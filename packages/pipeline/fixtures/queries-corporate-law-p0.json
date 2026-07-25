@@ -1,6 +1,38 @@
 {
   "paragraphId": "69bbf88d8937cf14551903ca#s1_p1",
   "note": "손으로 작성한 문단 수준 보존 질의. 질의 생성기 이전에 접근 타당성을 검증하기 위한 고정 오라클. 각 질의는 합성 노드가 아니라 문장 span·명제·관계 간선에 앵커링된다.",
+  "flagsNote": "requiredForRelation=관계 보존(relation_preserved) 인정에 필수인 질의(층위 무관). requiredForFullArgumentCoverage=완전 논항 커버리지(full) 인정에 필수인 논항 질의. 두 플래그가 정규화(query-normalize.ts)의 세 축 판정을 결정한다.",
+  "regionPolicyNote": "미세 질의를 scope+relation+argument 상위 영역으로 묶는 후처리 정책(멤버십만). criticalForRelation·requiredForFullArgument는 각 질의의 플래그에서 파생한다. LLM 프롬프트에는 전달되지 않는다.",
+  "regionPolicy": [
+    {
+      "id": "classification",
+      "label": "법인의 정의와 분류",
+      "scopeQueries": ["q1"],
+      "relationQueries": ["q2"],
+      "argumentQueries": ["q3"]
+    },
+    {
+      "id": "asset_operation",
+      "label": "자산 운용",
+      "scopeQueries": ["q4"],
+      "relationQueries": ["q5"],
+      "argumentQueries": ["q6a", "q6b"]
+    },
+    {
+      "id": "illegal_sanction",
+      "label": "위법 운용과 제재",
+      "scopeQueries": [],
+      "relationQueries": ["q7"],
+      "argumentQueries": []
+    },
+    {
+      "id": "control_purpose",
+      "label": "법적 통제의 목적",
+      "scopeQueries": [],
+      "relationQueries": ["q8"],
+      "argumentQueries": ["q9"]
+    }
+  ],
   "queries": [
     {
       "id": "q1",
@@ -11,6 +43,8 @@
       "sentences": ["S1", "S2"],
       "propositions": ["p1", "p2", "p3", "p4", "p5"],
       "relations": [],
+      "requiredForRelation": false,
+      "requiredForFullArgumentCoverage": false,
       "acceptanceCriteria": [
         "법인의 정의 또는 종류·분류를 화제로 지목하면 인정한다.",
         "'법인의 성격', '법인의 특징'처럼 어느 하위 영역인지 특정되지 않는 표현은 인정하지 않는다."
@@ -26,6 +60,8 @@
       "sentences": ["S1", "S2"],
       "propositions": ["p2", "p3", "p4", "p5"],
       "relations": [],
+      "requiredForRelation": true,
+      "requiredForFullArgumentCoverage": false,
       "acceptanceCriteria": [
         "'종류', '분류', '나뉜다', '유형' 등으로 분류 관계를 나타내면 인정한다.",
         "기준을 명시하지 않아도 분류 관계 자체를 표현하면 인정한다.",
@@ -42,6 +78,8 @@
       "sentences": ["S1", "S2"],
       "propositions": ["p2", "p3", "p4", "p5"],
       "relations": [],
+      "requiredForRelation": false,
+      "requiredForFullArgumentCoverage": true,
       "acceptanceCriteria": [
         "두 분류 기준(부여 대상, 영리성)을 모두 언급하면 완전 보존.",
         "한 기준만 언급하면 부분 보존.",
@@ -58,6 +96,8 @@
       "sentences": ["S3", "S4", "S5", "S6"],
       "propositions": ["p6", "p7", "p8", "p9", "p10"],
       "relations": [],
+      "requiredForRelation": false,
+      "requiredForFullArgumentCoverage": false,
       "acceptanceCriteria": [
         "자산 운용 또는 자산 소유·통제를 화제로 지목하면 인정한다.",
         "'법인의 성격'처럼 이 영역을 특정하지 못하는 표현은 인정하지 않는다."
@@ -73,6 +113,8 @@
       "sentences": ["S3", "S4", "S5"],
       "propositions": ["p6", "p7", "p8", "p9"],
       "relations": ["p6→p9:role_separation"],
+      "requiredForRelation": true,
+      "requiredForFullArgumentCoverage": false,
       "acceptanceCriteria": [
         "법인과 권한자를 서로 다른 역할의 주체로 표현하면 인정한다.",
         "'분리', '대조', '다르다'라는 단어를 직접 쓸 필요는 없다 — 두 역할을 다른 주체에 연결한 병치만으로 인정한다.",
@@ -82,19 +124,43 @@
       "feedbackOnFail": "자산 운용에서 법적 주체와 실제로 운용하는 주체가 어떻게 다른지 드러내 보세요."
     },
     {
-      "id": "q6",
+      "id": "q6a",
       "level": "relation_argument",
       "region": "자산 운용의 주체",
-      "question": "법적 소유 주체와 실제 운용 주체는 각각 누구인가?",
-      "expectedAnswer": "법적 소유 주체는 법인, 실제 운용 주체는 정관·법령이 권한을 부여한 사람",
+      "question": "실제 자산 운용은 법인 자체와 사람 중 누가 수행하는가?",
+      "expectedAnswer": "법인 자체가 아니라 사람이 수행한다.",
+      "sentences": ["S4", "S5"],
+      "propositions": ["p9"],
+      "relations": [],
+      "requiredForRelation": true,
+      "requiredForFullArgumentCoverage": true,
+      "acceptanceCriteria": [
+        "법인과 사람을 서로 다른 역할에 배치하면 preserved.",
+        "'사람', '대표자', '권한자'처럼 사람이 수행함을 나타내면 이 질의에서는 인정한다.",
+        "운용 주체가 누구인지 특정하지 않으면 not_evidenced.",
+        "법인이 직접 운용한다고 하면 contradicted."
+      ],
+      "feedbackOnFail": "실제로 자산을 운용하는 것이 법인 자체인지 사람인지 밝혀 보세요."
+    },
+    {
+      "id": "q6b",
+      "level": "relation_argument",
+      "region": "자산 운용의 주체",
+      "question": "어떤 사람이 법인의 자산을 실제로 운용할 수 있는가?",
+      "expectedAnswer": "정관이나 법령에 의해 권한을 부여받은 사람",
       "sentences": ["S4", "S5"],
       "propositions": ["p7", "p9"],
       "relations": [],
+      "requiredForRelation": false,
+      "requiredForFullArgumentCoverage": true,
       "acceptanceCriteria": [
-        "법인(소유)과 권한자(운용)를 각각 명시하면 완전 보존.",
-        "한쪽만 명시하면 부분 보존."
+        "'권한자', '권한을 부여받은 사람', '정관·법령상 권한자'는 preserved.",
+        "단순히 '사람'이라고만 하면 not_evidenced.",
+        "'대표자'는 권한 부여의 대표적 사례이므로 경계로 보되, 정관·법령상 권한이 함축되면 preserved 쪽으로 인정한다.",
+        "'직원'은 권한 조건이 명시되지 않으므로 not_evidenced.",
+        "'아무 사람', '출자자'처럼 권한 조건 없는 주체를 운용자로 단정하면 원문(권한 부여받은 사람만 운용)과 어긋나므로 contradicted."
       ],
-      "feedbackOnFail": "누가 소유하고 누가 운용하는지 구체적으로 밝혀 보세요."
+      "feedbackOnFail": "그 사람이 어떤 자격으로 자산을 운용할 수 있는지(권한 부여) 짚어 보세요."
     },
     {
       "id": "q7",
@@ -105,6 +171,8 @@
       "sentences": ["S6"],
       "propositions": ["p10"],
       "relations": [],
+      "requiredForRelation": true,
+      "requiredForFullArgumentCoverage": false,
       "acceptanceCriteria": [
         "위법·잘못된 운용에 제재·처벌이 따른다는 조건-제재 관계를 나타내면 인정한다.",
         "제재만 언급하고 무엇에 대한 제재인지 없으면 부분 보존."
@@ -120,6 +188,8 @@
       "sentences": ["S7"],
       "propositions": ["p11"],
       "relations": [],
+      "requiredForRelation": true,
+      "requiredForFullArgumentCoverage": false,
       "acceptanceCriteria": [
         "법적 통제가 어떤 목적을 위한 것이라는 수단-목적 관계를 나타내면 관계 보존 인정.",
         "목적의 구체적 내용(공동체 질서 유지)은 relation_argument로 별도 판정 — 관계 보존의 필수 조건이 아니다."
@@ -135,6 +205,8 @@
       "sentences": ["S7"],
       "propositions": ["p11"],
       "relations": [],
+      "requiredForRelation": false,
+      "requiredForFullArgumentCoverage": true,
       "acceptanceCriteria": [
         "공동체·사회 질서 유지를 언급하면 완전 보존.",
         "'목적' 관계만 있고 내용이 없으면 not_evidenced (q8은 통과할 수 있음)."

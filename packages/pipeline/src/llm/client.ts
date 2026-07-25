@@ -22,7 +22,8 @@ export type Op =
   | 'slot-core'
   | 'evaluate'
   | 'test-responses'
-  | 'query-eval';
+  | 'query-eval'
+  | 'query-gen';
 
 export interface CallMetric {
   readonly ts: string;

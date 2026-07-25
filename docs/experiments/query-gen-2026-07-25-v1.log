@@ -1,0 +1,113 @@
+
+> csat-literacy-trainer@0.0.0 qgen
+> node packages/pipeline/dist/cli/query-gen-experiment.js
+
+자동 질의 생성 재현성 실험 (법인 문단, 3회 생성)
+
+생성기 입력: 문장 7 · 명제 11 · 관계간선 5 · 주제 "법인의 정의·유형 분류와 자산의 법적 통제 운용"
+합성 노드(c5/c6/c7) 미입력. 손 질의 오라클 미입력.
+
+생성 run1: 영역 4개, 질의 10개  → 저장
+생성 run2: 영역 4개, 질의 10개  → 저장
+생성 run3: 영역 5개, 질의 12개  → 저장
+
+══════════════════════════════════════════════════════════════════════════════
+구조적 재현성
+
+2.1 의미 영역 (오라클 4영역에 정렬, 문장Jaccard·명제Jaccard)
+  gen-run1 (영역 4개):
+     classification   ← 법인의 정의와 유형 분류      문장J=1.00 명제J=1.00
+     asset_operation  ← 실제 자산 운용의 주체 분리와 제재 문장J=0.50 명제J=0.60
+     illegal_sanction ← (없음)               문장J=0.00 명제J=0.00
+     control_purpose  ← 법적 통제 운용의 목적       문장J=1.00 명제J=1.00
+  gen-run2 (영역 4개):
+     classification   ← 법인의 정의와 유형 분류      문장J=1.00 명제J=1.00
+     asset_operation  ← 자산 소유권의 법인 귀속      문장J=0.50 명제J=0.40
+     illegal_sanction ← 위반에 대한 제재와 법적 통제의 목적 문장J=0.50 명제J=0.50
+     control_purpose  ← (없음)               문장J=0.00 명제J=0.00
+  gen-run3 (영역 5개):
+     classification   ← 법인의 정의와 유형 분류      문장J=1.00 명제J=1.00
+     asset_operation  ← 자산 소유권의 법인 귀속      문장J=0.50 명제J=0.40
+     illegal_sanction ← 위반 운용에 대한 제재       문장J=1.00 명제J=0.50
+     control_purpose  ← 법적 통제 운용의 목적       문장J=1.00 명제J=0.50
+
+2.2 핵심 관계 커버리지 (매 실행에 존재해야 함)
+  관계                       oracle(손질 gen-run1  gen-run2  gen-run3  
+  법인의 정의                   ✓         ✓         ✓         ✓         
+  두 기준 유형 분류               ✓         ✓         ✓         ✓         
+  자산의 법인 귀속                ✓         ✓         ✓         ✓         
+  법적주체↔실제운용 역할 분리          ✓         ✓         ✓         ✓         
+  운용자의 권한 조건               ✓         ✓         ✓         ✓         
+  위반→제재                    ✓         ✓         ✓         ✓         
+  법적 통제의 목적                ✓         ✓         ✓         ✓         
+
+2.3 층위·필수플래그 재현성 (오라클 정렬 질의 대비)
+  gen-run1: 층위일치 5/7 · critical일치 4/7 · reqArg일치 3/7
+  gen-run2: 층위일치 6/6 · critical일치 6/6 · reqArg일치 6/6
+  gen-run3: 층위일치 6/7 · critical일치 7/7 · reqArg일치 6/7
+
+══════════════════════════════════════════════════════════════════════════════
+기능적 재현성 — 프로브별 자산 운용 영역 3축 (오라클 vs 생성 3회)
+
+  [A] 오라클: relation_preserved/full/implicit
+        gen-run1: relation_preserved/full/mixed  ≠
+        gen-run2: relation_preserved/none/implicit  ≠
+        gen-run3: relation_preserved/none/implicit  ≠
+
+  [B] 오라클: topic_only/none/none
+        gen-run1: region_not_evidenced/none/none  ≠
+        gen-run2: region_not_evidenced/none/none  ≠
+        gen-run3: region_not_evidenced/none/none  ≠
+        기대 경계 충족(전 세트): 아니오
+
+  [C] 오라클: region_not_evidenced/none/none
+        gen-run1: region_not_evidenced/none/none
+        gen-run2: region_not_evidenced/none/none
+        gen-run3: region_not_evidenced/none/none
+        기대 경계 충족(전 세트): 예
+
+  [D] 오라클: contradicted/none/none
+        gen-run1: contradicted/none/none
+        gen-run2: contradicted/none/none
+        gen-run3: contradicted/none/none
+        기대 경계 충족(전 세트): 예
+
+  [E2] 오라클: relation_preserved/partial/implicit
+        gen-run1: partial_relation_preservation/partial/implicit  ≠
+        gen-run2: relation_preserved/none/implicit  ≠
+        gen-run3: region_not_evidenced/none/none  ≠
+        기대 경계 충족(전 세트): 아니오
+
+  [E3] 오라클: topic_only/none/none
+        gen-run1: region_not_evidenced/none/none  ≠
+        gen-run2: region_not_evidenced/none/none  ≠
+        gen-run3: region_not_evidenced/none/none  ≠
+        기대 경계 충족(전 세트): 예
+
+  [F] 오라클: relation_preserved/full/explicit
+        gen-run1: partial_relation_preservation/partial/explicit  ≠
+        gen-run2: relation_preserved/none/explicit  ≠
+        gen-run3: relation_preserved/none/explicit  ≠
+        기대 경계 충족(전 세트): 아니오
+
+  [G8] 오라클: contradicted/none/none
+        gen-run1: contradicted/none/none
+        gen-run2: region_not_evidenced/none/none  ≠
+        gen-run3: region_not_evidenced/none/none  ≠
+
+══════════════════════════════════════════════════════════════════════════════
+기능적 성공 기준 (핵심 구분이 생성 3회 = 오라클)
+  A    불일치 ✗   오라클=relation_preserved/full/implicit  생성=[relation_preserved/full/mixed | relation_preserved/none/implicit | relation_preserved/none/implicit]
+  B    불일치 ✗   오라클=topic_only/none/none  생성=[region_not_evidenced/none/none | region_not_evidenced/none/none | region_not_evidenced/none/none]
+  C    일치 ✓   오라클=region_not_evidenced/none/none  생성=[region_not_evidenced/none/none | region_not_evidenced/none/none | region_not_evidenced/none/none]
+  D    일치 ✓   오라클=contradicted/none/none  생성=[contradicted/none/none | contradicted/none/none | contradicted/none/none]
+  E2   불일치 ✗   오라클=relation_preserved/partial/implicit  생성=[partial_relation_preservation/partial/implicit | relation_preserved/none/implicit | region_not_evidenced/none/none]
+  E3   불일치 ✗   오라클=topic_only/none/none  생성=[region_not_evidenced/none/none | region_not_evidenced/none/none | region_not_evidenced/none/none]
+  F    불일치 ✗   오라클=relation_preserved/full/explicit  생성=[partial_relation_preservation/partial/explicit | relation_preserved/none/explicit | relation_preserved/none/explicit]
+  G8   불일치 ✗   오라클=contradicted/none/none  생성=[contradicted/none/none | region_not_evidenced/none/none | region_not_evidenced/none/none]
+
+  기능 일치: 2/8
+
+모순 cluster (동일 주장 → 하나로 묶어 중복 벌점 방지)
+  [D] claim="법인이 직접 자산을 운용함" → 질의 2개(q5,q6a) 명제[p6,p7,p8,p9] 영역=자산 운용
+  [G8] claim="법인이 직접 운영한다" → 질의 2개(q5,q6a) 명제[p6,p7,p8,p9] 영역=자산 운용

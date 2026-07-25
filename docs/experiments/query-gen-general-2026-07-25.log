@@ -1,0 +1,151 @@
+
+> csat-literacy-trainer@0.0.0 qgen:general
+> node packages/pipeline/dist/cli/query-gen-generalize.js
+
+자동 질의 생성 v0 일반화 실험 (과학·인문, 각 3회 생성)
+
+██████████████████████████████████████████████████████████████████████████████
+█ 과학(NCM 산화물)  (생성기 v0, 스키마 query-3axis-v1)
+██████████████████████████████████████████████████████████████████████████████
+입력: 문장 6·명제 11·간선 7 | 주제 "리튬 코발트 산화물의 한계를 보완한 NCM계 산화물의 제안과, 니켈·망가니즈 함량비에 따른 용량·안정성 트레이드오프"
+오라클 영역 4개: proposal, classification, nickel, manganese | focal=nickel
+  생성 run1: 영역 3·질의 12
+  생성 run2: 영역 3·질의 13
+  생성 run3: 영역 4·질의 14
+
+── 구조: 핵심 관계 커버리지 (매 실행 존재해야 함) ──
+  관계                     oracle(손질의)gen1   gen2   gen3   
+  문제→NCM 제안              ✓      ✓      ✓      ✓      
+  함량비 분류                 ✓      ✓      ✓      ✓      
+  니켈↑→용량↑ 방향             ✓      ✓      ✓      ✓      
+  니켈 용량↑vs수명↓            ✓      ✓      ✓      ✓      
+  망가니즈 안정성↑vs용량↓         ✓      ✓      ✓      ✓      
+
+── 구조: 영역 정렬 + 층위 변이 ──
+  gen1: 영역 3개, 오라클 3/4 정렬, 층위일치 5/8
+  gen2: 영역 3개, 오라클 3/4 정렬, 층위일치 7/8
+  gen3: 영역 4개, 오라클 4/4 정렬, 층위일치 9/11
+
+── 기능: 프로브별 (오라클 vs 생성 3회) ──
+
+  [A] 관계 보존 추상  (인간기대 범주=관계보존, focal=relation_preserved)
+     오라클: 범주=관계보존 focal=relation_preserved/none/explicit 모순영역=[] 교정=classification
+     gen1:  범주=관계보존 focal=relation_preserved/full/explicit 모순영역=[] 교정=classification
+     gen2:  범주=관계보존 focal=relation_preserved/partial/explicit 모순영역=[] 교정=classification
+     gen3:  범주=관계보존 focal=relation_preserved/full/explicit 모순영역=[] 교정=classification
+
+  [B] 주제만 포착  (인간기대 범주=주제만, focal=topic_only)
+     오라클: 범주=기타 focal=region_not_evidenced/none/none 모순영역=[] 교정=classification
+     gen1:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=proposal  ≠범주
+     gen2:  범주=주제만 focal=topic_only/none/none 모순영역=[] 교정=nickel  ≠범주
+     gen3:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=proposal  ≠범주
+
+  [C] 공허한 표현  (인간기대 범주=공허, focal=region_not_evidenced)
+     오라클: 범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=proposal
+     gen1:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=proposal
+     gen2:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=proposal
+     gen3:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=proposal
+
+  [D] 관계 오류  (인간기대 범주=관계오류, focal=contradicted)
+     오라클: 범주=관계오류 focal=contradicted/none/none 모순영역=[manganese,nickel] 교정=nickel
+     gen1:  범주=관계오류 focal=contradicted/none/none 모순영역=[manganese,nickel] 교정=nickel
+     gen2:  범주=관계오류 focal=contradicted/none/none 모순영역=[manganese,nickel] 교정=nickel
+     gen3:  범주=관계오류 focal=contradicted/none/none 모순영역=[manganese,nickel] 교정=nickel
+
+  [Bd1] 경계: 병치·방향 미표현  (인간기대 범주=주제만, focal=topic_only)
+     오라클: 범주=주제만 focal=topic_only/none/none 모순영역=[] 교정=nickel
+     gen1:  범주=주제만 focal=topic_only/none/none 모순영역=[] 교정=nickel
+     gen2:  범주=주제만 focal=topic_only/none/none 모순영역=[] 교정=nickel
+     gen3:  범주=주제만 focal=topic_only/none/none 모순영역=[] 교정=nickel
+
+  [Bd2] 경계: 기제만·조건 생략  (인간기대 범주=부분, focal=partial_relation_preservation)
+     오라클: 범주=주제만 focal=topic_only/full/none 모순영역=[] 교정=nickel
+     gen1:  범주=부분 focal=partial_relation_preservation/none/explicit 모순영역=[] 교정=nickel  ≠범주
+     gen2:  범주=관계보존 focal=relation_preserved/partial/explicit 모순영역=[] 교정=proposal  ≠범주
+     gen3:  범주=주제만 focal=topic_only/full/none 모순영역=[] 교정=nickel
+
+── argumentCoverage 변이 (탐색 지표): focal 영역 논항 질의 분해 ──
+  gen1: focal 논항질의 1개, requiredForFull 1개, 핵심관계질의 2개
+  gen2: focal 논항질의 2개, requiredForFull 2개, 핵심관계질의 1개
+  gen3: focal 논항질의 1개, requiredForFull 1개, 핵심관계질의 2개
+
+── 과학(NCM 산화물) 요약 ──
+  오라클 자체 범주 일치(인간기대): 4/6
+  regionSemanticVerdict 셀 일치: 66/72 (92%)
+  교육 범주 일치(생성 3회=오라클): 4/6 (67%)
+  모순 대상영역 일치: 6/6 (100%)
+  첫 교정 대상 일치: 4/6 (67%)
+  ✓ 핵심 관계 누락 0
+
+██████████████████████████████████████████████████████████████████████████████
+█ 인문(후기 묵가 명실론)  (생성기 v0, 스키마 query-3axis-v1)
+██████████████████████████████████████████████████████████████████████████████
+입력: 문장 6·명제 8·간선 3 | 주제 "명실의 다대다 대응을 인정한 후기 묵가의 명실론"
+오라클 영역 3개: claim_horse, real_to_names, name_to_reals | focal=real_to_names
+  생성 run1: 영역 2·질의 9
+  생성 run2: 영역 2·질의 7
+  생성 run3: 영역 2·질의 6
+
+── 구조: 핵심 관계 커버리지 (매 실행 존재해야 함) ──
+  관계                     oracle(손질의)gen1   gen2   gen3   
+  흰 말은 말이다               ✓      ✓      ✓      ✓      
+  하나의 실→여러 명             ✓      ✓      ✓      ✓      
+  사례(흰말)가 원리1 지지         ✓      ✓      ✓      ✓      
+  하나의 명→여러 실             ✓      ✓      ✓      ✓      
+  사례(학)가 원리2 지지          ✓      ✓      ✓      ✓      
+
+── 구조: 영역 정렬 + 층위 변이 ──
+  gen1: 영역 2개, 오라클 2/3 정렬, 층위일치 2/6
+  gen2: 영역 2개, 오라클 2/3 정렬, 층위일치 2/6
+  gen3: 영역 2개, 오라클 2/3 정렬, 층위일치 3/5
+
+── 기능: 프로브별 (오라클 vs 생성 3회) ──
+
+  [A] 관계 보존 추상  (인간기대 범주=관계보존, focal=relation_preserved)
+     오라클: 범주=관계보존 focal=relation_preserved/none/explicit 모순영역=[] 교정=none
+     gen1:  범주=관계보존 focal=relation_preserved/full/implicit 모순영역=[] 교정=none
+     gen2:  범주=관계보존 focal=relation_preserved/none/implicit 모순영역=[] 교정=none
+     gen3:  범주=관계보존 focal=relation_preserved/full/implicit 모순영역=[] 교정=none
+
+  [B] 주제만 포착  (인간기대 범주=주제만, focal=topic_only)
+     오라클: 범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=claim_horse
+     gen1:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=claim_horse
+     gen2:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=claim_horse
+     gen3:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=claim_horse
+
+  [C] 공허한 표현  (인간기대 범주=공허, focal=region_not_evidenced)
+     오라클: 범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=claim_horse
+     gen1:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=claim_horse
+     gen2:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=claim_horse
+     gen3:  범주=공허 focal=region_not_evidenced/none/none 모순영역=[] 교정=claim_horse
+
+  [D] 관계 오류  (인간기대 범주=관계오류, focal=contradicted)
+     오라클: 범주=관계오류 focal=contradicted/none/none 모순영역=[claim_horse,real_to_names] 교정=claim_horse
+     gen1:  범주=관계오류 focal=contradicted/none/none 모순영역=[claim_horse,real_to_names] 교정=claim_horse
+     gen2:  범주=관계오류 focal=contradicted/none/none 모순영역=[claim_horse,real_to_names] 교정=claim_horse
+     gen3:  범주=관계오류 focal=contradicted/none/none 모순영역=[claim_horse,real_to_names] 교정=claim_horse
+
+  [Bd1] 경계: 병치·지지관계 미표현  (인간기대 범주=주제만, focal=topic_only)
+     오라클: 범주=관계보존 focal=relation_preserved/none/implicit 모순영역=[] 교정=claim_horse
+     gen1:  범주=관계보존 focal=relation_preserved/none/implicit 모순영역=[] 교정=claim_horse
+     gen2:  범주=부분 focal=partial_relation_preservation/none/none 모순영역=[] 교정=real_to_names  ≠범주
+     gen3:  범주=부분 focal=partial_relation_preservation/none/none 모순영역=[] 교정=real_to_names  ≠범주
+
+  [Bd2] 경계: 사례만·지지 주장 모호  (인간기대 범주=부분, focal=partial_relation_preservation)
+     오라클: 범주=기타 focal=region_not_evidenced/none/none 모순영역=[] 교정=real_to_names
+     gen1:  범주=관계보존 focal=relation_preserved/full/implicit 모순영역=[] 교정=name_to_reals  ≠범주
+     gen2:  범주=부분 focal=partial_relation_preservation/full/none 모순영역=[] 교정=real_to_names  ≠범주
+     gen3:  범주=관계보존 focal=relation_preserved/full/implicit 모순영역=[] 교정=name_to_reals  ≠범주
+
+── argumentCoverage 변이 (탐색 지표): focal 영역 논항 질의 분해 ──
+  gen1: focal 논항질의 2개, requiredForFull 1개, 핵심관계질의 1개
+  gen2: focal 논항질의 1개, requiredForFull 1개, 핵심관계질의 2개
+  gen3: focal 논항질의 0개, requiredForFull 1개, 핵심관계질의 2개
+
+── 인문(후기 묵가 명실론) 요약 ──
+  오라클 자체 범주 일치(인간기대): 3/6
+  regionSemanticVerdict 셀 일치: 48/54 (89%)
+  교육 범주 일치(생성 3회=오라클): 4/6 (67%)
+  모순 대상영역 일치: 6/6 (100%)
+  첫 교정 대상 일치: 4/6 (67%)
+  ✓ 핵심 관계 누락 0

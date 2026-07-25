@@ -44,6 +44,9 @@ export interface PreservationQuery {
   readonly expectedAnswer: string;
   readonly sentences: readonly string[];
   readonly acceptanceCriteria: readonly string[];
+  /** 후처리 정규화 전용 플래그. LLM 프롬프트에는 전달되지 않는다. */
+  readonly requiredForRelation?: boolean;
+  readonly requiredForFullArgumentCoverage?: boolean;
 }
 
 const SYSTEM = `당신은 학생의 문단 요약이 **보존 질의**의 답을 어느 수준까지 담았는지 판정한다.
