@@ -41,6 +41,8 @@ interface Probe {
   readonly id: string;
   readonly text: string;
   readonly expectFocal: RegionSemanticVerdict;
+  /** 이 프로브만 다른 영역을 focal로 본다. 같은 문단 안 대조군(선형 인과) 검사용. */
+  readonly focal?: string;
 }
 interface Config {
   readonly name: string;
@@ -126,9 +128,103 @@ const NEW_CONFIGS: readonly Config[] = [
     ],
   },
 ];
-/** 이번 실행: 미사용 지문만 (기존 3문단은 이미 검증됨). CONFIGS는 회귀 회복용으로 보존. */
-const ACTIVE: readonly Config[] = NEW_CONFIGS;
+// ── N2 실험: 관계 하위 유형별 압축 허용도 ──
+//
+// 가설(2026-07-27 학생 루프 교차검증): 과정형 관계는 하위 유형마다 중간 생략 허용도가 다르다.
+//   선형 인과 연쇄 → 양 끝이 방향대로 이어지면 관계보존 (중간 생략 OK)
+//   순환(되먹임)   → 되먹임 간선이 관계 자체이므로 생략 시 부분관계
+//   공간 분업      → 두 항의 병치가 관계 자체이므로 한쪽만이면 부분관계
+// v0 생성기 프롬프트(원칙 A~F)에는 이 구분이 없다. 생성기가 순환·분업에도 선형 연쇄식
+// 수용 기준을 쓰면 "중간 생략" 응답을 관계보존으로 **과대평가**한다.
+//
+// 검사 방법: 순환·분업 영역의 핵심 관계를 두 축(진행/되먹임, 앞 공간/뒤 공간)으로 나눈 손
+// 오라클을 동결하고, 한 축만 보존한 프로브를 넣는다. 오라클은 partial을 내야 하고, 생성기가
+// relation_preserved를 내면 위험이 실증된다. 같은 문단의 선형 인과 영역을 대조군으로 둔다.
+const N2_CONFIGS: readonly Config[] = [
+  {
+    name: '광합성 P3(캘빈 회로 = 순환)',
+    gold: '.omc/agreement/69bce4ece23376a28e12cb7c_s1_p3.gold-1.json',
+    oracle: 'photosynthesis-p3-hand.json',
+    genPrefix: 'photosynthesis-p3',
+    focal: 'calvin_cycle',
+    probes: [
+      {
+        id: '관계보존',
+        expectFocal: 'relation_preserved',
+        text: '암반응은 명반응이 만든 화학 에너지와 흡수한 이산화 탄소로 포도당을 만드는 단계다\n이산화 탄소가 RuBP와 결합해 3탄당이 되고 3탄당이 포도당이 되며, 쓰고 남은 화합물은 다시 RuBP로 돌아가 이산화 탄소와 결합하는 과정이 되풀이된다\n이렇게 광합성하는 대부분의 식물을 C3 식물이라 한다',
+      },
+      { id: '주제만', expectFocal: 'topic_only', text: '암반응과 캘빈 회로\nC3 식물' },
+      { id: '공허', expectFocal: 'region_not_evidenced', text: '식물의 내부 작용\n여러 가지 화학 반응\n식물의 분류' },
+      {
+        // ★ N2 핵심: 순환의 진행 축만 보존하고 되먹임을 생략 → 오라클 기대 = 부분관계
+        id: '순환중간생략',
+        expectFocal: 'partial_relation_preservation',
+        text: '암반응에서는 이산화 탄소를 이용해 포도당이 만들어지고, 이 과정이 계속 반복된다',
+      },
+      {
+        id: '관계오류',
+        expectFocal: 'contradicted',
+        text: '암반응에서는 3탄당이 분해되어 이산화 탄소와 RuBP가 되고, 포도당이 RuBP로 재생되어 순환이 이어진다',
+      },
+      {
+        id: '구체적',
+        expectFocal: 'relation_preserved',
+        text: '대기에서 흡수한 이산화 탄소가 루비스코의 촉진으로 RuBP와 결합해 탄소 3개짜리 3탄당을 만들고, 3탄당은 화학적 변환을 거쳐 포도당이 되며, 포도당 생성에 쓰이고 남은 화합물은 RuBP로 재생되어 다시 이산화 탄소와 결합한다',
+      },
+      {
+        // ★ 대조군: 같은 문단의 선형 인과 영역에서 중간(결합 비율) 생략 → 기대 = 관계보존
+        id: '대조군-선형중간생략',
+        expectFocal: 'relation_preserved',
+        focal: 'cycle_condition',
+        text: '캘빈 회로는 이산화 탄소 농도와 온도가 적정해야 포도당을 만들 수 있고, 그렇지 않으면 포도당 생산 효율이 떨어진다',
+      },
+    ],
+  },
+  {
+    name: '광합성 P5(두 공간 = 분업)',
+    gold: '.omc/agreement/69bce4ece23376a28e12cb7c_s1_p5.gold-1.json',
+    oracle: 'photosynthesis-p5-hand.json',
+    genPrefix: 'photosynthesis-p5',
+    focal: 'division',
+    probes: [
+      {
+        id: '관계보존',
+        expectFocal: 'relation_preserved',
+        text: 'C4 식물은 두 공간에서 광합성을 한다\n엽육 세포에서 이산화 탄소를 PEP와 결합시켜 4탄당으로 저장했다가, 유관속초 세포로 보내 분해해 이산화 탄소를 내놓는다\n그 농도를 높게 유지해 C3보다 광합성 효율이 높다',
+      },
+      { id: '주제만', expectFocal: 'topic_only', text: 'C4 식물의 광합성\n엽육 세포와 유관속초 세포' },
+      {
+        // 분업이 있다는 사실만 — 각 공간의 역할이 없음 → 기대 = 주제만
+        id: '조직만',
+        expectFocal: 'topic_only',
+        text: 'C4 식물은 두 개의 공간에서 광합성이 진행되어 효율이 높다',
+      },
+      {
+        // ★ N2 핵심: 앞 공간의 역할만 보존하고 뒤 공간을 생략 → 오라클 기대 = 부분관계
+        id: '한쪽공간만',
+        expectFocal: 'partial_relation_preservation',
+        text: 'C4 식물은 엽육 세포에서 이산화 탄소를 붙잡아 4탄당의 형태로 저장해 두고 광합성을 한다',
+      },
+      {
+        id: '관계오류',
+        expectFocal: 'contradicted',
+        text: 'C4 식물은 유관속초 세포에서 이산화 탄소를 PEP와 결합시켜 4탄당을 만든 뒤 엽육 세포로 보내 분해한다',
+      },
+      {
+        // ★ 대조군: 같은 문단의 선형 인과 영역에서 중간(4탄당 이동·분해) 생략 → 기대 = 관계보존
+        id: '대조군-선형중간생략',
+        expectFocal: 'relation_preserved',
+        focal: 'efficiency',
+        text: 'C4 식물은 유관속초 세포 안의 이산화 탄소 농도를 높게 유지하기 때문에 C3 식물보다 광합성 효율이 높다',
+      },
+    ],
+  },
+];
+
+/** 이번 실행: N2 실험만. 기존 configs는 회귀 회복용으로 보존. */
+const ACTIVE: readonly Config[] = N2_CONFIGS;
 void CONFIGS;
+void NEW_CONFIGS;
 
 function readJson<T>(p: string): T {
   return JSON.parse(readFileSync(p, 'utf8')) as T;
@@ -203,14 +299,16 @@ async function runOne(set: EvalSet, cfg: Config, probe: Probe, paraText: string,
     qeval.verdicts.map((v) => [v.queryId, { semanticState: v.semanticState, expressionMode: v.expressionMode, evidence: v.evidence, viaItem: v.viaItem }]),
   );
   const assessments = assess(regions, regionMeta, assessQueries(set), verdicts, propShort);
-  const focalVerdict = regions.find((r) => r.id === cfg.focal)?.regionSemanticVerdict ?? 'region_not_evidenced';
-  return { focalVerdict, category: overallCategory(regions, cfg.focal), assessments };
+  const focalId = probe.focal ?? cfg.focal;
+  const focalVerdict = regions.find((r) => r.id === focalId)?.regionSemanticVerdict ?? 'region_not_evidenced';
+  return { focalVerdict, category: overallCategory(regions, focalId), assessments };
 }
 
 async function main(): Promise<void> {
-  console.log('v0 일반화 — 미사용 지문 회귀 (핵심축=regionSemanticVerdict, 분해 4종)\n');
+  console.log('N2 실험 — 관계 하위 유형별 압축 허용도 (순환·분업 vs 선형 인과)\n');
   let overcredit = 0;
   let unstable = 0;
+  let oracleMiss = 0;
   const feedbackSamples: string[] = [];
 
   for (const cfg of ACTIVE) {
@@ -244,22 +342,35 @@ async function main(): Promise<void> {
       const verdicts = results.map((r) => r.focalVerdict);
       const unanimous = new Set(verdicts).size === 1;
       if (!unanimous) unstable++;
-      // 과대평가 점검: topic_only/contradicted/미포착 기대인데 relation_preserved로 나온 세트
-      const oc = (probe.expectFocal === 'topic_only' || probe.expectFocal === 'contradicted' || probe.expectFocal === 'region_not_evidenced') && verdicts.some((v) => v === 'relation_preserved');
+      // 과대평가 점검: relation_preserved 미만을 기대했는데 relation_preserved로 나온 세트.
+      // partial 기대(순환·분업의 한 축만 보존)를 포함하는 것이 N2의 핵심 신호다.
+      const under: RegionSemanticVerdict[] = ['topic_only', 'contradicted', 'region_not_evidenced', 'partial_relation_preservation'];
+      const oc = under.includes(probe.expectFocal) && verdicts.some((v) => v === 'relation_preserved');
       if (oc) overcredit++;
-      console.log(`\n  [${probe.id}] 기대 focal=${VSHORT[probe.expectFocal]}`);
-      console.log(`     focal 판정 (오라클|gen1|gen2|gen3): ${verdicts.map((v) => VSHORT[v]).join(' | ')}  ${unanimous ? '✓안정' : '⚠분해변이'}${oc ? '  ✗과대평가!' : ''}`);
+      // 오라클이 기대와 어긋나면 손 오라클 자체를 재검토해야 한다 (생성기 문제와 구분).
+      const oracleMismatch = verdicts[0] !== probe.expectFocal;
+      if (oracleMismatch) oracleMiss++;
+      const probeFocal = probe.focal ?? cfg.focal;
+      console.log(`\n  [${probe.id}] 기대 focal(${probeFocal})=${VSHORT[probe.expectFocal]}`);
+      console.log(`     focal 판정 (오라클|gen1|gen2|gen3): ${verdicts.map((v) => VSHORT[v]).join(' | ')}  ${unanimous ? '✓안정' : '⚠분해변이'}${oracleMismatch ? '  ⚠오라클≠기대' : ''}${oc ? '  ✗과대평가!' : ''}`);
       // 피드백 예시: 오라클 세트의 focal 영역
-      const focalAssess = results[0]!.assessments.find((a) => a.regionId === cfg.focal);
+      const focalAssess = results[0]!.assessments.find((a) => a.regionId === probeFocal);
       if (focalAssess && ['관계보존', '주제만', '관계오류', '암묵적'].some((k) => probe.id.includes(k))) {
         feedbackSamples.push(`[${cfg.name} · ${probe.id}] "${probe.text.split('\n').slice(0, 2).join(' / ')}…"\n    판정: ${VSHORT[focalAssess.verdict]}\n    피드백: ${focalAssess.feedback}\n    명제 evidence: ${focalAssess.propositionEvidence.map((e) => `${e.propositionId}:${e.state}`).join(' ')}`);
       }
     }
   }
 
+  const total = ACTIVE.reduce((n, c) => n + c.probes.length, 0);
   console.log(`\n${'═'.repeat(76)}\n요약`);
-  console.log(`  과대평가 오류(topic_only/contradicted→relation_preserved): ${overcredit}건`);
-  console.log(`  분해 4종 간 focal 판정 불안정: ${unstable}/${ACTIVE.reduce((n, c) => n + c.probes.length, 0)} 프로브`);
+  console.log(`  과대평가 오류(관계보존 미만 기대 → 관계보존 판정): ${overcredit}건`);
+  console.log(`  손 오라클이 기대와 어긋난 프로브: ${oracleMiss}/${total} (오라클 재검토 대상)`);
+  console.log(`  분해 4종 간 focal 판정 불안정: ${unstable}/${total} 프로브`);
+  console.log(`\n  N2 판정 기준:`);
+  console.log(`    - '순환중간생략'·'한쪽공간만'에서 생성기가 관계보존 → **위험 실증** (v0 프롬프트 수정 필요)`);
+  console.log(`    - 오라클도 생성기도 부분관계 → 생성기 무사 (정책만 문서화)`);
+  console.log(`    - 둘 다 관계보존 → N2 가설 자체 재검토 (압축 허용이 정답일 수 있음)`);
+  console.log(`    - '대조군-선형중간생략'은 관계보존이 나와야 구분이 실재함을 보인다`);
   console.log(`\n── 학생 피드백 예시 ──`);
   for (const s of feedbackSamples) console.log(`\n  ${s}`);
 }
