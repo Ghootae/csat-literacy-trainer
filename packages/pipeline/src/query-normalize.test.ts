@@ -128,6 +128,74 @@ describe('규칙 1·2 — scope 승격 (양방향)', () => {
   });
 });
 
+/**
+ * N2-b 회귀 — 대상 이름의 나열은 관계 충족 근거가 아니다.
+ *
+ * 실험(2026-07-29)에서 관찰된 문제: 명칭 확인 질의("첫 번째 공간은 무엇인가?")가
+ * criticalForRelation으로 지정되면, 학생이 대상 이름만 나열해도 핵심 질의가 충족되어
+ * 영역 판정이 관계보존 방향으로 올라간다. 이는 query-eval의 확립 원칙
+ * ("화제어만으로 관계 질의를 통과시키면 안 된다")과 충돌한다.
+ *
+ * 아래는 **의미 축이 논항 커버리지에 오염되지 않는다**는 계약을 고정한다: 명칭 질의를
+ * 보조 논항으로만 두면(핵심 지정 없음) 이름을 모두 맞혀 논항 커버리지가 full이어도
+ * 관계 질의가 미보존인 한 topic_only를 넘지 못한다. 특정 지문 문구에 의존하지 않도록
+ * 서로 다른 영역(광합성 분업 / 권력 분립)으로 같은 계약을 검사한다.
+ */
+describe('N2-b — 대상 이름 나열은 관계 질의를 충족시키지 못한다', () => {
+  /** 관계 질의는 "어떻게 역할을 분담하는가"를 묻고, 명칭 질의는 보조 논항으로만 둔다. */
+  const division = (id: string, label: string): RegionPolicy => ({
+    id,
+    label,
+    scopeQueries: ['s'],
+    relationQueries: ['rel'],
+    argumentQueries: ['n1', 'n2'],
+    criticalForRelation: ['rel'],
+    requiredForFullArgument: ['n1', 'n2'],
+  });
+
+  const PHOTO = division('division', '두 공간의 분업');
+  const BRANCHES = division('separation', '두 기관의 권력 분립');
+
+  it('이름만 나열 → topic_only (부분관계 이상으로 올라가지 않는다)', () => {
+    // "두 공간은 어떤 방식으로 역할을 분담하는가?" → "엽육 세포와 유관속초 세포."
+    // 두 대상을 모두 맞게 지목해 논항은 full이지만, 연결·역할 분담이 없어 관계는 미보존.
+    const r = one(PHOTO, raw(P('s', 'explicit'), N('rel'), P('n1', 'explicit'), P('n2', 'explicit')));
+    expect(r.regionSemanticVerdict).toBe('topic_only');
+    expect(r.regionSemanticVerdict).not.toBe('partial_relation_preservation');
+    expect(r.regionSemanticVerdict).not.toBe('relation_preserved');
+    // 논항 커버리지가 full이어도 의미 축은 올라가지 않는다 — 두 축은 독립이다.
+    expect(r.argumentCoverage).toBe('full');
+  });
+
+  it('역할 분담을 진술 → relation_preserved', () => {
+    // "엽육 세포가 이산화 탄소를 먼저 고정하고, 유관속초 세포에서 캘빈 회로가 진행된다."
+    const r = one(PHOTO, raw(P('s', 'explicit'), P('rel', 'explicit'), P('n1', 'explicit'), P('n2', 'explicit')));
+    expect(r.regionSemanticVerdict).toBe('relation_preserved');
+    expect(r.argumentCoverage).toBe('full');
+  });
+
+  it('일반화 — 이름만 나열 → topic_only (지문·분야 무관)', () => {
+    // "두 기관은 업무를 어떻게 나누는가?" → "입법부와 행정부."
+    const r = one(BRANCHES, raw(P('s', 'explicit'), N('rel'), P('n1', 'explicit'), P('n2', 'explicit')));
+    expect(r.regionSemanticVerdict).toBe('topic_only');
+    expect(r.regionSemanticVerdict).not.toBe('partial_relation_preservation');
+  });
+
+  it('일반화 — 역할 분담을 진술 → relation_preserved', () => {
+    // "입법부는 법률을 만들고 행정부는 이를 집행한다."
+    const r = one(BRANCHES, raw(P('s', 'explicit'), P('rel', 'explicit'), P('n1', 'explicit'), P('n2', 'explicit')));
+    expect(r.regionSemanticVerdict).toBe('relation_preserved');
+  });
+
+  it('이름 나열은 scope 승격도 일으키지 않는다 — 논항 보존만으로 화제가 확정되지 않는 경우', () => {
+    // scope 질의조차 미보존이면, 명칭 논항이 보존돼도 규칙 1에 의해 scope가 승격되므로
+    // topic_only가 된다. 이 경로가 관계 축으로 새지 않는지 확인한다.
+    const r = one(PHOTO, raw(N('s'), N('rel'), P('n1', 'explicit'), P('n2', 'explicit')));
+    expect(r.scope.source).toBe('promoted_argument');
+    expect(r.regionSemanticVerdict).toBe('topic_only');
+  });
+});
+
 describe('논항 없는 영역 — 커버리지는 none, 상한은 관계 보존', () => {
   it('scope 질의·논항 없이 핵심 관계만 preserved', () => {
     const r = one(RELATION_ONLY, raw(P('rel', 'explicit')));
