@@ -9,11 +9,10 @@
  * 실험 경로 전용 — production 미연결.
  */
 
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { type PreservationQuery, type QueryEval, evaluateQueries } from '../llm/query-eval.js';
+import { EVAL_REQUEST_FINGERPRINT, type PreservationQuery, type QueryEval, evaluateQueries } from '../llm/query-eval.js';
 import {
   type AssessQuery,
   type AssessRegionMeta,
@@ -21,6 +20,7 @@ import {
   assess,
   overallCategory,
 } from '../assessment.js';
+import { evalCacheKey } from '../eval-cache-key.js';
 import {
   type EvalSet,
   type Gold,
@@ -237,7 +237,14 @@ function readJson<T>(p: string): T {
 const CACHE_DIR = resolve(process.cwd(), '.omc/state/assess-cache');
 async function cachedEval(paraText: string, queries: readonly PreservationQuery[], probeText: string, paraId: string): Promise<QueryEval> {
   mkdirSync(CACHE_DIR, { recursive: true });
-  const key = createHash('sha256').update(`${paraId} ${probeText} ${JSON.stringify(queries)}`).digest('hex').slice(0, 32);
+  // 키에 모델·시스템 프롬프트·출력 스키마·요청 설정을 포함한다 — 이것들이 빠져 있으면
+  // 프롬프트를 고쳐도 과거 결과가 재사용돼 수정 후 검증이 조용히 무효가 된다.
+  const key = evalCacheKey({
+    paragraphId: paraId,
+    probeText,
+    queries,
+    requestFingerprint: EVAL_REQUEST_FINGERPRINT,
+  });
   const path = resolve(CACHE_DIR, `${key}.json`);
   if (existsSync(path)) return readJson<QueryEval>(path);
   // 구조화 출력 파싱 실패(스키마 비순응)는 instrumented 재시도 밖에서 던져지므로 여기서 재시도.

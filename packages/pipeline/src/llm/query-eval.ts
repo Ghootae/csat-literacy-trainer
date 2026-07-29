@@ -36,6 +36,11 @@ export const QueryEvalSchema = z.object({
 
 export type QueryEval = z.infer<typeof QueryEvalSchema>;
 
+/** 실제 요청 파라미터. 캐시 지문과 호출부가 같은 상수를 쓰도록 한 곳에 둔다. */
+const EVAL_MAX_TOKENS = 8000;
+const EVAL_EFFORT = 'high';
+const EVAL_THINKING = 'adaptive';
+
 export interface PreservationQuery {
   readonly id: string;
   readonly level: string;
@@ -84,6 +89,23 @@ not_evidenced다. 대상을 빠짐없이 정확히 지목했더라도 마찬가�
 **공허한 표현을 걸러라.** "법인의 성격", "법인의 특징"은 어느 영역인지 특정하지 못하므로
 scope 질의조차 not_evidenced다.`;
 
+/**
+ * 캐시 키 입력으로 노출하는 요청 지문(fingerprint).
+ *
+ * **실제 API에 전달되는 값 그대로여야 한다.** 사람이 손으로 올리는 버전 번호나 부분
+ * 템플릿을 해시하면, 프롬프트를 고쳤는데 과거 평가 결과가 재사용되는 사고를 막지 못한다.
+ * `outputFormat`은 `zodOutputFormat(QueryEvalSchema)`의 결과 — 즉 응답 스키마가 바뀌면
+ * 자동으로 달라진다.
+ */
+export const EVAL_REQUEST_FINGERPRINT = {
+  model: MODEL,
+  systemPrompt: SYSTEM,
+  maxTokens: EVAL_MAX_TOKENS,
+  effort: EVAL_EFFORT,
+  thinking: EVAL_THINKING,
+  outputFormat: zodOutputFormat(QueryEvalSchema),
+} as const;
+
 export async function evaluateQueries(
   paragraphText: string,
   queries: readonly PreservationQuery[],
@@ -100,12 +122,12 @@ export async function evaluateQueries(
     )
     .join('\n\n');
 
-  const response = await instrumented('query-eval', 'high', paragraphId, () =>
+  const response = await instrumented('query-eval', EVAL_EFFORT, paragraphId, () =>
     getClient().messages.parse({
       model: MODEL,
-      max_tokens: 8000,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'high', format: zodOutputFormat(QueryEvalSchema) },
+      max_tokens: EVAL_MAX_TOKENS,
+      thinking: { type: EVAL_THINKING },
+      output_config: { effort: EVAL_EFFORT, format: zodOutputFormat(QueryEvalSchema) },
       system: SYSTEM,
       messages: [
         {
