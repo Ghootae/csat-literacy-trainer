@@ -173,9 +173,25 @@ function isPreserved(id: string, raw: ReadonlyMap<string, RawQueryVerdict>): boo
  * 규칙 3~6의 의미 축. 표현·논항과 분리된 의미 보존 수준만 판정한다.
  *   모순     하위/scope에 contradicted → contradicted
  *   핵심 관계 모두 preserved            → relation_preserved
- *   핵심 관계 일부 preserved            → partial_relation_preservation
+ *   핵심 관계 일부 preserved            → partial_relation_preservation (단, 아래 원칙 B)
  *   scope만 preserved                  → topic_only
  *   어디에도 증거 없음                  → region_not_evidenced
+ *
+ * **원칙 A — 두 축의 독립성.** regionSemanticVerdict는 "핵심 관계를 얼마나 보존했는가",
+ * argumentCoverage는 "관계에 참여하는 대상·논항을 얼마나 정확히 지목했는가"를 나타낸다.
+ * 논항을 전부 맞혔다고 관계를 이해한 것은 아니므로 `topic_only + argumentCoverage=full`이
+ * 정상적으로 가능해야 한다.
+ *
+ * **원칙 B — 관계 증거가 없으면 부분관계로 승격하지 않는다.** 영역에 관계 층위 핵심 질의가
+ * 하나 이상 있는데 그중 보존된 것이 0개라면, 논항 층위 핵심 질의가 모두 보존됐더라도
+ * 상한은 topic_only다. 대상 이름을 빠짐없이 지목한 것은 argumentCoverage가 담당한다.
+ *
+ * 이 가드는 실측(2026-07-29 N2 실험)에서 나왔다: 생성기가 명칭 확인 질의
+ * ("첫 번째 공간은 무엇인가?")를 criticalForRelation으로 지정하자, 대상 이름만 나열한
+ * 응답이 핵심 질의 2개를 충족해 partial_relation_preservation으로 올라갔다.
+ *
+ * 관계 층위 핵심 질의가 **애초에 없는** 영역(논항 핵심만으로 관계를 정의한 영역)에는
+ * 가드가 적용되지 않는다 — 그런 영역에서는 논항 보존이 유일한 관계 증거이기 때문이다.
  */
 function deriveSemanticVerdict(
   region: RegionPolicy,
@@ -187,7 +203,13 @@ function deriveSemanticVerdict(
   const critical = region.criticalForRelation;
   const preservedCount = critical.filter((id) => isPreserved(id, raw)).length;
   if (critical.length > 0 && preservedCount === critical.length) return 'relation_preserved';
-  if (preservedCount >= 1) return 'partial_relation_preservation';
+
+  // 원칙 B — 관계 층위 핵심 질의가 있는데 하나도 보존되지 않았으면 부분관계로 올리지 않는다.
+  const criticalRelation = critical.filter((id) => region.relationQueries.includes(id));
+  const relationEvidenceMissing =
+    criticalRelation.length > 0 && !criticalRelation.some((id) => isPreserved(id, raw));
+
+  if (preservedCount >= 1 && !relationEvidenceMissing) return 'partial_relation_preservation';
   if (scope.semanticState === 'preserved') return 'topic_only';
   return 'region_not_evidenced';
 }

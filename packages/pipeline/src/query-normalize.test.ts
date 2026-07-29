@@ -84,12 +84,37 @@ describe('의미 축 사다리', () => {
     expect(r.expressionProfile).toBe('none');
   });
 
-  it('핵심 관계 일부만 preserved → partial_relation_preservation (E3 유형)', () => {
-    // rel 미보존, a1만 병치 보존 → 핵심 2개 중 1개. 관계 구조는 표현 안 됐으므로 expr=none.
-    const r = one(ASSET, raw(P('s', 'explicit'), N('rel'), P('a1', 'implicit'), N('a2')));
+  /**
+   * 구 "E3 유형" 테스트의 의미적 정정 (2026-07-29).
+   *
+   * 원래 시나리오는 `ASSET`에서 rel 미보존 + a1(역할 주체) 보존 → partial이었다. 이 테스트가
+   * 표현하려던 것은 **사다리의 중간 단**(핵심 관계를 일부만 보존하면 partial)이지, 논항만
+   * 맞혀도 partial이 된다는 규칙이 아니었다. 두 가지가 한 케이스에 뒤섞여 있었다.
+   *
+   * 원본 오라클(queries-corporate-law-p0.json)에서 a1에 해당하는 q6a는
+   * `level: relation_argument`이고 수용 기준이 "법인과 사람을 서로 다른 역할에 배치하면
+   * preserved"다 — **역할 배정 질의**이지 명칭 확인 질의가 아니다. 즉 이 질의의 보존은
+   * 진짜 관계 증거다. 그런데 RegionPolicy에서는 argumentQueries에 들어가 있어 결정적
+   * 계층에서는 명칭 확인 질의와 구분되지 않았다.
+   *
+   * 그래서 기대값만 뒤집지 않고 **표현을 바로잡는다**: 역할 배정 질의를 관계 층위로 분류한
+   * 정책으로 사다리 단을 검사한다. `ASSET`처럼 논항 층위 핵심만 보존된 경우는 아래
+   * 원칙 B 테스트에서 topic_only로 따로 확인한다.
+   */
+  it('핵심 관계 일부만 preserved → partial_relation_preservation (사다리 중간 단)', () => {
+    // 역할 배정 질의(role)를 관계 층위로 둔 영역. 양측 분리(rel)는 미보존, 역할 배정만 보존.
+    const ASSET_ROLE: RegionPolicy = {
+      id: 'asset_role',
+      label: '자산 운용 (역할 배정을 관계 층위로 분류)',
+      scopeQueries: ['s'],
+      relationQueries: ['rel', 'role'],
+      argumentQueries: ['a2'],
+      criticalForRelation: ['rel', 'role'],
+      requiredForFullArgument: ['a2'],
+    };
+    const r = one(ASSET_ROLE, raw(P('s', 'explicit'), N('rel'), P('role', 'implicit'), N('a2')));
     expect(r.regionSemanticVerdict).toBe('partial_relation_preservation');
-    expect(r.argumentCoverage).toBe('partial');
-    expect(r.expressionProfile).toBe('none');
+    expect(r.expressionProfile).toBe('implicit'); // 보존된 관계 질의가 병치이므로
   });
 
   it('어디에도 증거 없음 → region_not_evidenced (C 유형)', () => {
@@ -193,6 +218,111 @@ describe('N2-b — 대상 이름 나열은 관계 질의를 충족시키지 못�
     const r = one(PHOTO, raw(N('s'), N('rel'), P('n1', 'explicit'), P('n2', 'explicit')));
     expect(r.scope.source).toBe('promoted_argument');
     expect(r.regionSemanticVerdict).toBe('topic_only');
+  });
+});
+
+/**
+ * 원칙 B — 관계 증거가 없으면 부분관계로 승격하지 않는다 (실제 N2-b 경로).
+ *
+ * 2026-07-29 실험의 생성 run2가 명칭 확인 질의를 criticalForRelation으로 지정했다:
+ *   q5  [argument] critical  "첫 번째 공간은 무엇인가?"        → 엽육 세포
+ *   q10 [argument] critical  "두 번째 공간은 무엇인가?"        → 유관속초 세포
+ *   q6  [relation] critical  "엽육 세포에서 4탄당은 어떻게 형성되는가?"
+ *   q11 [relation] critical  "유관속초로 이동한 4탄당은 어떤 과정을 거치는가?"
+ * 학생이 대상 이름만 나열하면 핵심 4개 중 2개가 충족돼 partial로 올라갔다. 두 대상을
+ * 모두 알지만 그 사이의 역할 분담을 말하지 않았으므로 관계 증거는 0이다.
+ */
+describe('원칙 B — 관계 증거 0이면 논항이 full이어도 topic_only를 넘지 못한다', () => {
+  /** 명칭 확인 논항 2개 + 각 공간의 과정을 묻는 관계 질의 2개, 전부 critical. */
+  const TWO_SPACE: RegionPolicy = {
+    id: 'division',
+    label: '두 공간의 분업',
+    scopeQueries: ['s'],
+    relationQueries: ['relA', 'relB'],
+    argumentQueries: ['nameA', 'nameB'],
+    criticalForRelation: ['nameA', 'relA', 'nameB', 'relB'],
+    requiredForFullArgument: ['nameA', 'nameB'],
+  };
+
+  it('A — 논항 전부 보존 + 관계 전부 미보존 → topic_only, argumentCoverage=full', () => {
+    const r = one(
+      TWO_SPACE,
+      raw(P('s', 'explicit'), P('nameA', 'explicit'), P('nameB', 'explicit'), N('relA'), N('relB')),
+    );
+    expect(r.regionSemanticVerdict).toBe('topic_only');
+    expect(r.regionSemanticVerdict).not.toBe('partial_relation_preservation');
+    expect(r.regionSemanticVerdict).not.toBe('relation_preserved');
+    // 원칙 A — 두 축은 독립이다. 대상을 모두 맞혔다는 사실은 여기에 남는다.
+    expect(r.argumentCoverage).toBe('full');
+  });
+
+  it('B — 논항 일부만 보존 + 관계 전부 미보존 → topic_only, argumentCoverage=partial', () => {
+    const r = one(
+      TWO_SPACE,
+      raw(P('s', 'explicit'), P('nameA', 'explicit'), N('nameB'), N('relA'), N('relB')),
+    );
+    expect(r.regionSemanticVerdict).toBe('topic_only');
+    expect(r.argumentCoverage).toBe('partial');
+  });
+
+  it('C-1 — 역할을 실제로 배정하면 관계 증거가 생긴다 (한 축만) → partial_relation_preservation', () => {
+    // "A는 X를 수행한다"까지만 말하고 B의 역할은 말하지 않은 경우.
+    const r = one(
+      TWO_SPACE,
+      raw(P('s', 'explicit'), P('nameA', 'explicit'), P('nameB', 'explicit'), P('relA', 'explicit'), N('relB')),
+    );
+    expect(r.regionSemanticVerdict).toBe('partial_relation_preservation');
+    expect(r.argumentCoverage).toBe('full');
+  });
+
+  it('C-2 — 두 대상에 각각 역할을 배정하면 → relation_preserved', () => {
+    // "A는 X를 수행하고 B는 Y를 수행한다."
+    const r = one(
+      TWO_SPACE,
+      raw(
+        P('s', 'explicit'),
+        P('nameA', 'explicit'),
+        P('nameB', 'explicit'),
+        P('relA', 'explicit'),
+        P('relB', 'explicit'),
+      ),
+    );
+    expect(r.regionSemanticVerdict).toBe('relation_preserved');
+  });
+
+  it('D — 선형 인과: 중간 기제를 생략해도 시작·끝을 이었으면 관계 증거다 → relation_preserved', () => {
+    // "금리를 올리면 사람들이 돈을 덜 써서 물가가 내린다" 유형. 이름 나열이 아니라
+    // 인과를 진술한 것이므로 가드에 걸리면 안 된다.
+    const CAUSAL: RegionPolicy = {
+      id: 'causal',
+      label: '조건 → 결과',
+      scopeQueries: ['s'],
+      relationQueries: ['chain'],
+      argumentQueries: ['operand'],
+      criticalForRelation: ['chain'],
+      requiredForFullArgument: ['operand'],
+    };
+    const r = one(CAUSAL, raw(P('s', 'explicit'), P('chain', 'implicit'), N('operand')));
+    expect(r.regionSemanticVerdict).toBe('relation_preserved');
+    expect(r.argumentCoverage).toBe('none');
+  });
+
+  it('E — 관계 층위 핵심 질의가 없는 영역에는 가드가 적용되지 않는다 (기존 동작 보존)', () => {
+    // 관계를 논항 핵심만으로 정의한 영역. 여기서는 논항 보존이 유일한 관계 증거이므로
+    // 가드가 무조건 topic_only로 떨어뜨리면 안 된다.
+    const ARG_ONLY: RegionPolicy = {
+      id: 'arg_only',
+      label: '논항 핵심만 있는 영역',
+      scopeQueries: ['s'],
+      relationQueries: [],
+      argumentQueries: ['a1', 'a2'],
+      criticalForRelation: ['a1', 'a2'],
+      requiredForFullArgument: ['a1', 'a2'],
+    };
+    const partial = one(ARG_ONLY, raw(P('s', 'explicit'), P('a1', 'implicit'), N('a2')));
+    expect(partial.regionSemanticVerdict).toBe('partial_relation_preservation');
+    const full = one(ARG_ONLY, raw(P('s', 'explicit'), P('a1', 'implicit'), P('a2', 'implicit')));
+    expect(full.regionSemanticVerdict).toBe('relation_preserved');
   });
 });
 
