@@ -71,6 +71,15 @@ export interface QueryVerdict {
   readonly viaItem: string;
 }
 
+/**
+ * 피드백에 나열하는 참고 세부의 상한 (N1).
+ *
+ * 상한이 없으면 명제가 많은 과정형 문단에서 우수 응답에 5~7개가 붙어 결손표처럼 읽힌다 —
+ * 잘한 응답일수록 텍스트가 길어지는 역전이라 시각적 보상(수형도 오버레이)과 충돌한다.
+ * 잘린 나머지는 사라지지 않고 오버레이의 ○(참고·미확인)로만 표시된다.
+ */
+const REFERENCE_DETAIL_CAP = 3;
+
 function aggregatePropositionState(verdicts: readonly QueryVerdict[]): PropositionEvidenceState {
   if (verdicts.some((v) => v.semanticState === 'contradicted')) return 'contradicted';
   if (verdicts.some((v) => v.semanticState === 'preserved' && v.expressionMode === 'explicit')) return 'evidenced';
@@ -81,6 +90,10 @@ function aggregatePropositionState(verdicts: readonly QueryVerdict[]): Propositi
 /**
  * 정규화된 영역 + 질의 판정 → 학생 평가. 핵심 판정은 그대로 통과시키고, 명제 evidence와
  * 피드백을 파생한다. 결정적 — LLM 없음.
+ *
+ * @param propWeight 명제 id → 전역 가중치 W. 피드백에 어떤 참고 세부를 남길지 고르는 데만
+ *   쓴다(채점 아님). 비어 있으면 골드 순서로 자른다 — 질의 보존 파이프라인의 `Gold`에는
+ *   아직 가중치가 없어서 기본값이 그 경로다. `weights.ts`의 W를 넘기면 상위부터 남는다.
  */
 export function assess(
   regions: readonly NormalizedRegion[],
@@ -88,6 +101,7 @@ export function assess(
   queries: readonly AssessQuery[],
   verdicts: ReadonlyMap<string, QueryVerdict>,
   propShortForm: ReadonlyMap<string, string> = new Map(),
+  propWeight: ReadonlyMap<string, number> = new Map(),
 ): RegionAssessment[] {
   const regionById = new Map(regions.map((r) => [r.id, r]));
   return regionMeta.map((meta) => {
@@ -111,7 +125,7 @@ export function assess(
     });
 
     const critical = regionQueries.find((q) => q.critical && q.level === 'relation') ?? regionQueries.find((q) => q.critical);
-    const feedback = buildFeedback(verdict, meta, critical, propositionEvidence);
+    const feedback = buildFeedback(verdict, meta, critical, propositionEvidence, propWeight);
 
     return {
       regionId: meta.id,
@@ -127,21 +141,46 @@ export function assess(
   });
 }
 
+/**
+ * 피드백에 남길 참고 세부를 고른다 — 가중치 상위 {@link REFERENCE_DETAIL_CAP}개까지.
+ *
+ * 가중치가 없거나 동률이면 골드 순서로 자른다. 정렬은 전부 결정적이어야 한다: 같은 입력에
+ * 같은 피드백 문장이 나와야 회귀 로그를 비교할 수 있다.
+ */
+function topReferenceDetails(
+  evidence: readonly PropositionEvidence[],
+  criticalProps: ReadonlySet<string>,
+  propWeight: ReadonlyMap<string, number>,
+): string[] {
+  return evidence
+    .map((e, goldOrder) => ({ e, goldOrder }))
+    .filter(
+      ({ e }) =>
+        (e.state === 'not_evidenced' || e.state === 'supported_by_abstraction') && !criticalProps.has(e.propositionId),
+    )
+    .sort((a, b) => {
+      const wa = propWeight.get(a.e.propositionId) ?? 0;
+      const wb = propWeight.get(b.e.propositionId) ?? 0;
+      return wa === wb ? a.goldOrder - b.goldOrder : wb - wa;
+    })
+    .slice(0, REFERENCE_DETAIL_CAP)
+    .map(({ e }) => e.shortForm);
+}
+
 /** 설명형 피드백. 포착한 핵심 관계 + 추가로 참고할 세부(감점 아님)를 구체적으로 기술. */
 function buildFeedback(
   verdict: RegionSemanticVerdict,
   meta: AssessRegionMeta,
   critical: AssessQuery | undefined,
   evidence: readonly PropositionEvidence[],
+  propWeight: ReadonlyMap<string, number>,
 ): string {
   const relText = critical?.expectedAnswer ?? meta.label;
   const criticalProps = new Set(critical?.propositionIds ?? []);
 
   switch (verdict) {
     case 'relation_preserved': {
-      const extra = evidence
-        .filter((e) => (e.state === 'not_evidenced' || e.state === 'supported_by_abstraction') && !criticalProps.has(e.propositionId))
-        .map((e) => e.shortForm);
+      const extra = topReferenceDetails(evidence, criticalProps, propWeight);
       const base = `핵심 관계 「${relText}」를 잘 포착했습니다.`;
       return extra.length > 0
         ? `${base} 원문에는 ${extra.join(', ')}도 제시됩니다 (참고 — 더 구체적으로 표현할 수 있으나 감점 요소는 아닙니다).`
