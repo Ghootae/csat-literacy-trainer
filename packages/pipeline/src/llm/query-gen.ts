@@ -15,11 +15,23 @@ import { z } from 'zod/v4';
 import { MODEL, getClient, instrumented } from './client.js';
 
 /**
- * 동결 버전 태그. 일반화 실험 동안 프롬프트·스키마를 고정한다 — 새 관계 유형에 대한
- * 순수 일반화를 관찰하기 위함. 개선안은 실험 후 별도 버전으로만 반영한다.
+ * 동결 버전 태그. 실험 기간 동안 프롬프트·스키마를 고정한다 — 새 관계 유형에 대한
+ * 순수 일반화를 관찰하기 위함. **프롬프트를 고치면 반드시 이 상수를 함께 올린다.**
+ * 이 태그는 생성 fixture의 `_meta.generatorVersion`으로 기록되므로, 태그를 고정한 채
+ * 프롬프트만 바꾸면 과거 실험 로그와 현재 코드가 같은 이름으로 다른 지시문을 가리키게 된다.
+ *
+ * 버전 대응:
+ * - `v0` (~2026-07-29): 원칙 A~F. F = "수용 기준은 판정 가능하게".
+ *   실험 로그 `query-gen-*`, `n2-compression-2026-07-29`, fixture `*-run{1,2,3}.json`.
+ * - `v1` (2026-08-01~): 원칙 A~G. **F에 "명명된 중간산물의 조건부 생략 허용"을 신설**하고
+ *   v0의 F(수용 기준)를 G로 밀었다. N2-a 정책 결정(`docs/NEXT.md`)의 반영이다.
+ *   fixture `*-v1-run{1,2,3}.json`.
+ *
+ * 주의: v0 시기 문서가 말하는 "원칙 F에 명문화한다"는 **슬롯을 지칭한 예고**이지
+ * v0의 F(수용 기준)를 고치라는 뜻이 아니었다. v1은 그 예고대로 F를 신설한 것이다.
  */
-export const GENERATOR_VERSION = 'v0';
-export const EVAL_SCHEMA_VERSION = 'query-3axis-v1';
+export const GENERATOR_VERSION: string = 'v1';
+export const EVAL_SCHEMA_VERSION: string = 'query-3axis-v1';
 
 // ── 입력 타입 (안정화 골드에서 구성) ──
 

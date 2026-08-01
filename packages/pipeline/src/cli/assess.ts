@@ -12,6 +12,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { MODEL } from '../llm/client.js';
 import { EVAL_REQUEST_FINGERPRINT, type PreservationQuery, type QueryEval, evaluateQueries } from '../llm/query-eval.js';
 import {
   type AssessQuery,
@@ -32,10 +33,20 @@ import {
   rebucketToOracle,
 } from '../query-gen-lib.js';
 import { type RawQueryVerdict, type RegionSemanticVerdict, normalizeQueryStates } from '../query-normalize.js';
-import { type GeneratedQuerySet, generateQuerySet } from '../llm/query-gen.js';
+import { EVAL_SCHEMA_VERSION, GENERATOR_VERSION, type GeneratedQuerySet, generateQuerySet } from '../llm/query-gen.js';
 
 const GEN_DIR = resolve(process.cwd(), 'packages/pipeline/fixtures/generated-queries');
 const ORACLE_DIR = resolve(process.cwd(), 'packages/pipeline/fixtures/query-oracles');
+
+/**
+ * 생성 fixture 경로. **버전마다 다른 파일에 쓴다** — 프롬프트를 고친 뒤 같은 경로에 쓰면
+ * 기존 fixture가 있어 재생성이 일어나지 않거나(캐시 히트), 덮어써서 기준선이 사라진다.
+ * v0 fixture는 버전 태그 없는 이름으로 이미 동결돼 있으므로 그 이름을 유지한다.
+ */
+function genFixturePath(prefix: string, run: number): string {
+  const tag = GENERATOR_VERSION === 'v0' ? '' : `-${GENERATOR_VERSION}`;
+  return resolve(GEN_DIR, `${prefix}${tag}-run${run}.json`);
+}
 
 interface Probe {
   readonly id: string;
@@ -332,13 +343,13 @@ async function main(): Promise<void> {
     const sets: EvalSet[] = [oracle];
     const genInput = buildGeneratorInput(gold);
     for (let i = 1; i <= 3; i++) {
-      const p = resolve(GEN_DIR, `${cfg.genPrefix}-run${i}.json`);
+      const p = genFixturePath(cfg.genPrefix, i);
       let fx: GeneratedQuerySet;
       if (existsSync(p)) fx = readJson<GeneratedQuerySet>(p);
       else {
-        console.log(`  생성 run${i} (fixture 없음, v0 생성)…`);
+        console.log(`  생성 run${i} (fixture 없음, ${GENERATOR_VERSION} 생성)…`);
         fx = await generateQuerySet(genInput);
-        writeFileSync(p, JSON.stringify({ _meta: { kind: 'generated', run: i, generatorVersion: 'v0', schemaVersion: 'query-3axis-v1', model: 'claude-opus-4-8', generatedAt: new Date().toISOString(), note: '실험용' }, ...fx }, null, 2), 'utf8');
+        writeFileSync(p, JSON.stringify({ _meta: { kind: 'generated', run: i, generatorVersion: GENERATOR_VERSION, schemaVersion: EVAL_SCHEMA_VERSION, model: MODEL, generatedAt: new Date().toISOString(), note: '실험용' }, ...fx }, null, 2), 'utf8');
       }
       sets.push(loadSet(`gen${i}`, fx, oracle.shapes));
     }
