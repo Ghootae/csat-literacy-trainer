@@ -233,9 +233,37 @@ const N2_CONFIGS: readonly Config[] = [
 ];
 
 /** 이번 실행: N2 실험만. 기존 configs는 회귀 회복용으로 보존. */
-const ACTIVE: readonly Config[] = N2_CONFIGS;
-void CONFIGS;
-void NEW_CONFIGS;
+/**
+ * 실행할 회귀 세트. 인자로 고른다.
+ *
+ *   npm run assess                    n2 세트 (기본)
+ *   npm run assess -- base            법인·과학·인문
+ *   npm run assess -- base 법인        이름에 '법인'이 든 문단만
+ *   npm run assess -- all
+ *
+ * 평가 캐시가 무효화되는 변경(프롬프트·스키마) 뒤에는 **모든 세트가 재측정 대상**이다.
+ * 한 세트만 돌리고 끝내면 다른 문단의 회귀를 못 본다.
+ */
+const SUITES: Readonly<Record<string, readonly Config[]>> = {
+  n2: N2_CONFIGS,
+  base: CONFIGS,
+  new: NEW_CONFIGS,
+  all: [...CONFIGS, ...NEW_CONFIGS, ...N2_CONFIGS],
+};
+
+const SUITE_NAME = process.argv[2] ?? 'n2';
+const NAME_FILTER = process.argv[3];
+const SUITE = SUITES[SUITE_NAME];
+if (SUITE === undefined) {
+  console.error(`알 수 없는 세트 '${SUITE_NAME}'. 가능한 값: ${Object.keys(SUITES).join(', ')}`);
+  process.exit(1);
+}
+const ACTIVE: readonly Config[] =
+  NAME_FILTER === undefined ? SUITE : SUITE.filter((c) => c.name.includes(NAME_FILTER));
+if (ACTIVE.length === 0) {
+  console.error(`'${SUITE_NAME}' 세트에 이름이 '${NAME_FILTER}'을 포함하는 문단이 없다.`);
+  process.exit(1);
+}
 
 function readJson<T>(p: string): T {
   return JSON.parse(readFileSync(p, 'utf8')) as T;
@@ -323,7 +351,11 @@ async function runOne(set: EvalSet, cfg: Config, probe: Probe, paraText: string,
 }
 
 async function main(): Promise<void> {
-  console.log('N2 실험 — 관계 하위 유형별 압축 허용도 (순환·분업 vs 선형 인과)\n');
+  const header =
+    SUITE_NAME === 'n2'
+      ? 'N2 실험 — 관계 하위 유형별 압축 허용도 (순환·분업 vs 선형 인과)'
+      : `회귀 — 세트 '${SUITE_NAME}'${NAME_FILTER === undefined ? '' : ` / 필터 '${NAME_FILTER}'`}`;
+  console.log(`${header}  (문단 ${ACTIVE.length}개, 생성기 ${GENERATOR_VERSION})\n`);
   let overcredit = 0;
   let unstable = 0;
   let oracleMiss = 0;
@@ -384,11 +416,13 @@ async function main(): Promise<void> {
   console.log(`  과대평가 오류(관계보존 미만 기대 → 관계보존 판정): ${overcredit}건`);
   console.log(`  손 오라클이 기대와 어긋난 프로브: ${oracleMiss}/${total} (오라클 재검토 대상)`);
   console.log(`  분해 4종 간 focal 판정 불안정: ${unstable}/${total} 프로브`);
-  console.log(`\n  N2 판정 기준:`);
-  console.log(`    - '순환중간생략'·'한쪽공간만'에서 생성기가 관계보존 → **위험 실증** (v0 프롬프트 수정 필요)`);
-  console.log(`    - 오라클도 생성기도 부분관계 → 생성기 무사 (정책만 문서화)`);
-  console.log(`    - 둘 다 관계보존 → N2 가설 자체 재검토 (압축 허용이 정답일 수 있음)`);
-  console.log(`    - '대조군-선형중간생략'은 관계보존이 나와야 구분이 실재함을 보인다`);
+  if (SUITE_NAME === 'n2') {
+    console.log(`\n  N2 판정 기준:`);
+    console.log(`    - '순환중간생략'·'한쪽공간만'에서 생성기가 관계보존 → **위험 실증** (v0 프롬프트 수정 필요)`);
+    console.log(`    - 오라클도 생성기도 부분관계 → 생성기 무사 (정책만 문서화)`);
+    console.log(`    - 둘 다 관계보존 → N2 가설 자체 재검토 (압축 허용이 정답일 수 있음)`);
+    console.log(`    - '대조군-선형중간생략'은 관계보존이 나와야 구분이 실재함을 보인다`);
+  }
   console.log(`\n── 학생 피드백 예시 ──`);
   for (const s of feedbackSamples) console.log(`\n  ${s}`);
 }
