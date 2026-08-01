@@ -26,6 +26,11 @@ export const QueryVerdictSchema = z.object({
   expressionMode: z
     .enum(['explicit', 'implicit', 'none'])
     .describe('preserved일 때만 유효. 직접 진술이면 explicit, 병치·함축이면 implicit. not_evidenced/contradicted면 none.'),
+  evidenceRole: z
+    .enum(['relation', 'entity_identification', 'scope', 'none'])
+    .describe(
+      'preserved일 때만 유효. 그 증거가 어떤 종류인가 — relation=대상에 역할·방향·조건·인과·대조·순서가 배정됨(대상 개수 무관), entity_identification=대상·개수를 지목했을 뿐 연결이 없음, scope=화제만 지목. preserved가 아니면 none.',
+    ),
   evidence: z.string().describe('판정 근거가 된 학생 표현 조각. 그대로 인용.'),
   viaItem: z.string().describe('어느 학생 항목이 이 질의를 다뤘는가. 없으면 빈 문자열.'),
 });
@@ -66,8 +71,41 @@ const SYSTEM = `당신은 학생의 문단 요약이 **보존 질의**의 답을
     explicit   답을 직접 진술함
     implicit   직접 쓰진 않았지만 병치·함축으로 충분히 나타냄
     (preserved가 아니면 none)
+- evidenceRole (preserved일 때만):
+    relation               대상에 **역할·방향·조건·인과·대조·순서**가 배정됨
+    entity_identification  대상·개수를 **지목**했을 뿐 연결이 없음
+    scope                  화제만 지목
+    (preserved가 아니면 none)
 - evidence: 판정 근거가 된 학생 표현을 그대로 인용
 - viaItem: 어느 학생 항목이 이 질의를 다뤘는지
+
+# 두 판단의 분업 — 섞지 마라
+
+semanticState와 evidenceRole은 **서로 다른 질문**에 답한다.
+
+- semanticState는 **"학생이 이 질의의 답을 했는가"**다. 질의별 **수용 기준을 그대로 따른다.**
+  수용 기준이 "이름 두 개면 인정"이라고 하면, 이름 두 개를 쓴 학생은 그 질의에 **답한 것이므로
+  preserved**다. 답을 했는데 not_evidenced로 낮추지 마라.
+- evidenceRole은 **"그 답이 어떤 종류의 증거인가"**다. 여기서는 수용 기준이 무엇이라고 쓰여
+  있든 **아래 정의만 따른다.** 수용 기준이 이름 나열을 인정하더라도, 이름 나열은
+  entity_identification이지 relation이 아니다.
+
+두 축이 어긋나는 것은 정상이다: **preserved + entity_identification**은 "질의에는 답했지만
+관계 증거는 아니다"라는 뜻이며, 흔하게 나온다.
+
+# evidenceRole 판별 — 개수가 아니라 **역할 배정**이 기준이다
+
+relation인 경우:
+- 대상에 서로 다른 역할을 배정 ("자산은 법인이 소유하고 실제 운용은 권한자가 한다")
+- 원인–결과·조건–결과·수단–목적을 연결
+- 과정의 순서·방향을 표현
+- 두 대상을 대조
+- **대상이 하나여도 그 대상에 역할·작용이 배정되면 relation이다** ("법인이 권리·의무의 주체가 된다")
+
+entity_identification인 경우:
+- 역할 없이 대상 이름만 나열 ("법인과 권한자")
+- 개수만 진술 ("주체는 둘이다")
+- "관련이 있다", "차이가 있다" 같은 공허한 연결어만 붙임
 
 # 핵심 원칙
 

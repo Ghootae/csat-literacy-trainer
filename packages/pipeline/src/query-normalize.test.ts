@@ -326,6 +326,85 @@ describe('원칙 B — 관계 증거 0이면 논항이 full이어도 topic_only�
   });
 });
 
+/**
+ * N2-e — 생성기가 명칭 질의를 `level: relation` + critical로 잘못 지정한 경우.
+ *
+ * 실측 출처: `photosynthesis-p5-v1-run1.json`의 영역 r1.
+ *   질의 q2 "C4 식물의 광합성이 이루어지는 공간은 몇 개이며 각각 무엇인가?"
+ *   level=relation, criticalForRelation=true, 수용 기준 "순서 없이 두 이름만 언급해도 부분 인정"
+ *   학생 응답 "C4 식물의 광합성 / 엽육 세포와 유관속초 세포" → 기대 `topic_only`
+ *
+ * 학생은 그 질의의 답을 실제로 했으므로 semanticState는 preserved다. 관계 증거가 아니라는
+ * 사실은 evidenceRole로 표현한다 — semanticState를 낮추면 argumentCoverage가 함께 망가진다.
+ */
+describe('N2-e — 질의 라벨이 relation이어도 증거가 명칭 지목이면 관계 증거가 아니다', () => {
+  /** 명칭 지목 증거. 질의에는 답했으나(preserved) 관계 증거는 아니다. */
+  const NAMED = (id: string): RawQueryVerdict => ({
+    queryId: id,
+    semanticState: 'preserved',
+    expressionMode: 'implicit',
+    evidenceRole: 'entity_identification',
+  });
+  /** 역할이 배정된 증거. 대상이 하나여도 관계 증거다. */
+  const ROLE = (id: string, mode: 'explicit' | 'implicit'): RawQueryVerdict => ({
+    queryId: id,
+    semanticState: 'preserved',
+    expressionMode: mode,
+    evidenceRole: 'relation',
+  });
+
+  /** gen1 r1 모사 — 관계 층위 critical 질의가 명칭 질의 **하나뿐**인 영역. */
+  const NAMING_ONLY_CRITICAL: RegionPolicy = {
+    id: 'division',
+    label: '두 공간 분업',
+    scopeQueries: ['s'],
+    relationQueries: ['q2'],
+    argumentQueries: [],
+    criticalForRelation: ['q2'],
+    requiredForFullArgument: [],
+  };
+
+  it('A — 이름만 나열 → topic_only (부분관계로 올라가지 않는다)', () => {
+    const r = one(ASSET, raw(P('s', 'explicit'), NAMED('rel'), NAMED('a1'), N('a2')));
+    expect(r.regionSemanticVerdict).toBe('topic_only');
+  });
+
+  it('B — ★relation_preserved 분기도 막힌다 (critical 전부 보존이어도 관계 증거 0)', () => {
+    // 이 케이스가 실제 구멍이었다: critical이 명칭 질의 하나뿐이면 preservedCount ===
+    // critical.length가 성립해 원칙 B가 실행되기도 전에 relation_preserved로 반환됐다.
+    // 실험에서는 rebucketToOracle이 critical 집합을 키워 가려졌을 뿐, production 경로에는
+    // 완전 과대평가로 열려 있었다.
+    const r = one(NAMING_ONLY_CRITICAL, raw(P('s', 'explicit'), NAMED('q2')));
+    expect(r.regionSemanticVerdict).toBe('topic_only');
+  });
+
+  it('C — 대상이 하나여도 역할이 배정되면 관계 증거다 → partial (한쪽공간만 보호)', () => {
+    // "C4 식물은 엽육 세포에서 이산화 탄소를 붙잡아 4탄당의 형태로 저장해 두고 광합성을 한다"
+    // 대상은 엽육 세포 하나뿐이지만 역할이 배정됐다. N2 기준선의 기대값은 부분관계다.
+    const r = one(ASSET, raw(P('s', 'explicit'), ROLE('rel', 'implicit'), N('a1'), N('a2')));
+    expect(r.regionSemanticVerdict).toBe('partial_relation_preservation');
+  });
+
+  it('D — 병치로 역할을 나눠 배정하면 관계 증거다 (E2 보호)', () => {
+    // "자산은 법인이 소유하고 실제 운용은 권한자가 한다" — 관계어 없이 병치지만 역할 배정.
+    const r = one(ASSET, raw(N('s'), ROLE('rel', 'implicit'), ROLE('a1', 'explicit'), N('a2')));
+    expect(r.regionSemanticVerdict).toBe('relation_preserved');
+    expect(r.expressionProfile).toBe('implicit');
+  });
+
+  it('E — q6a 동결: 논항 층위 증거만으로는 관계 층위 가드를 통과시키지 않는다', () => {
+    // 원칙 B를 "층위 AND 증거" 연언으로 좁혔으므로, argumentQueries에 있는 q6a는 오늘과
+    // 동일하게 관계 증거로 승격되지 않는다. 3축 기준선을 건드리지 않기 위한 보호 테스트.
+    const r = one(ASSET, raw(P('s', 'explicit'), NAMED('rel'), ROLE('a1', 'explicit'), N('a2')));
+    expect(r.regionSemanticVerdict).toBe('topic_only');
+  });
+
+  it('F — evidenceRole이 없는 판정은 기존대로 관계 증거로 본다 (하위 호환)', () => {
+    const r = one(ASSET, raw(P('s', 'explicit'), P('rel', 'implicit'), N('a1'), N('a2')));
+    expect(r.regionSemanticVerdict).toBe('partial_relation_preservation');
+  });
+});
+
 describe('논항 없는 영역 — 커버리지는 none, 상한은 관계 보존', () => {
   it('scope 질의·논항 없이 핵심 관계만 preserved', () => {
     const r = one(RELATION_ONLY, raw(P('rel', 'explicit')));

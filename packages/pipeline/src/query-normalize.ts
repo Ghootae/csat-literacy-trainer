@@ -34,10 +34,33 @@ export type ArgumentCoverage = 'none' | 'partial' | 'full';
 /** 표현 방식 프로필 — 보존된 핵심 질의의 explicit/implicit 집계. 의미 판정을 바꾸지 않는다. */
 export type ExpressionProfile = 'explicit' | 'implicit' | 'mixed' | 'none';
 
+/**
+ * 학생 증거의 **종류**. semanticState("답을 담았는가")·expressionMode("직접인가 함축인가")와
+ * 직교한다 — 질의에 답은 했지만 그 답이 관계 증거는 아닌 경우가 있기 때문이다.
+ *
+ * 필요해진 이유(N2-e, 2026-08-01): 생성기가 명칭 질의("공간은 몇 개이며 각각 무엇인가")를
+ * `level: relation` + critical로 지정하면, 학생이 이름만 나열해도 관계 증거가 있는 것으로
+ * 처리됐다. semanticState를 not_evidenced로 낮추는 방식은 쓸 수 없다 — 학생은 그 질의의
+ * 답을 실제로 했고, 그 정보는 argumentCoverage가 정당하게 집계해야 한다(원칙 A: 두 축의 독립성).
+ * 그래서 "답했는가"와 "관계 증거인가"를 갈라 놓는다.
+ *
+ * - `relation`              대상에 역할·방향·조건·인과·대조·순서가 배정됨. 대상 개수는 무관하다
+ *                           ("엽육 세포에서 CO2를 붙잡아 저장" — 대상 하나여도 관계 증거).
+ * - `entity_identification` 대상·개수를 지목했을 뿐 연결이 없음 ("엽육 세포와 유관속초 세포").
+ * - `scope`                 화제만 지목.
+ * - `none`                  preserved가 아닐 때.
+ */
+export type EvidenceRole = 'relation' | 'entity_identification' | 'scope' | 'none';
+
 export interface RawQueryVerdict {
   readonly queryId: string;
   readonly semanticState: SemanticState;
   readonly expressionMode: ExpressionMode;
+  /**
+   * 선택 필드. **없으면 관계 증거로 간주한다** — 이 축이 도입되기 전의 판정 데이터와
+   * 기존 테스트가 그대로 동작해야 하므로, 채워졌을 때만 게이트가 좁아진다.
+   */
+  readonly evidenceRole?: EvidenceRole;
 }
 
 /**
@@ -170,6 +193,18 @@ function isPreserved(id: string, raw: ReadonlyMap<string, RawQueryVerdict>): boo
 }
 
 /**
+ * 보존됐고, 그 증거가 **관계 증거**인가. 원칙 B의 판정 단위다.
+ *
+ * `evidenceRole`이 없는 판정은 관계 증거로 본다 — 이 축 도입 전의 데이터·테스트가 그대로
+ * 동작해야 하므로, 채워졌을 때만 게이트가 좁아진다(단조 축소).
+ */
+function isRelationEvidence(id: string, raw: ReadonlyMap<string, RawQueryVerdict>): boolean {
+  const v = raw.get(id);
+  if (v?.semanticState !== 'preserved') return false;
+  return v.evidenceRole === undefined || v.evidenceRole === 'relation';
+}
+
+/**
  * 규칙 3~6의 의미 축. 표현·논항과 분리된 의미 보존 수준만 판정한다.
  *   모순     하위/scope에 contradicted → contradicted
  *   핵심 관계 모두 preserved            → relation_preserved
@@ -202,12 +237,19 @@ function deriveSemanticVerdict(
   if (contradiction) return 'contradicted';
   const critical = region.criticalForRelation;
   const preservedCount = critical.filter((id) => isPreserved(id, raw)).length;
-  if (critical.length > 0 && preservedCount === critical.length) return 'relation_preserved';
 
-  // 원칙 B — 관계 층위 핵심 질의가 있는데 하나도 보존되지 않았으면 부분관계로 올리지 않는다.
+  // 원칙 B — 관계 층위 핵심 질의가 있는데 **진짜 관계 증거**가 하나도 없으면 승격하지 않는다.
+  // 층위(relationQueries)와 증거 종류(evidenceRole)를 **둘 다** 요구하는 연언이다.
   const criticalRelation = critical.filter((id) => region.relationQueries.includes(id));
   const relationEvidenceMissing =
-    criticalRelation.length > 0 && !criticalRelation.some((id) => isPreserved(id, raw));
+    criticalRelation.length > 0 && !criticalRelation.some((id) => isRelationEvidence(id, raw));
+
+  // relation_preserved도 같은 가드를 받는다. 이 분기를 열어두면 관계 층위 critical 질의가
+  // 명칭 질의 하나뿐인 영역에서 이름만 나열한 응답이 preservedCount === critical.length를
+  // 만족해 곧장 관계보존으로 올라간다 (N2-e 최악형).
+  if (critical.length > 0 && preservedCount === critical.length && !relationEvidenceMissing) {
+    return 'relation_preserved';
+  }
 
   if (preservedCount >= 1 && !relationEvidenceMissing) return 'partial_relation_preservation';
   if (scope.semanticState === 'preserved') return 'topic_only';
