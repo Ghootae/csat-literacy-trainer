@@ -84,28 +84,28 @@ P3(캘빈 회로=순환)·P4(실제 골드/오라클)·P5(두 공간 분업)·2�
   단 불안정은 전부 주제만↔미포착 / 관계보존↔부분관계 경계이고 **과대평가 방향은 0건**.
 - 오라클 기대값 오류 1건(P5 `조직만`) 기록 — 네 세트 일치하므로 기대값 쪽이 틀림.
 
-### N2-a — 미결정 (건드리지 말 것)
+### N2-a — 정책 결정 완료 (2026-08-01)
 대상 응답: **"이산화 탄소로 포도당이 만들어지고 그 과정이 반복된다"** — 캘빈 회로의 전체
 방향과 반복성은 담았으나 `3탄당`을 생략한다.
-- 관대한 기준: 핵심 흐름과 순환성을 이해했으므로 부분관계 또는 관계보존.
-- 엄격한 기준: 3탄당은 C3 명명의 근거인 중요한 중간 물질이므로 생략 시 불충분.
 
-**어느 쪽도 선택하지 않았다.** 결정 전까지 v0 프롬프트(원칙 F 포함)와 기존 fixture 기대값을
-동결한다. 캘빈 회로 사례에 맞춰 일반 평가 기준을 바꾸거나 "명명된 물질은 항상 필수"라는 새
-규칙을 추가하지 않는다.
+**결정: 명명된 중간산물의 조건부 생략 허용**
 
-```text
-N2-a unresolved:
-The generator consistently treated omission of a named intermediate
-more strictly than omission of a mechanism. This behavior was reproduced
-across three runs, but it has not been accepted as a normative scoring rule.
-Keep prompt principle F and the v0 baseline frozen until additional
-cross-paragraph evidence or an explicit educational policy decision is made.
-```
+원칙 F (재정의):
+> 중간산물은 원문에서 명명되었다는 이유만으로 필수 논항이 되지 않는다. 시작점·결과·관계
+> 방향이 보존되고, 중간산물의 생략이 분기·조건·대조·인과 또는 순환의 성립 원리를 제거하지
+> 않는다면 생략을 허용한다. 중간산물의 명칭은 생략할 수 있지만, 그것이 핵심적인 기능을
+> 수행한다면 그 기능적 역할은 보존되어야 한다.
 
-다음: (1) **N2-a 정책 결정** — 위 미결 사항. 추가 문단 교차 증거나 명시적 교육 정책 결정이
-나오기 전까지 v0 동결 유지. → (2) docs/STUDENT-LOOP-DESIGN.md 작성 (N1·N3 그대로, N2는
-정정본으로).
+판정 기준:
+- **CO₂→포도당 전환의 전체 흐름**: preserved
+- **과정의 순환성**: preserved
+- **3탄당이라는 명칭**: 생략 허용
+- **3탄당의 분기·재생 역할**: 슬롯이 요구하면 partial (명칭 생략만으로 보존 불가)
+- **모순 여부**: 모순 없음, 하드 게이트 불필요
+
+핵심: "3탄당을 말했는가?"가 아니라 "3탄당이 담당하는 관계까지 이 요약에서 필요한가?"로 판단.
+이는 Query-Preservation 원칙과 가장 잘 맞는다.
+※ docs/STUDENT-LOOP-DESIGN.md 작성 완료 (2026-07-29) — N1·N3 그대로, N2는 정정본으로.
 ※ N2-b 본체는 `450e750` + 원칙 B로 닫혔다(위 65~72행). 남은 것은 오라클 fixture q6a의 층위
 배치 결정뿐이며, 3축 기준선을 건드리므로 별도 항목이다.
 
@@ -245,5 +245,6 @@ G1~G8로 q6a(역할)·q6b(자격) 변별 확인. 유일 불일치: G8 q6b(법인
 
 ## 전체 지도
 - 설계 개요: docs/ARCHITECTURE.md
+- 학생 루프 스펙: docs/STUDENT-LOOP-DESIGN.md (게이트·피드백·결과 화면·미결정)
 - 마스터 계획: .omc/plans/consensus-csat-literacy.md
 - 실행: nvm use 24.18.0; set -a; . ./.env; set +a; npm test / npm run qexp / npm run agreement
