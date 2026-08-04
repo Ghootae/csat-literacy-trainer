@@ -342,7 +342,7 @@ async function runOne(set: EvalSet, cfg: Config, probe: Probe, paraText: string,
   const rawMap = new Map(qeval.verdicts.map((v) => [v.queryId, v as RawQueryVerdict]));
   const regions = normalizeQueryStates(rawMap, set.functionalPolicy ?? set.policy);
   const verdicts = new Map<string, QueryVerdict>(
-    qeval.verdicts.map((v) => [v.queryId, { semanticState: v.semanticState, expressionMode: v.expressionMode, evidence: v.evidence, viaItem: v.viaItem }]),
+    qeval.verdicts.map((v) => [v.queryId, { semanticState: v.semanticState, expressionMode: v.expressionMode, evidence: v.evidence, viaItem: v.viaItem, evidenceRole: v.evidenceRole }]),
   );
   const assessments = assess(regions, regionMeta, assessQueries(set), verdicts, propShort);
   const focalId = probe.focal ?? cfg.focal;

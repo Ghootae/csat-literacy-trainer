@@ -13,6 +13,7 @@
 
 import type {
   ArgumentCoverage,
+  EvidenceRole,
   ExpressionMode,
   ExpressionProfile,
   NormalizedRegion,
@@ -69,6 +70,11 @@ export interface QueryVerdict {
   readonly expressionMode: ExpressionMode;
   readonly evidence: string;
   readonly viaItem: string;
+  /**
+   * 증거의 종류. 선택 필드 — **없으면 명제를 뒷받침하는 것으로 본다**(이 축 도입 전
+   * 데이터·테스트와의 하위 호환). 채워졌을 때만 `scope` 증거가 걸러진다.
+   */
+  readonly evidenceRole?: EvidenceRole;
 }
 
 /**
@@ -80,10 +86,24 @@ export interface QueryVerdict {
  */
 const REFERENCE_DETAIL_CAP = 3;
 
+/**
+ * 명제 evidence 집계.
+ *
+ * **`scope` 역할 증거는 명제를 뒷받침하지 않는다.** `scope`의 정의가 "화제만 지목"이므로
+ * 정의상 어떤 명제의 *내용*도 뒷받침할 수 없다. 이 가드가 없으면 화제 이름표만 쓴 응답이
+ * scope 질의를 통과시켜 그 질의에 앵커된 명제들이 ◐로 칠해진다 — 영역 판정은 `주제만`인데
+ * 오버레이는 부분 포착처럼 보이는 어긋남이 생긴다(실측: 2026-08-05 니체 문단).
+ *
+ * 판별은 질의의 **층위 라벨이 아니라 `evidenceRole`**로 한다. 생성기가 붙인 라벨은 틀릴 수
+ * 있고(N2-e), scope 질의에 답하면서 관계를 진술한 학생은 실제로 명제를 뒷받침한 것이다.
+ *
+ * 모순은 역할과 무관하게 그대로 전파한다 — 잘못된 이해를 가리면 안 된다.
+ */
 function aggregatePropositionState(verdicts: readonly QueryVerdict[]): PropositionEvidenceState {
   if (verdicts.some((v) => v.semanticState === 'contradicted')) return 'contradicted';
-  if (verdicts.some((v) => v.semanticState === 'preserved' && v.expressionMode === 'explicit')) return 'evidenced';
-  if (verdicts.some((v) => v.semanticState === 'preserved')) return 'supported_by_abstraction';
+  const supporting = verdicts.filter((v) => v.evidenceRole !== 'scope');
+  if (supporting.some((v) => v.semanticState === 'preserved' && v.expressionMode === 'explicit')) return 'evidenced';
+  if (supporting.some((v) => v.semanticState === 'preserved')) return 'supported_by_abstraction';
   return 'not_evidenced';
 }
 

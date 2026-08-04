@@ -44,6 +44,64 @@ describe('명제 evidence — 골드 명제 앵커링, 점수 아님', () => {
   });
 });
 
+/**
+ * 화제만 짚은 응답이 명제를 뒷받침한 것으로 표시되면 안 된다.
+ *
+ * 실측(2026-08-05, 니체 문단): 학생이 "니체가 본 삶과 가치의 관계"라는 **화제 이름표만**
+ * 썼는데 scope 질의가 preserved되어 그 질의에 앵커된 명제 3개가 ◐(병치·함축으로 뒷받침)로
+ * 칠해졌다. 영역 판정은 `주제만`으로 정확했으나 **오버레이가 채점축과 다른 말을 했다** —
+ * 학생이 실제로 보는 화면이 오버레이다.
+ *
+ * 판별은 질의의 층위 라벨이 아니라 `evidenceRole`로 한다(N2-e와 같은 이유: 생성기가 붙인
+ * 라벨은 틀릴 수 있고, 학생이 무엇을 했는지가 기준이다). scope 질의에 답하면서 관계를
+ * 진술했다면 그 증거는 `relation`이므로 명제를 뒷받침한다.
+ */
+describe('scope 역할 증거는 명제를 뒷받침하지 않는다', () => {
+  const scopeMeta: AssessRegionMeta = { id: 'r1', label: '영역1', propositionIds: ['p1', 'p2'] };
+  const scopeQueries: AssessQuery[] = [
+    { id: 'qScope', regionId: 'r1', level: 'scope', propositionIds: ['p1'], expectedAnswer: '이 영역의 화제', critical: false },
+    { id: 'qRel', regionId: 'r1', level: 'relation', propositionIds: ['p2'], expectedAnswer: '핵심 관계', critical: true },
+  ];
+  const R = (
+    semanticState: QueryVerdict['semanticState'],
+    expressionMode: QueryVerdict['expressionMode'],
+    evidenceRole: QueryVerdict['evidenceRole'],
+  ): QueryVerdict => ({ semanticState, expressionMode, evidence: '', viaItem: '항목1', evidenceRole });
+
+  it('화제 이름표만 쓴 응답 → 앵커된 명제는 not_evidenced (◐로 칠하지 않는다)', () => {
+    const verdicts = new Map([
+      ['qScope', R('preserved', 'implicit', 'scope')],
+      ['qRel', R('not_evidenced', 'none', 'none')],
+    ]);
+    const [a] = assess([region('r1', 'topic_only')], [scopeMeta], scopeQueries, verdicts);
+    const byId = new Map(a!.propositionEvidence.map((e) => [e.propositionId, e.state]));
+    expect(byId.get('p1')).toBe('not_evidenced');
+    expect(byId.get('p2')).toBe('not_evidenced');
+  });
+
+  it('scope 질의라도 답이 관계를 진술하면 명제를 뒷받침한다', () => {
+    const verdicts = new Map([
+      ['qScope', R('preserved', 'explicit', 'relation')],
+      ['qRel', R('not_evidenced', 'none', 'none')],
+    ]);
+    const [a] = assess([region('r1', 'topic_only')], [scopeMeta], scopeQueries, verdicts);
+    const byId = new Map(a!.propositionEvidence.map((e) => [e.propositionId, e.state]));
+    expect(byId.get('p1')).toBe('evidenced');
+  });
+
+  it('scope 역할이어도 모순은 그대로 표시한다', () => {
+    const verdicts = new Map([['qScope', R('contradicted', 'none', 'none')]]);
+    const [a] = assess([region('r1', 'contradicted')], [scopeMeta], scopeQueries, verdicts);
+    expect(a!.propositionEvidence.find((e) => e.propositionId === 'p1')?.state).toBe('contradicted');
+  });
+
+  it('evidenceRole이 없는 판정은 기존대로 뒷받침으로 본다 (하위 호환)', () => {
+    const verdicts = new Map([['qScope', V('preserved', 'implicit')]]);
+    const [a] = assess([region('r1', 'topic_only')], [scopeMeta], scopeQueries, verdicts);
+    expect(a!.propositionEvidence.find((e) => e.propositionId === 'p1')?.state).toBe('supported_by_abstraction');
+  });
+});
+
 describe('핵심 채점축은 regionSemanticVerdict 그대로 통과', () => {
   it('verdict를 바꾸지 않는다', () => {
     for (const v of ['relation_preserved', 'topic_only', 'contradicted', 'region_not_evidenced'] as RegionSemanticVerdict[]) {
