@@ -176,36 +176,93 @@ async function cmdEval(paragraphId: string, responseFile: string): Promise<void>
   const propShort = new Map(gold.propositions.map((p) => [p.id, p.shortForm]));
   const assessments = assess(regions, regionMeta, aq, verdicts, propShort);
 
-  printTree(gold, assessments, response);
+  // 영역별 학생 조각 — 보존된 질의의 viaItem을 모은다 (§4.1.3 응답↔영역 매핑).
+  const regionOf = new Map(aq.map((q) => [q.id, q.regionId]));
+  const said = new Map<string, Set<string>>();
+  // `viaItem`은 식별자("1", "첫 문장")라 화면에 그대로 쓰면 무용하다. 인용문인 `evidence`를 쓴다.
+  for (const v of qeval.verdicts) {
+    const rid = regionOf.get(v.queryId);
+    if (rid === undefined || v.semanticState === 'not_evidenced' || v.evidence.trim() === '') continue;
+    (said.get(rid) ?? said.set(rid, new Set()).get(rid)!).add(v.evidence.trim());
+  }
+  const spanOf = new Map(gen.regions.map((r) => [r.regionId, r.sourceSentenceIds]));
+
+  printScreen(gold, assessments, said, spanOf);
 }
 
-/** 수형도 + 커버리지 오버레이만 출력한다. 텍스트 피드백은 내지 않는다. */
-function printTree(gold: PipelineGold, assessments: readonly RegionAssessment[], response: string): void {
-  const byId = new Map(gold.nodes.map((n) => [n.id, n]));
-  console.log(`학생 응답:\n${response.split('\n').map((l) => `  ${l}`).join('\n')}`);
+/** 문장 id 목록 → "1~2번째 문장" 같은 위치 표기. 골드를 노출하지 않는 유일한 지시 수단이다. */
+function sentenceSpan(ids: readonly string[]): string {
+  const ns = ids.map((s) => Number(s.replace(/\D/g, ''))).filter((n) => !Number.isNaN(n)).sort((a, b) => a - b);
+  if (ns.length === 0) return '이 부분';
+  const first = ns[0]!;
+  const last = ns[ns.length - 1]!;
+  return first === last ? `${first}번째 문장` : `${first}~${last}번째 문장`;
+}
+
+const VERDICT_MARK: Record<string, string> = {
+  relation_preserved: '●',
+  partial_relation_preservation: '◐',
+  topic_only: '○',
+  region_not_evidenced: '○',
+  contradicted: '✗',
+};
+
+/**
+ * 학생이 보는 화면 (§4.1.1~4.1.3).
+ *
+ * 영역 박스가 주인공이다. **관계보존 영역에만** 정답(label)과 명제를 공개하고, 미달 영역은
+ * 위치와 힌트만 준다 — 골드 노출 0. 화제어는 골드가 아니라 학생 자신이 쓴 표현이 채운다.
+ */
+function printScreen(
+  gold: PipelineGold,
+  assessments: readonly RegionAssessment[],
+  said: ReadonlyMap<string, ReadonlySet<string>>,
+  spanOf: ReadonlyMap<string, readonly string[]>,
+): void {
   console.log(`\n${'━'.repeat(76)}`);
-  console.log(`[타이틀] ${byId.get(gold.titleId)?.shortForm ?? '?'}\n`);
+  console.log(`이 문단은 ${assessments.length}개 부분으로 나뉩니다.`);
+  console.log('━'.repeat(76));
 
   for (const a of assessments) {
-    console.log(`■ ${a.label}  —  ${VERDICT_LABEL[a.verdict] ?? a.verdict}`);
-    for (const e of a.propositionEvidence) {
-      console.log(`    ${EV_MARK[e.state] ?? '?'} ${e.propositionId.padEnd(4)} ${e.shortForm}`);
-    }
-    console.log('');
-  }
+    const mark = VERDICT_MARK[a.verdict] ?? '?';
+    const solved = a.verdict === 'relation_preserved';
+    const title = solved ? a.label : sentenceSpan(spanOf.get(a.regionId) ?? []);
 
-  const all = assessments.flatMap((a) => a.propositionEvidence);
-  const count = (s: string) => all.filter((e) => e.state === s).length;
-  console.log('─'.repeat(76));
-  console.log(
-    `● 직접 ${count('evidenced')}   ◐ 병치·함축 ${count('supported_by_abstraction')}   ` +
-      `○ 참고·미확인 ${count('not_evidenced')}   ✗ 모순 ${count('contradicted')}`,
-  );
+    console.log(`\n┌─ ${mark} ${VERDICT_LABEL[a.verdict] ?? a.verdict} ${'─'.repeat(Math.max(0, 58 - VERDICT_LABEL[a.verdict]!.length))}`);
+    console.log(`│  ${title}`);
+
+    if (solved) {
+      console.log('│');
+      for (const e of a.propositionEvidence) {
+        console.log(`│    ${EV_MARK[e.state] ?? '?'} ${e.shortForm}`);
+      }
+    }
+    console.log('│');
+    console.log(`│  ${a.feedback}`);
+
+    // 같은 섹션의 전체와 부분 인용이 함께 잡히므로, 다른 인용에 포함되는 것은 접는다.
+    const all = [...(said.get(a.regionId) ?? [])];
+    const mine = all.filter((s) => !all.some((o) => o !== s && o.includes(s)));
+    if (mine.length > 0) {
+      console.log('│');
+      console.log(`│  내가 쓴 것: ${mine.map((m) => `"${m}"`).join(', ')}`);
+    }
+    console.log('└' + '─'.repeat(74));
+  }
+  console.log('');
+  void gold;
+
+  // 하단 요약은 **영역 단위만** 낸다. 명제 개수(특히 ○)를 집계해 보여주면 결손표 인상이
+  // 되살아난다 — 명제는 관계보존 영역 안에서 성취 표시로만 쓴다 (§4.1.1).
   const v = (k: string) => assessments.filter((a) => a.verdict === k).length;
-  console.log(
-    `영역 판정 — 관계보존 ${v('relation_preserved')} · 부분관계 ${v('partial_relation_preservation')} · ` +
-      `주제만 ${v('topic_only')} · 미포착 ${v('region_not_evidenced')} · 모순 ${v('contradicted')}`,
-  );
+  const parts = [
+    ['관계보존', v('relation_preserved'), '●'],
+    ['부분관계', v('partial_relation_preservation'), '◐'],
+    ['다듬을 곳', v('topic_only') + v('region_not_evidenced'), '○'],
+    ['꼭 고칠 곳', v('contradicted'), '✗'],
+  ] as const;
+  console.log('─'.repeat(76));
+  console.log(parts.filter(([, n]) => n > 0).map(([label, n, m]) => `${m} ${label} ${n}`).join('   '));
 }
 
 async function main(): Promise<void> {
