@@ -14,25 +14,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import {
-  type AssessQuery,
-  type AssessRegionMeta,
-  type QueryVerdict,
-  type RegionAssessment,
-  assess,
-} from '../assessment.js';
-import { evalCacheKey } from '../eval-cache-key.js';
+import type { RegionAssessment } from '../assessment.js';
+import { evaluateResponse } from '../evaluate-response.js';
 import { type Gold as PipelineGold, buildGold } from '../gold.js';
-import { EVAL_REQUEST_FINGERPRINT, type QueryEval, evaluateQueries } from '../llm/query-eval.js';
 import { GENERATOR_VERSION, type GeneratedQuerySet, generateQuerySet } from '../llm/query-gen.js';
-import {
-  type EvalSet,
-  type Gold as LibGold,
-  buildGeneratorInput,
-  generatedEvalSet,
-  paragraphText,
-} from '../query-gen-lib.js';
-import { type RawQueryVerdict, normalizeQueryStates } from '../query-normalize.js';
+import { type Gold as LibGold, buildGeneratorInput } from '../query-gen-lib.js';
 
 const DIR = resolve(process.cwd(), '.omc/adhoc');
 
@@ -125,69 +111,14 @@ async function cmdEval(paragraphId: string, responseFile: string): Promise<void>
   const gold = readJson<PipelineGold>(goldPath(paragraphId));
   const gen = readJson<GeneratedQuerySet>(queryPath(paragraphId));
   const response = readFileSync(resolve(process.cwd(), responseFile), 'utf8').trim();
-  const set: EvalSet = generatedEvalSet('gen', gen);
-  const paraText = paragraphText(gold as unknown as LibGold);
 
-  const cacheDir = resolve(DIR, 'eval-cache');
-  mkdirSync(cacheDir, { recursive: true });
-  const key = evalCacheKey({
-    paragraphId,
-    probeText: response,
-    queries: set.queries,
-    requestFingerprint: EVAL_REQUEST_FINGERPRINT,
-  });
-  const cached = resolve(cacheDir, `${key}.json`);
-  const qeval: QueryEval = existsSync(cached)
-    ? readJson<QueryEval>(cached)
-    : await evaluateQueries(paraText, set.queries, response, paragraphId);
-  if (!existsSync(cached)) writeFileSync(cached, JSON.stringify(qeval, null, 2), 'utf8');
-
-  const rawMap = new Map(qeval.verdicts.map((v) => [v.queryId, v as RawQueryVerdict]));
-  const regions = normalizeQueryStates(rawMap, set.policy);
-  const verdicts = new Map<string, QueryVerdict>(
-    qeval.verdicts.map((v) => [
-      v.queryId,
-      { semanticState: v.semanticState, expressionMode: v.expressionMode, evidence: v.evidence, viaItem: v.viaItem, evidenceRole: v.evidenceRole },
-    ]),
+  const { assessments, said, sentenceIds } = await evaluateResponse(
+    gold,
+    gen,
+    response,
+    resolve(DIR, 'eval-cache'),
   );
-  const regionMeta: AssessRegionMeta[] = set.shapes.map((s) => ({
-    id: s.key,
-    label: s.label,
-    propositionIds: s.propositionIds,
-  }));
-  const aq: AssessQuery[] = [];
-  const shapeById = new Map(set.shapes.flatMap((r) => r.queries).map((q) => [q.id, q]));
-  const pqById = new Map(set.queries.map((q) => [q.id, q]));
-  for (const rp of set.policy) {
-    const add = (id: string, level: 'scope' | 'relation' | 'argument') =>
-      aq.push({
-        id,
-        regionId: rp.id,
-        level,
-        question: pqById.get(id)?.question ?? '',
-        propositionIds: shapeById.get(id)?.propositionIds ?? [],
-        expectedAnswer: pqById.get(id)?.expectedAnswer ?? '',
-        critical: rp.criticalForRelation.includes(id),
-      });
-    for (const id of rp.scopeQueries) add(id, 'scope');
-    for (const id of rp.relationQueries) add(id, 'relation');
-    for (const id of rp.argumentQueries) add(id, 'argument');
-  }
-  const propShort = new Map(gold.propositions.map((p) => [p.id, p.shortForm]));
-  const assessments = assess(regions, regionMeta, aq, verdicts, propShort);
-
-  // 영역별 학생 조각 — 보존된 질의의 viaItem을 모은다 (§4.1.3 응답↔영역 매핑).
-  const regionOf = new Map(aq.map((q) => [q.id, q.regionId]));
-  const said = new Map<string, Set<string>>();
-  // `viaItem`은 식별자("1", "첫 문장")라 화면에 그대로 쓰면 무용하다. 인용문인 `evidence`를 쓴다.
-  for (const v of qeval.verdicts) {
-    const rid = regionOf.get(v.queryId);
-    if (rid === undefined || v.semanticState === 'not_evidenced' || v.evidence.trim() === '') continue;
-    (said.get(rid) ?? said.set(rid, new Set()).get(rid)!).add(v.evidence.trim());
-  }
-  const spanOf = new Map(gen.regions.map((r) => [r.regionId, r.sourceSentenceIds]));
-
-  printScreen(gold, assessments, said, spanOf);
+  printScreen(gold, assessments, said, sentenceIds);
 }
 
 /** 문장 id 목록 → "1~2번째 문장" 같은 위치 표기. 골드를 노출하지 않는 유일한 지시 수단이다. */
@@ -216,7 +147,7 @@ const VERDICT_MARK: Record<string, string> = {
 function printScreen(
   gold: PipelineGold,
   assessments: readonly RegionAssessment[],
-  said: ReadonlyMap<string, ReadonlySet<string>>,
+  said: ReadonlyMap<string, readonly string[]>,
   spanOf: ReadonlyMap<string, readonly string[]>,
 ): void {
   console.log(`\n${'━'.repeat(76)}`);
@@ -240,9 +171,7 @@ function printScreen(
     console.log('│');
     console.log(`│  ${a.feedback}`);
 
-    // 같은 섹션의 전체와 부분 인용이 함께 잡히므로, 다른 인용에 포함되는 것은 접는다.
-    const all = [...(said.get(a.regionId) ?? [])];
-    const mine = all.filter((s) => !all.some((o) => o !== s && o.includes(s)));
+    const mine = said.get(a.regionId) ?? [];
     if (mine.length > 0) {
       console.log('│');
       console.log(`│  내가 쓴 것: ${mine.map((m) => `"${m}"`).join(', ')}`);
