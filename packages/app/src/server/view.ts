@@ -6,8 +6,21 @@
  * 볼 수 있기 때문이다. **보내지 않는 것만이 보장이다.**
  */
 
-import type { RegionAssessment } from '@csat/pipeline';
-import type { PropView, RegionView, Verdict } from '../shared/contract.js';
+import type { PropositionEvidenceState, RegionAssessment, RegionSemanticVerdict } from '@csat/pipeline';
+import type { PropState, PropView, RegionView, Verdict } from '../shared/contract.js';
+
+/**
+ * 계약 드리프트 가드.
+ *
+ * `shared/contract.ts`는 프로세스 경계 때문에 판정값 유니온을 **중복 정의**한다. 두 정의가
+ * 어긋나면 여기서 컴파일이 깨진다 — 캐스트(`as Verdict`)를 쓰면 드리프트가 조용히 가려지므로
+ * 아래 변환에서 캐스트를 쓰지 않는 것이 규칙이다.
+ */
+type Eq<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const _verdictsMatch: Eq<Verdict, RegionSemanticVerdict> = true;
+const _propStatesMatch: Eq<PropState, PropositionEvidenceState> = true;
+void _verdictsMatch;
+void _propStatesMatch;
 
 export interface ViewInput {
   readonly assessments: readonly RegionAssessment[];
@@ -19,7 +32,7 @@ export interface ViewInput {
 
 export function toRegionViews(input: ViewInput): RegionView[] {
   return input.assessments.map((a) => {
-    const verdict = a.verdict as Verdict;
+    const verdict: Verdict = a.verdict; // 캐스트 없음 — 위 가드 참조
     const solved = verdict === 'relation_preserved';
     const attempted = input.revised.has(a.regionId);
 
