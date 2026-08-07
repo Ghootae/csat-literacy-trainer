@@ -20,8 +20,8 @@ function region(id: string, verdict: RegionSemanticVerdict): NormalizedRegion {
 }
 const meta: AssessRegionMeta = { id: 'asset', label: '자산 운용', propositionIds: ['p7', 'p9a', 'p9b'] };
 const queries: AssessQuery[] = [
-  { id: 'qRel', regionId: 'asset', level: 'relation', propositionIds: ['p7', 'p9a'], expectedAnswer: '법인 소유 vs 사람 운용의 역할 분리', critical: true },
-  { id: 'qArg', regionId: 'asset', level: 'argument', propositionIds: ['p9b'], expectedAnswer: '운용자는 권한자', critical: false },
+  { id: 'qRel', regionId: 'asset', level: 'relation', question: '자산의 법적 주체와 실제 운용 주체는 어떤 관계인가?', propositionIds: ['p7', 'p9a'], expectedAnswer: '법인 소유 vs 사람 운용의 역할 분리', critical: true },
+  { id: 'qArg', regionId: 'asset', level: 'argument', question: '어떤 사람이 실제로 자산을 운용할 수 있는가?', propositionIds: ['p9b'], expectedAnswer: '운용자는 권한자', critical: false },
 ];
 const V = (semanticState: QueryVerdict['semanticState'], expressionMode: QueryVerdict['expressionMode'], viaItem = '항목1'): QueryVerdict => ({ semanticState, expressionMode, evidence: '', viaItem });
 
@@ -102,6 +102,69 @@ describe('scope 역할 증거는 명제를 뒷받침하지 않는다', () => {
   });
 });
 
+/**
+ * 힌트 문구 4종 — 미달 영역은 골드를 노출하지 않는다 (§4.1.3 · §7).
+ *
+ * 이전 `topic_only` 문구는 `critical.expectedAnswer`를 그대로 끼워 넣어 정답을 공개했다:
+ *   "화제는 짚었지만, 핵심 관계 「법인은 자산의 법적 권리·소유 주체이고 …」가 아직…"
+ * 학생이 답을 이미 봤으므로 수정할 이유가 사라진다.
+ *
+ * 안전한 필드는 질의 `question`(질문 형태라 답을 주지 않는다)과 위치뿐이다.
+ * 영역 `label`·`expectedAnswer`·명제 `shortForm`은 미달 영역에서 전부 금지.
+ */
+describe('힌트 문구 — 미달 영역 골드 노출 0', () => {
+  const ANSWER = '법인 소유 vs 사람 운용의 역할 분리';
+  const QUESTION = '실제 자산 운용은 법인 자체와 사람 중 누가 수행하는가?';
+  // 자연스러운 label("자산 운용")을 쓰면 질의 question 안에 같은 어구가 들어 있어 오탐이 난다.
+  // 코드가 meta.label을 **필드로 끼워 넣는지**만 보려면 자연 발생하지 않는 표지가 필요하다.
+  const LABEL = '§LABEL§';
+  const hintMeta: AssessRegionMeta = { id: 'r', label: LABEL, propositionIds: ['p1'] };
+  const hintQueries: AssessQuery[] = [
+    { id: 'qs', regionId: 'r', level: 'scope', question: '이 영역은 무엇에 관한 내용인가?', propositionIds: ['p1'], expectedAnswer: '자산 운용에 관한 내용', critical: false },
+    { id: 'qr', regionId: 'r', level: 'relation', question: QUESTION, propositionIds: ['p1'], expectedAnswer: ANSWER, critical: true },
+  ];
+  const fb = (v: RegionSemanticVerdict, m: Map<string, QueryVerdict>) =>
+    assess([region('r', v)], [hintMeta], hintQueries, m)[0]!.feedback;
+  const none = new Map<string, QueryVerdict>([['qr', V('not_evidenced', 'none', '')]]);
+
+  it('부분관계 — 미포착과 다른 전용 문구를 받는다', () => {
+    const f = fb('partial_relation_preservation', none);
+    expect(f).not.toBe(fb('region_not_evidenced', none));
+    expect(f).toContain(QUESTION);
+  });
+
+  it('주제만 — question은 주되 정답은 주지 않는다', () => {
+    const f = fb('topic_only', none);
+    expect(f).toContain(QUESTION);
+    expect(f).not.toContain(ANSWER);
+  });
+
+  it('미포착 — 전용 문구, 골드 노출 없음', () => {
+    const f = fb('region_not_evidenced', none);
+    expect(f).not.toContain(ANSWER);
+    expect(f).not.toContain(LABEL);
+  });
+
+  it('모순 — 되물음은 주되 정답·명제는 주지 않는다', () => {
+    const f = fb('contradicted', new Map([['qr', V('contradicted', 'none', '')]]));
+    expect(f).toContain(QUESTION);
+    expect(f).not.toContain(ANSWER);
+  });
+
+  it('미달 4종 전부 expectedAnswer·label을 노출하지 않는다', () => {
+    for (const v of ['partial_relation_preservation', 'topic_only', 'region_not_evidenced', 'contradicted'] as RegionSemanticVerdict[]) {
+      const f = fb(v, none);
+      expect(f, `${v}에 정답이 노출됨`).not.toContain(ANSWER);
+      expect(f, `${v}에 영역 label이 노출됨`).not.toContain(LABEL);
+    }
+  });
+
+  it('관계보존은 정답을 공개한다 (§4.1.3 — 성공 영역은 허용)', () => {
+    const f = fb('relation_preserved', new Map([['qr', V('preserved', 'explicit')]]));
+    expect(f).toContain(ANSWER);
+  });
+});
+
 describe('핵심 채점축은 regionSemanticVerdict 그대로 통과', () => {
   it('verdict를 바꾸지 않는다', () => {
     for (const v of ['relation_preserved', 'topic_only', 'contradicted', 'region_not_evidenced'] as RegionSemanticVerdict[]) {
@@ -125,15 +188,20 @@ describe('피드백 — 설명형, not_evidenced를 결손으로 취급하지 �
     expect(a!.feedback).toContain('감점 요소는 아닙니다');
     expect(a!.feedback).toContain('권한자'); // 빠진 세부(p9b)를 참고로 안내
   });
-  it('topic_only: 관계로 표현하도록 안내', () => {
+  // 문구 자체가 아니라 **의도**를 검사한다 — 화제 포착을 인정하고 관계 쪽으로 유도하는가.
+  // (2026-08-07 문구 개정: 정답 노출을 없애고 질의 question으로 되묻는 형태로 바뀌었다.)
+  it('topic_only: 화제 포착을 인정하고 관계로 유도한다', () => {
     const [a] = assess([region('asset', 'topic_only')], [meta], queries, new Map());
-    expect(a!.feedback).toContain('화제는 짚었지만');
-    expect(a!.feedback).toContain('관계');
+    expect(a!.feedback).toContain('화제');
+    expect(a!.feedback).toContain('어떤 관계인가'); // 핵심 관계 질의로 되물음
+    expect(a!.feedback).not.toContain('법인 소유 vs 사람 운용'); // 정답 미노출
   });
-  it('contradicted: 어긋난 지점을 지목', () => {
+  it('contradicted: 어긋남을 지목하고 재확인을 요구한다', () => {
     const verdicts = new Map([['qRel', V('contradicted', 'none')]]);
     const [a] = assess([region('asset', 'contradicted')], [meta], queries, verdicts);
-    expect(a!.feedback).toContain('잘못 이해');
+    expect(a!.feedback).toContain('어긋');
+    expect(a!.feedback).toContain('다시 확인');
+    expect(a!.feedback).not.toContain('법인 소유 vs 사람 운용'); // 정답 미노출
   });
 });
 

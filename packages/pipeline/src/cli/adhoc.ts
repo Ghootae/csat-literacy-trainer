@@ -164,6 +164,7 @@ async function cmdEval(paragraphId: string, responseFile: string): Promise<void>
         id,
         regionId: rp.id,
         level,
+        question: pqById.get(id)?.question ?? '',
         propositionIds: shapeById.get(id)?.propositionIds ?? [],
         expectedAnswer: pqById.get(id)?.expectedAnswer ?? '',
         critical: rp.criticalForRelation.includes(id),

@@ -56,6 +56,11 @@ export interface AssessQuery {
   readonly id: string;
   readonly regionId: string; // 오라클 영역으로 재버킷팅된 소속
   readonly level: 'scope' | 'relation' | 'argument';
+  /**
+   * 질의 문장. **미달 영역 힌트에서 쓸 수 있는 유일한 골드 필드다** — 질문 형태라 답을
+   * 주지 않는다. `expectedAnswer`는 정답이므로 관계보존 영역에만 쓴다.
+   */
+  readonly question: string;
   readonly propositionIds: readonly string[];
   readonly expectedAnswer: string;
   readonly critical: boolean;
@@ -145,7 +150,16 @@ export function assess(
     });
 
     const critical = regionQueries.find((q) => q.critical && q.level === 'relation') ?? regionQueries.find((q) => q.critical);
-    const feedback = buildFeedback(verdict, meta, critical, propositionEvidence, propWeight);
+
+    // 힌트로 되물을 질의. 모순이면 어긋난 질의를, 그 외에는 아직 보존되지 않은 핵심 관계
+    // 질의를 고른다. 이미 보존된 질의를 되물으면 학생이 무엇을 더 해야 할지 알 수 없다.
+    const state = (q: AssessQuery) => verdicts.get(q.id)?.semanticState;
+    const hint =
+      verdict === 'contradicted'
+        ? (regionQueries.find((q) => state(q) === 'contradicted') ?? critical)
+        : (regionQueries.find((q) => q.critical && q.level === 'relation' && state(q) !== 'preserved') ?? critical);
+
+    const feedback = buildFeedback(verdict, meta, critical, propositionEvidence, propWeight, hint?.question ?? '');
 
     return {
       regionId: meta.id,
@@ -194,11 +208,16 @@ function buildFeedback(
   critical: AssessQuery | undefined,
   evidence: readonly PropositionEvidence[],
   propWeight: ReadonlyMap<string, number>,
+  hintQuestion: string,
 ): string {
   const relText = critical?.expectedAnswer ?? meta.label;
   const criticalProps = new Set(critical?.propositionIds ?? []);
 
+  // 미달 영역에서 되물을 질문. 없으면 그 절을 통째로 생략한다.
+  const ask = hintQuestion === '' ? '' : ` "${hintQuestion}"`;
+
   switch (verdict) {
+    // 성공 영역만 정답을 공개한다 (§4.1.3).
     case 'relation_preserved': {
       const extra = topReferenceDetails(evidence, criticalProps, propWeight);
       const base = `핵심 관계 「${relText}」를 잘 포착했습니다.`;
@@ -206,15 +225,27 @@ function buildFeedback(
         ? `${base} 원문에는 ${extra.join(', ')}도 제시됩니다 (참고 — 더 구체적으로 표현할 수 있으나 감점 요소는 아닙니다).`
         : base;
     }
+
+    // ── 아래는 전부 미달 영역: 정답·영역 label·명제 shortForm을 노출하지 않는다 ──
+
+    case 'partial_relation_preservation':
+      return ask === ''
+        ? '관계의 한 축은 잡았어요. 나머지 축도 함께 드러나도록 다듬어 보세요.'
+        : `관계의 한 축은 잡았어요.${ask}도 함께 드러나도록 다듬어 보세요.`;
+
     case 'topic_only':
-      return `「${meta.label}」의 화제는 짚었지만, 핵심 관계 「${relText}」가 아직 드러나지 않았습니다. 요소들이 어떻게 연결되는지 관계로 표현해 보세요.`;
-    case 'contradicted': {
-      const contra = evidence.filter((e) => e.state === 'contradicted').map((e) => e.shortForm);
-      const where = contra.length > 0 ? ` (${contra.join(', ')})` : '';
-      return `「${meta.label}」에서 관계를 잘못 이해했습니다${where}. 원문의 「${relText}」와 어긋납니다.`;
-    }
+      return ask === ''
+        ? '화제는 짚었어요. 요소들이 어떻게 연결되는지 관계로 표현해 보세요.'
+        : `화제는 짚었어요.${ask}에 답해 보세요.`;
+
+    case 'contradicted':
+      return ask === ''
+        ? '관계 방향이 원문과 어긋납니다. 하이라이트된 문장에서 무엇이 무엇의 목적이고 수단인지 다시 확인해 보세요.'
+        : `관계 방향이 원문과 어긋납니다. 하이라이트된 문장에서${ask}를 다시 확인해 보세요.`;
+
     default:
-      return `「${meta.label}」 부분을 아직 짚지 못했습니다.`;
+      // region_not_evidenced — 요약에 나타나지 않았으므로 인정할 것이 없다. 위치만 가리킨다.
+      return '이 부분은 요약에 나타나지 않았어요. 하이라이트된 문장을 다시 읽어 보세요.';
   }
 }
 

@@ -314,6 +314,7 @@ function assessQueries(set: EvalSet): AssessQuery[] {
         id,
         regionId: rp.id,
         level,
+        question: pqById.get(id)?.question ?? '',
         propositionIds: sh?.propositionIds ?? [],
         expectedAnswer: pqById.get(id)?.expectedAnswer ?? '',
         critical: rp.criticalForRelation.includes(id),
