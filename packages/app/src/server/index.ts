@@ -15,7 +15,7 @@ import { evaluateResponse } from '@csat/pipeline';
 import type { AttemptRequest, AttemptResponse } from '../shared/contract.js';
 import { loadContent, toPassageView } from './content.js';
 import { appendAttempt, loadSession, revisedRegions } from './session.js';
-import { isBlocked, toRegionViews } from './view.js';
+import { bestOf, isBlocked, toRecord, toRegionViews } from './view.js';
 
 const PORT = Number(process.env['PORT'] ?? 5174);
 const OWNER = 'local'; // D4 — 리포지토리는 처음부터 ownerId를 받는다. 로컬은 고정.
@@ -63,17 +63,28 @@ const server = createServer((req, res) => {
       const { gold, queries } = loadContent(paragraphId);
       const evaluated = await evaluateResponse(gold, queries, sections.join('\n'), EVAL_CACHE);
 
-      const session = appendAttempt(OWNER, sessionId, paragraphId, {
+      // 직전까지의 기록으로 "지금까지의 최고"를 만든다. 이번 결과를 넣기 **전에** 잡아야
+      // 겨냥하지 않은 영역의 강등을 가릴 수 있다(§2.1).
+      const prior = loadSession(OWNER, sessionId);
+      const best = bestOf((prior?.attempts ?? []).map((a) => a.regions));
+      const revised = revisedRegions(prior);
+      const records = evaluated.assessments.map((a) =>
+        toRecord(a, evaluated.said.get(a.regionId) ?? [], revised.has(a.regionId)),
+      );
+
+      appendAttempt(OWNER, sessionId, paragraphId, {
         at: new Date().toISOString(),
         sections,
         ...(body.regionId === undefined ? {} : { targetRegionId: body.regionId }),
-        regions: evaluated.assessments.map((a) => ({
-          regionId: a.regionId,
-          verdict: a.verdict as AttemptResponse['regions'][number]['verdict'],
-        })),
+        regions: records,
       });
 
-      const regions = toRegionViews({ ...evaluated, revised: revisedRegions(session) });
+      const regions = toRegionViews({
+        ...evaluated,
+        revised: new Set([...revised, ...(body.regionId === undefined ? [] : [body.regionId])]),
+        best,
+        ...(body.regionId === undefined ? {} : { targetRegionId: body.regionId }),
+      });
       return json(res, 200, { regions, blocked: isBlocked(regions) } satisfies AttemptResponse);
     }
 

@@ -22,47 +22,108 @@ const _propStatesMatch: Eq<PropState, PropositionEvidenceState> = true;
 void _verdictsMatch;
 void _propStatesMatch;
 
+/**
+ * 한 시점의 영역 내용. 세션에 보관해 **강등을 가릴 때 그 시점 그대로** 복원한다.
+ *
+ * 판정값만 보관하면 박스는 ◐인데 문구는 `주제만`용이 붙어 화면이 서로 다른 말을 한다.
+ */
+export interface RegionRecord {
+  readonly regionId: string;
+  readonly verdict: Verdict;
+  readonly feedback: string;
+  readonly said: readonly string[];
+  readonly label?: string;
+  readonly propositions?: readonly PropView[];
+}
+
 export interface ViewInput {
   readonly assessments: readonly RegionAssessment[];
   readonly said: ReadonlyMap<string, readonly string[]>;
   readonly sentenceIds: ReadonlyMap<string, readonly string[]>;
   /** 이미 "다듬기"를 쓴 영역. 영역당 1회이므로 여기 들어 있으면 버튼이 사라진다. */
   readonly revised: ReadonlySet<string>;
+  /** 영역별 지금까지의 최고 기록. 겨냥하지 않은 영역의 강등을 가리는 데 쓴다. */
+  readonly best?: ReadonlyMap<string, RegionRecord>;
+  /** 이번 수정이 겨냥한 영역. 여기만 강등을 그대로 보여준다. */
+  readonly targetRegionId?: string;
+}
+
+/** 도달 수준 사다리. `contradicted`는 사다리 밖이라 따로 다룬다. */
+const RANK: Record<Verdict, number> = {
+  contradicted: -1,
+  region_not_evidenced: 0,
+  topic_only: 1,
+  partial_relation_preservation: 2,
+  relation_preserved: 3,
+};
+
+/** 채점 결과 하나를 보관 가능한 기록으로. 공개 조건(§2.1)이 여기서 적용된다. */
+export function toRecord(a: RegionAssessment, said: readonly string[], attempted: boolean): RegionRecord {
+  const verdict: Verdict = a.verdict; // 캐스트 없음 — 위 가드 참조
+  const solved = verdict === 'relation_preserved';
+  const base = { regionId: a.regionId, verdict, feedback: a.feedback, said };
+
+  // 공개 조건은 둘뿐이다: 관계보존이거나, 수정을 시도했으나 미달이거나.
+  if (!solved && !attempted) return base;
+
+  // 명제는 **관계보존일 때만** 붙인다. 수정 실패 시에는 간략 정답만 공개하고 명제는
+  // 표시하지 않는다(§2.1) — 성취 표시 채널을 미달 영역에 쓰지 않기 위해서다.
+  if (!solved) return { ...base, label: a.label };
+
+  const propositions: PropView[] = a.propositionEvidence.map((e) => ({
+    shortForm: e.shortForm,
+    state: e.state,
+  }));
+  return { ...base, label: a.label, propositions };
+}
+
+/**
+ * 표시할 기록을 고른다 (§2.1, 2026-08-08 개정).
+ *
+ * **겨냥한 영역은 그대로, 그 외는 상승만 반영한다.** 같은 입력에도 영역 판정이 갈리는 것이
+ * 측정됐으므로(2/9), 학생이 건드리지도 않은 영역이 모델 변동으로 내려가는 것을 보여주면
+ * 설명할 수 없는 강등이 된다.
+ *
+ * **모순은 예외다** — 새로 생기면 반드시 표시한다. 가리면 하드 게이트가 조용히 실패한다.
+ */
+function pick(current: RegionRecord, best: RegionRecord | undefined, targeted: boolean): RegionRecord {
+  if (targeted || best === undefined) return current;
+  if (current.verdict === 'contradicted') return current;
+  return RANK[best.verdict] > RANK[current.verdict] ? best : current;
 }
 
 export function toRegionViews(input: ViewInput): RegionView[] {
   return input.assessments.map((a) => {
-    const verdict: Verdict = a.verdict; // 캐스트 없음 — 위 가드 참조
-    const solved = verdict === 'relation_preserved';
     const attempted = input.revised.has(a.regionId);
+    const current = toRecord(a, input.said.get(a.regionId) ?? [], attempted);
+    const shown = pick(current, input.best?.get(a.regionId), input.targetRegionId === a.regionId);
+    const solved = shown.verdict === 'relation_preserved';
 
-    // 공개 조건은 둘뿐이다(§2.1): 관계보존이거나, 수정을 시도했으나 미달이거나.
-    // 시도하지 않은 미달 영역은 문단을 마칠 때까지 공개하지 않는다.
-    const revealed = solved || attempted;
-
-    const base = {
+    return {
       regionId: a.regionId,
-      verdict,
+      verdict: shown.verdict,
       sentenceIds: input.sentenceIds.get(a.regionId) ?? [],
-      feedback: a.feedback,
-      said: input.said.get(a.regionId) ?? [],
+      feedback: shown.feedback,
+      said: shown.said,
       canRevise: !solved && !attempted,
-      forced: verdict === 'contradicted' && !attempted,
-      revealed,
+      forced: shown.verdict === 'contradicted' && !attempted,
+      revealed: shown.label !== undefined,
+      ...(shown.label === undefined ? {} : { label: shown.label }),
+      ...(shown.propositions === undefined ? {} : { propositions: shown.propositions }),
     };
-
-    if (!revealed) return base;
-
-    // 명제는 **관계보존일 때만** 붙인다. 수정 실패 시에는 간략 정답만 공개하고 명제는
-    // 표시하지 않는다(§2.1) — 성취 표시 채널을 미달 영역에 쓰지 않기 위해서다.
-    if (!solved) return { ...base, label: a.label };
-
-    const propositions: PropView[] = a.propositionEvidence.map((e) => ({
-      shortForm: e.shortForm,
-      state: e.state,
-    }));
-    return { ...base, label: a.label, propositions };
   });
+}
+
+/** 영역별 지금까지의 최고 기록. 동률이면 먼저 도달한 것을 남긴다. */
+export function bestOf(records: readonly (readonly RegionRecord[])[]): Map<string, RegionRecord> {
+  const out = new Map<string, RegionRecord>();
+  for (const attempt of records) {
+    for (const r of attempt) {
+      const prev = out.get(r.regionId);
+      if (prev === undefined || RANK[r.verdict] > RANK[prev.verdict]) out.set(r.regionId, r);
+    }
+  }
+  return out;
 }
 
 /** 모순 영역 중 아직 시도하지 않은 것이 있으면 진행을 막는다. */

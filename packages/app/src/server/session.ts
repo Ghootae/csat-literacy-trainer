@@ -13,7 +13,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { Verdict } from '../shared/contract.js';
+import type { RegionRecord } from './view.js';
 
 const ROOT = resolve(process.cwd(), 'sessions');
 
@@ -22,7 +22,11 @@ export interface Attempt {
   readonly sections: readonly string[];
   /** 수정이면 겨냥한 영역. 최초 제출이면 없다. */
   readonly targetRegionId?: string;
-  readonly regions: readonly { readonly regionId: string; readonly verdict: Verdict }[];
+  /**
+   * 그 시점의 영역 내용 전체. 판정값만 남기면 강등을 가릴 때 문구가 어긋난다 —
+   * 박스는 ◐인데 문구는 `주제만`용이 붙는다.
+   */
+  readonly regions: readonly RegionRecord[];
 }
 
 export interface Session {
