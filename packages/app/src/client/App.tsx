@@ -43,11 +43,17 @@ export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * 섹션을 고칠 때 **그 순간 선택돼 있던 영역**에 귀속시킨다. 학생은 영역을 하나씩 짚어가며
-   * 고치므로 이 귀속이 정확하고, 최종 제출 때 "실제로 고친 영역"이 그대로 나온다.
+   * 이번 패스에서 고친 영역. 섹션을 고칠 때 **그 순간 선택돼 있던 영역**에 귀속시킨다.
    * 눌러보기만 하고 안 고친 영역은 여기 안 들어가 "다듬기"가 소진되지 않는다.
+   *
+   * **`useRef`가 아니라 상태다.** ref는 리렌더를 일으키지 않아, 첫 영역을 고친 뒤 다른
+   * 영역을 선택하면 먼저 고친 카드의 표시가 갱신되지 않는다 — 학생 입장에서는 첫 수정이
+   * 저장됐는지 알 수 없다(코덱스 테스트 2026-08-09). 누적 표시가 이 화면의 요구사항이므로
+   * 렌더에 반영되는 자료구조여야 한다.
    */
-  const touched = useRef(new Set<string>());
+  const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
+  /** 직전 제출에서 겨냥했던 영역. "재판정 완료"를 표시하는 데 쓴다. */
+  const [rejudged, setRejudged] = useState<ReadonlySet<string>>(new Set());
   /** 모순 영역을 한 번은 열어봤는지 (§2 하드 게이트 — 강제 1회 시도). */
   const visited = useRef(new Set<string>());
 
@@ -64,7 +70,9 @@ export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element
     lit !== undefined && text.trim() !== '' && lit.said.some((s) => s !== '' && text.includes(s));
 
   function edit(index: number, value: string): void {
-    if (selected !== null) touched.current.add(selected);
+    if (selected !== null && !touched.has(selected)) {
+      setTouched(new Set([...touched, selected]));
+    }
     setSections(sections.map((v, j) => (j === index ? value : v)));
   }
 
@@ -80,13 +88,14 @@ export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element
     setBusy(true);
     setError(null);
     try {
-      const ids = [...touched.current].filter((id) => regions?.some((r) => r.regionId === id) === true);
+      const ids = [...touched].filter((id) => regions?.some((r) => r.regionId === id) === true);
       const res = await submitAttempt(paragraphId, sessionId, {
         sections,
         ...(ids.length === 0 ? {} : { regionIds: ids }),
       });
       setRegions(res.regions);
-      touched.current = new Set();
+      setRejudged(new Set(ids)); // 방금 재판정된 영역 — 결과 화면에서 표시한다
+      setTouched(new Set());
       visited.current = new Set();
       setSelected(null);
     } catch (e: unknown) {
@@ -102,8 +111,11 @@ export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element
 
   const filled = sections.some((s) => s.trim() !== '');
   const first = regions === null;
-  const changed = touched.current.size > 0;
+  const changed = touched.size > 0;
   const canSubmit = !busy && filled && (first || changed) && unvisitedForced.length === 0;
+  // 모든 영역이 관계보존이면 이 문단은 끝났다. 남은 할 일이 없는데 "고치고 싶은 부분을
+  // 눌러 보세요"가 계속 떠 있으면 학생이 완료 여부를 알 수 없다(코덱스 테스트 2026-08-09).
+  const done = regions !== null && regions.every((r) => r.verdict === 'relation_preserved');
 
   return (
     <div className="wrap">
@@ -111,7 +123,9 @@ export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element
       <p className="sub">
         {first
           ? '문단을 읽고 주요 내용을 섹션별로 요약해 보세요. 몇 개로 나눌지는 스스로 정합니다.'
-          : '고치고 싶은 부분을 눌러 보세요. 원문과 내 요약에서 관련된 곳이 켜집니다. 다 고치면 한 번에 제출합니다.'}
+          : done
+            ? '이 문단은 끝났습니다. 아래에서 각 부분을 다시 훑어볼 수 있습니다.'
+            : '고치고 싶은 부분을 눌러 보세요. 원문과 내 요약에서 관련된 곳이 켜집니다. 다 고치면 한 번에 제출합니다.'}
       </p>
 
       <div className="panels">
@@ -176,11 +190,23 @@ export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element
                   key={r.regionId}
                   region={r}
                   selected={selected === r.regionId}
-                  touched={touched.current.has(r.regionId)}
+                  touched={touched.has(r.regionId)}
+                  rejudged={rejudged.has(r.regionId)}
                   onSelect={() => select(r.regionId)}
                 />
               ))}
-              <p className="summary">{summarize(regions)}</p>
+              {done ? (
+                <div className="done">
+                  <strong>이 문단의 핵심 관계를 모두 담았습니다.</strong>
+                  <p>{summarize(regions)}</p>
+                  {/* 다음 문단은 아직 하나뿐이라 이동할 곳이 없다. 지문이 늘면 여기가 진입점이 된다. */}
+                  <button className="primary" disabled title="다음 문단은 아직 준비 중입니다">
+                    다음 문단으로
+                  </button>
+                </div>
+              ) : (
+                <p className="summary">{summarize(regions)}</p>
+              )}
             </>
           )}
         </section>
@@ -189,28 +215,49 @@ export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element
   );
 }
 
+/**
+ * 카드의 진행 상태. **도달 수준(판정)과 직교한 축이다.**
+ *
+ * 한 영역을 고친 뒤 다른 영역을 선택해도 먼저 고친 카드는 `수정됨`을 유지해야 한다 —
+ * 그러지 않으면 학생이 첫 수정이 저장됐는지, 재판정 대상인지 알 수 없다
+ * (코덱스 테스트 2026-08-09). 즉 이 상태는 **누적**이지 현재 선택의 함수가 아니다.
+ */
+function progressBadge(region: RegionView, touched: boolean, rejudged: boolean): React.JSX.Element | null {
+  if (touched) return <span className="badge edited">수정됨 · 제출 대기</span>;
+  if (rejudged) return <span className="badge judged">재판정 완료</span>;
+  if (region.canRevise) return <span className="badge dim">눌러서 다듬기</span>;
+  return null;
+}
+
 function RegionBox({
   region,
   selected,
   touched,
+  rejudged,
   onSelect,
 }: {
   region: RegionView;
   selected: boolean;
   touched: boolean;
+  rejudged: boolean;
   onSelect: () => void;
 }): React.JSX.Element {
   // 정답을 확인한 상태는 채움이 아니라 테두리로 (§4.1.2 — 도달 수준과 직교한 축).
   const checked = region.revealed && region.verdict !== 'relation_preserved';
-  const cls = ['region', `v-${region.verdict}`, selected ? 'selected' : '', checked ? 'checked' : ''];
+  const cls = [
+    'region',
+    `v-${region.verdict}`,
+    selected ? 'selected' : '',
+    checked ? 'checked' : '',
+    touched ? 'edited' : '',
+  ];
 
   return (
     <div className={cls.filter(Boolean).join(' ')} onClick={onSelect}>
       <div className="head">
         <span className="mark">{MARK[region.verdict]}</span>
         <span className="verdict">{LABEL[region.verdict]}</span>
-        {touched && <span className="badge">고치는 중</span>}
-        {region.canRevise && !touched && <span className="badge dim">눌러서 다듬기</span>}
+        {progressBadge(region, touched, rejudged)}
       </div>
 
       {/* 미달 영역은 골드가 아니라 **위치**로 부른다. label은 서버가 보내지도 않는다. */}
