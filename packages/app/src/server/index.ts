@@ -21,6 +21,16 @@ const PORT = Number(process.env['PORT'] ?? 5174);
 const OWNER = 'local'; // D4 — 리포지토리는 처음부터 ownerId를 받는다. 로컬은 고정.
 const EVAL_CACHE = resolve(process.cwd(), 'sessions', '.eval-cache');
 
+/**
+ * 채점 호출 예산 (서버 기동당).
+ *
+ * 이 서버는 인증이 없고 `ANTHROPIC_API_KEY`를 들고 있다. 터널로 외부에 노출하면 URL을 아는
+ * 누구나 채점을 호출해 크레딧을 태울 수 있다. 인증을 붙이면 클라이언트까지 복잡해지므로,
+ * **실질 위험인 비용에 직접 상한을 건다.** 캐시 히트는 API를 부르지 않으므로 세지 않는다.
+ */
+const BUDGET = Number(process.env['EVAL_BUDGET'] ?? 60);
+let spent = 0;
+
 function json(res: import('node:http').ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
@@ -59,6 +69,13 @@ const server = createServer((req, res) => {
       const body = (await readBody(req)) as AttemptRequest;
       const sections = body.sections.map((s) => s.trim()).filter((s) => s !== '');
       if (sections.length === 0) return json(res, 400, { error: '빈 응답' });
+
+      if (spent >= BUDGET) {
+        console.warn(`예산 소진 ${spent}/${BUDGET} — 채점 거부`);
+        return json(res, 429, { error: `채점 예산을 다 썼습니다 (${BUDGET}회). 서버를 다시 시작하세요.` });
+      }
+      spent += 1;
+      console.log(`[${new Date().toISOString()}] 채점 ${spent}/${BUDGET}  session=${sessionId}  섹션=${sections.length}`);
 
       const { gold, queries } = loadContent(paragraphId);
       const evaluated = await evaluateResponse(gold, queries, sections.join('\n'), EVAL_CACHE);
