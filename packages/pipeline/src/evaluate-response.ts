@@ -17,7 +17,7 @@ import {
 } from './assessment.js';
 import { evalCacheKey } from './eval-cache-key.js';
 import type { Gold as PipelineGold } from './gold.js';
-import { EVAL_REQUEST_FINGERPRINT, type QueryEval, evaluateQueries } from './llm/query-eval.js';
+import { evalRequestFingerprint, type QueryEval, evaluateQueries } from './llm/query-eval.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
 import { type EvalSet, type Gold as LibGold, generatedEvalSet, paragraphText } from './query-gen-lib.js';
 import { type RawQueryVerdict, normalizeQueryStates } from './query-normalize.js';
@@ -124,7 +124,7 @@ async function runEval(
     paragraphId,
     probeText: response,
     queries: set.queries,
-    requestFingerprint: EVAL_REQUEST_FINGERPRINT,
+    requestFingerprint: evalRequestFingerprint(),
   });
   const path = resolve(cacheDir, `${key}.json`);
   if (existsSync(path)) return JSON.parse(readFileSync(path, 'utf8')) as QueryEval;

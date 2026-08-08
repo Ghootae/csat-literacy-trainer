@@ -28,8 +28,15 @@ export interface EvalCacheKeyInputs {
    * 렌더링되므로 순서가 바뀌면 모델에 전달되는 문자열이 달라진다. 임의로 정렬하지 않는다.
    */
   readonly queries: readonly unknown[];
-  /** 실제 API에 전달되는 요청 지문 (모델·시스템 프롬프트·출력 스키마·요청 설정). */
-  readonly requestFingerprint: unknown;
+  /**
+   * 실제 API에 전달되는 요청 지문 (모델·시스템 프롬프트·출력 스키마·요청 설정).
+   *
+   * **`unknown`이 아니라 객체로 못박는다.** 지문이 상수에서 함수로 바뀐 적이 있는데,
+   * `unknown`이면 호출을 빠뜨려 **함수 자체**를 넘겨도 컴파일이 통과한다. 그러면
+   * `JSON.stringify`가 함수를 지워 지문이 키에서 통째로 빠지고, 모델·effort를 바꿔도
+   * 과거 결과가 재사용된다 — 이 파일이 막으려던 바로 그 사고가 다시 난다.
+   */
+  readonly requestFingerprint: Readonly<Record<string, unknown>>;
 }
 
 /**

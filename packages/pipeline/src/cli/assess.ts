@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { MODEL } from '../llm/client.js';
-import { EVAL_REQUEST_FINGERPRINT, type PreservationQuery, type QueryEval, evaluateQueries } from '../llm/query-eval.js';
+import { evalRequestFingerprint, type PreservationQuery, type QueryEval, evaluateQueries } from '../llm/query-eval.js';
 import {
   type AssessQuery,
   type AssessRegionMeta,
@@ -282,7 +282,7 @@ async function cachedEval(paraText: string, queries: readonly PreservationQuery[
     paragraphId: paraId,
     probeText,
     queries,
-    requestFingerprint: EVAL_REQUEST_FINGERPRINT,
+    requestFingerprint: evalRequestFingerprint(),
   });
   const path = resolve(CACHE_DIR, `${key}.json`);
   if (existsSync(path)) return readJson<QueryEval>(path);
