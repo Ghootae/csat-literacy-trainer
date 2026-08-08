@@ -105,21 +105,25 @@ export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element
         {/* ── 내 요약 ── */}
         <section className="panel">
           <h2>내 요약</h2>
-          {sections.map((text, i) => (
-            <div key={i} className={`section${litSection(text) ? ' lit' : ''}`}>
-              <label htmlFor={`s${i}`}>섹션 {i + 1}</label>
-              {editing ? (
-                <textarea
-                  id={`s${i}`}
-                  value={text}
-                  disabled={busy}
-                  onChange={(e) => setSections(sections.map((v, j) => (j === i ? e.target.value : v)))}
-                />
-              ) : (
-                <div>{text === '' ? <span className="sub">(비어 있음)</span> : text}</div>
-              )}
-            </div>
-          ))}
+          {sections.map((text, i) => {
+            // 결과 화면에서는 빈 섹션을 감춘다 — 입력 중에는 필요하지만 결과에서는 노이즈다.
+            if (!editing && text.trim() === '') return null;
+            return (
+              <div key={i} className={`section${litSection(text) ? ' lit' : ''}`}>
+                <label htmlFor={`s${i}`}>섹션 {i + 1}</label>
+                {editing ? (
+                  <textarea
+                    id={`s${i}`}
+                    value={text}
+                    disabled={busy}
+                    onChange={(e) => setSections(sections.map((v, j) => (j === i ? e.target.value : v)))}
+                  />
+                ) : (
+                  <div>{text}</div>
+                )}
+              </div>
+            );
+          })}
           {editing && (
             <div className="row">
               <button onClick={() => setSections([...sections, ''])} disabled={busy}>

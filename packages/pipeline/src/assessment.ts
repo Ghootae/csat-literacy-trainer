@@ -210,7 +210,9 @@ function buildFeedback(
   propWeight: ReadonlyMap<string, number>,
   hintQuestion: string,
 ): string {
-  const relText = critical?.expectedAnswer ?? meta.label;
+  // 기대 답은 대개 마침표로 끝나는데 「」로 감싸 이어붙이면 "…비롯된다.」를 잘 포착했습니다."가
+  // 되어 문장 부호가 겹쳐 읽힌다. 인용 안에서는 끝 마침표를 뗀다.
+  const relText = (critical?.expectedAnswer ?? meta.label).replace(/[.。]\s*$/, '');
   const criticalProps = new Set(critical?.propositionIds ?? []);
 
   // 미달 영역에서 되물을 질문. 없으면 그 절을 통째로 생략한다.
