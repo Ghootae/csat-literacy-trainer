@@ -32,6 +32,13 @@ export interface CallMetric {
   readonly effort: string;
   readonly inputTokens: number;
   readonly outputTokens: number;
+  /**
+   * 프롬프트 캐시 토큰. **캐싱이 실제로 먹었는지 여기서만 알 수 있다.**
+   * `cacheRead`가 계속 0이면 접두부가 매번 달라진다는 뜻이므로 무엇이 깨뜨리는지 찾아야 한다.
+   * 쓰기는 1.25배, 읽기는 0.1배로 과금된다.
+   */
+  readonly cacheWriteTokens?: number;
+  readonly cacheReadTokens?: number;
   readonly ms: number;
   /** 문단 식별자. 배치 재개와 문단별 비용 집계에 쓴다. */
   readonly paragraphId?: string;
@@ -66,6 +73,19 @@ export function backoffMs(attempt: number): number {
   return Math.min(1000 * 2 ** attempt, 30_000);
 }
 
+/** 0인 캐시 필드는 기록하지 않는다 — 캐싱을 안 쓰는 호출까지 0으로 채우면 로그만 커진다. */
+function cacheTokens(usage: Anthropic.Usage): {
+  cacheWriteTokens?: number;
+  cacheReadTokens?: number;
+} {
+  const write = usage.cache_creation_input_tokens ?? 0;
+  const read = usage.cache_read_input_tokens ?? 0;
+  return {
+    ...(write === 0 ? {} : { cacheWriteTokens: write }),
+    ...(read === 0 ? {} : { cacheReadTokens: read }),
+  };
+}
+
 export async function instrumented<T extends { usage: Anthropic.Usage }>(
   op: Op,
   effort: string,
@@ -88,6 +108,7 @@ export async function instrumented<T extends { usage: Anthropic.Usage }>(
         ...base,
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
+        ...cacheTokens(response.usage),
         ms: Math.round(performance.now() - started),
       });
       return response;

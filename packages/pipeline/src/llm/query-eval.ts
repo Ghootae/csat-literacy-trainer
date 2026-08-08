@@ -134,6 +134,10 @@ scope 질의조차 not_evidenced다.`;
  * 템플릿을 해시하면, 프롬프트를 고쳤는데 과거 평가 결과가 재사용되는 사고를 막지 못한다.
  * `outputFormat`은 `zodOutputFormat(QueryEvalSchema)`의 결과 — 즉 응답 스키마가 바뀌면
  * 자동으로 달라진다.
+ *
+ * **`cache_control`은 일부러 넣지 않는다.** 프롬프트 캐싱은 모델이 보는 내용을 바꾸지 않고
+ * 과금만 바꾸므로, 캐싱을 켜고 끄는 것으로 과거 평가 결과가 무효화되면 안 된다. 여기 담을
+ * 것은 **판정을 바꾸는 것**뿐이다.
  */
 export const EVAL_REQUEST_FINGERPRINT = {
   model: MODEL,
@@ -170,7 +174,20 @@ export async function evaluateQueries(
       messages: [
         {
           role: 'user',
-          content: `원문 문단:\n${paragraphText}\n\n보존 질의:\n${queryBlock}\n\n학생 응답:\n${studentResponse}`,
+          // **접두부를 별도 블록으로 쪼갠 이유가 캐싱이다.** 한 문자열로 합치면 학생 응답이
+          // 접두부 안에 섞여 매번 지문이 달라지고, 캐시가 성립하지 않는다.
+          //
+          // 안정 → 가변 순서가 규칙이다. 문단·질의는 같은 문단이면 매번 같고(입력의 95%가
+          // 넘는다), 학생 응답만 바뀐다. 마지막 안정 블록에 표시를 달면 그 앞의 system까지
+          // 함께 캐시된다 — 렌더 순서가 tools → system → messages이기 때문이다.
+          content: [
+            {
+              type: 'text',
+              text: `원문 문단:\n${paragraphText}\n\n보존 질의:\n${queryBlock}`,
+              cache_control: { type: 'ephemeral' },
+            },
+            { type: 'text', text: `학생 응답:\n${studentResponse}` },
+          ],
         },
       ],
     }),
