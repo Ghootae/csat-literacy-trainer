@@ -58,10 +58,18 @@ function evalModel(): string {
  *
  * 측정된 사실: 채점 지연·비용은 출력 토큰에 거의 선형이고(약 12ms/토큰), 접두부 캐싱을
  * 넣은 뒤로는 **비용의 95%가 출력**이다. 즉 effort가 지연과 비용을 동시에 정하는 유일한
- * 변수다. 그래서 실험으로 낮은 effort의 판정 일치도를 잴 수 있어야 한다.
+ * 변수다.
+ *
+ * `high` → `medium` (2026-08-09, `docs/experiments/effort-medium-2026-08-09.md`).
+ * 회귀 3세트 37프로브 × 분해 4종으로 재고 바꿨다:
+ *
+ *   과대평가      1건 → 1건   (기준선부터 있던 인문 Bd1. 4종 중 2/4 → 1/4로 오히려 개선)
+ *   오라클≠기대   5/37 → 3/37
+ *   불안정        4/37 → 6/37 (전부 주제만↔미포착 경계. 반복 변동 1~2/9와 구분되지 않는다)
+ *   채점 1건    $0.1435 → $0.0546   지연 68.5s → 23.1s
  *
  * 환경변수는 **실험 전용이다.** 지문(fingerprint)에 effort가 들어가므로 값이 다르면 캐시도
- * 갈라져, 낮은 effort의 결과가 운영 캐시를 오염시키지 않는다.
+ * 갈라져, 다른 effort의 결과가 운영 캐시를 오염시키지 않는다.
  */
 
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
@@ -69,7 +77,7 @@ export type Effort = (typeof EFFORTS)[number];
 
 function evalEffort(): Effort {
   const raw = process.env['EVAL_EFFORT'];
-  if (raw === undefined) return 'high';
+  if (raw === undefined) return 'medium';
   // 오타를 API까지 보내지 않는다. 조용히 기본값으로 되돌리면 낮은 effort를 쟀다고 믿으면서
   // 실은 high를 재는 실험이 된다.
   const found = EFFORTS.find((e) => e === raw);
