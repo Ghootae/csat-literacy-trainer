@@ -61,8 +61,14 @@ export interface RegionView {
 
 export interface AttemptRequest {
   readonly sections: readonly string[];
-  /** 수정이면 겨냥한 영역. **평가 범위를 좁히지 않는다** — 재평가는 항상 전체다(§2.1). */
-  readonly regionId?: string;
+  /**
+   * 이번 패스에서 **실제로 고친** 영역들. 학생은 영역을 하나씩 짚어가며 고치고 마지막에
+   * 한 번 낸다 — 영역마다 채점을 부르면 거의 같은 텍스트를 N번 평가하게 된다.
+   *
+   * **평가 범위를 좁히지 않는다** — 재평가는 항상 전체다(§2.1). 이 목록은 (a) 강등을
+   * 그대로 보여줄 영역을 가리고, (b) "다듬기" 소진을 표시하는 데만 쓴다.
+   */
+  readonly regionIds?: readonly string[];
 }
 
 export interface AttemptResponse {

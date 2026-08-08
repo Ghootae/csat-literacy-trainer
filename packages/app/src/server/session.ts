@@ -20,8 +20,8 @@ const ROOT = resolve(process.cwd(), 'sessions');
 export interface Attempt {
   readonly at: string;
   readonly sections: readonly string[];
-  /** 수정이면 겨냥한 영역. 최초 제출이면 없다. */
-  readonly targetRegionId?: string;
+  /** 이번 패스에서 고친 영역들. 최초 제출이면 없다. */
+  readonly targetRegionIds?: readonly string[];
   /**
    * 그 시점의 영역 내용 전체. 판정값만 남기면 강등을 가릴 때 문구가 어긋난다 —
    * 박스는 ◐인데 문구는 `주제만`용이 붙는다.
@@ -67,7 +67,7 @@ export function appendAttempt(
 export function revisedRegions(session: Session | undefined): Set<string> {
   const out = new Set<string>();
   for (const a of session?.attempts ?? []) {
-    if (a.targetRegionId !== undefined) out.add(a.targetRegionId);
+    for (const id of a.targetRegionIds ?? []) out.add(id);
   }
   return out;
 }

@@ -44,8 +44,8 @@ export interface ViewInput {
   readonly revised: ReadonlySet<string>;
   /** 영역별 지금까지의 최고 기록. 겨냥하지 않은 영역의 강등을 가리는 데 쓴다. */
   readonly best?: ReadonlyMap<string, RegionRecord>;
-  /** 이번 수정이 겨냥한 영역. 여기만 강등을 그대로 보여준다. */
-  readonly targetRegionId?: string;
+  /** 이번 패스에서 고친 영역들. 여기만 강등을 그대로 보여준다. */
+  readonly targetRegionIds?: ReadonlySet<string>;
 }
 
 /** 도달 수준 사다리. `contradicted`는 사다리 밖이라 따로 다룬다. */
@@ -96,7 +96,7 @@ export function toRegionViews(input: ViewInput): RegionView[] {
   return input.assessments.map((a) => {
     const attempted = input.revised.has(a.regionId);
     const current = toRecord(a, input.said.get(a.regionId) ?? [], attempted);
-    const shown = pick(current, input.best?.get(a.regionId), input.targetRegionId === a.regionId);
+    const shown = pick(current, input.best?.get(a.regionId), input.targetRegionIds?.has(a.regionId) === true);
     const solved = shown.verdict === 'relation_preserved';
 
     return {

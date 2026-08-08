@@ -68,6 +68,7 @@ const server = createServer((req, res) => {
       const prior = loadSession(OWNER, sessionId);
       const best = bestOf((prior?.attempts ?? []).map((a) => a.regions));
       const revised = revisedRegions(prior);
+      const targets = new Set(body.regionIds ?? []);
       const records = evaluated.assessments.map((a) =>
         toRecord(a, evaluated.said.get(a.regionId) ?? [], revised.has(a.regionId)),
       );
@@ -75,15 +76,15 @@ const server = createServer((req, res) => {
       appendAttempt(OWNER, sessionId, paragraphId, {
         at: new Date().toISOString(),
         sections,
-        ...(body.regionId === undefined ? {} : { targetRegionId: body.regionId }),
+        ...(targets.size === 0 ? {} : { targetRegionIds: [...targets] }),
         regions: records,
       });
 
       const regions = toRegionViews({
         ...evaluated,
-        revised: new Set([...revised, ...(body.regionId === undefined ? [] : [body.regionId])]),
+        revised: new Set([...revised, ...targets]),
         best,
-        ...(body.regionId === undefined ? {} : { targetRegionId: body.regionId }),
+        targetRegionIds: targets,
       });
       return json(res, 200, { regions, blocked: isBlocked(regions) } satisfies AttemptResponse);
     }

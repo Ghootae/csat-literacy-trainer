@@ -30,7 +30,7 @@ function views(opts: {
     sentenceIds: new Map([['r1', ['S1', 'S2']]]),
     revised: new Set(opts.revised === true ? ['r1'] : []),
     ...(opts.best === undefined ? {} : { best: new Map([['r1', opts.best]]) }),
-    ...(opts.targeted === true ? { targetRegionId: 'r1' } : {}),
+    ...(opts.targeted === true ? { targetRegionIds: new Set(['r1']) } : {}),
   })[0]!;
 }
 
