@@ -91,10 +91,12 @@ export async function instrumented<T extends { usage: Anthropic.Usage }>(
   effort: string,
   paragraphId: string | undefined,
   call: () => Promise<T>,
+  /** 호출이 실제로 쓴 모델. 채점만 다른 모델로 재는 실험이 있으므로 기본값에 기대지 않는다. */
+  model: string = MODEL,
 ): Promise<T> {
   const base = {
     op,
-    model: MODEL,
+    model,
     effort,
     ...(paragraphId === undefined ? {} : { paragraphId }),
   };

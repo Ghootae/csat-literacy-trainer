@@ -43,7 +43,39 @@ export type QueryEval = z.infer<typeof QueryEvalSchema>;
 
 /** 실제 요청 파라미터. 캐시 지문과 호출부가 같은 상수를 쓰도록 한 곳에 둔다. */
 const EVAL_MAX_TOKENS = 8000;
-const EVAL_EFFORT = 'high';
+
+/**
+ * 채점 모델. **골드 구축과 따로 둔다** — 골드는 한 번 만들면 끝이라 품질이 우선이고,
+ * 채점은 학생이 쓸 때마다 도는 온라인 경로라 비용·지연이 걸린다. 둘을 한 상수로 묶으면
+ * 채점만 싼 모델로 재는 실험이 골드 파이프라인까지 흔든다.
+ */
+function evalModel(): string {
+  return process.env['EVAL_MODEL'] ?? MODEL;
+}
+
+/**
+ * 사고 깊이. **판정을 만드는 값이므로 바꾸면 회귀 3세트를 다시 재야 한다.**
+ *
+ * 측정된 사실: 채점 지연·비용은 출력 토큰에 거의 선형이고(약 12ms/토큰), 접두부 캐싱을
+ * 넣은 뒤로는 **비용의 95%가 출력**이다. 즉 effort가 지연과 비용을 동시에 정하는 유일한
+ * 변수다. 그래서 실험으로 낮은 effort의 판정 일치도를 잴 수 있어야 한다.
+ *
+ * 환경변수는 **실험 전용이다.** 지문(fingerprint)에 effort가 들어가므로 값이 다르면 캐시도
+ * 갈라져, 낮은 effort의 결과가 운영 캐시를 오염시키지 않는다.
+ */
+
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type Effort = (typeof EFFORTS)[number];
+
+function evalEffort(): Effort {
+  const raw = process.env['EVAL_EFFORT'];
+  if (raw === undefined) return 'high';
+  // 오타를 API까지 보내지 않는다. 조용히 기본값으로 되돌리면 낮은 effort를 쟀다고 믿으면서
+  // 실은 high를 재는 실험이 된다.
+  const found = EFFORTS.find((e) => e === raw);
+  if (found === undefined) throw new Error(`EVAL_EFFORT가 잘못됐다: ${raw} (${EFFORTS.join('|')})`);
+  return found;
+}
 const EVAL_THINKING = 'adaptive';
 
 export interface PreservationQuery {
@@ -139,14 +171,18 @@ scope 질의조차 not_evidenced다.`;
  * 과금만 바꾸므로, 캐싱을 켜고 끄는 것으로 과거 평가 결과가 무효화되면 안 된다. 여기 담을
  * 것은 **판정을 바꾸는 것**뿐이다.
  */
-export const EVAL_REQUEST_FINGERPRINT = {
-  model: MODEL,
-  systemPrompt: SYSTEM,
-  maxTokens: EVAL_MAX_TOKENS,
-  effort: EVAL_EFFORT,
-  thinking: EVAL_THINKING,
-  outputFormat: zodOutputFormat(QueryEvalSchema),
-} as const;
+export function evalRequestFingerprint() {
+  return {
+    model: evalModel(),
+    systemPrompt: SYSTEM,
+    maxTokens: EVAL_MAX_TOKENS,
+    // **상수가 아니라 함수인 이유다.** effort를 실험으로 바꿀 수 있으므로 모듈 적재 시점에
+    // 굳히면 낮은 effort의 결과가 운영 effort의 캐시 키를 쓰게 된다.
+    effort: evalEffort(),
+    thinking: EVAL_THINKING,
+    outputFormat: zodOutputFormat(QueryEvalSchema),
+  };
+}
 
 export async function evaluateQueries(
   paragraphText: string,
@@ -164,33 +200,40 @@ export async function evaluateQueries(
     )
     .join('\n\n');
 
-  const response = await instrumented('query-eval', EVAL_EFFORT, paragraphId, () =>
-    getClient().messages.parse({
-      model: MODEL,
-      max_tokens: EVAL_MAX_TOKENS,
-      thinking: { type: EVAL_THINKING },
-      output_config: { effort: EVAL_EFFORT, format: zodOutputFormat(QueryEvalSchema) },
-      system: SYSTEM,
-      messages: [
-        {
-          role: 'user',
-          // **접두부를 별도 블록으로 쪼갠 이유가 캐싱이다.** 한 문자열로 합치면 학생 응답이
-          // 접두부 안에 섞여 매번 지문이 달라지고, 캐시가 성립하지 않는다.
-          //
-          // 안정 → 가변 순서가 규칙이다. 문단·질의는 같은 문단이면 매번 같고(입력의 95%가
-          // 넘는다), 학생 응답만 바뀐다. 마지막 안정 블록에 표시를 달면 그 앞의 system까지
-          // 함께 캐시된다 — 렌더 순서가 tools → system → messages이기 때문이다.
-          content: [
-            {
-              type: 'text',
-              text: `원문 문단:\n${paragraphText}\n\n보존 질의:\n${queryBlock}`,
-              cache_control: { type: 'ephemeral' },
-            },
-            { type: 'text', text: `학생 응답:\n${studentResponse}` },
-          ],
-        },
-      ],
-    }),
+  const effort = evalEffort();
+  const model = evalModel();
+  const response = await instrumented(
+    'query-eval',
+    effort,
+    paragraphId,
+    () =>
+      getClient().messages.parse({
+        model,
+        max_tokens: EVAL_MAX_TOKENS,
+        thinking: { type: EVAL_THINKING },
+        output_config: { effort, format: zodOutputFormat(QueryEvalSchema) },
+        system: SYSTEM,
+        messages: [
+          {
+            role: 'user',
+            // **접두부를 별도 블록으로 쪼갠 이유가 캐싱이다.** 한 문자열로 합치면 학생 응답이
+            // 접두부 안에 섞여 매번 지문이 달라지고, 캐시가 성립하지 않는다.
+            //
+            // 안정 → 가변 순서가 규칙이다. 문단·질의는 같은 문단이면 매번 같고(입력의 95%가
+            // 넘는다), 학생 응답만 바뀐다. 마지막 안정 블록에 표시를 달면 그 앞의 system까지
+            // 함께 캐시된다 — 렌더 순서가 tools → system → messages이기 때문이다.
+            content: [
+              {
+                type: 'text',
+                text: `원문 문단:\n${paragraphText}\n\n보존 질의:\n${queryBlock}`,
+                cache_control: { type: 'ephemeral' },
+              },
+              { type: 'text', text: `학생 응답:\n${studentResponse}` },
+            ],
+          },
+        ],
+      }),
+    model,
   );
 
   const parsed = response.parsed_output;
