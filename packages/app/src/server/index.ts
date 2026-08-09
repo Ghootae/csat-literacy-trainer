@@ -31,6 +31,20 @@ const EVAL_CACHE = resolve(process.cwd(), 'sessions', '.eval-cache');
 const BUDGET = Number(process.env['EVAL_BUDGET'] ?? 60);
 let spent = 0;
 
+/**
+ * 최근 예열 시각. **문단을 여는 요청이 중복으로 와도 한 번만 데운다.**
+ *
+ * 실측(2026-08-09): 문단 하나를 여는데 예열이 2회씩 돌았다. React `StrictMode`가 개발
+ * 모드에서 effect를 두 번 실행하기 때문인데, 두 요청이 같은 초에 나가면 **둘 다 쓰기가
+ * 된다** — 캐시는 첫 응답이 스트리밍을 시작해야 읽을 수 있으므로 서로를 재사용하지 못한다.
+ * 한 세션에서 $0.19가 그대로 버려졌다.
+ *
+ * 클라이언트 규율에 기대지 않는다. 새로고침·탭 두 개·프리페치 등 중복 경로는 계속 생긴다.
+ * 창은 짧게 잡는다(10초) — TTL(5분)에 가깝게 잡으면 만료 직전에 연 학생이 예열을 못 받는다.
+ */
+const WARM_DEDUPE_MS = 10_000;
+const lastWarm = new Map<string, number>();
+
 function json(res: import('node:http').ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
@@ -66,7 +80,11 @@ const server = createServer((req, res) => {
       // 예산에 세지 않는다: 출력 1토큰이고, 어차피 첫 제출에서 낼 쓰기 비용을 앞당길 뿐이다.
       const view = toPassageView(content.passage);
       json(res, 200, view);
-      void warmResponsePrefix(content.gold, content.queries);
+      const now = Date.now();
+      if (now - (lastWarm.get(id) ?? 0) > WARM_DEDUPE_MS) {
+        lastWarm.set(id, now);
+        void warmResponsePrefix(content.gold, content.queries);
+      }
       return;
     }
 
