@@ -23,6 +23,8 @@ export type Op =
   | 'evaluate'
   | 'test-responses'
   | 'query-eval'
+  /** 접두부 예열. 출력 1토큰이라 지연·비용 집계에서 채점과 섞이면 안 된다. */
+  | 'query-eval-warm'
   | 'query-gen';
 
 export interface CallMetric {

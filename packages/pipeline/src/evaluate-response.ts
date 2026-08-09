@@ -17,7 +17,7 @@ import {
 } from './assessment.js';
 import { evalCacheKey } from './eval-cache-key.js';
 import type { Gold as PipelineGold } from './gold.js';
-import { evalRequestFingerprint, type QueryEval, evaluateQueries } from './llm/query-eval.js';
+import { evalRequestFingerprint, type QueryEval, evaluateQueries, warmEvalPrefix } from './llm/query-eval.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
 import { type EvalSet, type Gold as LibGold, generatedEvalSet, paragraphText } from './query-gen-lib.js';
 import { type RawQueryVerdict, normalizeQueryStates } from './query-normalize.js';
@@ -28,6 +28,19 @@ export interface EvaluatedResponse {
   readonly said: ReadonlyMap<string, readonly string[]>;
   /** 영역 → 원문 문장 id. 하이라이트 좌표. */
   readonly sentenceIds: ReadonlyMap<string, readonly string[]>;
+}
+
+/**
+ * 접두부 예열. 학생이 문단을 여는 순간 부르면 첫 제출이 캐시 히트가 된다.
+ *
+ * **`evaluateResponse`와 같은 파일에 있는 이유가 여기다.** 접두부는 `generatedEvalSet` +
+ * `paragraphText`로 만들어지므로, 호출부에서 질의를 따로 조립하면 접두부가 한 글자만 달라도
+ * **다른 캐시를 데우고 예열이 통째로 헛일이 된다**(실측 2026-08-10: 예열 write=5621,
+ * 실호출 write=5805, read=0). 같은 유도 경로를 쓰는 것이 유일한 보장이다.
+ */
+export async function warmResponsePrefix(gold: PipelineGold, gen: GeneratedQuerySet): Promise<void> {
+  const set: EvalSet = generatedEvalSet('gen', gen);
+  await warmEvalPrefix(paragraphText(gold as unknown as LibGold), set.queries, gold.paragraphId);
 }
 
 /**

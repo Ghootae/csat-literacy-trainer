@@ -192,12 +192,8 @@ export function evalRequestFingerprint() {
   };
 }
 
-export async function evaluateQueries(
-  paragraphText: string,
-  queries: readonly PreservationQuery[],
-  studentResponse: string,
-  paragraphId?: string,
-): Promise<QueryEval> {
+/** 문단·질의를 프롬프트 블록으로. 예열과 실채점이 **같은 접두부**를 쓰도록 한 곳에 둔다. */
+function prefixBlocks(paragraphText: string, queries: readonly PreservationQuery[]) {
   const queryBlock = queries
     .map(
       (q) =>
@@ -207,7 +203,68 @@ export async function evaluateQueries(
         `  수용 기준:\n${q.acceptanceCriteria.map((c) => `    - ${c}`).join('\n')}`,
     )
     .join('\n\n');
+  return {
+    type: 'text' as const,
+    text: `원문 문단:\n${paragraphText}\n\n보존 질의:\n${queryBlock}`,
+    cache_control: { type: 'ephemeral' as const },
+  };
+}
 
+/**
+ * 접두부 예열 — 학생이 문단을 여는 순간 캐시를 채운다.
+ *
+ * 측정(2026-08-10): 학생 경로 캐시 히트율 44%, **첫 제출은 반드시 미스**다. 미스는 중앙
+ * 28.4s, 히트는 19.6s로 9초 차이가 난다. 학생이 문단을 읽고 요약을 쓰기까지 최소 수십 초가
+ * 걸리므로, 그 사이에 데워 두면 첫 제출부터 히트가 된다.
+ *
+ * **`max_tokens: 1`이다.** 문서가 권하는 `max_tokens: 0`은 `output_config.format`과 함께
+ * 쓸 수 없고(400), format을 빼면 스키마가 접두부에서 빠져 **다른 캐시를 데운다**(실측:
+ * 예열 write=5621, 실호출 write=5805, read=0). 실채점과 완전히 같은 요청 모양을 유지해야 한다.
+ *
+ * 비용은 쓰기 1회분 — **어차피 첫 제출에서 낼 돈을 미리 내는 것**이다. 출력은 1토큰이라
+ * 무시할 만하다. 학생이 열고 풀지 않으면 그때만 헛돈이다.
+ *
+ * 실패해도 조용히 넘어간다. 예열은 최적화지 정확성 요건이 아니다.
+ */
+export async function warmEvalPrefix(
+  paragraphText: string,
+  queries: readonly PreservationQuery[],
+  paragraphId?: string,
+): Promise<void> {
+  const effort = evalEffort();
+  const model = evalModel();
+  try {
+    await instrumented(
+      'query-eval-warm',
+      effort,
+      paragraphId,
+      () =>
+        getClient().messages.create({
+          model,
+          max_tokens: 1,
+          thinking: { type: EVAL_THINKING },
+          output_config: { effort, format: zodOutputFormat(QueryEvalSchema) },
+          system: SYSTEM,
+          messages: [
+            {
+              role: 'user',
+              content: [prefixBlocks(paragraphText, queries), { type: 'text', text: '학생 응답:\n(예열)' }],
+            },
+          ],
+        }),
+      model,
+    );
+  } catch {
+    /* 예열 실패는 무시한다 — 첫 제출이 조금 느려질 뿐이다 */
+  }
+}
+
+export async function evaluateQueries(
+  paragraphText: string,
+  queries: readonly PreservationQuery[],
+  studentResponse: string,
+  paragraphId?: string,
+): Promise<QueryEval> {
   const effort = evalEffort();
   const model = evalModel();
   const response = await instrumented(
@@ -231,11 +288,7 @@ export async function evaluateQueries(
             // 넘는다), 학생 응답만 바뀐다. 마지막 안정 블록에 표시를 달면 그 앞의 system까지
             // 함께 캐시된다 — 렌더 순서가 tools → system → messages이기 때문이다.
             content: [
-              {
-                type: 'text',
-                text: `원문 문단:\n${paragraphText}\n\n보존 질의:\n${queryBlock}`,
-                cache_control: { type: 'ephemeral' },
-              },
+              prefixBlocks(paragraphText, queries),
               { type: 'text', text: `학생 응답:\n${studentResponse}` },
             ],
           },

@@ -10,7 +10,7 @@
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 
-import { evaluateResponse } from '@csat/pipeline';
+import { evaluateResponse, warmResponsePrefix } from '@csat/pipeline';
 
 import type { AttemptRequest, AttemptResponse, RestoreResponse } from '../shared/contract.js';
 import { listPassages, loadContent, toPassageView } from './content.js';
@@ -60,7 +60,14 @@ const server = createServer((req, res) => {
     // 원문만 보낸다 — 골드도 질의도 포함하지 않는다.
     if (req.method === 'GET' && url.pathname.startsWith('/api/passage/')) {
       const id = url.pathname.slice('/api/passage/'.length);
-      return json(res, 200, toPassageView(loadContent(id).passage));
+      const content = loadContent(id);
+      // **응답을 보낸 뒤 예열한다.** 학생이 문단을 읽고 요약을 쓰기까지 수십 초가 걸리므로
+      // 그 사이에 접두부 캐시가 채워진다 — 첫 제출이 미스라서 가장 느리던 문제가 사라진다.
+      // 예산에 세지 않는다: 출력 1토큰이고, 어차피 첫 제출에서 낼 쓰기 비용을 앞당길 뿐이다.
+      const view = toPassageView(content.passage);
+      json(res, 200, view);
+      void warmResponsePrefix(content.gold, content.queries);
+      return;
     }
 
     // 최초 제출과 수정이 같은 경로다. 재평가는 항상 전체이므로 처리가 다르지 않고,
