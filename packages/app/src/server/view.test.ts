@@ -2,7 +2,7 @@ import type { RegionAssessment } from '@csat/pipeline';
 import { describe, expect, it } from 'vitest';
 
 import type { Verdict } from '../shared/contract.js';
-import { type RegionRecord, bestOf, isBlocked, toRecord, toRegionViews } from './view.js';
+import { type RegionRecord, bestOf, isBlocked, toRecord, toRegionViews, viewsFromRecords } from './view.js';
 
 const ANSWER = '법인 소유 vs 사람 운용의 역할 분리';
 
@@ -103,6 +103,69 @@ describe('골드 차단 — 공개 조건은 둘뿐', () => {
     expect(views({ verdict: 'topic_only' }).canRevise).toBe(true);
     expect(views({ verdict: 'topic_only', revised: true }).canRevise).toBe(false);
     expect(views({ verdict: 'relation_preserved' }).canRevise).toBe(false);
+  });
+});
+
+/**
+ * 이어하기 (2026-08-09 코덱스 테스트). 다른 문단에 갔다 돌아오면 답안·판정이 사라졌다.
+ *
+ * 화면이 비는 것보다 심각한 것은 **규칙 누수**였다: 세션 id를 마운트마다 새로 만들었으므로
+ * 돌아올 때 새 세션이 생기고 이전 기록이 고아가 됐다 — 다른 문단을 들렀다 오면 "다듬기는
+ * 영역당 1회"가 되살아난다.
+ */
+describe('viewsFromRecords — 저장된 기록에서 화면 복원', () => {
+  const record = (verdict: Verdict, extra: Partial<RegionRecord> = {}): RegionRecord => ({
+    regionId: 'r1',
+    verdict,
+    feedback: `${verdict} 문구`,
+    said: ['내가 쓴 것'],
+    ...extra,
+  });
+  const sentenceIds = new Map([['r1', ['S1', 'S2']]]);
+
+  it('제출 직후 화면과 같은 것을 낸다 — 같은 규칙을 다시 적용할 뿐', () => {
+    const submitted = views({ verdict: 'topic_only', best: partial, targeted: true });
+    const [restored] = viewsFromRecords({
+      records: [record('topic_only')],
+      best: new Map([['r1', partial]]),
+      targetRegionIds: new Set(['r1']),
+      revised: new Set(),
+      sentenceIds,
+    });
+    expect(restored!.verdict).toBe(submitted.verdict);
+    expect(restored!.canRevise).toBe(submitted.canRevise);
+    expect(restored!.sentenceIds).toEqual(submitted.sentenceIds);
+  });
+
+  it('★ 시도한 영역은 복원해도 "다듬기"가 살아나지 않는다 (규칙 누수 방지)', () => {
+    const [v] = viewsFromRecords({
+      records: [record('topic_only', { label: '정답' })],
+      revised: new Set(['r1']), // 이전 시도에서 소진됨
+      sentenceIds,
+    });
+    expect(v!.canRevise).toBe(false);
+    expect(v!.revealed).toBe(true);
+  });
+
+  it('가리기 규칙도 그대로 — 겨냥하지 않은 영역의 강등은 복원 시에도 가려진다', () => {
+    const [v] = viewsFromRecords({
+      records: [record('topic_only')],
+      best: new Map([['r1', partial]]),
+      revised: new Set(),
+      sentenceIds,
+    });
+    expect(v!.verdict).toBe('partial_relation_preservation');
+    expect(v!.feedback).toBe('관계의 한 축은 잡았어요');
+  });
+
+  it('모순은 복원 시에도 강제 시도가 유지된다', () => {
+    const [v] = viewsFromRecords({
+      records: [record('contradicted')],
+      revised: new Set(),
+      sentenceIds,
+    });
+    expect(v!.forced).toBe(true);
+    expect(isBlocked([v!])).toBe(true);
   });
 });
 

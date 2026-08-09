@@ -79,6 +79,17 @@ export interface AttemptRequest {
   readonly regionIds?: readonly string[];
 }
 
+/**
+ * 이어하기. 학생이 다른 문단에 갔다 돌아왔을 때 **채점을 다시 부르지 않고** 화면을 되살린다.
+ * `attempts`가 없으면 `regions`는 비어 있고 첫 제출 화면으로 시작한다.
+ */
+export interface RestoreResponse {
+  /** 마지막으로 제출한 섹션들. 없으면 빈 배열. */
+  readonly sections: readonly string[];
+  readonly regions: readonly RegionView[];
+  readonly blocked: boolean;
+}
+
 export interface AttemptResponse {
   readonly regions: readonly RegionView[];
   /** 모순 영역이 남아 있는가. 남아 있으면 진행 전에 1회 시도가 강제된다. */

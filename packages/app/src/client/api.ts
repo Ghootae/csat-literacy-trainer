@@ -9,6 +9,7 @@ import type {
   AttemptResponse,
   PassageSummary,
   PassageView,
+  RestoreResponse,
 } from '../shared/contract.js';
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -22,6 +23,11 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function fetchPassage(paragraphId: string): Promise<PassageView> {
   return jsonFetch<PassageView>(`/api/passage/${paragraphId}`);
+}
+
+/** 이어하기 — 저장된 마지막 제출을 되살린다. 채점을 부르지 않는다. */
+export function fetchAttempt(paragraphId: string, sessionId: string): Promise<RestoreResponse> {
+  return jsonFetch<RestoreResponse>(`/api/attempt/${paragraphId}/${sessionId}`);
 }
 
 export function submitAttempt(

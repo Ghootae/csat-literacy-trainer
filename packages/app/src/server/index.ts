@@ -12,10 +12,10 @@ import { resolve } from 'node:path';
 
 import { evaluateResponse } from '@csat/pipeline';
 
-import type { AttemptRequest, AttemptResponse } from '../shared/contract.js';
+import type { AttemptRequest, AttemptResponse, RestoreResponse } from '../shared/contract.js';
 import { listPassages, loadContent, toPassageView } from './content.js';
 import { appendAttempt, loadSession, revisedRegions } from './session.js';
-import { bestOf, isBlocked, toRecord, toRegionViews } from './view.js';
+import { bestOf, isBlocked, toRecord, toRegionViews, viewsFromRecords } from './view.js';
 
 const PORT = Number(process.env['PORT'] ?? 5174);
 const OWNER = 'local'; // D4 — 리포지토리는 처음부터 ownerId를 받는다. 로컬은 고정.
@@ -90,8 +90,11 @@ const server = createServer((req, res) => {
       const best = bestOf((prior?.attempts ?? []).map((a) => a.regions));
       const revised = revisedRegions(prior);
       const targets = new Set(body.regionIds ?? []);
+      // **이번 시도의 겨냥까지 포함해 기록한다.** `revised`(직전까지)만으로 만들면 이번에
+      // 고친 영역의 정답 공개가 기록에 빠져, 나중에 복원할 때 화면이 그때와 달라진다.
+      const attempted = new Set([...revised, ...targets]);
       const records = evaluated.assessments.map((a) =>
-        toRecord(a, evaluated.said.get(a.regionId) ?? [], revised.has(a.regionId)),
+        toRecord(a, evaluated.said.get(a.regionId) ?? [], attempted.has(a.regionId)),
       );
 
       appendAttempt(OWNER, sessionId, paragraphId, {
@@ -101,13 +104,37 @@ const server = createServer((req, res) => {
         regions: records,
       });
 
-      const regions = toRegionViews({
-        ...evaluated,
-        revised: new Set([...revised, ...targets]),
-        best,
-        targetRegionIds: targets,
-      });
+      const regions = toRegionViews({ ...evaluated, revised: attempted, best, targetRegionIds: targets });
       return json(res, 200, { regions, blocked: isBlocked(regions) } satisfies AttemptResponse);
+    }
+
+    // 이어하기. **채점을 부르지 않는다** — 저장된 기록에 제출 때와 같은 표시 규칙을 다시 적용할 뿐이다.
+    if (req.method === 'GET' && url.pathname.startsWith('/api/attempt/')) {
+      const [paragraphId, sessionId] = url.pathname.slice('/api/attempt/'.length).split('/');
+      if (paragraphId === undefined || sessionId === undefined) {
+        return json(res, 400, { error: 'paragraphId와 sessionId가 필요하다' });
+      }
+      const session = loadSession(OWNER, sessionId);
+      const attempts = session?.attempts ?? [];
+      const last = attempts[attempts.length - 1];
+      if (last === undefined) {
+        return json(res, 200, { sections: [], regions: [], blocked: false } satisfies RestoreResponse);
+      }
+      const { queries } = loadContent(paragraphId);
+      const sentenceIds = new Map(queries.regions.map((r) => [r.regionId, r.sourceSentenceIds]));
+      const regions = viewsFromRecords({
+        records: last.regions,
+        // 마지막 시도를 뺀 나머지가 그 시점의 "지금까지 최고"다 — 제출 때와 같은 계산.
+        best: bestOf(attempts.slice(0, -1).map((a) => a.regions)),
+        targetRegionIds: new Set(last.targetRegionIds ?? []),
+        revised: revisedRegions(session),
+        sentenceIds,
+      });
+      return json(res, 200, {
+        sections: last.sections,
+        regions,
+        blocked: isBlocked(regions),
+      } satisfies RestoreResponse);
     }
 
     if (req.method === 'GET' && url.pathname.startsWith('/api/session/')) {

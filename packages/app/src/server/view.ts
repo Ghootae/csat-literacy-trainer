@@ -92,25 +92,49 @@ function pick(current: RegionRecord, best: RegionRecord | undefined, targeted: b
   return RANK[best.verdict] > RANK[current.verdict] ? best : current;
 }
 
+/** 보여줄 기록 하나 → 화면 계약. */
+function toView(shown: RegionRecord, sentenceIds: readonly string[], attempted: boolean): RegionView {
+  const solved = shown.verdict === 'relation_preserved';
+  return {
+    regionId: shown.regionId,
+    verdict: shown.verdict,
+    sentenceIds,
+    feedback: shown.feedback,
+    said: shown.said,
+    canRevise: !solved && !attempted,
+    forced: shown.verdict === 'contradicted' && !attempted,
+    revealed: shown.label !== undefined,
+    ...(shown.label === undefined ? {} : { label: shown.label }),
+    ...(shown.propositions === undefined ? {} : { propositions: shown.propositions }),
+  };
+}
+
 export function toRegionViews(input: ViewInput): RegionView[] {
   return input.assessments.map((a) => {
     const attempted = input.revised.has(a.regionId);
     const current = toRecord(a, input.said.get(a.regionId) ?? [], attempted);
     const shown = pick(current, input.best?.get(a.regionId), input.targetRegionIds?.has(a.regionId) === true);
-    const solved = shown.verdict === 'relation_preserved';
+    return toView(shown, input.sentenceIds.get(a.regionId) ?? [], attempted);
+  });
+}
 
-    return {
-      regionId: a.regionId,
-      verdict: shown.verdict,
-      sentenceIds: input.sentenceIds.get(a.regionId) ?? [],
-      feedback: shown.feedback,
-      said: shown.said,
-      canRevise: !solved && !attempted,
-      forced: shown.verdict === 'contradicted' && !attempted,
-      revealed: shown.label !== undefined,
-      ...(shown.label === undefined ? {} : { label: shown.label }),
-      ...(shown.propositions === undefined ? {} : { propositions: shown.propositions }),
-    };
+/**
+ * 저장된 기록에서 화면을 복원한다. **채점을 다시 부르지 않는다** — 학생이 문단을 옮겼다
+ * 돌아온 것뿐인데 LLM을 태우면 비용도 지연도 이유가 없다.
+ *
+ * 제출 경로와 같은 `pick`을 쓴다. 기록이 그 시점의 화면 내용을 그대로 담고 있으므로
+ * (`toRecord`가 최종 `attempted`로 만들어진다), 같은 입력에 같은 규칙을 적용하면 같은 화면이 된다.
+ */
+export function viewsFromRecords(input: {
+  readonly records: readonly RegionRecord[];
+  readonly best?: ReadonlyMap<string, RegionRecord>;
+  readonly targetRegionIds?: ReadonlySet<string>;
+  readonly revised: ReadonlySet<string>;
+  readonly sentenceIds: ReadonlyMap<string, readonly string[]>;
+}): RegionView[] {
+  return input.records.map((r) => {
+    const shown = pick(r, input.best?.get(r.regionId), input.targetRegionIds?.has(r.regionId) === true);
+    return toView(shown, input.sentenceIds.get(r.regionId) ?? [], input.revised.has(r.regionId));
   });
 }
 

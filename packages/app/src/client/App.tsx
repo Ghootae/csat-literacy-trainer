@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PassageSummary, PassageView, RegionView, Verdict } from '../shared/contract.js';
-import { fetchPassage, fetchPassages, submitAttempt } from './api.js';
+import { fetchAttempt, fetchPassage, fetchPassages, submitAttempt } from './api.js';
 
 
 /**
@@ -56,6 +56,23 @@ export function App(): React.JSX.Element {
       />
     </>
   );
+}
+
+/**
+ * 탭 안에서 문단마다 고정된 세션 id. 없으면 만들어 `sessionStorage`에 넣는다.
+ * 저장소를 못 쓰는 환경(프라이빗 모드 등)에서는 매번 새 id가 되지만, 그래도 동작은 한다.
+ */
+function sessionKey(paragraphId: string): string {
+  const k = `csat.session.${paragraphId}`;
+  try {
+    const found = sessionStorage.getItem(k);
+    if (found !== null) return found;
+    const made = `${paragraphId}-${Date.now().toString(36)}`;
+    sessionStorage.setItem(k, made);
+    return made;
+  } catch {
+    return `${paragraphId}-${Date.now().toString(36)}`;
+  }
 }
 
 /** §4.1.2 — 색만으로는 적록색맹에서 갈리지 않으므로 기호를 항상 함께 쓴다. */
@@ -120,13 +137,34 @@ function Trainer({
   /** 모순 영역을 한 번은 열어봤는지 (§2 하드 게이트 — 강제 1회 시도). */
   const visited = useRef(new Set<string>());
 
-  // **문단마다 다른 세션이다.** 서버의 `Session`은 `paragraphId` 하나를 들고 있어서,
-  // 문단을 옮겨 다니며 같은 세션 id를 쓰면 기록이 서로 덮인다.
-  const sessionId = useMemo(() => `${paragraphId}-${Date.now().toString(36)}`, [paragraphId]);
+  // **문단마다 다르되, 같은 문단이면 항상 같아야 한다.**
+  //
+  // 서버의 `Session`은 `paragraphId` 하나를 들고 있어서 문단끼리 세션을 공유하면 기록이
+  // 서로 덮인다. 반대로 문단으로 돌아올 때마다 새 id를 만들면 이전 세션이 고아가 되어
+  // **"다듬기는 영역당 1회"가 무력화된다** — 다른 문단을 들렀다 오면 기회가 되살아난다.
+  // `sessionStorage`는 탭 단위라 새로고침에도 남고 탭을 닫으면 정리된다.
+  const sessionId = useMemo(() => sessionKey(paragraphId), [paragraphId]);
 
   useEffect(() => {
     fetchPassage(paragraphId).then(setPassage).catch((e: unknown) => setError(String(e)));
   }, [paragraphId]);
+
+  // 이어하기. 이 문단에 이미 제출한 적이 있으면 그때 화면을 되살린다 (채점 호출 없음).
+  useEffect(() => {
+    let live = true;
+    fetchAttempt(paragraphId, sessionId)
+      .then((r) => {
+        if (!live || r.regions.length === 0) return;
+        setSections(r.sections.length > 0 ? [...r.sections] : ['', '', '', '']);
+        setRegions(r.regions);
+      })
+      .catch(() => {
+        /* 이어할 것이 없으면 첫 제출 화면 그대로 둔다 */
+      });
+    return () => {
+      live = false;
+    };
+  }, [paragraphId, sessionId]);
 
   // 배타적 단일 선택 — 선택된 영역의 문장과 응답 조각만 켜진다 (§4.1.3).
   const lit = regions?.find((r) => r.regionId === selected);
