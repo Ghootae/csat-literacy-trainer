@@ -4,7 +4,12 @@
  * 여기서 `@csat/pipeline`을 import 하지 않는다 — 하면 채점 코드가 번들에 들어간다.
  */
 
-import type { AttemptRequest, AttemptResponse, PassageView } from '../shared/contract.js';
+import type {
+  AttemptRequest,
+  AttemptResponse,
+  PassageSummary,
+  PassageView,
+} from '../shared/contract.js';
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
@@ -29,4 +34,9 @@ export function submitAttempt(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+/** 고를 수 있는 문단 목록. 골드도 질의도 담기지 않는다. */
+export function fetchPassages(): Promise<PassageSummary[]> {
+  return jsonFetch<PassageSummary[]>('/api/passages');
 }

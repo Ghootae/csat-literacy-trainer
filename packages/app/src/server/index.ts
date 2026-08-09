@@ -13,7 +13,7 @@ import { resolve } from 'node:path';
 import { evaluateResponse } from '@csat/pipeline';
 
 import type { AttemptRequest, AttemptResponse } from '../shared/contract.js';
-import { loadContent, toPassageView } from './content.js';
+import { listPassages, loadContent, toPassageView } from './content.js';
 import { appendAttempt, loadSession, revisedRegions } from './session.js';
 import { bestOf, isBlocked, toRecord, toRegionViews } from './view.js';
 
@@ -52,6 +52,10 @@ const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
 
     if (req.method === 'OPTIONS') return json(res, 204, {});
+
+    if (req.method === 'GET' && url.pathname === '/api/passages') {
+      return json(res, 200, listPassages());
+    }
 
     // 원문만 보낸다 — 골드도 질의도 포함하지 않는다.
     if (req.method === 'GET' && url.pathname.startsWith('/api/passage/')) {

@@ -1,7 +1,62 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { PassageView, RegionView, Verdict } from '../shared/contract.js';
-import { fetchPassage, submitAttempt } from './api.js';
+import type { PassageSummary, PassageView, RegionView, Verdict } from '../shared/contract.js';
+import { fetchPassage, fetchPassages, submitAttempt } from './api.js';
+
+
+/**
+ * 셸 — 문단 목록과 선택.
+ *
+ * `Trainer`에 `key={paragraphId}`를 주는 것이 핵심이다. 문단을 옮기면 React가 컴포넌트를
+ * 다시 마운트하므로 요약·판정·수정 상태가 **전부 초기화된다.** 상태를 하나씩 수동으로
+ * 비우면 새 상태가 생길 때마다 빠뜨리게 된다.
+ */
+export function App(): React.JSX.Element {
+  const [list, setList] = useState<readonly PassageSummary[] | null>(null);
+  const [current, setCurrent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchPassages()
+      .then((xs) => {
+        setList(xs);
+        setCurrent(xs[0]?.paragraphId ?? null);
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  }, []);
+
+  if (error !== null) return <div className="wrap"><p className="err">{error}</p></div>;
+  if (list === null || current === null) {
+    return <div className="wrap">{list?.length === 0 ? '문단이 없습니다.' : '불러오는 중…'}</div>;
+  }
+
+  const i = list.findIndex((p) => p.paragraphId === current);
+  const next = i >= 0 ? list[i + 1] : undefined;
+
+  return (
+    <>
+      <nav className="picker">
+        {list.map((p, n) => (
+          <button
+            key={p.paragraphId}
+            className={p.paragraphId === current ? 'chip on' : 'chip'}
+            onClick={() => setCurrent(p.paragraphId)}
+            title={p.tags.join(' · ')}
+          >
+            <span className="n">{n + 1}</span>
+            {p.title}
+          </button>
+        ))}
+      </nav>
+      <Trainer
+        key={current}
+        paragraphId={current}
+        next={next}
+        onNext={() => next !== undefined && setCurrent(next.paragraphId)}
+      />
+    </>
+  );
+}
 
 /** §4.1.2 — 색만으로는 적록색맹에서 갈리지 않으므로 기호를 항상 함께 쓴다. */
 const MARK: Record<Verdict, string> = {
@@ -34,7 +89,15 @@ function spanTitle(ids: readonly string[]): string {
   return first === last ? `${first}번째 문장` : `${first}~${last}번째 문장`;
 }
 
-export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element {
+function Trainer({
+  paragraphId,
+  next,
+  onNext,
+}: {
+  paragraphId: string;
+  next: PassageSummary | undefined;
+  onNext: () => void;
+}): React.JSX.Element {
   const [passage, setPassage] = useState<PassageView | null>(null);
   const [sections, setSections] = useState<string[]>(['', '', '', '']);
   const [regions, setRegions] = useState<readonly RegionView[] | null>(null);
@@ -57,7 +120,9 @@ export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element
   /** 모순 영역을 한 번은 열어봤는지 (§2 하드 게이트 — 강제 1회 시도). */
   const visited = useRef(new Set<string>());
 
-  const sessionId = useMemo(() => `s${Date.now().toString(36)}`, []);
+  // **문단마다 다른 세션이다.** 서버의 `Session`은 `paragraphId` 하나를 들고 있어서,
+  // 문단을 옮겨 다니며 같은 세션 id를 쓰면 기록이 서로 덮인다.
+  const sessionId = useMemo(() => `${paragraphId}-${Date.now().toString(36)}`, [paragraphId]);
 
   useEffect(() => {
     fetchPassage(paragraphId).then(setPassage).catch((e: unknown) => setError(String(e)));
@@ -199,10 +264,13 @@ export function App({ paragraphId }: { paragraphId: string }): React.JSX.Element
                 <div className="done">
                   <strong>이 문단의 핵심 관계를 모두 담았습니다.</strong>
                   <p>{summarize(regions)}</p>
-                  {/* 다음 문단은 아직 하나뿐이라 이동할 곳이 없다. 지문이 늘면 여기가 진입점이 된다. */}
-                  <button className="primary" disabled title="다음 문단은 아직 준비 중입니다">
-                    다음 문단으로
-                  </button>
+                  {next === undefined ? (
+                    <p className="sub">마지막 문단입니다. 위에서 다른 문단을 골라 다시 해 볼 수 있습니다.</p>
+                  ) : (
+                    <button className="primary" onClick={onNext}>
+                      다음 문단 — {next.title}
+                    </button>
+                  )}
                 </div>
               ) : (
                 <p className="summary">{summarize(regions)}</p>

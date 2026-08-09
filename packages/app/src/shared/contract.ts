@@ -20,6 +20,14 @@ export interface Sentence {
   readonly text: string;
 }
 
+/** 목록 화면에 나가는 요약. **문장 본문도 담지 않는다** — 목록은 고르기 위한 것이다. */
+export interface PassageSummary {
+  readonly paragraphId: string;
+  readonly title: string;
+  readonly tags: readonly string[];
+  readonly sentenceCount: number;
+}
+
 export interface PassageView {
   readonly paragraphId: string;
   readonly title: string;

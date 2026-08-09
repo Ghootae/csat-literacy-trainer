@@ -57,6 +57,8 @@ interface Source {
   readonly title: string;
   readonly source: string;
   readonly tags: readonly string[];
+  /** 목록 정렬. 관계 구조가 단순한 것부터 — 조건 분기·순환·분업 순으로 어려워진다. */
+  readonly order: number;
 }
 
 /**
@@ -66,6 +68,7 @@ interface Source {
 const SOURCES: readonly Source[] = [
   {
     id: 'corporate-law-p1',
+    order: 10,
     gold: '.omc/agreement/s1_p1.gold-1.json',
     generated: 'corporate-law-v1-run1.json', // 손 오라클이 없는 유일한 문단
     title: '법인의 권리 능력',
@@ -74,6 +77,7 @@ const SOURCES: readonly Source[] = [
   },
   {
     id: 'science-p5',
+    order: 20,
     gold: '.omc/agreement/69bffacbfa5063deffe19cc6_s1_p5.gold-1.json',
     oracle: 'science-p5-hand.json',
     title: '니켈 촉매의 인과와 트레이드오프',
@@ -82,6 +86,7 @@ const SOURCES: readonly Source[] = [
   },
   {
     id: 'humanities-p4',
+    order: 30,
     gold: '.omc/agreement/69c011fd78128b2a9beddd5e_s1_p4.gold-1.json',
     oracle: 'humanities-p4-hand.json',
     title: '실재론과 명목론',
@@ -90,6 +95,7 @@ const SOURCES: readonly Source[] = [
   },
   {
     id: 'disclosure-p3',
+    order: 50,
     gold: '.omc/agreement/s1_p3.gold-1.json',
     oracle: 'disclosure-p3-hand.json',
     title: '증권 공시 의무의 조건과 예외',
@@ -98,6 +104,7 @@ const SOURCES: readonly Source[] = [
   },
   {
     id: 'photosynthesis-p3',
+    order: 60,
     gold: '.omc/agreement/69bce4ece23376a28e12cb7c_s1_p3.gold-1.json',
     oracle: 'photosynthesis-p3-hand.json',
     title: '캘빈 회로',
@@ -106,6 +113,7 @@ const SOURCES: readonly Source[] = [
   },
   {
     id: 'photosynthesis-p4',
+    order: 40,
     gold: '.omc/agreement/s1_p4.gold-1.json',
     oracle: 'photosynthesis-p4-hand.json',
     title: 'C3 식물의 한계와 C4 연구',
@@ -114,6 +122,7 @@ const SOURCES: readonly Source[] = [
   },
   {
     id: 'photosynthesis-p5',
+    order: 70,
     gold: '.omc/agreement/69bce4ece23376a28e12cb7c_s1_p5.gold-1.json',
     oracle: 'photosynthesis-p5-hand.json',
     title: 'C4 식물의 두 공간 분업',
@@ -208,6 +217,7 @@ function main(): void {
       title: s.title,
       source: s.source,
       tags: s.tags,
+      order: s.order,
       text: gold.sentences.map((x) => x.text).join(' '),
       sentences: gold.sentences.map((x) => ({ id: x.id, text: x.text })),
     };
