@@ -35,6 +35,42 @@ describe('명제 evidence — 골드 명제 앵커링, 점수 아님', () => {
     expect(byId.get('p9b')).toBe('not_evidenced'); // qArg 미언급
   });
 
+  /**
+   * 2026-08-09 코덱스 테스트에서 드러난 결함. 학생이 "CO2가 RuBP와 결합해 포도당을 만들고"라고만
+   * 썼는데 `결합→3탄당 형성`이 `evidenced`로 표시됐다 — 3탄당은 쓰지도 않았다.
+   *
+   * 원인은 **판정의 해상도가 질의인데 명제 단위로 표시**하는 데 있다. 질의 하나가 명제 여럿을
+   * 앵커링하므로, 그 질의가 explicit이라 해도 앵커링된 명제를 각각 직접 썼다는 뜻이 아니다.
+   */
+  it('★ 광역 질의(여러 명제 앵커)의 explicit은 명제를 evidenced로 올리지 못한다', () => {
+    const verdicts = new Map([['qRel', V('preserved', 'explicit')]]);
+    const [a] = assess([region('asset', 'relation_preserved')], [meta], queries, verdicts);
+    const byId = new Map(a!.propositionEvidence.map((e) => [e.propositionId, e.state]));
+    // qRel은 p7·p9a를 함께 앵커링한다 — 어느 쪽을 직접 썼는지 알 수 없다.
+    expect(byId.get('p7')).toBe('supported_by_abstraction');
+    expect(byId.get('p9a')).toBe('supported_by_abstraction');
+  });
+
+  it('★ 전용 질의(이 명제만 앵커)가 광역 질의를 이긴다 — 없다고 말하는 쪽도', () => {
+    // p7만 묻는 전용 질의가 "안 썼다"고 하는데, p7·p9a를 묶어 묻는 광역 질의가 explicit이다.
+    const withSpecific: AssessQuery[] = [
+      ...queries,
+      { id: 'qP7', regionId: 'asset', level: 'argument', question: 'p7만 묻는 질의', propositionIds: ['p7'], expectedAnswer: 'p7', critical: false },
+    ];
+    const verdicts = new Map([['qRel', V('preserved', 'explicit')], ['qP7', V('not_evidenced', 'none', '')]]);
+    const [a] = assess([region('asset', 'relation_preserved')], [meta], withSpecific, verdicts);
+    const byId = new Map(a!.propositionEvidence.map((e) => [e.propositionId, e.state]));
+    expect(byId.get('p7')).toBe('not_evidenced'); // 전용 질의가 정본
+    expect(byId.get('p9a')).toBe('supported_by_abstraction'); // 전용 질의 없음 → 광역 상한
+  });
+
+  it('전용 질의가 explicit이면 evidenced 그대로 — 정밀도를 잃지 않는다', () => {
+    const verdicts = new Map([['qArg', V('preserved', 'explicit')]]);
+    const [a] = assess([region('asset', 'relation_preserved')], [meta], queries, verdicts);
+    const byId = new Map(a!.propositionEvidence.map((e) => [e.propositionId, e.state]));
+    expect(byId.get('p9b')).toBe('evidenced'); // qArg는 p9b 하나만 앵커링
+  });
+
   it('모순이 다른 상태보다 우선', () => {
     const verdicts = new Map([['qRel', V('contradicted', 'none')], ['qArg', V('preserved', 'explicit')]]);
     const [a] = assess([region('asset', 'contradicted')], [meta], queries, verdicts);
@@ -188,6 +224,34 @@ describe('피드백 — 설명형, not_evidenced를 결손으로 취급하지 �
     expect(a!.feedback).toContain('감점 요소는 아닙니다');
     expect(a!.feedback).toContain('권한자'); // 빠진 세부(p9b)를 참고로 안내
   });
+  /**
+   * 관계보존이어도 **학생이 쓰지 않은 것을 썼다고 말하지 않는다.** 기대 답을 그대로 인용하고
+   * "잘 포착했습니다"라고만 하면, 인용문에 든 중간 산물까지 표현한 것처럼 읽힌다.
+   */
+  it('★ relation_preserved: 나타나지 않은 핵심 중간 단계를 포착했다고 하지 않는다', () => {
+    const withSpecific: AssessQuery[] = [
+      ...queries,
+      { id: 'qP7', regionId: 'asset', level: 'argument', question: 'p7만 묻는 질의', propositionIds: ['p7'], expectedAnswer: 'p7', critical: false },
+    ];
+    const verdicts = new Map([['qRel', V('preserved', 'explicit')], ['qP7', V('not_evidenced', 'none', '')]]);
+    const shortForms = new Map([['p7', '자산의 법인 귀속']]);
+    const [a] = assess([region('asset', 'relation_preserved')], [meta], withSpecific, verdicts, shortForms);
+    expect(a!.feedback).toContain('구조를 보존');
+    expect(a!.feedback).toContain('자산의 법인 귀속'); // 빠진 중간 단계를 밝힌다
+    expect(a!.feedback).toContain('직접 쓰지 않았지만');
+    expect(a!.feedback).not.toContain('잘 포착'); // 포착했다고 단정하지 않는다
+  });
+
+  it('★ 압축 보존(◐)은 "안 썼다"고 단정하지 않는다 — 반대 방향 과장 금지', () => {
+    // qRel만 있고 전용 질의가 없다 → p7·p9a는 supported_by_abstraction.
+    // 직접 썼는지 "알 수 없다"이지 "안 썼다"가 아니므로 문구에 넣지 않는다.
+    const verdicts = new Map([['qRel', V('preserved', 'explicit')]]);
+    const shortForms = new Map([['p7', '자산의 법인 귀속']]);
+    const [a] = assess([region('asset', 'relation_preserved')], [meta], queries, verdicts, shortForms);
+    expect(a!.feedback).not.toContain('직접 쓰지 않았지만');
+    expect(a!.feedback).toContain('잘 포착');
+  });
+
   // 문구 자체가 아니라 **의도**를 검사한다 — 화제 포착을 인정하고 관계 쪽으로 유도하는가.
   // (2026-08-07 문구 개정: 정답 노출을 없애고 질의 question으로 되묻는 형태로 바뀌었다.)
   it('topic_only: 화제 포착을 인정하고 관계로 유도한다', () => {

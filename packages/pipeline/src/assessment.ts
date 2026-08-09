@@ -92,23 +92,49 @@ export interface QueryVerdict {
 const REFERENCE_DETAIL_CAP = 3;
 
 /**
- * 명제 evidence 집계.
+ * 명제 하나의 증거 상태.
  *
  * **`scope` 역할 증거는 명제를 뒷받침하지 않는다.** `scope`의 정의가 "화제만 지목"이므로
  * 정의상 어떤 명제의 *내용*도 뒷받침할 수 없다. 이 가드가 없으면 화제 이름표만 쓴 응답이
  * scope 질의를 통과시켜 그 질의에 앵커된 명제들이 ◐로 칠해진다 — 영역 판정은 `주제만`인데
  * 오버레이는 부분 포착처럼 보이는 어긋남이 생긴다(실측: 2026-08-05 니체 문단).
- *
- * 판별은 질의의 **층위 라벨이 아니라 `evidenceRole`**로 한다. 생성기가 붙인 라벨은 틀릴 수
- * 있고(N2-e), scope 질의에 답하면서 관계를 진술한 학생은 실제로 명제를 뒷받침한 것이다.
+ * 판별은 질의의 **층위 라벨이 아니라 `evidenceRole`**로 한다(N2-e).
  *
  * 모순은 역할과 무관하게 그대로 전파한다 — 잘못된 이해를 가리면 안 된다.
+ *
+ * **판정의 해상도는 질의지 명제가 아니다.** 질의 하나가 명제 여러 개를 앵커링하므로
+ * (실측: 67%가 2개 이상), 그 질의가 `explicit`이라 해도 앵커링된 명제를 **각각** 직접
+ * 표현했다는 뜻은 아니다. 그래서 앵커 개수로 증거의 구체성을 나눈다:
+ *
+ *   전용 질의(이 명제 하나만 앵커링)  이 명제에 대한 직접 증거 → 그대로 따른다
+ *   광역 질의(여러 명제를 함께 앵커링)  상위 관계만 확인 → **최대 `supported_by_abstraction`**
+ *
+ * 이게 없으면 학생이 쓰지도 않은 것을 썼다고 표시한다. 실제 사례(2026-08-09 코덱스 테스트):
+ * 학생이 "CO2가 RuBP와 결합해 포도당을 만들고"라고만 썼는데 `결합→3탄당 형성`이 `evidenced`로
+ * 나왔다. 정작 그 명제 하나만 묻는 전용 질의(`결합으로 처음 생기는 화합물은?`)는
+ * `not_evidenced`였는데, 3개를 묶어 묻는 광역 질의의 `explicit`이 그것을 덮었다.
+ *
+ * `scope` 증거는 화제만 지목한 것이므로 어느 쪽에서도 세지 않는다(원칙 A).
  */
-function aggregatePropositionState(verdicts: readonly QueryVerdict[]): PropositionEvidenceState {
-  if (verdicts.some((v) => v.semanticState === 'contradicted')) return 'contradicted';
-  const supporting = verdicts.filter((v) => v.evidenceRole !== 'scope');
-  if (supporting.some((v) => v.semanticState === 'preserved' && v.expressionMode === 'explicit')) return 'evidenced';
-  if (supporting.some((v) => v.semanticState === 'preserved')) return 'supported_by_abstraction';
+function aggregatePropositionState(
+  anchoring: readonly { readonly verdict: QueryVerdict; readonly anchorCount: number }[],
+): PropositionEvidenceState {
+  if (anchoring.some((a) => a.verdict.semanticState === 'contradicted')) return 'contradicted';
+
+  const supporting = anchoring.filter((a) => a.verdict.evidenceRole !== 'scope');
+  const dedicated = supporting.filter((a) => a.anchorCount === 1);
+
+  // 전용 질의가 있으면 그것이 이 명제에 대한 유일한 직접 증거다. 광역 질의가 뒤집지 못한다.
+  if (dedicated.length > 0) {
+    if (dedicated.some((a) => a.verdict.semanticState === 'preserved' && a.verdict.expressionMode === 'explicit')) {
+      return 'evidenced';
+    }
+    if (dedicated.some((a) => a.verdict.semanticState === 'preserved')) return 'supported_by_abstraction';
+    return 'not_evidenced';
+  }
+
+  // 광역 질의만 있다 — 상위 관계가 보존됐다는 것까지만 말할 수 있다.
+  if (supporting.some((a) => a.verdict.semanticState === 'preserved')) return 'supported_by_abstraction';
   return 'not_evidenced';
 }
 
@@ -137,8 +163,13 @@ export function assess(
     // 명제 evidence: 골드 명제에 앵커링 (생성기 논항 분해와 무관)
     const propositionEvidence: PropositionEvidence[] = meta.propositionIds.map((pid) => {
       const anchoring = regionQueries.filter((q) => q.propositionIds.includes(pid));
-      const vs = anchoring.map((q) => verdicts.get(q.id)).filter((v): v is QueryVerdict => v !== undefined);
-      const state = aggregatePropositionState(vs);
+      // 앵커 개수를 함께 넘긴다 — 증거의 구체성이 여기서 정해진다(위 주석 참조).
+      const withCount = anchoring.flatMap((q) => {
+        const verdict = verdicts.get(q.id);
+        return verdict === undefined ? [] : [{ verdict, anchorCount: q.propositionIds.length }];
+      });
+      const vs = withCount.map((a) => a.verdict);
+      const state = aggregatePropositionState(withCount);
       const via = [
         ...new Set(
           vs
@@ -189,8 +220,10 @@ function topReferenceDetails(
   return evidence
     .map((e, goldOrder) => ({ e, goldOrder }))
     .filter(
-      ({ e }) =>
-        (e.state === 'not_evidenced' || e.state === 'supported_by_abstraction') && !criticalProps.has(e.propositionId),
+      // **`not_evidenced`만.** `supported_by_abstraction`은 "직접 썼는지 알 수 없다"이지
+      // "없다"가 아니다 — 넣으면 학생이 실제로 쓴 것을 "원문에는 …도 제시됩니다"라고
+      // 다시 권하게 된다(2026-08-09 관측).
+      ({ e }) => e.state === 'not_evidenced' && !criticalProps.has(e.propositionId),
     )
     .sort((a, b) => {
       const wa = propWeight.get(a.e.propositionId) ?? 0;
@@ -199,6 +232,17 @@ function topReferenceDetails(
     })
     .slice(0, REFERENCE_DETAIL_CAP)
     .map(({ e }) => e.shortForm);
+}
+
+/**
+ * 받침 유무로 조사를 고른다. `은(는)` 같은 표기는 학생용 문구에 쓰지 않는다.
+ * 한글 음절은 0xAC00부터 28개 종성 주기로 배열되므로 나머지가 0이면 받침이 없다.
+ */
+function particle(word: string, withFinal: string, without: string): string {
+  const last = word.at(-1);
+  const code = last === undefined ? -1 : last.charCodeAt(0);
+  if (code < 0xac00 || code > 0xd7a3) return withFinal; // 한글이 아니면 보수적으로
+  return (code - 0xac00) % 28 === 0 ? without : withFinal;
 }
 
 /** 설명형 피드백. 포착한 핵심 관계 + 추가로 참고할 세부(감점 아님)를 구체적으로 기술. */
@@ -222,7 +266,31 @@ function buildFeedback(
     // 성공 영역만 정답을 공개한다 (§4.1.3).
     case 'relation_preserved': {
       const extra = topReferenceDetails(evidence, criticalProps, propWeight);
-      const base = `핵심 관계 「${relText}」를 잘 포착했습니다.`;
+
+      // 핵심 관계에 속하면서 **나타나지 않은** 중간 단계. 기대 답을 그대로 인용하고
+      // "잘 포착했습니다"라고만 하면, 학생이 쓰지 않은 중간 산물까지 표현한 것처럼 읽힌다
+      // (2026-08-09 코덱스 테스트: 3탄당을 안 썼는데 3탄당이 든 문장을 포착했다고 했다).
+      // 압축은 허용되지만(원칙 F) 압축했다는 사실은 숨기지 않는다.
+      //
+      // **`not_evidenced`만 넣는다.** `supported_by_abstraction`은 "직접 썼는지 알 수 없다"이지
+      // "안 썼다"가 아니다 — 그것까지 "직접 쓰지 않았다"고 하면 반대 방향으로 과장하게 된다.
+      const compressed = evidence
+        .filter(
+          (e) =>
+            criticalProps.has(e.propositionId) &&
+            e.state === 'not_evidenced' &&
+            // shortForm이 없으면 `propositionId`로 대체돼 있다. "p7은(는) 직접 쓰지 않았지만"은
+            // 학생에게 아무 뜻이 없으므로 문구에서 뺀다.
+            e.shortForm !== e.propositionId,
+        )
+        .slice(0, REFERENCE_DETAIL_CAP)
+        .map((e) => e.shortForm);
+
+      const base =
+        compressed.length > 0
+          ? `핵심 관계 「${relText}」의 구조를 보존했습니다. ${compressed.join(', ')}${particle(compressed[compressed.length - 1] ?? '', '은', '는')} 직접 쓰지 않았지만, 관계가 이어지는 방향은 살아 있습니다.`
+          : `핵심 관계 「${relText}」를 잘 포착했습니다.`;
+
       return extra.length > 0
         ? `${base} 원문에는 ${extra.join(', ')}도 제시됩니다 (참고 — 더 구체적으로 표현할 수 있으나 감점 요소는 아닙니다).`
         : base;
