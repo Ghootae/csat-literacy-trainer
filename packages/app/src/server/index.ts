@@ -118,7 +118,12 @@ const server = createServer((req, res) => {
       const attempts = session?.attempts ?? [];
       const last = attempts[attempts.length - 1];
       if (last === undefined) {
-        return json(res, 200, { sections: [], regions: [], blocked: false } satisfies RestoreResponse);
+        return json(res, 200, {
+          sections: [],
+          regions: [],
+          rejudgedRegionIds: [],
+          blocked: false,
+        } satisfies RestoreResponse);
       }
       const { queries } = loadContent(paragraphId);
       const sentenceIds = new Map(queries.regions.map((r) => [r.regionId, r.sourceSentenceIds]));
@@ -133,6 +138,7 @@ const server = createServer((req, res) => {
       return json(res, 200, {
         sections: last.sections,
         regions,
+        rejudgedRegionIds: last.targetRegionIds ?? [],
         blocked: isBlocked(regions),
       } satisfies RestoreResponse);
     }

@@ -87,6 +87,11 @@ export interface RestoreResponse {
   /** 마지막으로 제출한 섹션들. 없으면 빈 배열. */
   readonly sections: readonly string[];
   readonly regions: readonly RegionView[];
+  /**
+   * 직전 제출에서 겨냥한 영역. **세션의 성질이지 화면의 성질이 아니다** — 문단을 옮겼다
+   * 돌아와도 "직전에 무엇을 고쳤는지"는 그대로다. 클라이언트 상태로만 두면 복귀 시 사라진다.
+   */
+  readonly rejudgedRegionIds: readonly string[];
   readonly blocked: boolean;
 }
 

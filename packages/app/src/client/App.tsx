@@ -121,6 +121,12 @@ function Trainer({
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * 이어할 것이 있는지 아직 모른다. **끝날 때까지 입력 화면을 그리지 않는다** — 그리면
+   * 복원 직전에 빈 최초 화면이 잠깐 보이고(측정: 약 0.3초), 그 창에 학생이 타이핑하면
+   * 복원이 덮어쓴다(2026-08-10 코덱스 회귀).
+   */
+  const [restoring, setRestoring] = useState(true);
 
   /**
    * 이번 패스에서 고친 영역. 섹션을 고칠 때 **그 순간 선택돼 있던 영역**에 귀속시킨다.
@@ -157,9 +163,13 @@ function Trainer({
         if (!live || r.regions.length === 0) return;
         setSections(r.sections.length > 0 ? [...r.sections] : ['', '', '', '']);
         setRegions(r.regions);
+        setRejudged(new Set(r.rejudgedRegionIds));
       })
       .catch(() => {
-        /* 이어할 것이 없으면 첫 제출 화면 그대로 둔다 */
+        /* 이어할 것이 없으면 첫 제출 화면으로 시작한다 */
+      })
+      .finally(() => {
+        if (live) setRestoring(false);
       });
     return () => {
       live = false;
@@ -208,9 +218,9 @@ function Trainer({
     }
   }
 
-  if (passage === null) {
-    return <div className="wrap">{error === null ? '불러오는 중…' : <p className="err">{error}</p>}</div>;
-  }
+  if (error !== null && passage === null) return <div className="wrap"><p className="err">{error}</p></div>;
+  // 원문과 이어하기가 **둘 다** 끝나야 그린다.
+  if (passage === null || restoring) return <div className="wrap">불러오는 중…</div>;
 
   const filled = sections.some((s) => s.trim() !== '');
   const first = regions === null;
