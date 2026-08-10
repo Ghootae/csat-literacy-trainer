@@ -15,7 +15,13 @@ import { resolve } from 'node:path';
 
 import type { RegionRecord } from './view.js';
 
-const ROOT = resolve(process.cwd(), 'sessions');
+/**
+ * 호출 시점에 푼다. 상수로 잡아 두면 모듈 로드 때 cwd가 박혀서, 테스트가
+ * `process.chdir`로 임시 폴더를 잡아도 실제 `sessions/`에 쓰고 서로 오염시킨다.
+ */
+function root(): string {
+  return resolve(process.cwd(), 'sessions');
+}
 
 export interface Attempt {
   readonly at: string;
@@ -60,7 +66,7 @@ export interface Session {
 }
 
 function path(ownerId: string, sessionId: string): string {
-  return resolve(ROOT, ownerId, `${sessionId}.json`);
+  return resolve(root(), ownerId, `${sessionId}.json`);
 }
 
 export function loadSession(ownerId: string, sessionId: string): Session | undefined {
@@ -82,7 +88,7 @@ export function appendAttempt(
     startedAt: prev?.startedAt ?? attempt.at,
     attempts: [...(prev?.attempts ?? []), attempt],
   };
-  mkdirSync(resolve(ROOT, ownerId), { recursive: true });
+  mkdirSync(resolve(root(), ownerId), { recursive: true });
   writeFileSync(path(ownerId, sessionId), JSON.stringify(next, null, 2), 'utf8');
   return next;
 }
@@ -112,7 +118,7 @@ export function appendTitleAttempt(
     attempts: prev?.attempts ?? [],
     titleAttempts: [...(prev?.titleAttempts ?? []), attempt],
   };
-  mkdirSync(resolve(ROOT, ownerId), { recursive: true });
+  mkdirSync(resolve(root(), ownerId), { recursive: true });
   writeFileSync(path(ownerId, sessionId), JSON.stringify(next, null, 2), 'utf8');
   return next;
 }
@@ -123,7 +129,7 @@ export function judgedTitleCount(session: Session | undefined): number {
 }
 
 export function listSessions(ownerId: string): string[] {
-  const dir = resolve(ROOT, ownerId);
+  const dir = resolve(root(), ownerId);
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((f) => f.endsWith('.json'))
