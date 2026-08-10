@@ -80,7 +80,23 @@ export interface QueryVerdict {
    * 데이터·테스트와의 하위 호환). 채워졌을 때만 `scope` 증거가 걸러진다.
    */
   readonly evidenceRole?: EvidenceRole;
+  /**
+   * 어긋난 모양. `contradicted`일 때만 의미가 있고, **없을 수 있다** — 이 축 도입 전에
+   * 기록된 판정에는 들어 있지 않다. 없으면 방향을 단정하지 않는 문구를 쓴다.
+   */
+  readonly contradictionKind?: ContradictionKind;
 }
+
+/**
+ * 모순의 두 모양. 학생이 해야 할 일이 다르므로 문구도 갈라야 한다.
+ *
+ *   reversed     방향만 뒤집으면 맞는다 — "무엇이 무엇의 원인인지" 되짚게 한다
+ *   misassigned  방향이 아니라 붙인 자리가 틀렸다 — "이것이 어느 쪽 기준인지" 되짚게 한다
+ *
+ * 하나로 뭉뚱그린 문구는 후자에게 없는 오류를 찾게 만든다(실측 2026-08-10: 축을 잘못 붙인
+ * 응답에 "관계 방향이 원문과 어긋납니다"가 붙었다 — 뒤집힌 것은 아무것도 없었다).
+ */
+export type ContradictionKind = 'reversed' | 'misassigned';
 
 /**
  * 피드백에 나열하는 참고 세부의 상한 (N1).
@@ -190,7 +206,22 @@ export function assess(
         ? (regionQueries.find((q) => state(q) === 'contradicted') ?? critical)
         : (regionQueries.find((q) => q.critical && q.level === 'relation' && state(q) !== 'preserved') ?? critical);
 
-    const feedback = buildFeedback(verdict, meta, critical, propositionEvidence, propWeight, hint?.question ?? '');
+    // 문구의 모양은 **되물을 질의로 고른 그 모순**에서 가져온다. 영역에 모순이 둘이면
+    // 다른 질의의 모양을 붙이게 되고, 그러면 지목한 문장과 문구가 어긋난다.
+    const kind =
+      verdict === 'contradicted' && hint !== undefined
+        ? verdicts.get(hint.id)?.contradictionKind
+        : undefined;
+
+    const feedback = buildFeedback(
+      verdict,
+      meta,
+      critical,
+      propositionEvidence,
+      propWeight,
+      hint?.question ?? '',
+      kind,
+    );
 
     return {
       regionId: meta.id,
@@ -253,6 +284,7 @@ function buildFeedback(
   evidence: readonly PropositionEvidence[],
   propWeight: ReadonlyMap<string, number>,
   hintQuestion: string,
+  contradictionKind?: ContradictionKind,
 ): string {
   // 기대 답은 대개 마침표로 끝나는데 「」로 감싸 이어붙이면 "…비롯된다.」를 잘 포착했습니다."가
   // 되어 문장 부호가 겹쳐 읽힌다. 인용 안에서는 끝 마침표를 뗀다.
@@ -308,10 +340,24 @@ function buildFeedback(
         ? '화제는 짚었어요. 요소들이 어떻게 연결되는지 관계로 표현해 보세요.'
         : `화제는 짚었어요.${ask}에 답해 보세요.`;
 
-    case 'contradicted':
+    // 모양을 아는 만큼만 말한다. 모르면 어긋났다는 사실까지만 — 없는 오류를 찾게 하지 않는다.
+    case 'contradicted': {
+      const lead =
+        contradictionKind === 'reversed'
+          ? '관계의 방향이 원문과 반대입니다.'
+          : contradictionKind === 'misassigned'
+            ? '관계를 원문과 다른 대상에 붙였습니다.'
+            : '원문과 어긋나는 서술이 있습니다.';
+      const nudge =
+        contradictionKind === 'reversed'
+          ? '무엇이 무엇의 원인이고 결과인지'
+          : contradictionKind === 'misassigned'
+            ? '이것이 어느 쪽에 해당하는 설명인지'
+            : '원문이 무엇을 무엇에 연결하는지';
       return ask === ''
-        ? '관계 방향이 원문과 어긋납니다. 하이라이트된 문장에서 무엇이 무엇의 목적이고 수단인지 다시 확인해 보세요.'
-        : `관계 방향이 원문과 어긋납니다. 하이라이트된 문장에서${ask}를 다시 확인해 보세요.`;
+        ? `${lead} 하이라이트된 문장에서 ${nudge} 다시 확인해 보세요.`
+        : `${lead} 하이라이트된 문장에서${ask}를 다시 확인해 보세요.`;
+    }
 
     default:
       // region_not_evidenced — 요약에 나타나지 않았으므로 인정할 것이 없다. 위치만 가리킨다.

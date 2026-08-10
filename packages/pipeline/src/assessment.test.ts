@@ -267,6 +267,39 @@ describe('피드백 — 설명형, not_evidenced를 결손으로 취급하지 �
     expect(a!.feedback).toContain('다시 확인');
     expect(a!.feedback).not.toContain('법인 소유 vs 사람 운용'); // 정답 미노출
   });
+
+  // 모순의 두 모양 — 학생이 고쳐야 할 것이 다르므로 문구도 갈라진다.
+  const contradictedFeedback = (kind?: 'reversed' | 'misassigned', qs: AssessQuery[] = queries): string => {
+    const v: QueryVerdict = { ...V('contradicted', 'none'), ...(kind === undefined ? {} : { contradictionKind: kind }) };
+    const [a] = assess([region('asset', 'contradicted')], [meta], qs, new Map([['qRel', v]]));
+    return a!.feedback;
+  };
+  // 되물을 질의가 없는 영역. 그때만 일반 유도 문구가 나오므로 따로 만든다.
+  const noQuestion: AssessQuery[] = queries.map((q) => ({ ...q, question: '' }));
+
+  it('reversed: 방향이 반대라고 말한다', () => {
+    expect(contradictedFeedback('reversed')).toContain('방향이 원문과 반대');
+  });
+
+  it('misassigned: 방향을 말하지 않고 붙인 자리를 지적한다', () => {
+    const fb = contradictedFeedback('misassigned');
+    expect(fb).toContain('다른 대상에 붙였습니다');
+    // 뒤집힌 것이 없는데 방향을 찾게 하면 없는 오류를 찾게 된다 (2026-08-10 실측).
+    expect(fb).not.toContain('방향');
+  });
+
+  it('모양을 모르면 방향도 자리도 단정하지 않는다', () => {
+    const fb = contradictedFeedback();
+    expect(fb).toContain('어긋');
+    expect(fb).not.toContain('방향');
+    expect(fb).not.toContain('다른 대상에 붙였습니다');
+  });
+
+  it('되물을 질의가 없으면 모양에 맞는 유도 문구가 대신 나온다', () => {
+    expect(contradictedFeedback('reversed', noQuestion)).toContain('원인이고 결과인지');
+    expect(contradictedFeedback('misassigned', noQuestion)).toContain('어느 쪽에 해당하는');
+    expect(contradictedFeedback(undefined, noQuestion)).toContain('무엇을 무엇에 연결하는지');
+  });
 });
 
 // N1 — 과정형 문단(명제 다수)에서 참고 세부가 결손표처럼 길어지던 회귀.
