@@ -28,6 +28,11 @@ export interface EvaluatedResponse {
   readonly said: ReadonlyMap<string, readonly string[]>;
   /** 영역 → 원문 문장 id. 하이라이트 좌표. */
   readonly sentenceIds: ReadonlyMap<string, readonly string[]>;
+  /**
+   * 질의 id → 원시 판정. **화면에는 쓰지 않는다** — 실험이 개별 질의가 어떻게 나왔는지
+   * 봐야 할 때만 쓴다(예: 타이틀의 압축 판별이 반복에서 갈리는지).
+   */
+  readonly rawVerdicts: ReadonlyMap<string, QueryVerdict>;
 }
 
 /**
@@ -119,6 +124,7 @@ export async function evaluateResponse(
     assessments,
     said,
     sentenceIds: new Map(gen.regions.map((r) => [r.regionId, r.sourceSentenceIds])),
+    rawVerdicts: verdicts,
   };
 }
 
