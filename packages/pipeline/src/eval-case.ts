@@ -12,7 +12,7 @@
  * 움직이고 나머지는 그대로여야 하는데, 기준선과 목표가 떨어져 있으면 그 비교가 성립하지 않는다.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { QueryEval } from './llm/query-eval.js';
@@ -59,6 +59,17 @@ const DIR = resolve(process.cwd(), 'packages/pipeline/fixtures/eval-cases');
 
 export function loadEvalCase(caseId: string): EvalCase {
   return JSON.parse(readFileSync(resolve(DIR, `${caseId}.json`), 'utf8')) as EvalCase;
+}
+
+/**
+ * 디렉터리에 있는 사례 전부. **회귀가 파일 목록을 손으로 들고 있지 않게 한다** — 사례를
+ * 추가하고 테스트에 등록하는 것을 잊으면, 얼려 둔 기준선이 아무것도 지키지 않는다.
+ */
+export function listEvalCases(): EvalCase[] {
+  return readdirSync(DIR)
+    .filter((f) => f.endsWith('.json'))
+    .sort()
+    .map((f) => loadEvalCase(f.replace(/\.json$/, '')));
 }
 
 /** 얼려 둔 판정을 `assembleResponse`에 넣을 수 있는 모양으로. */

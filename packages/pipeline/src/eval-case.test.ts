@@ -11,13 +11,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { overallCategory } from './assessment.js';
-import { type RecordedProbe, isRecorded, loadEvalCase, recordedEval } from './eval-case.js';
+import { type RecordedProbe, isRecorded, listEvalCases, loadEvalCase, recordedEval } from './eval-case.js';
 import { assembleResponse } from './evaluate-response.js';
 import type { Gold } from './gold.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
-
-const CASE_ID = 'corporate-law-p1-r1-axis-conflation';
-const evalCase = loadEvalCase(CASE_ID);
 
 function content(paragraphId: string): { gold: Gold; queries: GeneratedQuerySet } {
   const read = <T>(f: string): T =>
@@ -25,27 +22,34 @@ function content(paragraphId: string): { gold: Gold; queries: GeneratedQuerySet 
   return { gold: read<Gold>('gold.json'), queries: read<GeneratedQuerySet>('queries.json') };
 }
 
-const { gold, queries } = content(evalCase.paragraphId);
+function replayOf(paragraphId: string) {
+  const { gold, queries } = content(paragraphId);
+  return (p: RecordedProbe) => assembleResponse(gold, queries, recordedEval(p));
+}
+
+// 디렉터리의 모든 사례에 걸린다. 사례를 추가하면 등록 없이 자동으로 지켜진다.
+describe.each(listEvalCases().map((c) => [c.caseId, c] as const))('관찰 사례 — %s', (_id, c) => {
+  const replay = replayOf(c.paragraphId);
+  it.each(c.probes.filter(isRecorded).map((p) => [p.id, p] as const))(
+    '%s: 얼려 둔 판정이 그날의 영역 판정을 그대로 낸다',
+    (_pid, p) => {
+      const actual = Object.fromEntries(replay(p).assessments.map((a) => [a.regionId, a.verdict]));
+      expect(actual).toEqual(p.recordedRegionVerdicts);
+    },
+  );
+});
+
+const CASE_ID = 'corporate-law-p1-r1-axis-conflation';
+const evalCase = loadEvalCase(CASE_ID);
 const recorded = evalCase.probes.filter(isRecorded);
 const probe = (id: string): RecordedProbe => {
   const p = recorded.find((x) => x.id === id);
   if (p === undefined) throw new Error(`관찰 기록이 있는 probe 없음: ${id}`);
   return p;
 };
+const replay = replayOf(evalCase.paragraphId);
 
-function replay(p: RecordedProbe) {
-  return assembleResponse(gold, queries, recordedEval(p));
-}
-
-describe(`관찰 사례 — ${CASE_ID}`, () => {
-  it.each(recorded.map((p) => [p.id, p] as const))(
-    '%s: 얼려 둔 판정이 그날의 영역 판정을 그대로 낸다',
-    (_id, p) => {
-      const { assessments } = replay(p);
-      const actual = Object.fromEntries(assessments.map((a) => [a.regionId, a.verdict]));
-      expect(actual).toEqual(p.recordedRegionVerdicts);
-    },
-  );
+describe(`모순 판정의 파급 — ${CASE_ID}`, () => {
 
   // ── 아래 셋이 "모순 하나가 제출 전체를 끌어내린다"의 실측이다 ──
 
@@ -89,5 +93,58 @@ describe(`관찰 사례 — ${CASE_ID}`, () => {
     const p = probe('explicit');
     expect(replay(p).assessments.find((a) => a.regionId === 'r1')?.verdict).toBe('relation_preserved');
     expect(overallCategory(replay(p).regions, evalCase.focalRegionId)).not.toBe('관계오류');
+  });
+});
+
+// ── 귀속 뒤바꿈이 통과하던 사각지대 (2026-08-11 해결) ──
+//
+// **아래는 고치기 전의 모습이다.** 얼려 둔 판정을 재생하므로 값이 변하지 않는다 — 지금
+// 실행하면 `content/nietzsche-p1/queries.json`의 모순 기준에 귀속이 들어가 이 응답은
+// contradicted가 된다(실측 4/4, fixture의 `resolution`).
+//
+// 그런데도 남겨 두는 이유는, 이게 **무엇을 놓쳤었는지에 대한 유일한 기록**이기 때문이다.
+// 특히 마지막 검사 — 채점기가 근거 인용에서 틀린 주어를 떼어냈다는 것 — 이 사각지대의
+// 정체이고, 같은 형태의 지문에서 되풀이될 수 있다.
+//
+// 법인 문단과 방향이 반대였다. 거기서는 분류 기준이 **답변 쪽**에 있어 어긋나게 붙이면 모순이
+// 과하게 발동했고, 여기서는 주장의 소유자가 **질문 줄기 쪽**에 있어 어긋나게 붙여도 아무 일도
+// 일어나지 않았다. 둘 다 채점기가 아니라 기준이 무엇을 지목하느냐에서 갈렸다.
+const NIETZSCHE = 'nietzsche-p1-attribution-swap';
+const nz = loadEvalCase(NIETZSCHE);
+const nzReplay = replayOf(nz.paragraphId);
+const nzProbe = (id: string): RecordedProbe => {
+  const p = nz.probes.filter(isRecorded).find((x) => x.id === id);
+  if (p === undefined) throw new Error(`관찰 기록이 있는 probe 없음: ${id}`);
+  return p;
+};
+
+describe(`귀속 사각지대 (수정 전 기록) — ${NIETZSCHE}`, () => {
+  it('고치기 전: 귀속을 뒤바꾼 응답이 세 영역 모두 관계보존을 받았다', () => {
+    const { assessments } = nzReplay(nzProbe('swapped-attribution'));
+    expect(assessments.map((a) => a.verdict)).toEqual([
+      'relation_preserved',
+      'relation_preserved',
+      'relation_preserved',
+    ]);
+  });
+
+  it('고치기 전: 어느 질의도 모순으로 잡지 않았다', () => {
+    const { rawVerdicts } = nzReplay(nzProbe('swapped-attribution'));
+    expect([...rawVerdicts.values()].filter((v) => v.semanticState === 'contradicted')).toHaveLength(0);
+  });
+
+  // 이게 사각지대의 정체다: 채점기가 근거 인용에서 틀린 주어를 떼어내고 관계만 확인했다.
+  // 고친 뒤에는 주어를 포함해 인용한다 — 무엇이 달라졌는지가 여기서 가장 선명하다.
+  it('고치기 전: 근거 인용에서 잘못된 귀속이 잘려 나갔다', () => {
+    const { rawVerdicts } = nzReplay(nzProbe('swapped-attribution'));
+    const cited = [...rawVerdicts.values()].map((v) => v.evidence);
+    expect(cited.some((e) => e.includes('삶은 가치의 근원'))).toBe(true);
+    expect(cited.some((e) => e.includes('전통 형이상학에 따르면'))).toBe(false);
+  });
+
+  it('귀속만 바로잡은 최소 대조쌍이 사례에 남아 있다', () => {
+    const minimal = nz.probes.find((p) => p.id === 'correct-attribution-minimal');
+    expect(minimal?.response.startsWith('니체에 따르면')).toBe(true);
+    expect(nzProbe('swapped-attribution').response.startsWith('전통 형이상학에 따르면')).toBe(true);
   });
 });
