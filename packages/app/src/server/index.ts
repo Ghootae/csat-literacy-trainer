@@ -12,10 +12,17 @@ import { resolve } from 'node:path';
 
 import { evaluateResponse, warmResponsePrefix } from '@csat/pipeline';
 
-import type { AttemptRequest, AttemptResponse, RestoreResponse } from '../shared/contract.js';
+import type {
+  AttemptRequest,
+  AttemptResponse,
+  RestoreResponse,
+  TitleRequest,
+  TitleResponse,
+} from '../shared/contract.js';
 import { listPassages, loadContent, toPassageView } from './content.js';
-import { appendAttempt, loadSession, revisedRegions } from './session.js';
+import { appendAttempt, appendTitleAttempt, judgedTitleCount, loadSession, revisedRegions } from './session.js';
 import { bestOf, isBlocked, toRecord, toRegionViews, viewsFromRecords } from './view.js';
+import { restoreTitleView, toTitleView } from './title-view.js';
 
 const PORT = Number(process.env['PORT'] ?? 5174);
 const OWNER = 'local'; // D4 — 리포지토리는 처음부터 ownerId를 받는다. 로컬은 고정.
@@ -43,6 +50,13 @@ let spent = 0;
  * 창은 짧게 잡는다(10초) — TTL(5분)에 가깝게 잡으면 만료 직전에 연 학생이 예열을 못 받는다.
  */
 const WARM_DEDUPE_MS = 10_000;
+
+/** 모범 타이틀. 골드 타이틀 노드의 `shortForm`이다 — 공개 조건은 `title-view.ts`가 정한다. */
+function titleExemplar(paragraphId: string): string {
+  const { gold } = loadContent(paragraphId);
+  const node = gold.nodes.find((n) => n.id === gold.titleId);
+  return node?.shortForm ?? '';
+}
 const lastWarm = new Map<string, number>();
 
 function json(res: import('node:http').ServerResponse, status: number, body: unknown): void {
@@ -133,6 +147,60 @@ const server = createServer((req, res) => {
       return json(res, 200, { regions, blocked: isBlocked(regions) } satisfies AttemptResponse);
     }
 
+    // 타이틀. 1단계(초기 가설)는 저장만 하고, 최종 타이틀만 채점한다.
+    if (req.method === 'POST' && url.pathname.startsWith('/api/title/')) {
+      const [paragraphId, sessionId] = url.pathname.slice('/api/title/'.length).split('/');
+      if (paragraphId === undefined || sessionId === undefined) {
+        return json(res, 400, { error: 'paragraphId와 sessionId가 필요하다' });
+      }
+      const body = (await readBody(req)) as TitleRequest;
+      const text = body.text.trim();
+      if (text === '') return json(res, 400, { error: '빈 응답' });
+
+      // **초기 가설은 채점하지 않는다.** 점수·진행에 영향이 없으므로 LLM을 태울 이유가 없고,
+      // 최종과 나란히 보여주는 데는 원문이면 충분하다. 저장은 해두므로 나중에 일괄 판정할 수 있다.
+      if (body.hypothesisOnly === true) {
+        appendTitleAttempt(OWNER, sessionId, paragraphId, {
+          at: new Date().toISOString(),
+          text,
+          judged: false,
+        });
+        return json(res, 200, {} satisfies TitleResponse);
+      }
+
+      const content = loadContent(paragraphId);
+      if (content.titleQueries === undefined) {
+        return json(res, 400, { error: '이 문단에는 타이틀 질의가 없습니다' });
+      }
+      if (spent >= BUDGET) {
+        console.warn(`예산 소진 ${spent}/${BUDGET} — 타이틀 채점 거부`);
+        return json(res, 429, { error: `채점 예산을 다 썼습니다 (${BUDGET}회).` });
+      }
+      spent += 1;
+      console.log(`[${new Date().toISOString()}] 타이틀 ${spent}/${BUDGET}  session=${sessionId}`);
+
+      const prior = loadSession(OWNER, sessionId);
+      const attempted = judgedTitleCount(prior) > 0;
+      const evaluated = await evaluateResponse(content.gold, content.titleQueries, text, EVAL_CACHE);
+      const assessment = evaluated.assessments[0];
+      if (assessment === undefined) return json(res, 500, { error: '타이틀 판정 없음' });
+
+      const view = toTitleView({
+        assessment,
+        compressedRaw: evaluated.rawVerdicts.get('qT3')?.semanticState === 'preserved',
+        attempted,
+        exemplar: titleExemplar(paragraphId),
+      });
+      appendTitleAttempt(OWNER, sessionId, paragraphId, {
+        at: new Date().toISOString(),
+        text,
+        judged: true,
+        verdict: view.verdict,
+        compressed: view.compressed,
+      });
+      return json(res, 200, { title: view } satisfies TitleResponse);
+    }
+
     // 이어하기. **채점을 부르지 않는다** — 저장된 기록에 제출 때와 같은 표시 규칙을 다시 적용할 뿐이다.
     if (req.method === 'GET' && url.pathname.startsWith('/api/attempt/')) {
       const [paragraphId, sessionId] = url.pathname.slice('/api/attempt/'.length).split('/');
@@ -160,11 +228,30 @@ const server = createServer((req, res) => {
         revised: revisedRegions(session),
         sentenceIds,
       });
+      // 타이틀 상태도 함께 되살린다 — 안 그러면 문단을 옮겼다 돌아올 때 타이틀만 사라진다.
+      // **채점을 다시 부르지 않는다**: 저장된 판정값으로 화면 계약을 재구성한다.
+      const titles = session?.titleAttempts ?? [];
+      const initial = titles.find((t) => !t.judged);
+      const lastJudged = [...titles].reverse().find((t) => t.judged);
+      const judgedCount = titles.filter((t) => t.judged).length;
+
       return json(res, 200, {
         sections: last.sections,
         regions,
         rejudgedRegionIds: last.targetRegionIds ?? [],
         blocked: isBlocked(regions),
+        ...(initial === undefined ? {} : { initialTitle: initial.text }),
+        ...(lastJudged === undefined ? {} : { finalTitle: lastJudged.text }),
+        ...(lastJudged === undefined
+          ? {}
+          : {
+              title: restoreTitleView(
+                lastJudged.verdict,
+                lastJudged.compressed === true,
+                judgedCount > 1,
+                titleExemplar(paragraphId),
+              ),
+            }),
       } satisfies RestoreResponse);
     }
 

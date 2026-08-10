@@ -10,6 +10,8 @@ import type {
   PassageSummary,
   PassageView,
   RestoreResponse,
+  TitleRequest,
+  TitleResponse,
 } from '../shared/contract.js';
 
 async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -45,4 +47,17 @@ export function submitAttempt(
 /** 고를 수 있는 문단 목록. 골드도 질의도 담기지 않는다. */
 export function fetchPassages(): Promise<PassageSummary[]> {
   return jsonFetch<PassageSummary[]>('/api/passages');
+}
+
+/** 타이틀 제출. `hypothesisOnly`면 서버가 저장만 하고 채점하지 않는다. */
+export function submitTitle(
+  paragraphId: string,
+  sessionId: string,
+  body: TitleRequest,
+): Promise<TitleResponse> {
+  return jsonFetch<TitleResponse>(`/api/title/${paragraphId}/${sessionId}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }

@@ -29,11 +29,34 @@ export interface Attempt {
   readonly regions: readonly RegionRecord[];
 }
 
+/** 타이틀 시도 하나. 초기 가설은 `judged: false`로 저장만 된다. */
+export interface TitleAttempt {
+  readonly at: string;
+  readonly text: string;
+  /**
+   * 초기 가설이면 거짓. **판정하지 않는 이유**: 점수·진행에 영향을 주지 않기로 했고
+   * (초기 답을 일부러 나쁘게 쓸 유인을 없애기 위해), 최종과 나란히 보여주는 데는 원문이면
+   * 충분하다. 저장은 해두므로 나중에 일괄로 판정해 진단표를 만들 수 있다.
+   */
+  readonly judged: boolean;
+  readonly verdict?: string;
+  readonly compressed?: boolean;
+}
+
+/**
+ * 한 문단의 기록 전부. 영역 시도와 타이틀 시도가 같은 파일에 남는다.
+ *
+ * **두 append 함수가 각자 세션을 다시 만든다.** 그래서 `...prev`로 먼저 펼치지 않으면
+ * 서로의 필드를 지운다 — 실제로 영역을 제출하는 순간 초기 가설이 날아갔다(2026-08-10).
+ * 필드를 새로 추가할 때마다 두 함수를 다 고쳐야 하는 구조이므로, 전개가 유일한 안전장치다.
+ */
 export interface Session {
   readonly ownerId: string;
   readonly paragraphId: string;
   readonly startedAt: string;
   readonly attempts: readonly Attempt[];
+  /** 타이틀 시도. 첫 항목이 초기 가설(미판정)이고, 이후가 최종 타이틀이다. */
+  readonly titleAttempts?: readonly TitleAttempt[];
 }
 
 function path(ownerId: string, sessionId: string): string {
@@ -53,6 +76,7 @@ export function appendAttempt(
 ): Session {
   const prev = loadSession(ownerId, sessionId);
   const next: Session = {
+    ...prev,
     ownerId,
     paragraphId,
     startedAt: prev?.startedAt ?? attempt.at,
@@ -70,6 +94,32 @@ export function revisedRegions(session: Session | undefined): Set<string> {
     for (const id of a.targetRegionIds ?? []) out.add(id);
   }
   return out;
+}
+
+/** 타이틀 시도를 덧붙인다. 영역 시도와 같은 파일에 남는다 — 한 문단의 기록은 하나다. */
+export function appendTitleAttempt(
+  ownerId: string,
+  sessionId: string,
+  paragraphId: string,
+  attempt: TitleAttempt,
+): Session {
+  const prev = loadSession(ownerId, sessionId);
+  const next: Session = {
+    ...prev,
+    ownerId,
+    paragraphId,
+    startedAt: prev?.startedAt ?? attempt.at,
+    attempts: prev?.attempts ?? [],
+    titleAttempts: [...(prev?.titleAttempts ?? []), attempt],
+  };
+  mkdirSync(resolve(ROOT, ownerId), { recursive: true });
+  writeFileSync(path(ownerId, sessionId), JSON.stringify(next, null, 2), 'utf8');
+  return next;
+}
+
+/** 채점된 타이틀 시도 수. 타이틀도 다듬기 1회이므로 이 값이 소진을 결정한다. */
+export function judgedTitleCount(session: Session | undefined): number {
+  return (session?.titleAttempts ?? []).filter((t) => t.judged).length;
 }
 
 export function listSessions(ownerId: string): string[] {

@@ -67,6 +67,41 @@ export interface RegionView {
   readonly propositions?: readonly PropView[];
 }
 
+/**
+ * 타이틀 판정. **영역과 같은 5값 축을 그대로 쓴다** — 타이틀도 관계 진술이므로 새 축이
+ * 필요 없다. `compressed`만 직교한 보너스 축이다.
+ *
+ * 근거: `docs/experiments/title-compression-2026-08-10.md`,
+ *       `docs/experiments/title-generator-2026-08-10.md`
+ */
+export interface TitleView {
+  readonly verdict: Verdict;
+  /**
+   * 하위 내용을 상위 관계로 **압축**했는가. 게이트가 아니라 보상이다 —
+   * "'적당한' 추상화의 기준은 인간에게도 매번 달라질 수 있다"(사용자, 2026-08-10).
+   * 실측에서도 연결↔압축 경계에서만 흔들렸으므로 진행을 막는 데 쓰지 않는다.
+   *
+   * **`관계보존`일 때만 참일 수 있다.** 모순 응답에 압축 보상이 붙으면 안 된다.
+   */
+  readonly compressed: boolean;
+  readonly feedback: string;
+  /** 아직 다듬을 수 있는가. 타이틀도 1회다. */
+  readonly canRevise: boolean;
+  /** 모범 타이틀. 시도 후 미달일 때만 담긴다 — 미달·미시도면 서버가 채우지 않는다. */
+  readonly exemplar?: string;
+}
+
+export interface TitleRequest {
+  readonly text: string;
+  /** 참이면 저장만 하고 채점하지 않는다 (1단계 초기 가설). */
+  readonly hypothesisOnly?: boolean;
+}
+
+export interface TitleResponse {
+  /** `hypothesisOnly`면 없다. */
+  readonly title?: TitleView;
+}
+
 export interface AttemptRequest {
   readonly sections: readonly string[];
   /**
@@ -93,6 +128,11 @@ export interface RestoreResponse {
    */
   readonly rejudgedRegionIds: readonly string[];
   readonly blocked: boolean;
+  /** 1단계에서 저장한 초기 가설. 판정하지 않는다 — 최종과 나란히 보여주기 위한 것이다. */
+  readonly initialTitle?: string;
+  /** 마지막으로 제출한 최종 타이틀. */
+  readonly finalTitle?: string;
+  readonly title?: TitleView;
 }
 
 export interface AttemptResponse {

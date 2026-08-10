@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { PassageSummary, PassageView, RegionView, Verdict } from '../shared/contract.js';
-import { fetchAttempt, fetchPassage, fetchPassages, submitAttempt } from './api.js';
+import type { PassageSummary, PassageView, RegionView, TitleView, Verdict } from '../shared/contract.js';
+import { fetchAttempt, fetchPassage, fetchPassages, submitAttempt, submitTitle } from './api.js';
 
 
 /**
@@ -127,6 +127,11 @@ function Trainer({
    * 복원이 덮어쓴다(2026-08-10 코덱스 회귀).
    */
   const [restoring, setRestoring] = useState(true);
+  /** 1단계에서 쓴 초기 가설. 판정하지 않고 저장만 한다. */
+  const [initialTitle, setInitialTitle] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [title, setTitle] = useState<TitleView | null>(null);
+  const [finalTitle, setFinalTitle] = useState<string | null>(null);
 
   /**
    * 이번 패스에서 고친 영역. 섹션을 고칠 때 **그 순간 선택돼 있던 영역**에 귀속시킨다.
@@ -164,6 +169,9 @@ function Trainer({
         setSections(r.sections.length > 0 ? [...r.sections] : ['', '', '', '']);
         setRegions(r.regions);
         setRejudged(new Set(r.rejudgedRegionIds));
+        if (r.initialTitle !== undefined) setInitialTitle(r.initialTitle);
+        if (r.finalTitle !== undefined) setFinalTitle(r.finalTitle);
+        if (r.title !== undefined) setTitle(r.title);
       })
       .catch(() => {
         /* 이어할 것이 없으면 첫 제출 화면으로 시작한다 */
@@ -218,6 +226,40 @@ function Trainer({
     }
   }
 
+  /** 1단계 — 초기 가설. 저장만 하고 채점하지 않는다. */
+  async function submitHypothesis(): Promise<void> {
+    const text = titleDraft.trim();
+    if (text === '') return;
+    setBusy(true);
+    setError(null);
+    try {
+      await submitTitle(paragraphId, sessionId, { text, hypothesisOnly: true });
+      setInitialTitle(text);
+      setTitleDraft('');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** 3단계 — 최종 타이틀. 채점한다. */
+  async function submitFinalTitle(): Promise<void> {
+    const text = titleDraft.trim();
+    if (text === '') return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await submitTitle(paragraphId, sessionId, { text });
+      setFinalTitle(text);
+      if (res.title !== undefined) setTitle(res.title);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (error !== null && passage === null) return <div className="wrap"><p className="err">{error}</p></div>;
   // 원문과 이어하기가 **둘 다** 끝나야 그린다.
   if (passage === null || restoring) return <div className="wrap">불러오는 중…</div>;
@@ -226,19 +268,46 @@ function Trainer({
   const first = regions === null;
   const changed = touched.size > 0;
   const canSubmit = !busy && filled && (first || changed) && unvisitedForced.length === 0;
-  // 모든 영역이 관계보존이면 이 문단은 끝났다. 남은 할 일이 없는데 "고치고 싶은 부분을
-  // 눌러 보세요"가 계속 떠 있으면 학생이 완료 여부를 알 수 없다(코덱스 테스트 2026-08-09).
-  const done = regions !== null && regions.every((r) => r.verdict === 'relation_preserved');
+  /**
+   * 영역 단계가 끝났는가. **전부 관계보존일 필요는 없다** — 다듬기를 소진한 영역은 더 할 일이
+   * 없으므로 그것도 종료다. 그러지 않으면 못 맞춘 학생이 타이틀 단계에 영영 못 온다.
+   */
+  const regionsSettled =
+    regions !== null && regions.every((r) => r.verdict === 'relation_preserved' || !r.canRevise);
+
+  /**
+   * 단계. **서버 상태에서 파생시킨다** — 별도 상태로 두면 복원할 때 어긋난다.
+   *
+   *   hypothesis  초기 가설을 아직 안 씀
+   *   regions     영역 요약·판정·수정 (기존 루프)
+   *   title       최종 타이틀 입력·판정·1회 수정
+   *   done        타이틀까지 끝남
+   */
+  const phase: 'hypothesis' | 'regions' | 'title' | 'done' =
+    initialTitle === null
+      ? 'hypothesis'
+      : title !== null && !title.canRevise
+        ? 'done'
+        : regionsSettled
+          ? 'title'
+          : 'regions';
+
+  // 영역이 다 관계보존인가 — 완료 배너 문구를 가른다.
+  const allPreserved = regions !== null && regions.every((r) => r.verdict === 'relation_preserved');
 
   return (
     <div className="wrap">
       <h1>{passage.title}</h1>
       <p className="sub">
-        {first
-          ? '문단을 읽고 주요 내용을 섹션별로 요약해 보세요. 몇 개로 나눌지는 스스로 정합니다.'
-          : done
-            ? '이 문단은 끝났습니다. 아래에서 각 부분을 다시 훑어볼 수 있습니다.'
-            : '고치고 싶은 부분을 눌러 보세요. 원문과 내 요약에서 관련된 곳이 켜집니다. 다 고치면 한 번에 제출합니다.'}
+        {phase === 'hypothesis'
+          ? '먼저 문단을 훑어 읽고, 이 글이 결국 무엇을 말하는지 짐작해 보세요. 채점하지 않습니다.'
+          : phase === 'title'
+            ? '이제 각 부분을 하나로 묶어 보세요. 각각을 다시 설명하는 것이 아니라, 그것들이 모여 무엇을 이루는지 한 문장으로 씁니다.'
+            : phase === 'done'
+              ? '이 문단은 끝났습니다. 아래에서 각 부분을 다시 훑어볼 수 있습니다.'
+              : first
+                ? '문단을 읽고 주요 내용을 섹션별로 요약해 보세요. 몇 개로 나눌지는 스스로 정합니다.'
+                : '고치고 싶은 부분을 눌러 보세요. 원문과 내 요약에서 관련된 곳이 켜집니다. 다 고치면 한 번에 제출합니다.'}
       </p>
 
       <div className="panels">
@@ -254,7 +323,37 @@ function Trainer({
           </p>
         </section>
 
+        {/* ── 1단계: 초기 가설 ── */}
+        {phase === 'hypothesis' && (
+          <section className="panel">
+            <h2>첫 짐작</h2>
+            <p className="sub">
+              이 문단이 결국 무엇을 말한다고 생각하나요? 한 문장으로 적어 보세요.
+              <strong> 채점하지 않습니다</strong> — 나중에 자기 생각이 어떻게 바뀌었는지 보기 위한 것입니다.
+            </p>
+            <div className="section">
+              <textarea
+                value={titleDraft}
+                disabled={busy}
+                placeholder="예: 두 입장이 무엇을 두고 맞서는지…"
+                onChange={(e) => setTitleDraft(e.target.value)}
+              />
+            </div>
+            <div className="row">
+              <button
+                className="primary"
+                disabled={busy || titleDraft.trim() === ''}
+                onClick={() => void submitHypothesis()}
+              >
+                {busy ? '저장 중…' : '적었어요 — 이제 자세히 읽기'}
+              </button>
+            </div>
+            {error !== null && <p className="err">{error}</p>}
+          </section>
+        )}
+
         {/* ── 내 요약 — 결과를 본 뒤에도 계속 편집 가능하다 ── */}
+        {phase !== 'hypothesis' && (
         <section className="panel">
           <h2>내 요약</h2>
           {lit !== undefined && lit.said.length === 0 && (
@@ -287,11 +386,16 @@ function Trainer({
           )}
           {error !== null && <p className="err">{error}</p>}
         </section>
+        )}
 
         {/* ── 평가 ── */}
         <section className="panel">
           <h2>평가</h2>
-          {regions === null ? (
+          {phase === 'hypothesis' ? (
+            <p className="sub">
+              첫 짐작을 적으면 문단을 부분별로 정리하는 단계로 넘어갑니다.
+            </p>
+          ) : regions === null ? (
             <p className="sub">
               제출하면 이 문단이 몇 개 부분으로 나뉘는지, 각 부분을 어느 수준으로 담았는지 보여줍니다.
             </p>
@@ -308,20 +412,21 @@ function Trainer({
                   onSelect={() => select(r.regionId)}
                 />
               ))}
-              {done ? (
-                <div className="done">
-                  <strong>이 문단의 핵심 관계를 모두 담았습니다.</strong>
-                  <p>{summarize(regions)}</p>
-                  {next === undefined ? (
-                    <p className="sub">마지막 문단입니다. 위에서 다른 문단을 골라 다시 해 볼 수 있습니다.</p>
-                  ) : (
-                    <button className="primary" onClick={onNext}>
-                      다음 문단 — {next.title}
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <p className="summary">{summarize(regions)}</p>
+              <p className="summary">{summarize(regions)}</p>
+
+              {(phase === 'title' || phase === 'done') && (
+                <TitlePanel
+                  initialTitle={initialTitle}
+                  finalTitle={finalTitle}
+                  title={title}
+                  draft={titleDraft}
+                  busy={busy}
+                  onDraft={setTitleDraft}
+                  onSubmit={() => void submitFinalTitle()}
+                  allPreserved={allPreserved}
+                  next={next}
+                  onNext={onNext}
+                />
               )}
             </>
           )}
@@ -343,6 +448,101 @@ function progressBadge(region: RegionView, touched: boolean, rejudged: boolean):
   if (rejudged) return <span className="badge judged">재판정 완료</span>;
   if (region.canRevise) return <span className="badge dim">눌러서 다듬기</span>;
   return null;
+}
+
+
+/**
+ * 3단계 — 최종 타이틀.
+ *
+ * **완료 조건이 아니다.** 실패해도 다음 문단으로 갈 수 있다 — "'적당한' 추상화의 기준은
+ * 인간에게도 매번 달라질 수 있다"(사용자, 2026-08-10). 그래서 압축은 보상이고, 미달이어도
+ * 1회 수정 후 모범 타이틀을 공개하고 넘어간다.
+ *
+ * 초기 가설을 나란히 보여주는 것이 이 화면의 핵심이다. 판정하지 않지만, 학생이 **자기 생각이
+ * 어떻게 바뀌었는지** 보는 것이 3단계 설계의 목적이기 때문이다.
+ */
+function TitlePanel({
+  initialTitle,
+  finalTitle,
+  title,
+  draft,
+  busy,
+  onDraft,
+  onSubmit,
+  allPreserved,
+  next,
+  onNext,
+}: {
+  initialTitle: string | null;
+  finalTitle: string | null;
+  title: TitleView | null;
+  draft: string;
+  busy: boolean;
+  onDraft: (v: string) => void;
+  onSubmit: () => void;
+  allPreserved: boolean;
+  next: PassageSummary | undefined;
+  onNext: () => void;
+}): React.JSX.Element {
+  const reward = title === null ? 0 : title.verdict !== 'relation_preserved' ? 0 : title.compressed ? 2 : 1;
+  const settled = title !== null && !title.canRevise;
+
+  return (
+    <div className={`title-step${settled ? ' settled' : ''}`}>
+      <h3>이 문단을 한 문장으로</h3>
+
+      {initialTitle !== null && (
+        <p className="prior">
+          <span>처음 짐작</span> {initialTitle}
+        </p>
+      )}
+
+      {title !== null && (
+        <div className={`title-verdict v-${title.verdict}`}>
+          <span className="mark">{MARK[title.verdict]}</span>
+          <span className="verdict">{LABEL[title.verdict]}</span>
+          {reward > 0 && <span className={`badge reward r${reward}`}>보상 {reward}단계</span>}
+          <p className="fb">{title.feedback}</p>
+          {finalTitle !== null && <p className="mine">내가 쓴 것: “{finalTitle}”</p>}
+          {title.exemplar !== undefined && <p className="exemplar">모범: {title.exemplar}</p>}
+        </div>
+      )}
+
+      {!settled && (
+        <>
+          <textarea
+            value={draft}
+            disabled={busy}
+            placeholder={title === null ? '각 부분을 하나로 묶어 한 문장으로…' : '한 층 위에서 다시 써 보세요…'}
+            onChange={(e) => onDraft(e.target.value)}
+          />
+          <div className="row">
+            <button className="primary" disabled={busy || draft.trim() === ''} onClick={onSubmit}>
+              {busy ? '채점 중…' : title === null ? '제출' : '다시 제출'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {settled && (
+        <div className="done">
+          <strong>
+            {allPreserved ? '이 문단을 끝냈습니다.' : '이 문단을 마쳤습니다.'}
+          </strong>
+          {!allPreserved && (
+            <p className="sub">일부 부분은 정답을 확인하고 넘어왔습니다.</p>
+          )}
+          {next === undefined ? (
+            <p className="sub">마지막 문단입니다. 위에서 다른 문단을 골라 다시 해 볼 수 있습니다.</p>
+          ) : (
+            <button className="primary" onClick={onNext}>
+              다음 문단 — {next.title}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function RegionBox({

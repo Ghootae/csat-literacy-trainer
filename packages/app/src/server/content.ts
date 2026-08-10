@@ -24,6 +24,11 @@ export interface Content {
   readonly passage: Passage;
   readonly gold: Gold;
   readonly queries: GeneratedQuerySet;
+  /**
+   * 타이틀 질의. **없을 수 있다** — 아직 생성하지 않은 문단이 있으면 타이틀 단계를 건너뛴다.
+   * 없다고 문단 전체가 막히면 안 된다.
+   */
+  readonly titleQueries?: GeneratedQuerySet;
 }
 
 function read<T>(paragraphId: string, file: string): T {
@@ -33,10 +38,14 @@ function read<T>(paragraphId: string, file: string): T {
 }
 
 export function loadContent(paragraphId: string): Content {
+  const titlePath = resolve(ROOT, paragraphId, 'title-queries.json');
   return {
     passage: read<Passage>(paragraphId, 'passage.json'),
     gold: read<Gold>(paragraphId, 'gold.json'),
     queries: read<GeneratedQuerySet>(paragraphId, 'queries.json'),
+    ...(existsSync(titlePath)
+      ? { titleQueries: JSON.parse(readFileSync(titlePath, 'utf8')) as GeneratedQuerySet }
+      : {}),
   };
 }
 
