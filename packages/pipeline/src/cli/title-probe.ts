@@ -76,6 +76,28 @@ const PROBES: Readonly<Record<string, readonly Probe[]>> = {
       expect: { relation: true, compressed: true },
       text: '삶을 수단화하는 형이상학에 니체가 반대하는데, 삶이 가치의 근원이기 때문이다',
     },
+    {
+      // ── 아래 4개: 중심 서술을 바꾼 변형. 생성 질의가 수용 기준에 **특정 중심 서술을
+      // 예로 적으므로**('니체가 ~에 반대한다'), 다른 표현을 쓴 학생을 막지 않는지 본다.
+      id: '변형-명사중심(비판)',
+      expect: { relation: true, compressed: true },
+      text: '삶이 가치의 근원임을 근거로 한 니체의 전통 형이상학 비판',
+    },
+    {
+      id: '변형-이유중심',
+      expect: { relation: true, compressed: true },
+      text: '삶을 수단으로 전도한 전통 형이상학을 니체가 거부한 이유',
+    },
+    {
+      id: '변형-도치',
+      expect: { relation: true, compressed: true },
+      text: '삶을 목적에서 수단으로 떨어뜨린 전통 형이상학, 니체는 이를 받아들이지 않았다',
+    },
+    {
+      id: '변형-콜론',
+      expect: { relation: true, compressed: true },
+      text: '니체가 형이상학에 맞선 지점: 삶은 수단이 아니라 그 자체로 목적이다',
+    },
   ],
   'photosynthesis-p5': [
     {
@@ -115,6 +137,28 @@ const PROBES: Readonly<Record<string, readonly Probe[]>> = {
       expect: { relation: true, compressed: true },
       text: '두 공간에 광합성을 나눠 이산화 탄소를 농축함으로써 C4 식물이 높은 효율을 얻는다',
     },
+    {
+      id: '변형-명사중심(효율)',
+      expect: { relation: true, compressed: true },
+      text: '두 공간 분업과 이산화 탄소 농축이 만들어낸 C4 식물의 높은 광합성 효율',
+    },
+    {
+      id: '변형-이유중심',
+      expect: { relation: true, compressed: true },
+      text: 'C4 식물의 광합성이 C3보다 효율적인 까닭',
+    },
+    {
+      // ★ "길이는 기준이 아니다"를 시험한다. 짧지만 두 명사구가 **대등하게** 병렬이라
+      // 중심 서술이 없다 → 압축이 아니어야 한다.
+      id: '변형-명사구병렬(짧음)',
+      expect: { relation: true, compressed: false },
+      text: '엽육과 유관속초로 나뉜 광합성, 그리고 그 결과인 높은 효율',
+    },
+    {
+      id: '변형-도치',
+      expect: { relation: true, compressed: true },
+      text: '두 공간에 나뉜 광합성으로 이산화 탄소를 농축하는 방식, 그것이 C4의 높은 효율을 만든다',
+    },
   ],
 };
 
@@ -131,7 +175,9 @@ function mark(actual: boolean, expected: boolean): string {
 
 async function main(): Promise<void> {
   const runs = Number(process.argv[2] ?? '3');
-  console.log(`타이틀 판정 실측 — 반복 ${runs}회, 캐시 미사용\n`);
+  // 질의 출처. `hand`는 손 오라클, `gen1`은 생성기 산출물 — 같은 프로브로 돌려 비교한다.
+  const source = process.argv[3] ?? 'hand';
+  console.log(`타이틀 판정 실측 — 질의 ${source}, 반복 ${runs}회, 캐시 미사용\n`);
   console.log('  O = 보존   · = 미보존   * = 기대와 다름\n');
 
   let unstable = 0;
@@ -140,7 +186,7 @@ async function main(): Promise<void> {
 
   for (const [paragraphId, probes] of Object.entries(PROBES)) {
     const gold = readJson<Gold>(resolve(process.cwd(), 'content', paragraphId, 'gold.json'));
-    const queries = readJson<GeneratedQuerySet>(resolve(FIX_DIR, `${paragraphId}-hand.json`));
+    const queries = readJson<GeneratedQuerySet>(resolve(FIX_DIR, `${paragraphId}-${source}.json`));
 
     console.log(`━━ ${paragraphId}`);
     console.log(`   ${'프로브'.padEnd(22)} ${'qT2 관계통합'.padEnd(14)} ${'qT3 압축'.padEnd(14)} 영역판정`);
