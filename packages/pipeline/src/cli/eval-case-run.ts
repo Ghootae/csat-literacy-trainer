@@ -23,9 +23,12 @@ const repeats = Number(process.argv[3] ?? 1);
 /** 한 프로브만 반복해서 볼 때. 경계 사례의 변이를 잴 때 나머지까지 부르면 돈만 든다. */
 const onlyProbe = process.argv[4];
 
-/** 질의 id에서 영역 id를 뗀다 (`r1q3` → `r1`). 생성 질의의 id 규약이다. */
-function rawRegion(queryId: string): string {
-  return queryId.replace(/q\d+$/, '');
+/**
+ * 질의 id → 영역 id. **질의셋에서 읽는다.** id에서 접두사를 떼는 방식은 안 된다 —
+ * 법인 문단은 `r1q3`이지만 니체 문단은 `q2`라 영역이 빈 문자열이 되고, 문구를 못 찾는다.
+ */
+function regionIndex(gen: GeneratedQuerySet): Map<string, string> {
+  return new Map(gen.regions.flatMap((r) => r.queries.map((q) => [q.id, r.regionId] as const)));
 }
 
 function read<T>(paragraphId: string, file: string): T {
@@ -36,6 +39,7 @@ async function main(): Promise<void> {
   const c = loadEvalCase(caseId);
   const gold = read<Gold>(c.paragraphId, 'gold.json');
   const queries = read<GeneratedQuerySet>(c.paragraphId, 'queries.json');
+  const regionOf = regionIndex(queries);
 
   console.log(`사례 ${c.caseId} — ${c.paragraphId} (관찰 ${c.observedAt}), 반복 ${repeats}회\n`);
 
@@ -89,7 +93,7 @@ async function main(): Promise<void> {
       const contradicted = [...rawVerdicts.entries()].filter(([, v]) => v.semanticState === 'contradicted');
       for (const [qid, v] of contradicted) {
         console.log(`        모순 질의 ${qid} [${v.contradictionKind ?? '모양 없음'}]: "${v.evidence}"`);
-        const fb = assessments.find((a) => a.regionId === rawRegion(qid))?.feedback;
+        const fb = assessments.find((a) => a.regionId === regionOf.get(qid))?.feedback;
         if (fb !== undefined) console.log(`        학생이 받는 문구: ${fb}`);
       }
     }
