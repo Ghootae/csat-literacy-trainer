@@ -20,7 +20,7 @@ import type { Gold as PipelineGold } from './gold.js';
 import { evalRequestFingerprint, type QueryEval, evaluateQueries, warmEvalPrefix } from './llm/query-eval.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
 import { type EvalSet, type Gold as LibGold, generatedEvalSet, paragraphText } from './query-gen-lib.js';
-import { type RawQueryVerdict, normalizeQueryStates } from './query-normalize.js';
+import { type NormalizedRegion, type RawQueryVerdict, normalizeQueryStates } from './query-normalize.js';
 
 export interface EvaluatedResponse {
   readonly assessments: readonly RegionAssessment[];
@@ -33,6 +33,11 @@ export interface EvaluatedResponse {
    * 봐야 할 때만 쓴다(예: 타이틀의 압축 판별이 반복에서 갈리는지).
    */
   readonly rawVerdicts: ReadonlyMap<string, QueryVerdict>;
+  /**
+   * 정규화된 영역. 화면은 `assessments`만 쓰지만, 회귀가 `overallCategory`처럼 영역 축을
+   * 직접 받는 함수를 부르려면 이게 필요하다 — 없으면 정규화를 테스트가 다시 배선하게 된다.
+   */
+  readonly regions: readonly NormalizedRegion[];
 }
 
 /**
@@ -61,6 +66,22 @@ export async function evaluateResponse(
   const set: EvalSet = generatedEvalSet('gen', gen);
   const paraText = paragraphText(gold as unknown as LibGold);
   const qeval = await runEval(paraText, set, response, gold.paragraphId, cacheDir);
+  return assembleResponse(gold, gen, qeval);
+}
+
+/**
+ * 판정 → 화면 산출물. **LLM 이후의 전부이고 결정적이다.**
+ *
+ * `evaluateResponse`에서 떼어낸 이유는 회귀 때문이다. 실제로 관찰된 판정을 fixture로 박아
+ * 두고 이 함수에 그대로 먹이면, API 키도 비용도 없이 **그 판정이 화면에서 어떤 결과가 되는지**를
+ * 고정할 수 있다. 붙여 두면 회귀가 배선을 복사하게 되고, 그러면 한쪽만 고쳐져 판정이 갈린다.
+ */
+export function assembleResponse(
+  gold: PipelineGold,
+  gen: GeneratedQuerySet,
+  qeval: QueryEval,
+): EvaluatedResponse {
+  const set: EvalSet = generatedEvalSet('gen', gen);
 
   const rawMap = new Map(qeval.verdicts.map((v) => [v.queryId, v as RawQueryVerdict]));
   const regions = normalizeQueryStates(rawMap, set.policy);
@@ -73,6 +94,10 @@ export async function evaluateResponse(
         evidence: v.evidence,
         viaItem: v.viaItem,
         evidenceRole: v.evidenceRole,
+        // 'none'은 "모순이 아니다"라는 뜻이므로 모양으로 넘기지 않는다.
+        ...(v.contradictionKind !== undefined && v.contradictionKind !== 'none'
+          ? { contradictionKind: v.contradictionKind }
+          : {}),
       },
     ]),
   );
@@ -125,6 +150,7 @@ export async function evaluateResponse(
     said,
     sentenceIds: new Map(gen.regions.map((r) => [r.regionId, r.sourceSentenceIds])),
     rawVerdicts: verdicts,
+    regions,
   };
 }
 
