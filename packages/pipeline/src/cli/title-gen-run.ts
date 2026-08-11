@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { Gold } from '../gold.js';
-import { generateTitleQuerySet, validateTitleQuerySet } from '../llm/title-gen.js';
+import { TITLE_GENERATOR_VERSION, generateTitleQuerySet, validateTitleQuerySet } from '../llm/title-gen.js';
 
 const DIR = resolve(process.cwd(), 'packages/pipeline/fixtures/title-queries');
 
@@ -40,7 +40,10 @@ async function main(): Promise<void> {
 
   const problems = validateTitleQuerySet(set);
   mkdirSync(DIR, { recursive: true });
-  const path = resolve(DIR, `${paragraphId}-gen${run}.json`);
+  // **경로에 버전을 넣는다.** 주석은 그러겠다고 했는데 실제로는 빠져 있어서, 프롬프트를
+  // 고치고 다시 돌리면 이전 버전 산출물이 덮였다 — 기준선이 사라진다.
+  const tag = TITLE_GENERATOR_VERSION === 'v1' ? '' : `-${TITLE_GENERATOR_VERSION}`;
+  const path = resolve(DIR, `${paragraphId}${tag}-gen${run}.json`);
   writeFileSync(path, `${JSON.stringify(set, null, 2)}\n`, 'utf8');
 
   console.log(`${paragraphId} → ${path.split('/').slice(-1)[0]}`);
