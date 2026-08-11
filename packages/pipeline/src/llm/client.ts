@@ -31,7 +31,9 @@ export type Op =
   /** 기존 질의셋에 모순 기준만 보강. 구조는 건드리지 않으므로 질의 생성과 나눠 센다. */
   | 'contradiction-gen'
   /** 고아 명제에 전용 질의 하나를 붙인다. 명제 단위 커버리지 보강. */
-  | 'proposition-query-gen';
+  | 'proposition-query-gen'
+  /** 전용 질의가 그 명제를 정확히 묻는지 감사. 검증 세트 확정용, 1회성. */
+  | 'dedicated-query-audit';
 
 export interface CallMetric {
   readonly ts: string;
