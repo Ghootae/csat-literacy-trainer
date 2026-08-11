@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import type { PropositionEvidenceState } from './assessment.js';
 import { overallCategory } from './assessment.js';
 import {
   type EvalCase,
@@ -206,4 +207,41 @@ describe('타이틀 — 보상 축은 기본 판정과 분리돼 있다', () => 
       for (const p of deferred) expect(p.deferReason ?? '').not.toBe('');
     },
   );
+});
+
+// ── 명제 판정은 영역·타이틀의 입력이 아니다 ──
+//
+// 명제 상태는 판정의 **하류**다. 영역 판정은 질의 판정만 보고 먼저 계산되고, 명제 evidence는
+// 그 뒤에 파생된다. 소비처는 피드백 문장과 화면 오버레이 둘뿐이고 게이트·보상에는 들어가지
+// 않는다.
+//
+// 지금은 구조적으로 참이지만 **그걸 막는 장치가 없다.** 명제 판정을 고치는 작업이 진행 중이라
+// (docs/DECISIONS.md 이후 작업), 그 과정에서 경계가 새면 영역·타이틀 판정이 조용히 따라
+// 움직인다. 교란으로 못박는다.
+describe('명제 판정은 영역·타이틀 판정을 움직일 수 없다', () => {
+  const ALL: PropositionEvidenceState[] = [
+    'evidenced',
+    'supported_by_abstraction',
+    'not_evidenced',
+    'contradicted',
+  ];
+
+  it.each(listEvalCases().map((c) => [c.caseId, c] as const))('%s', (_id, c) => {
+    const { gold, queries } = content(c.paragraphId, queryFileOf(c));
+    for (const probe of c.probes.filter(isRecorded)) {
+      const base = assembleResponse(gold, queries, recordedEval(probe));
+      // 명제 상태를 전부 갈아끼워도 영역 판정은 그대로여야 한다.
+      for (const state of ALL) {
+        const forced = base.assessments.map((a) => ({
+          ...a,
+          propositionEvidence: a.propositionEvidence.map((e) => ({ ...e, state })),
+        }));
+        expect(forced.map((a) => a.verdict)).toEqual(base.assessments.map((a) => a.verdict));
+      }
+      // 그리고 실제로 판정을 만드는 것은 질의 축이다 — 명제는 여기에 나타나지 않는다.
+      expect(base.regions.map((r) => r.regionSemanticVerdict)).toEqual(
+        base.assessments.map((a) => a.verdict),
+      );
+    }
+  });
 });

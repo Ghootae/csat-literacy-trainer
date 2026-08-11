@@ -63,7 +63,14 @@ async function main(): Promise<void> {
       const qDiffs = Object.entries(probe.targetQueryStates ?? {}).filter(
         ([qid, want]) => rawVerdicts.get(qid)?.semanticState !== want,
       );
-      const off = diffs.length === 0 && qDiffs.length === 0;
+      // 명제 축. 영역 판정이 맞아도 ●◐○ 표시가 틀릴 수 있고, 학생이 보는 것은 그쪽이다.
+      const propState = new Map(
+        assessments.flatMap((a) => a.propositionEvidence.map((e) => [e.propositionId, e] as const)),
+      );
+      const pDiffs = Object.entries(probe.targetPropositionStates ?? {}).filter(
+        ([pid, want]) => propState.get(pid)?.state !== want,
+      );
+      const off = diffs.length === 0 && qDiffs.length === 0 && pDiffs.length === 0;
       const mark = off ? '통과' : probe.deferred === true ? 'defer' : '불일치';
       // defer 프로브는 어긋나도 실패로 세지 않는다. 지금 재지 않기로 한 축이다.
       if (!off && probe.deferred !== true) failures += 1;
@@ -98,6 +105,18 @@ async function main(): Promise<void> {
       }
       for (const [qid, want] of qDiffs) {
         console.log(`        ✗ ${qid}: 목표 ${want}, 실제 ${rawVerdicts.get(qid)?.semanticState ?? '없음'}`);
+      }
+      const MARK: Record<string, string> = {
+        evidenced: '●',
+        supported_by_abstraction: '◐',
+        not_evidenced: '○',
+        contradicted: '✗',
+      };
+      for (const [pid, want] of pDiffs) {
+        const got = propState.get(pid);
+        console.log(
+          `        ✗ ${pid} "${got?.shortForm ?? ''}": 목표 ${MARK[want] ?? want}, 실제 ${MARK[got?.state ?? ''] ?? got?.state ?? '없음'}`,
+        );
       }
       // 모순이 남아 있으면 어느 질의인지 보여준다 — 좁히기 작업의 관심사가 그것이다.
       const contradicted = [...rawVerdicts.entries()].filter(([, v]) => v.semanticState === 'contradicted');

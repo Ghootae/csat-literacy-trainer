@@ -38,6 +38,16 @@ export interface EvalCaseProbe {
    */
   readonly targetQueryStates?: Readonly<Record<string, string>>;
   /**
+   * 명제별 목표 상태(`propositionId` → `evidenced` | `supported_by_abstraction` |
+   * `not_evidenced` | `contradicted`).
+   *
+   * **구조 검사로는 이 층을 지킬 수 없어서 프로브별로 적는다.** "○인데 근거 인용에는 그 관계가
+   * 들어갔다"를 자동으로 잡으려 해봤지만, 정당한 ○(학생이 정말 안 쓴 것)과 부당한 ○(썼는데
+   * 전용 질의가 다른 것을 물어서 덮인 것)이 같은 모양이라 오탐이 쏟아진다. 사람이 사례마다
+   * 무엇이 맞는지 적는 수밖에 없다.
+   */
+  readonly targetPropositionStates?: Readonly<Record<string, string>>;
+  /**
    * 목표는 적어 두되 **현재 필수 조건이 아닌** 프로브. 판정이 재현되지 않아 defer한 축을
    * 지운 대신 이렇게 남긴다 — 지우면 무엇을 미뤘는지가 사라지고, 필수로 두면 회귀가 늘
    * 빨갛다. 실호출은 결과를 보여주되 실패로 세지 않는다.
