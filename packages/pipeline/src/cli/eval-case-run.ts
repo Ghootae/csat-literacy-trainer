@@ -46,7 +46,8 @@ async function main(): Promise<void> {
   let failures = 0;
   for (const probe of c.probes) {
     if (onlyProbe !== undefined && probe.id !== onlyProbe) continue;
-    console.log(`── ${probe.id} — ${probe.label}`);
+    console.log(`── ${probe.id} — ${probe.label}${probe.deferred === true ? '  [defer — 필수 아님]' : ''}`);
+    if (probe.deferReason !== undefined) console.log(`   defer 이유: ${probe.deferReason}`);
     console.log(`   ${probe.response.replace(/\n/g, '\n   ')}`);
 
     for (let i = 1; i <= repeats; i += 1) {
@@ -62,8 +63,10 @@ async function main(): Promise<void> {
       const qDiffs = Object.entries(probe.targetQueryStates ?? {}).filter(
         ([qid, want]) => rawVerdicts.get(qid)?.semanticState !== want,
       );
-      const mark = diffs.length === 0 && qDiffs.length === 0 ? '통과' : '불일치';
-      if (diffs.length > 0 || qDiffs.length > 0) failures += 1;
+      const off = diffs.length === 0 && qDiffs.length === 0;
+      const mark = off ? '통과' : probe.deferred === true ? 'defer' : '불일치';
+      // defer 프로브는 어긋나도 실패로 세지 않는다. 지금 재지 않기로 한 축이다.
+      if (!off && probe.deferred !== true) failures += 1;
 
       // 지어낸 가드 프로브는 기준선이 없다 — 목표와의 일치만 본다.
       const baseline = probe.recordedRegionVerdicts;

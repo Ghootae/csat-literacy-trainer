@@ -156,3 +156,54 @@ describe(`귀속 사각지대 (수정 전 기록) — ${NIETZSCHE}`, () => {
     expect(nzProbe('swapped-attribution').response.startsWith('전통 형이상학에 따르면')).toBe(true);
   });
 });
+
+// ── 타이틀: defer한 축이 기본 판정을 흔들 수 없어야 한다 ──
+//
+// qT3(추상화 보상)는 판정이 재현되지 않아 defer했다(docs/DECISIONS.md, 2026-08-11).
+// 그 상태로 남겨 두는 것이 안전한 이유는 **구조적으로 분리돼 있기 때문**이다 — critical이
+// 아니므로 영역 판정에 들어가지 않는다. 그 분리가 깨지면 불안정한 축이 기본 성공을 흔들기
+// 시작하므로, 여기서 못을 박는다.
+describe('타이틀 — 보상 축은 기본 판정과 분리돼 있다', () => {
+  const titleCases = listEvalCases().filter((c) => c.querySet === 'title');
+
+  it('타이틀 사례가 남아 있다', () => {
+    expect(titleCases.length).toBeGreaterThan(0);
+  });
+
+  it.each(titleCases.map((c) => [c.caseId, c] as const))(
+    '%s: qT3는 critical이 아니다',
+    (_id, c) => {
+      const { queries } = content(c.paragraphId, queryFileOf(c));
+      const byId = new Map(queries.regions.flatMap((r) => r.queries).map((q) => [q.id, q]));
+      expect(byId.get('qT3')?.criticalForRelation).toBe(false);
+      // 통과 기준은 qT2 하나가 진다. 이것이 defer의 전제다.
+      expect(byId.get('qT2')?.criticalForRelation).toBe(true);
+    },
+  );
+
+  it.each(titleCases.map((c) => [c.caseId, c] as const))(
+    '%s: qT3를 뒤집어도 영역 판정이 그대로다',
+    (_id, c) => {
+      const { gold, queries } = content(c.paragraphId, queryFileOf(c));
+      const probe = c.probes.filter(isRecorded)[0]!;
+      const base = assembleResponse(gold, queries, recordedEval(probe));
+      const flipped = assembleResponse(gold, queries, {
+        verdicts: probe.recordedVerdicts.map((v) =>
+          v.queryId === 'qT3'
+            ? { ...v, semanticState: v.semanticState === 'preserved' ? 'not_evidenced' : 'preserved' }
+            : v,
+        ),
+      });
+      expect(flipped.assessments.map((a) => a.verdict)).toEqual(base.assessments.map((a) => a.verdict));
+    },
+  );
+
+  it.each(titleCases.map((c) => [c.caseId, c] as const))(
+    '%s: defer한 프로브가 지워지지 않고 남아 있다',
+    (_id, c) => {
+      const deferred = c.probes.filter((p) => p.deferred === true);
+      expect(deferred.length).toBeGreaterThan(0);
+      for (const p of deferred) expect(p.deferReason ?? '').not.toBe('');
+    },
+  );
+});

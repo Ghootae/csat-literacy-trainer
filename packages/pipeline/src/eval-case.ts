@@ -37,6 +37,13 @@ export interface EvalCaseProbe {
    * `qT3` 하나로 갈리는데 영역 판정은 둘 다 `relation_preserved`라 구별되지 않는다.
    */
   readonly targetQueryStates?: Readonly<Record<string, string>>;
+  /**
+   * 목표는 적어 두되 **현재 필수 조건이 아닌** 프로브. 판정이 재현되지 않아 defer한 축을
+   * 지운 대신 이렇게 남긴다 — 지우면 무엇을 미뤘는지가 사라지고, 필수로 두면 회귀가 늘
+   * 빨갛다. 실호출은 결과를 보여주되 실패로 세지 않는다.
+   */
+  readonly deferred?: boolean;
+  readonly deferReason?: string;
   readonly targetNote: string;
 }
 
