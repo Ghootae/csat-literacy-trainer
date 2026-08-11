@@ -29,7 +29,9 @@ export type Op =
   /** 타이틀 질의 생성. 기존 생성기와 별도 프롬프트라 집계도 나눈다. */
   | 'title-gen'
   /** 기존 질의셋에 모순 기준만 보강. 구조는 건드리지 않으므로 질의 생성과 나눠 센다. */
-  | 'contradiction-gen';
+  | 'contradiction-gen'
+  /** 고아 명제에 전용 질의 하나를 붙인다. 명제 단위 커버리지 보강. */
+  | 'proposition-query-gen';
 
 export interface CallMetric {
   readonly ts: string;
