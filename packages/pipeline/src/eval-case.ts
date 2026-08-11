@@ -32,6 +32,11 @@ export interface EvalCaseProbe {
   readonly recordedVerdicts?: QueryEval['verdicts'];
   readonly recordedRegionVerdicts?: Readonly<Record<string, RegionSemanticVerdict>>;
   readonly targetRegionVerdicts: Readonly<Record<string, RegionSemanticVerdict>>;
+  /**
+   * 질의별 목표 상태. **영역 판정만으로는 안 보이는 축**을 지킬 때 쓴다 — 타이틀의 보상은
+   * `qT3` 하나로 갈리는데 영역 판정은 둘 다 `relation_preserved`라 구별되지 않는다.
+   */
+  readonly targetQueryStates?: Readonly<Record<string, string>>;
   readonly targetNote: string;
 }
 
@@ -52,7 +57,19 @@ export interface EvalCase {
   readonly source: string;
   readonly note: string;
   readonly focalRegionId: string;
+  /**
+   * 어느 질의셋으로 채점하는가. 기본은 영역 질의(`queries.json`).
+   *
+   * 타이틀 단계는 **같은 파이프라인을 다른 질의셋으로** 돈다(`title-queries.json`, 영역 하나).
+   * 그래서 사례가 파일 이름만 알면 되고, 재생·실호출 경로는 그대로 쓴다.
+   */
+  readonly querySet?: 'region' | 'title';
   readonly probes: readonly EvalCaseProbe[];
+}
+
+/** 사례가 채점에 쓸 질의 파일. */
+export function queryFileOf(c: EvalCase): string {
+  return c.querySet === 'title' ? 'title-queries.json' : 'queries.json';
 }
 
 const DIR = resolve(process.cwd(), 'packages/pipeline/fixtures/eval-cases');

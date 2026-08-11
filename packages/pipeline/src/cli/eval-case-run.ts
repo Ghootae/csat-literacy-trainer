@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { loadEvalCase } from '../eval-case.js';
+import { loadEvalCase, queryFileOf } from '../eval-case.js';
 import { evaluateResponse } from '../evaluate-response.js';
 import type { Gold } from '../gold.js';
 import type { GeneratedQuerySet } from '../llm/query-gen.js';
@@ -38,7 +38,7 @@ function read<T>(paragraphId: string, file: string): T {
 async function main(): Promise<void> {
   const c = loadEvalCase(caseId);
   const gold = read<Gold>(c.paragraphId, 'gold.json');
-  const queries = read<GeneratedQuerySet>(c.paragraphId, 'queries.json');
+  const queries = read<GeneratedQuerySet>(c.paragraphId, queryFileOf(c));
   const regionOf = regionIndex(queries);
 
   console.log(`사례 ${c.caseId} — ${c.paragraphId} (관찰 ${c.observedAt}), 반복 ${repeats}회\n`);
@@ -58,8 +58,12 @@ async function main(): Promise<void> {
       const diffs = Object.entries(probe.targetRegionVerdicts).filter(
         ([rid, want]) => actual[rid] !== want,
       );
-      const mark = diffs.length === 0 ? '통과' : '불일치';
-      if (diffs.length > 0) failures += 1;
+      // 질의 축까지 목표가 있으면 함께 본다. 영역 판정이 같아도 보상이 갈릴 수 있다.
+      const qDiffs = Object.entries(probe.targetQueryStates ?? {}).filter(
+        ([qid, want]) => rawVerdicts.get(qid)?.semanticState !== want,
+      );
+      const mark = diffs.length === 0 && qDiffs.length === 0 ? '통과' : '불일치';
+      if (diffs.length > 0 || qDiffs.length > 0) failures += 1;
 
       // 지어낸 가드 프로브는 기준선이 없다 — 목표와의 일치만 본다.
       const baseline = probe.recordedRegionVerdicts;
@@ -88,6 +92,9 @@ async function main(): Promise<void> {
           if (!qid.startsWith(rid)) continue;
           console.log(`           ${qid} ${v.semanticState}/${v.expressionMode}/${v.evidenceRole ?? '-'} "${v.evidence}"`);
         }
+      }
+      for (const [qid, want] of qDiffs) {
+        console.log(`        ✗ ${qid}: 목표 ${want}, 실제 ${rawVerdicts.get(qid)?.semanticState ?? '없음'}`);
       }
       // 모순이 남아 있으면 어느 질의인지 보여준다 — 좁히기 작업의 관심사가 그것이다.
       const contradicted = [...rawVerdicts.entries()].filter(([, v]) => v.semanticState === 'contradicted');

@@ -11,25 +11,33 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { overallCategory } from './assessment.js';
-import { type RecordedProbe, isRecorded, listEvalCases, loadEvalCase, recordedEval } from './eval-case.js';
+import {
+  type EvalCase,
+  type RecordedProbe,
+  isRecorded,
+  listEvalCases,
+  loadEvalCase,
+  queryFileOf,
+  recordedEval,
+} from './eval-case.js';
 import { assembleResponse } from './evaluate-response.js';
 import type { Gold } from './gold.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
 
-function content(paragraphId: string): { gold: Gold; queries: GeneratedQuerySet } {
+function content(paragraphId: string, queryFile: string): { gold: Gold; queries: GeneratedQuerySet } {
   const read = <T>(f: string): T =>
     JSON.parse(readFileSync(resolve(process.cwd(), 'content', paragraphId, f), 'utf8')) as T;
-  return { gold: read<Gold>('gold.json'), queries: read<GeneratedQuerySet>('queries.json') };
+  return { gold: read<Gold>('gold.json'), queries: read<GeneratedQuerySet>(queryFile) };
 }
 
-function replayOf(paragraphId: string) {
-  const { gold, queries } = content(paragraphId);
+function replayOf(c: EvalCase) {
+  const { gold, queries } = content(c.paragraphId, queryFileOf(c));
   return (p: RecordedProbe) => assembleResponse(gold, queries, recordedEval(p));
 }
 
 // 디렉터리의 모든 사례에 걸린다. 사례를 추가하면 등록 없이 자동으로 지켜진다.
 describe.each(listEvalCases().map((c) => [c.caseId, c] as const))('관찰 사례 — %s', (_id, c) => {
-  const replay = replayOf(c.paragraphId);
+  const replay = replayOf(c);
   it.each(c.probes.filter(isRecorded).map((p) => [p.id, p] as const))(
     '%s: 얼려 둔 판정이 그날의 영역 판정을 그대로 낸다',
     (_pid, p) => {
@@ -47,7 +55,7 @@ const probe = (id: string): RecordedProbe => {
   if (p === undefined) throw new Error(`관찰 기록이 있는 probe 없음: ${id}`);
   return p;
 };
-const replay = replayOf(evalCase.paragraphId);
+const replay = replayOf(evalCase);
 
 describe(`모순 판정의 파급 — ${CASE_ID}`, () => {
 
@@ -111,7 +119,7 @@ describe(`모순 판정의 파급 — ${CASE_ID}`, () => {
 // 일어나지 않았다. 둘 다 채점기가 아니라 기준이 무엇을 지목하느냐에서 갈렸다.
 const NIETZSCHE = 'nietzsche-p1-attribution-swap';
 const nz = loadEvalCase(NIETZSCHE);
-const nzReplay = replayOf(nz.paragraphId);
+const nzReplay = replayOf(nz);
 const nzProbe = (id: string): RecordedProbe => {
   const p = nz.probes.filter(isRecorded).find((x) => x.id === id);
   if (p === undefined) throw new Error(`관찰 기록이 있는 probe 없음: ${id}`);
