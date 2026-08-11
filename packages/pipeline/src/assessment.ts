@@ -85,6 +85,14 @@ export interface QueryVerdict {
    * 기록된 판정에는 들어 있지 않다. 없으면 방향을 단정하지 않는 문구를 쓴다.
    */
   readonly contradictionKind?: ContradictionKind;
+  /**
+   * 앵커 명제별 커버리지. **실험 중이다** — 명제 판정을 이 값으로 바꿀지 검증하는 단계이며,
+   * 아직 `aggregatePropositionState`가 읽지 않는다. 측정에만 쓴다.
+   */
+  readonly propositionCoverage?: readonly {
+    readonly propositionId: string;
+    readonly coverage: 'explicit' | 'partial' | 'none';
+  }[];
 }
 
 /**

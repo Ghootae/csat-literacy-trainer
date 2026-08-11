@@ -63,7 +63,7 @@ export async function evaluateResponse(
   response: string,
   cacheDir?: string,
 ): Promise<EvaluatedResponse> {
-  const set: EvalSet = generatedEvalSet('gen', gen);
+  const set: EvalSet = withPropositions(generatedEvalSet('gen', gen), gold, gen);
   const paraText = paragraphText(gold as unknown as LibGold);
   const qeval = await runEval(paraText, set, response, gold.paragraphId, cacheDir);
   return assembleResponse(gold, gen, qeval);
@@ -94,6 +94,8 @@ export function assembleResponse(
         evidence: v.evidence,
         viaItem: v.viaItem,
         evidenceRole: v.evidenceRole,
+        // 실험 중인 축. 판정에는 아직 안 쓰이고 측정용으로만 흘려보낸다.
+        ...(v.propositionCoverage === undefined ? {} : { propositionCoverage: v.propositionCoverage }),
         // 'none'은 "모순이 아니다"라는 뜻이므로 모양으로 넘기지 않는다.
         ...(v.contradictionKind !== undefined && v.contradictionKind !== 'none'
           ? { contradictionKind: v.contradictionKind }
@@ -151,6 +153,24 @@ export function assembleResponse(
     sentenceIds: new Map(gen.regions.map((r) => [r.regionId, r.sourceSentenceIds])),
     rawVerdicts: verdicts,
     regions,
+  };
+}
+
+/**
+ * 질의에 앵커 명제 목록을 붙인다. 모델이 명제별 커버리지를 내려면 무엇이 앵커인지 봐야 한다.
+ * 채점 경로에서만 필요하다 — `assembleResponse`는 이미 나온 판정을 조립할 뿐이다.
+ */
+function withPropositions(set: EvalSet, gold: PipelineGold, gen: GeneratedQuerySet): EvalSet {
+  const shortForm = new Map(gold.propositions.map((p) => [p.id, p.shortForm]));
+  const anchors = new Map(
+    gen.regions.flatMap((r) => r.queries.map((q) => [q.id, q.propositionIds] as const)),
+  );
+  return {
+    ...set,
+    queries: set.queries.map((q) => ({
+      ...q,
+      anchorPropositions: (anchors.get(q.id) ?? []).map((id) => ({ id, shortForm: shortForm.get(id) ?? id })),
+    })),
   };
 }
 

@@ -36,6 +36,19 @@ export const QueryVerdictSchema = z.object({
     .describe(
       'contradicted일 때만 유효. reversed=관계의 방향·순서를 뒤집어 진술(A가 B의 원인인데 B가 A의 원인이라고 함). misassigned=대상·기준·조건을 엉뚱한 것에 붙여 진술(X의 기준을 Y의 기준이라고 함). contradicted가 아니면 none.',
     ),
+  propositionCoverage: z
+    .array(
+      z.object({
+        propositionId: z.string(),
+        coverage: z.enum(['explicit', 'partial', 'none']),
+      }),
+    )
+    .describe(
+      '이 질의가 앵커링한 명제 **각각**을 학생이 얼마나 담았는가. expressionMode와 다른 질문이다 — ' +
+        'expressionMode는 질의의 답 전체를 어떻게 표현했는지이고, 이것은 명제 하나하나를 짚는다. ' +
+        'explicit=그 명제의 필수 요소를 모두 표현, partial=일부 항이나 관계만 표현, none=실질적 증거 없음. ' +
+        '앵커 명제가 없으면 빈 배열.',
+    ),
   evidence: z.string().describe('판정 근거가 된 학생 표현 조각. 그대로 인용.'),
   viaItem: z.string().describe('어느 학생 항목이 이 질의를 다뤘는가. 없으면 빈 문자열.'),
 });
@@ -118,6 +131,8 @@ export interface PreservationQuery {
   readonly expectedAnswer: string;
   readonly sentences: readonly string[];
   readonly acceptanceCriteria: readonly string[];
+  /** 이 질의가 앵커링한 명제. 명제별 커버리지를 물으려면 모델이 목록을 봐야 한다. */
+  readonly anchorPropositions?: readonly { readonly id: string; readonly shortForm: string }[];
   /** 후처리 정규화 전용 플래그. LLM 프롬프트에는 전달되지 않는다. */
   readonly requiredForRelation?: boolean;
   readonly requiredForFullArgumentCoverage?: boolean;
@@ -215,6 +230,23 @@ not_evidenced다. 대상을 빠짐없이 정확히 지목했더라도 마찬가�
 **공허한 표현을 걸러라.** "법인의 성격", "법인의 특징"은 어느 영역인지 특정하지 못하므로
 scope 질의조차 not_evidenced다.
 
+# 명제별 커버리지 (propositionCoverage)
+
+질의마다 **앵커 명제** 목록이 붙어 있으면, 그 명제 **각각**에 대해 학생이 얼마나 담았는지 낸다.
+
+    explicit  그 명제의 필수 요소를 **모두** 표현했다. 양 항과 관계가 다 있다.
+    partial   일부만 표현했다 — 한쪽 항만 썼거나, 항은 있는데 관계가 없거나.
+    none      실질적 증거가 없다. 그 명제를 짚을 단서가 응답에 없다.
+
+**이것은 semanticState·expressionMode와 다른 질문이다.** 그 둘은 *질의의 답*을 어떻게 했는지
+보고, 이것은 *명제 하나하나*를 짚는다. 질의 하나가 명제 셋을 앵커링하면, 학생이 그중 하나만
+써서 질의에는 답했을 수 있다. 그때 semanticState는 preserved이지만 나머지 둘은 none이다.
+**그 어긋남이 정상이고, 이 필드를 넣은 이유가 그것이다.**
+
+가장 조심할 것은 **쓰지 않은 것을 explicit으로 올리는 일**이다. 질의 전체가 preserved라고 해서
+앵커 명제가 모두 explicit인 것이 아니다. 명제마다 **응답에서 그것을 가리키는 부분을 실제로
+짚을 수 있는지** 확인하고, 짚을 수 없으면 none이다. 짐작으로 채우지 마라.
+
 # 모순의 모양
 
 contradicted라면 어긋난 **모양**도 함께 낸다(contradictionKind):
@@ -267,7 +299,10 @@ function prefixBlocks(paragraphText: string, queries: readonly PreservationQuery
         `[${q.id}] (${q.level}, ${q.region})\n` +
         `  질문: ${q.question}\n` +
         `  기대 답: ${q.expectedAnswer}\n` +
-        `  수용 기준:\n${q.acceptanceCriteria.map((c) => `    - ${c}`).join('\n')}`,
+        `  수용 기준:\n${q.acceptanceCriteria.map((c) => `    - ${c}`).join('\n')}` +
+        (q.anchorPropositions === undefined || q.anchorPropositions.length === 0
+          ? ''
+          : `\n  앵커 명제:\n${q.anchorPropositions.map((p) => `    (${p.id}) ${p.shortForm}`).join('\n')}`),
     )
     .join('\n\n');
   return {
