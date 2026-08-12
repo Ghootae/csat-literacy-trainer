@@ -57,7 +57,44 @@ export const QueryEvalSchema = z.object({
   verdicts: z.array(QueryVerdictSchema),
 });
 
-export type QueryEval = z.infer<typeof QueryEvalSchema>;
+/** `propositionCoverage`를 뺀 변형. 스키마와 SYSTEM 절을 **함께** 꺼야 반쪽 측정이 안 된다. */
+const QueryEvalSchemaNoCoverage = z.object({
+  verdicts: z.array(QueryVerdictSchema.omit({ propositionCoverage: true })),
+});
+
+/**
+ * `propositionCoverage`를 낼 것인가. **실험 스위치이며 기본값은 켜짐**(운영 동작 유지).
+ *
+ * 이 필드는 4a 측정용으로 들어왔고 `aggregatePropositionState`는 읽지 않는다. 그러나 명제별
+ * 근거 확인이라는 **보조 과제가 본 판정을 붙들고 있을 수** 있다 — 끄면 빨라지는 대신 판정이
+ * 물러질 가능성이 있고, 그 교환비를 재려고 둔 스위치다. 출력 바이트는 25토큰이지만 SYSTEM의
+ * 19%를 차지하므로 절감분은 바이트가 아니라 사고 토큰에서 나온다.
+ *
+ * **상수가 아니라 함수인 이유는 effort와 같다** — 모듈 적재 시점에 굳히면 한 프로세스 안에서
+ * 설정을 바꿔 재는 실험이 바뀌지 않은 프롬프트를 재게 된다.
+ */
+function propositionCoverageEnabled(): boolean {
+  const raw = process.env['EVAL_PROPOSITION_COVERAGE'];
+  if (raw === undefined || raw === 'on') return true;
+  if (raw === 'off') return false;
+  throw new Error(`EVAL_PROPOSITION_COVERAGE가 잘못됐다: ${raw} (on|off)`);
+}
+
+function queryEvalSchema() {
+  return propositionCoverageEnabled() ? QueryEvalSchema : QueryEvalSchemaNoCoverage;
+}
+
+type QueryVerdictFull = z.infer<typeof QueryVerdictSchema>;
+
+/**
+ * 끈 설정에서는 `propositionCoverage`가 오지 않으므로 선택 필드다. main에도 이 필드가 없으니
+ * (07bbca0은 experiment 브랜치에만 있다) 선택으로 두는 편이 실제 데이터 모양에 맞는다.
+ */
+export type QueryEval = {
+  verdicts: (Omit<QueryVerdictFull, 'propositionCoverage'> & {
+    propositionCoverage?: QueryVerdictFull['propositionCoverage'];
+  })[];
+};
 
 /**
  * 실제 요청 파라미터. 캐시 지문과 호출부가 같은 상수를 쓰도록 한 곳에 둔다.
@@ -162,7 +199,7 @@ export interface PreservationQuery {
  * 아니라 **모순 기준의 문구**를 고쳐야 한다(명시해야 할 표현을 지목하게). 그래서 여기에는
  * 모순의 *모양*만 남기고 발동 조건은 건드리지 않는다.
  */
-const SYSTEM = `당신은 학생의 문단 요약이 **보존 질의**의 답을 어느 수준까지 담았는지 판정한다.
+const SYSTEM_HEAD = `당신은 학생의 문단 요약이 **보존 질의**의 답을 어느 수준까지 담았는지 판정한다.
 
 각 질의에는 질문·기대 답·수용 기준이 있다. 학생 응답 전체를 보고, 각 질의에 대해:
 
@@ -229,7 +266,10 @@ not_evidenced다. 대상을 빠짐없이 정확히 지목했더라도 마찬가�
 
 **공허한 표현을 걸러라.** "법인의 성격", "법인의 특징"은 어느 영역인지 특정하지 못하므로
 scope 질의조차 not_evidenced다.
+`;
 
+/** propositionCoverage 지시. 스키마 필드와 **함께** 켜고 꺼야 반쪽 설정이 되지 않는다. */
+const COVERAGE_SECTION = `
 # 명제별 커버리지 (propositionCoverage)
 
 질의마다 **앵커 명제** 목록이 붙어 있으면, 그 명제 **각각**에 대해 학생이 얼마나 담았는지 낸다.
@@ -246,7 +286,9 @@ scope 질의조차 not_evidenced다.
 가장 조심할 것은 **쓰지 않은 것을 explicit으로 올리는 일**이다. 질의 전체가 preserved라고 해서
 앵커 명제가 모두 explicit인 것이 아니다. 명제마다 **응답에서 그것을 가리키는 부분을 실제로
 짚을 수 있는지** 확인하고, 짚을 수 없으면 none이다. 짐작으로 채우지 마라.
+`;
 
+const SYSTEM_TAIL = `
 # 모순의 모양
 
 contradicted라면 어긋난 **모양**도 함께 낸다(contradictionKind):
@@ -267,11 +309,21 @@ contradicted라면 어긋난 **모양**도 함께 낸다(contradictionKind):
 위의 수용 기준 규칙이 그대로 정한다 — 모순을 좁힌다고 해서 인정하던 답을 덜 인정하면 안 된다.`;
 
 /**
+ * 실제로 보내는 system 프롬프트. **함수여야 한다** — 상수로 굳히면 한 프로세스에서 설정을
+ * 바꿔 재는 실험이 이전 프롬프트를 그대로 쓴다(effort에서 이미 겪은 사고다).
+ */
+function systemPrompt(): string {
+  return propositionCoverageEnabled()
+    ? `${SYSTEM_HEAD}${COVERAGE_SECTION}${SYSTEM_TAIL}`
+    : `${SYSTEM_HEAD}${SYSTEM_TAIL}`;
+}
+
+/**
  * 캐시 키 입력으로 노출하는 요청 지문(fingerprint).
  *
  * **실제 API에 전달되는 값 그대로여야 한다.** 사람이 손으로 올리는 버전 번호나 부분
  * 템플릿을 해시하면, 프롬프트를 고쳤는데 과거 평가 결과가 재사용되는 사고를 막지 못한다.
- * `outputFormat`은 `zodOutputFormat(QueryEvalSchema)`의 결과 — 즉 응답 스키마가 바뀌면
+ * `outputFormat`은 `zodOutputFormat(queryEvalSchema())`의 결과 — 즉 응답 스키마가 바뀌면
  * 자동으로 달라진다.
  *
  * **`cache_control`은 일부러 넣지 않는다.** 프롬프트 캐싱은 모델이 보는 내용을 바꾸지 않고
@@ -281,13 +333,13 @@ contradicted라면 어긋난 **모양**도 함께 낸다(contradictionKind):
 export function evalRequestFingerprint() {
   return {
     model: evalModel(),
-    systemPrompt: SYSTEM,
+    systemPrompt: systemPrompt(),
     maxTokens: EVAL_MAX_TOKENS,
     // **상수가 아니라 함수인 이유다.** effort를 실험으로 바꿀 수 있으므로 모듈 적재 시점에
     // 굳히면 낮은 effort의 결과가 운영 effort의 캐시 키를 쓰게 된다.
     effort: evalEffort(),
     thinking: EVAL_THINKING,
-    outputFormat: zodOutputFormat(QueryEvalSchema),
+    outputFormat: zodOutputFormat(queryEvalSchema()),
   };
 }
 
@@ -345,8 +397,8 @@ export async function warmEvalPrefix(
           model,
           max_tokens: 1,
           thinking: { type: EVAL_THINKING },
-          output_config: { effort, format: zodOutputFormat(QueryEvalSchema) },
-          system: SYSTEM,
+          output_config: { effort, format: zodOutputFormat(queryEvalSchema()) },
+          system: systemPrompt(),
           messages: [
             {
               role: 'user',
@@ -378,8 +430,8 @@ export async function evaluateQueries(
         model,
         max_tokens: EVAL_MAX_TOKENS,
         thinking: { type: EVAL_THINKING },
-        output_config: { effort, format: zodOutputFormat(QueryEvalSchema) },
-        system: SYSTEM,
+        output_config: { effort, format: zodOutputFormat(queryEvalSchema()) },
+        system: systemPrompt(),
         messages: [
           {
             role: 'user',
