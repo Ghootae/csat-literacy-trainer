@@ -90,12 +90,11 @@ const LABEL: Record<Verdict, string> = {
   region_not_evidenced: '미포착',
   contradicted: '모순',
 };
-const PROP_MARK: Record<string, string> = {
-  evidenced: '●',
-  supported_by_abstraction: '◐',
-  not_evidenced: '○',
-  contradicted: '✗',
-};
+// 명제 기호(●◐○✗)는 뺀다 — 실측에서 소비처가 이 글리프 하나뿐이었다. 표시되는 명제의
+// 55%가 ◐인데 피드백 문장 두 곳(topReferenceDetails·compressed)이 `not_evidenced`만
+// 보므로 ●/◐ 구분은 화면 밖으로 나가지 않고, ✗는 모순 영역이 표시 게이트에 걸려 애초에
+// 도달할 수 없다. 명제 목록은 성취 기호가 아니라 **정답 공개 채널**로만 남긴다 (§4.1.3).
+// 영역 판정 기호(MARK)는 유지한다 — §4.1.2의 적록색맹 실측이 색 단독 표시를 금지한다.
 
 /** 미달 영역의 제목. **골드가 아니라 위치로 부른다** (§4.1.3). */
 function spanTitle(ids: readonly string[]): string {
@@ -582,9 +581,7 @@ function RegionBox({
       {region.propositions !== undefined && (
         <ul className="props">
           {region.propositions.map((p, i) => (
-            <li key={i}>
-              {PROP_MARK[p.state] ?? '?'} {p.shortForm}
-            </li>
+            <li key={i}>{p.shortForm}</li>
           ))}
         </ul>
       )}
