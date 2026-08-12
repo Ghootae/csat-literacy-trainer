@@ -19,6 +19,11 @@ import { evalCacheKey } from './eval-cache-key.js';
 import type { Gold as PipelineGold } from './gold.js';
 import { evalRequestFingerprint, type QueryEval, evaluateQueries, warmEvalPrefix } from './llm/query-eval.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
+import {
+  evaluateSemanticFulfillment,
+  type PropositionEvidenceEvaluator,
+  type PropositionFulfillment,
+} from './proposition-fulfillment.js';
 import { type EvalSet, type Gold as LibGold, generatedEvalSet, paragraphText } from './query-gen-lib.js';
 import { type NormalizedRegion, type RawQueryVerdict, normalizeQueryStates } from './query-normalize.js';
 
@@ -38,6 +43,17 @@ export interface EvaluatedResponse {
    * 직접 받는 함수를 부르려면 이게 필요하다 — 없으면 정규화를 테스트가 다시 배선하게 된다.
    */
   readonly regions: readonly NormalizedRegion[];
+  /** Runtime diagnostics only. The UI receives only the derived proposition evidence states. */
+  readonly propositionEvaluation: {
+    readonly evaluator: PropositionEvidenceEvaluator;
+    readonly latencyMs: number;
+    readonly results: readonly PropositionFulfillment[];
+  };
+}
+
+export interface EvaluateResponseOptions {
+  /** Defaults to the existing production behavior. The app enables semantic-view only for attempts. */
+  readonly propositionEvidenceEvaluator?: PropositionEvidenceEvaluator;
 }
 
 /**
@@ -62,11 +78,26 @@ export async function evaluateResponse(
   gen: GeneratedQuerySet,
   response: string,
   cacheDir?: string,
+  options: EvaluateResponseOptions = {},
 ): Promise<EvaluatedResponse> {
   const set: EvalSet = withPropositions(generatedEvalSet('gen', gen), gold, gen);
   const paraText = paragraphText(gold as unknown as LibGold);
+  const queryStarted = performance.now();
   const qeval = await runEval(paraText, set, response, gold.paragraphId, cacheDir);
-  return assembleResponse(gold, gen, qeval);
+  const queryLatencyMs = Math.round(performance.now() - queryStarted);
+  const evaluator = options.propositionEvidenceEvaluator ?? 'query';
+  if (evaluator === 'query') {
+    return assembleResponse(gold, gen, qeval, {
+      evaluator,
+      latencyMs: queryLatencyMs,
+      results: [],
+    });
+  }
+
+  const anchoredIds = new Set(gen.regions.flatMap((r) => r.queries.flatMap((q) => q.propositionIds)));
+  const propositions = gold.propositions.filter((p) => anchoredIds.has(p.id));
+  const semantic = await evaluateSemanticFulfillment(propositions, response);
+  return assembleResponse(gold, gen, qeval, semantic);
 }
 
 /**
@@ -80,6 +111,11 @@ export function assembleResponse(
   gold: PipelineGold,
   gen: GeneratedQuerySet,
   qeval: QueryEval,
+  propositionEvaluation: EvaluatedResponse['propositionEvaluation'] = {
+    evaluator: 'query',
+    latencyMs: 0,
+    results: [],
+  },
 ): EvaluatedResponse {
   const set: EvalSet = generatedEvalSet('gen', gen);
 
@@ -130,7 +166,18 @@ export function assembleResponse(
   }
 
   const propShort = new Map(gold.propositions.map((p) => [p.id, p.shortForm]));
-  const assessments = assess(regions, regionMeta, aq, verdicts, propShort);
+  const queryAssessments = assess(regions, regionMeta, aq, verdicts, propShort);
+  const fulfillment = new Map(propositionEvaluation.results.map((r) => [r.propositionId, r.fulfilled]));
+  // This adapter changes proposition display only. Region verdicts, feedback, and contradiction handling
+  // remain owned by the existing query evaluator and assess().
+  const assessments = queryAssessments.map((assessment): RegionAssessment => ({
+    ...assessment,
+    propositionEvidence: assessment.propositionEvidence.map((e) => {
+      const fulfilled = fulfillment.get(e.propositionId);
+      if (fulfilled === undefined) return e;
+      return { ...e, state: fulfilled ? 'evidenced' : 'not_evidenced' };
+    }),
+  }));
 
   // 인용은 `viaItem`이 아니라 `evidence`를 쓴다 — viaItem은 식별자("1", "첫 문장")라 화면에
   // 그대로 쓰면 무용하다. 같은 섹션의 전체와 부분 인용이 함께 잡히므로 포함되는 것은 접는다.
@@ -153,6 +200,7 @@ export function assembleResponse(
     sentenceIds: new Map(gen.regions.map((r) => [r.regionId, r.sourceSentenceIds])),
     rawVerdicts: verdicts,
     regions,
+    propositionEvaluation,
   };
 }
 

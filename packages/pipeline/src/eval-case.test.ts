@@ -242,6 +242,39 @@ describe('명제 판정은 영역·타이틀 판정을 움직일 수 없다', ()
       expect(base.regions.map((r) => r.regionSemanticVerdict)).toEqual(
         base.assessments.map((a) => a.verdict),
       );
+
+      const allUnfulfilled = assembleResponse(gold, queries, recordedEval(probe), {
+        evaluator: 'semantic-view',
+        latencyMs: 1,
+        results: gold.propositions.map((p) => ({
+          propositionId: p.id,
+          coverage: 'partial',
+          fulfilled: false,
+        })),
+      });
+      const allFulfilled = assembleResponse(gold, queries, recordedEval(probe), {
+        evaluator: 'semantic-view',
+        latencyMs: 1,
+        results: gold.propositions.map((p) => ({
+          propositionId: p.id,
+          coverage: 'explicit',
+          fulfilled: true,
+        })),
+      });
+
+      // Semantic coverage is downstream display data: Gate A and title/region verdicts remain query-owned.
+      expect(allUnfulfilled.assessments.map((a) => a.verdict)).toEqual(
+        base.assessments.map((a) => a.verdict),
+      );
+      expect(allFulfilled.assessments.map((a) => a.verdict)).toEqual(
+        base.assessments.map((a) => a.verdict),
+      );
+      expect(
+        allUnfulfilled.assessments.flatMap((a) => a.propositionEvidence).map((e) => e.state),
+      ).toEqual(allUnfulfilled.assessments.flatMap((a) => a.propositionEvidence).map(() => 'not_evidenced'));
+      expect(
+        allFulfilled.assessments.flatMap((a) => a.propositionEvidence).map((e) => e.state),
+      ).toEqual(allFulfilled.assessments.flatMap((a) => a.propositionEvidence).map(() => 'evidenced'));
     }
   });
 });

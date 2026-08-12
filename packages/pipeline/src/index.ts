@@ -12,4 +12,5 @@ export * from './llm/client.js';
 export * from './assessment.js';
 export * from './query-normalize.js';
 export * from './evaluate-response.js';
+export * from './proposition-fulfillment.js';
 export * from './llm/query-gen.js';

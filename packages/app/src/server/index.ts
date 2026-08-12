@@ -10,7 +10,11 @@
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 
-import { evaluateResponse, warmResponsePrefix } from '@csat/pipeline';
+import {
+  evaluateResponse,
+  propositionEvidenceEvaluator,
+  warmResponsePrefix,
+} from '@csat/pipeline';
 
 import type {
   AttemptRequest,
@@ -27,6 +31,9 @@ import { restoreTitleView, toTitleView } from './title-view.js';
 const PORT = Number(process.env['PORT'] ?? 5174);
 const OWNER = 'local'; // D4 — 리포지토리는 처음부터 ownerId를 받는다. 로컬은 고정.
 const EVAL_CACHE = resolve(process.cwd(), 'sessions', '.eval-cache');
+const ATTEMPT_PROPOSITION_EVALUATOR = propositionEvidenceEvaluator(
+  process.env['PROPOSITION_EVIDENCE_EVALUATOR'],
+);
 
 /**
  * 채점 호출 예산 (서버 기동당).
@@ -121,7 +128,13 @@ const server = createServer((req, res) => {
       console.log(`[${new Date().toISOString()}] 채점 ${spent}/${BUDGET}  session=${sessionId}  섹션=${sections.length}`);
 
       const { gold, queries } = loadContent(paragraphId);
-      const evaluated = await evaluateResponse(gold, queries, sections.join('\n'), EVAL_CACHE);
+      const evaluated = await evaluateResponse(gold, queries, sections.join('\n'), EVAL_CACHE, {
+        propositionEvidenceEvaluator: ATTEMPT_PROPOSITION_EVALUATOR,
+      });
+      console.log(
+        `[proposition] evaluator=${evaluated.propositionEvaluation.evaluator} ` +
+          `latency=${evaluated.propositionEvaluation.latencyMs}ms`,
+      );
 
       // 직전까지의 기록으로 "지금까지의 최고"를 만든다. 이번 결과를 넣기 **전에** 잡아야
       // 겨냥하지 않은 영역의 강등을 가릴 수 있다(§2.1).
@@ -181,6 +194,7 @@ const server = createServer((req, res) => {
 
       const prior = loadSession(OWNER, sessionId);
       const attempted = judgedTitleCount(prior) > 0;
+      // Title evaluation deliberately stays on the existing query-only path.
       const evaluated = await evaluateResponse(content.gold, content.titleQueries, text, EVAL_CACHE);
       const assessment = evaluated.assessments[0];
       if (assessment === undefined) return json(res, 500, { error: '타이틀 판정 없음' });

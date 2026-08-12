@@ -77,3 +77,21 @@ describe('D4 규칙 3 — LLM 클라이언트가 클라이언트 번들에서 �
     expect(offenders.map((o) => o.file)).toEqual([]);
   });
 });
+
+describe('semantic-view runtime wiring은 제출 경로에만 있다', () => {
+  const server = readFileSync(resolve(SRC, 'server/index.ts'), 'utf8');
+
+  it('attempt는 feature flag를 evaluateResponse에 전달하고 evaluator/지연만 로그한다', () => {
+    expect(server).toContain("process.env['PROPOSITION_EVIDENCE_EVALUATOR']");
+    expect(server).toContain('propositionEvidenceEvaluator: ATTEMPT_PROPOSITION_EVALUATOR');
+    expect(server).toContain('evaluator=${evaluated.propositionEvaluation.evaluator}');
+    expect(server).toContain('latency=${evaluated.propositionEvaluation.latencyMs}ms');
+  });
+
+  it('title evaluateResponse 호출에는 proposition feature flag를 전달하지 않는다', () => {
+    const titleRoute = server.slice(server.indexOf("url.pathname.startsWith('/api/title/')"));
+    const titleCall = titleRoute.match(/evaluateResponse\([^;]+\);/)?.[0] ?? '';
+    expect(titleCall).toContain('content.titleQueries');
+    expect(titleCall).not.toContain('propositionEvidenceEvaluator');
+  });
+});
