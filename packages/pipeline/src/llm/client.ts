@@ -46,7 +46,9 @@ export type Op =
   /** 원문-질의의 근거·정답·수용 기준을 독립적으로 검증한다. */
   | 'query-semantic-verify'
   /** 질의 verifier가 찾은 오류만 최소 수정한다. */
-  | 'query-semantic-repair';
+  | 'query-semantic-repair'
+  | 'title-semantic-verify'
+  | 'title-semantic-repair';
 
 export interface CallMetric {
   readonly ts: string;

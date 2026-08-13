@@ -14,7 +14,6 @@ import { resolve } from 'node:path';
 import type { Gold } from '../gold.js';
 import { GoldGenerationMetadataSchema } from '../gold-generation-metadata.js';
 import { GeneratedQuerySetSchema, type GeneratedQuerySet } from '../llm/query-gen.js';
-import { validateTitleQuerySet } from '../llm/title-gen.js';
 import {
   applyRepairPlan,
   assertVerificationGate,
@@ -26,6 +25,7 @@ import {
   validateQueryStructure,
   verifyGoldSemantic,
   verifyQuerySemantic,
+  verifyTitleQuerySemantic,
   type RepairPlan,
   type SemanticVerificationReport,
 } from '../semantic-verification.js';
@@ -48,6 +48,15 @@ const IDS = [
 ] as const;
 
 interface Passage { readonly text: string }
+
+function validateMigratedTitleQuerySet(set: GeneratedQuerySet): void {
+  if (set.regions.length !== 1) throw new Error(`${set.paragraphId}: title 영역은 1개여야 한다`);
+  const queries = set.regions[0]?.queries ?? [];
+  if (queries.length !== 3) throw new Error(`${set.paragraphId}: title 질의는 3개여야 한다`);
+  for (const id of ['qT1', 'qT2', 'qT3']) {
+    if (!queries.some((query) => query.id === id)) throw new Error(`${set.paragraphId}: ${id} 없음`);
+  }
+}
 
 function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T;
@@ -105,8 +114,7 @@ async function verifyWithRepair<T extends Gold | GeneratedQuerySet>(args: {
       return { candidate, reports, repairs, reportPaths };
     }
 
-    const repairKind = args.kind === 'gold' ? 'gold' : 'query';
-    const plan = await planSemanticRepair(repairKind, args.sourceText, candidate, blockers, args.paragraphId);
+    const plan = await planSemanticRepair(args.kind, args.sourceText, candidate, blockers, args.paragraphId);
     repairCycles++;
     repairs.push(plan);
     writeJson(resolve(args.artifactDir, `${args.kind}-repair-${repairCycles}.json`), plan);
@@ -193,7 +201,7 @@ async function migrate(id: string): Promise<void> {
 
   const queryResult = await verifyWithRepair({
     kind: 'query', paragraphId: id, sourceText: passage.text, initial: existingQueries, artifactDir,
-    verify: (candidate) => verifyQuerySemantic(passage.text, verifiedGold, candidate, id),
+    verify: (candidate) => verifyTitleQuerySemantic(passage.text, verifiedGold, candidate, id),
     validate: (candidate) => { GeneratedQuerySetSchema.parse(candidate); validateQueryStructure(verifiedGold, candidate); },
   });
   const queryRecord = makeVerificationRecord({
@@ -216,8 +224,7 @@ async function migrate(id: string): Promise<void> {
     validate: (candidate) => {
       GeneratedQuerySetSchema.parse(candidate);
       validateQueryStructure(verifiedGold, candidate);
-      const problems = validateTitleQuerySet(candidate);
-      if (problems.length > 0) throw new Error(`${id}: title query 구조 오류: ${problems.join(', ')}`);
+      validateMigratedTitleQuerySet(candidate);
     },
   });
   const titleRecord = makeVerificationRecord({
@@ -275,12 +282,11 @@ async function migrateTitleOnly(id: string): Promise<void> {
   console.log(`  ${id} (title query)`);
   const result = await verifyWithRepair({
     kind: 'title-query', paragraphId: id, sourceText: passage.text, initial: existing, artifactDir,
-    verify: (candidate) => verifyQuerySemantic(passage.text, gold, candidate, id),
+    verify: (candidate) => verifyTitleQuerySemantic(passage.text, gold, candidate, id),
     validate: (candidate) => {
       GeneratedQuerySetSchema.parse(candidate);
       validateQueryStructure(gold, candidate);
-      const problems = validateTitleQuerySet(candidate);
-      if (problems.length > 0) throw new Error(`${id}: title query 구조 오류: ${problems.join(', ')}`);
+      validateMigratedTitleQuerySet(candidate);
     },
   });
   const record = makeVerificationRecord({

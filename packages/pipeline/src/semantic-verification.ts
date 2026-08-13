@@ -108,6 +108,22 @@ const QUERY_SYSTEM = `당신은 수능 국어 비문학 보존 질의의 독립 
 
 critical/error/warning과 sourceEvidence/goldPath 규칙은 골드 검증과 같다. goldPath는 후보 질의 JSON을 기준으로 한다.`;
 
+const TITLE_QUERY_SYSTEM = `당신은 수능 국어 비문학의 타이틀 단계 질의를 독립 검증한다.
+이 단계는 하위 영역을 다시 시험하지 않는다. 학생은 이미 각 영역을 교정받았고, 여기서는 문단 전체를 한 문장으로 조직하는 능력만 본다.
+
+후보는 단일 title 영역의 정확히 3질의여야 한다.
+- qT1: scope. 어느 문단에나 맞는 과대추상을 차단한다.
+- qT2: 문단의 코어 축이 학생 표현 안에 명시되거나 합리적으로 포함되는지 본다. 축별 세부 정확성은 다시 묻지 않고, 나열도 기본 성공이다.
+- qT3: 축을 상위어·중심 서술로 접었는지 보는 비필수 보너스다. 축 누락은 압축이 아니다.
+
+검사할 것:
+- qT1~qT3의 expectedAnswer와 수용·모순 기준이 원문과 골드의 title/slots 범위를 넘거나 방향을 바꾸지 않는지
+- qT2가 명백한 핵심 누락을 가리되 원문 재서술을 강요하지 않는지
+- qT3가 내용 정확성과 추상화 여부를 혼동하지 않는지
+
+하위 슬롯마다 별도 질의가 없다는 이유로 issue를 만들지 마라. qT2의 level이 legacy relation이든 현재 argument든 의미 역할이 위 계약과 같으면 의미 오류가 아니다.
+critical/error/warning과 sourceEvidence/goldPath 규칙은 골드 검증과 같다.`;
+
 const REPAIR_SYSTEM = `당신은 독립 verifier가 발견한 critical/error만 최소 수정하는 JSON repairer다.
 원문에 없는 의미를 추가하지 말고, 지적되지 않은 경로는 바꾸지 마라. 각 수정은 RFC 6901 JSON Pointer와 JSON 값으로 반환한다.
 배열 원소를 수정할 때는 안정성을 위해 해당 원소 전체를 replace하라. 누락 항목은 add, 불필요 항목은 remove를 쓴다.
@@ -261,15 +277,36 @@ export async function verifyQuerySemantic(
   return response.parsed_output;
 }
 
+export async function verifyTitleQuerySemantic(
+  sourceText: string,
+  gold: Gold,
+  candidate: GeneratedQuerySet,
+  paragraphId: string,
+): Promise<SemanticVerificationReport> {
+  const input = queryVerifierInput(sourceText, gold, candidate);
+  const response = await instrumented('title-semantic-verify', SEMANTIC_VERIFICATION_EFFORT, paragraphId, () =>
+    getClient().messages.parse({
+      model: MODEL,
+      max_tokens: 10000,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: SEMANTIC_VERIFICATION_EFFORT, format: zodOutputFormat(SemanticVerificationReportSchema) },
+      system: TITLE_QUERY_SYSTEM,
+      messages: [{ role: 'user', content: `원문:\n${input.sourceText}\n\n확정 골드 JSON:\n${JSON.stringify(input.gold)}\n\n후보 타이틀 질의 JSON:\n${JSON.stringify(input.candidateQueries)}` }],
+    }),
+  );
+  if (response.parsed_output === null) throw new Error('title semantic verifier 구조화 출력 파싱 실패');
+  return response.parsed_output;
+}
+
 export async function planSemanticRepair(
-  kind: 'gold' | 'query',
+  kind: 'gold' | 'query' | 'title-query',
   sourceText: string,
   candidate: Gold | GeneratedQuerySet,
   issues: readonly SemanticIssue[],
   paragraphId: string,
 ): Promise<RepairPlan> {
   const response = await instrumented(
-    kind === 'gold' ? 'gold-semantic-repair' : 'query-semantic-repair',
+    kind === 'gold' ? 'gold-semantic-repair' : kind === 'query' ? 'query-semantic-repair' : 'title-semantic-repair',
     SEMANTIC_VERIFICATION_EFFORT,
     paragraphId,
     () => getClient().messages.parse({
