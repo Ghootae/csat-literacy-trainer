@@ -36,10 +36,11 @@ describe('독립 semantic verification 계약', () => {
     expect(goldVerifierInput(source, markedGold).candidateGold).not.toHaveProperty('generationMetadata');
     expect(goldVerifierInput(source, markedGold).candidateGold).not.toHaveProperty('semanticVerification');
     const queryInput = queryVerifierInput(source, markedGold, markedQueries);
-    expect(Object.keys(queryInput)).toEqual(['sourceText', 'gold', 'candidateQueries']);
+    expect(Object.keys(queryInput)).toEqual(['sourceText', 'gold', 'relationEdgeIndex', 'candidateQueries']);
     expect(queryInput.gold).not.toHaveProperty('generationMetadata');
     expect(queryInput.gold).not.toHaveProperty('semanticVerification');
     expect(queryInput.candidateQueries).not.toHaveProperty('semanticVerification');
+    expect(queryInput.relationEdgeIndex.every((edge) => /^e\d+$|^d\d+$/.test(edge.id))).toBe(true);
   });
 
   it('paragraph ID와 provenance 변경은 semantic candidate hash를 바꾸지 않는다', () => {

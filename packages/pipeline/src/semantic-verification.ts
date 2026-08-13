@@ -4,12 +4,13 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod/v4';
 
 import type { Gold } from './gold.js';
-import type { GeneratedQuerySet } from './llm/query-gen.js';
+import { GeneratedQuerySetSchema, type GeneratedQuerySet, type GenRelationEdge } from './llm/query-gen.js';
 import { MODEL, getClient, instrumented } from './llm/client.js';
 import { PropositionSchema } from './llm/schemas.js';
 
 export const SEMANTIC_VERIFIER_VERSION = 'semantic-verifier-2026-08-14-v1';
 export const SEMANTIC_REPAIR_VERSION = 'semantic-repair-2026-08-14-v1';
+export const SEMANTIC_WORKFLOW_VERSION = 'semantic-workflow-2026-08-14-v2';
 export const SEMANTIC_VERIFICATION_EFFORT = 'medium' as const;
 
 const Sha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
@@ -147,6 +148,7 @@ export function verifierFingerprint(): string {
     effort: SEMANTIC_VERIFICATION_EFFORT,
     verifierVersion: SEMANTIC_VERIFIER_VERSION,
     repairVersion: SEMANTIC_REPAIR_VERSION,
+    workflowVersion: SEMANTIC_WORKFLOW_VERSION,
   }));
 }
 
@@ -173,11 +175,40 @@ export function goldVerifierInput(sourceText: string, candidate: Gold): {
 export function queryVerifierInput(sourceText: string, gold: Gold, candidate: GeneratedQuerySet): {
   sourceText: string;
   gold: Omit<Gold, 'generationMetadata' | 'semanticVerification'>;
+  relationEdgeIndex: readonly GenRelationEdge[];
   candidateQueries: Omit<GeneratedQuerySet, 'semanticVerification'>;
 } {
   const { generationMetadata: _generation, semanticVerification: _goldVerification, ...cleanGold } = gold;
   const { semanticVerification: _queryVerification, ...candidateQueries } = candidate;
-  return { sourceText, gold: cleanGold, candidateQueries };
+  return {
+    sourceText,
+    gold: cleanGold,
+    relationEdgeIndex: relationEdgeIndex(gold),
+    candidateQueries,
+  };
+}
+
+function relationEdgeIndex(gold: Gold): GenRelationEdge[] {
+  return [
+    ...gold.evaluationLinks.map((edge, index) => ({
+      id: `e${index + 1}`,
+      source: edge.source,
+      target: edge.target,
+      relation: edge.relation,
+      relationProperties: [...edge.relationProperties],
+      contrastAxis: edge.contrastAxis,
+      kind: 'eval' as const,
+    })),
+    ...gold.discourseLinks.map((edge, index) => ({
+      id: `d${index + 1}`,
+      source: edge.source,
+      target: edge.target,
+      relation: edge.relation,
+      relationProperties: [...edge.relationProperties],
+      contrastAxis: edge.contrastAxis,
+      kind: 'discourse' as const,
+    })),
+  ];
 }
 
 export async function verifyGoldSemantic(
@@ -215,7 +246,7 @@ export async function verifyQuerySemantic(
       thinking: { type: 'adaptive' },
       output_config: { effort: SEMANTIC_VERIFICATION_EFFORT, format: zodOutputFormat(SemanticVerificationReportSchema) },
       system: QUERY_SYSTEM,
-      messages: [{ role: 'user', content: `원문:\n${input.sourceText}\n\n확정 골드 JSON:\n${JSON.stringify(input.gold)}\n\n후보 질의 JSON:\n${JSON.stringify(input.candidateQueries)}` }],
+      messages: [{ role: 'user', content: `원문:\n${input.sourceText}\n\n확정 골드 JSON:\n${JSON.stringify(input.gold)}\n\n관계 ID 색인:\n${JSON.stringify(input.relationEdgeIndex)}\n\n후보 질의 JSON:\n${JSON.stringify(input.candidateQueries)}` }],
     }),
   );
   if (response.parsed_output === null) throw new Error('query semantic verifier 구조화 출력 파싱 실패');
@@ -290,6 +321,23 @@ export function validateGoldStructure(gold: Gold): void {
   for (const proposition of gold.propositions) {
     for (const sentenceId of proposition.sourceSentences) {
       if (!sentenceIds.has(sentenceId)) throw new Error(`${gold.paragraphId}/${proposition.id}: 없는 문장 ${sentenceId}`);
+    }
+  }
+}
+
+export function validateQueryStructure(gold: Gold, queries: GeneratedQuerySet): void {
+  GeneratedQuerySetSchema.parse(queries);
+  const sentenceIds = new Set(gold.sentences.map((sentence) => sentence.id));
+  const propositionIds = new Set(gold.propositions.map((proposition) => proposition.id));
+  const edgeIds = new Set(relationEdgeIndex(gold).map((edge) => edge.id));
+  for (const region of queries.regions) {
+    for (const id of region.sourceSentenceIds) if (!sentenceIds.has(id)) throw new Error(`${queries.paragraphId}/${region.regionId}: 없는 문장 ${id}`);
+    for (const id of region.propositionIds) if (!propositionIds.has(id)) throw new Error(`${queries.paragraphId}/${region.regionId}: 없는 명제 ${id}`);
+    for (const id of region.relationEdgeIds) if (!edgeIds.has(id)) throw new Error(`${queries.paragraphId}/${region.regionId}: 없는 관계 ${id}`);
+    for (const query of region.queries) {
+      for (const id of query.sourceSentenceIds) if (!sentenceIds.has(id)) throw new Error(`${queries.paragraphId}/${query.id}: 없는 문장 ${id}`);
+      for (const id of query.propositionIds) if (!propositionIds.has(id)) throw new Error(`${queries.paragraphId}/${query.id}: 없는 명제 ${id}`);
+      for (const id of query.relationEdgeIds) if (!edgeIds.has(id)) throw new Error(`${queries.paragraphId}/${query.id}: 없는 관계 ${id}`);
     }
   }
 }

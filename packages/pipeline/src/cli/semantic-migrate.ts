@@ -21,6 +21,7 @@ import {
   planSemanticRepair,
   reportBlockers,
   validateGoldStructure,
+  validateQueryStructure,
   verifyGoldSemantic,
   verifyQuerySemantic,
   type RepairPlan,
@@ -73,6 +74,7 @@ async function verifyWithRepair<T extends Gold | GeneratedQuerySet>(args: {
   const repairs: RepairPlan[] = [];
   const reportPaths: string[] = [];
   let repairCycles = 0;
+  let consecutiveCleanPasses = 0;
 
   for (let pass = 1; ; pass++) {
     // 이 호출에는 앞선 pass의 issue나 repair rationale가 들어가지 않는다.
@@ -84,7 +86,8 @@ async function verifyWithRepair<T extends Gold | GeneratedQuerySet>(args: {
     const blockers = reportBlockers(report);
     console.log(`    ${args.kind} pass ${pass}: blocker ${blockers.length}, warning ${report.issues.length - blockers.length}`);
 
-    if (blockers.length === 0 && pass >= 2) {
+    consecutiveCleanPasses = blockers.length === 0 ? consecutiveCleanPasses + 1 : 0;
+    if (consecutiveCleanPasses >= 2) {
       return { candidate, reports, repairs, reportPaths };
     }
     if (blockers.length === 0) continue;
@@ -97,6 +100,7 @@ async function verifyWithRepair<T extends Gold | GeneratedQuerySet>(args: {
     repairs.push(plan);
     writeJson(resolve(args.artifactDir, `${args.kind}-repair-${repairCycles}.json`), plan);
     candidate = applyRepairPlan(candidate, plan);
+    consecutiveCleanPasses = 0;
     args.validate(candidate);
     writeJson(resolve(args.artifactDir, `${args.kind}-candidate-${repairCycles + 1}.json`), candidate);
   }
@@ -176,7 +180,7 @@ async function migrate(id: string): Promise<void> {
   const queryResult = await verifyWithRepair({
     kind: 'query', paragraphId: id, sourceText: passage.text, initial: existingQueries, artifactDir,
     verify: (candidate) => verifyQuerySemantic(passage.text, verifiedGold, candidate, id),
-    validate: (candidate) => { GeneratedQuerySetSchema.parse(candidate); },
+    validate: (candidate) => { GeneratedQuerySetSchema.parse(candidate); validateQueryStructure(verifiedGold, candidate); },
   });
   const queryRecord = makeVerificationRecord({
     sourceText: passage.text,
