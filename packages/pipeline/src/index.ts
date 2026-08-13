@@ -2,6 +2,7 @@ export * from './adapter.js';
 export * from './normalize.js';
 export * from './agreement.js';
 export * from './gold.js';
+export * from './gold-generation-metadata.js';
 export * from './llm/kernel.js';
 export * from './llm/evaluate.js';
 export * from './llm/query-eval.js';

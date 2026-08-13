@@ -13,6 +13,7 @@ import { dirname } from 'node:path';
 
 import { compose, decompose, slotCores, verifyLinks } from './llm/kernel.js';
 import type { Composed, Decomposed, LinkVerdicts, SlotCores } from './llm/schemas.js';
+import { createGoldGenerationMetadata, type GoldGenerationMetadata } from './gold-generation-metadata.js';
 import {
   type DraftLink,
   type DraftNode,
@@ -41,6 +42,8 @@ export interface Gold {
   readonly evaluationLinks: readonly MergedLink[];
   readonly discourseLinks: readonly MergedLink[];
   readonly log: readonly string[];
+  /** 새 생성물에만 기록한다. 없는 기존 골드는 `legacy/no-fingerprint`로 정상 로드한다. */
+  readonly generationMetadata?: GoldGenerationMetadata;
 }
 
 function toDraft(d: Decomposed, c: Composed): { nodes: DraftNode[]; links: DraftLink[] } {
@@ -183,5 +186,6 @@ export async function buildGold(
     evaluationLinks: norm.evaluationLinks,
     discourseLinks: norm.discourseLinks,
     log: [...norm.log, ...slotLog],
+    generationMetadata: createGoldGenerationMetadata(paragraphText),
   };
 }
