@@ -14,6 +14,7 @@ import { resolve } from 'node:path';
 import type { Gold } from '../gold.js';
 import { GoldGenerationMetadataSchema } from '../gold-generation-metadata.js';
 import { GeneratedQuerySetSchema, type GeneratedQuerySet } from '../llm/query-gen.js';
+import { validateTitleQuerySet } from '../llm/title-gen.js';
 import {
   applyRepairPlan,
   assertVerificationGate,
@@ -62,7 +63,7 @@ function runId(): string {
 }
 
 async function verifyWithRepair<T extends Gold | GeneratedQuerySet>(args: {
-  readonly kind: 'gold' | 'query';
+  readonly kind: 'gold' | 'query' | 'title-query';
   readonly paragraphId: string;
   readonly sourceText: string;
   readonly initial: T;
@@ -104,7 +105,8 @@ async function verifyWithRepair<T extends Gold | GeneratedQuerySet>(args: {
       return { candidate, reports, repairs, reportPaths };
     }
 
-    const plan = await planSemanticRepair(args.kind, args.sourceText, candidate, blockers, args.paragraphId);
+    const repairKind = args.kind === 'gold' ? 'gold' : 'query';
+    const plan = await planSemanticRepair(repairKind, args.sourceText, candidate, blockers, args.paragraphId);
     repairCycles++;
     repairs.push(plan);
     writeJson(resolve(args.artifactDir, `${args.kind}-repair-${repairCycles}.json`), plan);
@@ -144,10 +146,12 @@ async function migrate(id: string): Promise<void> {
   const passage = readJson<Passage>(resolve(dir, 'passage.json'));
   const existingGold = readJson<Gold>(resolve(dir, 'gold.json'));
   const existingQueries = readJson<GeneratedQuerySet>(resolve(dir, 'queries.json'));
+  const existingTitleQueries = readJson<GeneratedQuerySet>(resolve(dir, 'title-queries.json'));
 
   try {
     assertVerificationGate(passage.text, existingGold, existingGold.semanticVerification);
     assertVerificationGate(passage.text, existingQueries, existingQueries.semanticVerification);
+    assertVerificationGate(passage.text, existingTitleQueries, existingTitleQueries.semanticVerification);
     console.log(`  ${id}: 이미 현재 계약으로 통과 — 재실행하지 않음`);
     return;
   } catch {
@@ -159,6 +163,7 @@ async function migrate(id: string): Promise<void> {
   mkdirSync(artifactDir, { recursive: true });
   writeJson(resolve(artifactDir, 'gold-candidate-1.json'), existingGold);
   writeJson(resolve(artifactDir, 'query-candidate-1.json'), existingQueries);
+  writeJson(resolve(artifactDir, 'title-query-candidate-1.json'), existingTitleQueries);
   console.log(`  ${id}`);
 
   const goldResult = await verifyWithRepair({
@@ -205,19 +210,99 @@ async function migrate(id: string): Promise<void> {
   const verifiedQueries: GeneratedQuerySet = { ...queryResult.candidate, semanticVerification: queryRecord };
   assertVerificationGate(passage.text, verifiedQueries, verifiedQueries.semanticVerification);
 
+  const titleResult = await verifyWithRepair({
+    kind: 'title-query', paragraphId: id, sourceText: passage.text, initial: existingTitleQueries, artifactDir,
+    verify: (candidate) => verifyQuerySemantic(passage.text, verifiedGold, candidate, id),
+    validate: (candidate) => {
+      GeneratedQuerySetSchema.parse(candidate);
+      validateQueryStructure(verifiedGold, candidate);
+      const problems = validateTitleQuerySet(candidate);
+      if (problems.length > 0) throw new Error(`${id}: title query 구조 오류: ${problems.join(', ')}`);
+    },
+  });
+  const titleRecord = makeVerificationRecord({
+    sourceText: passage.text,
+    candidate: titleResult.candidate,
+    reports: titleResult.reports,
+    repairCycles: titleResult.repairs.length,
+    reportPaths: titleResult.reportPaths,
+  });
+  if (titleRecord.status !== 'passed') {
+    writeJson(resolve(artifactDir, 'summary.json'), { id, gold: goldRecord, query: queryRecord, titleQuery: titleRecord, status: 'blocked' });
+    throw new Error(`${id}: title query semantic verification 실패`);
+  }
+  const verifiedTitleQueries: GeneratedQuerySet = { ...titleResult.candidate, semanticVerification: titleRecord };
+  assertVerificationGate(passage.text, verifiedTitleQueries, verifiedTitleQueries.semanticVerification);
+
   writeJson(resolve(artifactDir, 'summary.json'), {
     id,
     status: 'passed',
     gold: goldRecord,
     query: queryRecord,
+    titleQuery: titleRecord,
     semanticChanges: {
       gold: goldResult.repairs.length > 0,
       query: queryResult.repairs.length > 0,
+      titleQuery: titleResult.repairs.length > 0,
     },
   });
   // 두 자산이 모두 통과한 뒤에만 production을 함께 교체한다.
   writeJson(resolve(dir, 'gold.json'), verifiedGold);
   writeJson(resolve(dir, 'queries.json'), verifiedQueries);
+  writeJson(resolve(dir, 'title-queries.json'), verifiedTitleQueries);
+}
+
+async function migrateTitleOnly(id: string): Promise<void> {
+  const dir = resolve(CONTENT, id);
+  const passage = readJson<Passage>(resolve(dir, 'passage.json'));
+  const gold = readJson<Gold>(resolve(dir, 'gold.json'));
+  const queries = readJson<GeneratedQuerySet>(resolve(dir, 'queries.json'));
+  const existing = readJson<GeneratedQuerySet>(resolve(dir, 'title-queries.json'));
+  assertVerificationGate(passage.text, gold, gold.semanticVerification);
+  assertVerificationGate(passage.text, queries, queries.semanticVerification);
+  try {
+    assertVerificationGate(passage.text, existing, existing.semanticVerification);
+    console.log(`  ${id}: title query도 이미 현재 계약으로 통과 — 재실행하지 않음`);
+    return;
+  } catch {
+    // title query만 아직 미검증이다.
+  }
+
+  const stamp = runId();
+  const artifactDir = resolve(ARTIFACTS, id, stamp);
+  mkdirSync(artifactDir, { recursive: true });
+  writeJson(resolve(artifactDir, 'title-query-candidate-1.json'), existing);
+  console.log(`  ${id} (title query)`);
+  const result = await verifyWithRepair({
+    kind: 'title-query', paragraphId: id, sourceText: passage.text, initial: existing, artifactDir,
+    verify: (candidate) => verifyQuerySemantic(passage.text, gold, candidate, id),
+    validate: (candidate) => {
+      GeneratedQuerySetSchema.parse(candidate);
+      validateQueryStructure(gold, candidate);
+      const problems = validateTitleQuerySet(candidate);
+      if (problems.length > 0) throw new Error(`${id}: title query 구조 오류: ${problems.join(', ')}`);
+    },
+  });
+  const record = makeVerificationRecord({
+    sourceText: passage.text,
+    candidate: result.candidate,
+    reports: result.reports,
+    repairCycles: result.repairs.length,
+    reportPaths: result.reportPaths,
+  });
+  if (record.status !== 'passed') {
+    writeJson(resolve(artifactDir, 'summary.json'), { id, titleQuery: record, status: 'blocked' });
+    throw new Error(`${id}: title query semantic verification 실패`);
+  }
+  const verified: GeneratedQuerySet = { ...result.candidate, semanticVerification: record };
+  assertVerificationGate(passage.text, verified, verified.semanticVerification);
+  writeJson(resolve(artifactDir, 'summary.json'), {
+    id,
+    status: 'passed',
+    titleQuery: record,
+    semanticChanges: { titleQuery: result.repairs.length > 0 },
+  });
+  writeJson(resolve(dir, 'title-queries.json'), verified);
 }
 
 async function main(): Promise<void> {
@@ -226,10 +311,14 @@ async function main(): Promise<void> {
   const idIndex = process.argv.indexOf('--id');
   const only = idIndex === -1 ? undefined : process.argv[idIndex + 1];
   const all = process.argv.includes('--all');
+  const titlesOnly = process.argv.includes('--titles-only');
   if ((only === undefined) === !all) throw new Error('사용법: npm run content:verify -- --id <id> 또는 --all');
   if (only !== undefined && !IDS.includes(only as typeof IDS[number])) throw new Error(`알 수 없는 production 문단: ${only}`);
   const selected: readonly string[] = only === undefined ? IDS : [only];
-  for (const id of selected) await migrate(id);
+  for (const id of selected) {
+    if (titlesOnly) await migrateTitleOnly(id);
+    else await migrate(id);
+  }
 }
 
 main().catch((error: unknown) => {

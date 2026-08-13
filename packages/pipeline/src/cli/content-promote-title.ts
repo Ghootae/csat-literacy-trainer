@@ -9,6 +9,8 @@ import { resolve } from 'node:path';
 
 import { validateTitleQuerySet } from '../llm/title-gen.js';
 import type { GeneratedQuerySet } from '../llm/query-gen.js';
+import type { Gold } from '../gold.js';
+import { assertVerificationGate } from '../semantic-verification.js';
 
 function main(): void {
   const paragraphId = process.argv[2];
@@ -26,7 +28,13 @@ function main(): void {
   const problems = validateTitleQuerySet(set);
   if (problems.length > 0) throw new Error(`타이틀 질의 구조 오류: ${problems.join(', ')}`);
 
-  const out = resolve(process.cwd(), 'content', paragraphId, 'title-queries.json');
+  const contentDir = resolve(process.cwd(), 'content', paragraphId);
+  const passage = JSON.parse(readFileSync(resolve(contentDir, 'passage.json'), 'utf8')) as { text: string };
+  const gold = JSON.parse(readFileSync(resolve(contentDir, 'gold.json'), 'utf8')) as Gold;
+  assertVerificationGate(passage.text, gold, gold.semanticVerification);
+  assertVerificationGate(passage.text, set, set.semanticVerification);
+
+  const out = resolve(contentDir, 'title-queries.json');
   writeFileSync(out, `${JSON.stringify(set, null, 2)}\n`, 'utf8');
   console.log(`${fixturePath} → content/${paragraphId}/title-queries.json`);
 }
