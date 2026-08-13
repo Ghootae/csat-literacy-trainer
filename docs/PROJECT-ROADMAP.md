@@ -4,8 +4,8 @@
 
 - **목적:** 다음 작업자가 프로젝트의 확인된 현재 상태, 운영 결정, 완료 기준과 바로 이어서 할 한 가지를 빠르게 파악하기 위한 canonical 현황판이다. 상세 실험 결과는 `docs/experiments/`에 둔다.
 - **최종 갱신일:** 2026-08-13
-- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, 골드 provenance 구현 HEAD `1f263008f75efdf36522a2236e26084bdd3a0b8f`
-- **현재 최우선 작업:** 4단계 — tracked 원문에서 photosynthesis p1·p2·p6의 정확한 문장 경계를 확정한다.
+- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, 광합성 G1~G4 완성 커밋 `48ff00d`
+- **현재 최우선 작업:** 5단계 — photosynthesis p1부터 p6 완료와 지문 표제 진입까지 전체 지문 E2E를 설계한다.
 - **현재 운영 결정:** 학생 영역 응답은 Anthropic `claude-opus-4-8`, effort `low`, proposition coverage `off`를 사용한다. 타이틀 평가는 기존 `medium/on`, 골드·질의 생성은 `medium`이며 학생 영역은 환경변수로 `medium/on` 롤백이 가능하다.
 - **상태 정의:** `pending`은 시작 전, `in_progress`는 일부 근거나 구현이 있으나 완료 기준 미충족, `blocked`는 외부 결정·자료 없이는 진행 불가, `completed`는 완료 기준과 재현 가능한 증거를 모두 충족한 상태다.
 
@@ -27,16 +27,17 @@ G 단계는 다음처럼 판정한다.
 | 기준 | 현재 결과 | 근거 |
 | --- | --- | --- |
 | 고유 지문 | 7 | `content/`, `.omc/agreement/s1_p2.gold-1.json`, `docs/experiments/student-loop-photosynthesis-2026-07-27.md` |
-| tracked 골드 단락 | 9 | `content/`의 골드 8개와 `.omc/agreement/s1_p2.gold-1.json` |
-| 제품 대상 단락 | 8 | `content/`; curve-road `s1_p2` legacy asset은 제외 |
-| 앱 `content/` 등록 단락 | 8 | `content/`, `packages/app/src/server/content.ts` |
-| G1 골드 생성 | 9/9 | 위 tracked 골드 |
-| G2 사람 검수 | 8/8 제품 단락 | `packages/pipeline/fixtures/query-oracles/`, `packages/pipeline/fixtures/queries-corporate-law-p0.json`, `docs/experiments/student-loop-nietzsche-2026-08-07.md` |
-| G3 질의 완료 | 8/8 제품 단락 | `content/` 아래 각 문단의 tracked `queries.json`과 `title-queries.json` |
-| G4 표준 회귀 완료 | 8/8 제품 단락 | `packages/pipeline/src/cli/assess.ts`, `packages/pipeline/fixtures/regression/nietzsche-p1.json` |
-| G5a 앱 연결 | 8/8 제품 단락 | `content/`, `packages/app/src/server/content.ts`, `packages/app/src/server/index.ts` |
-| G5b 엄격한 tracked E2E 완료 | 0/8 제품 단락 | 대표 단락 학습 루프 E2E는 있으나 전 지문 완주 E2E는 아직 없음: `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/src/server/session.test.ts` |
-| 현재 표준 회귀 | 42프로브, 8단락 | 기존 base 12, new 12, n2 15와 Nietzsche production-query guard 3 |
+| tracked 골드 단락 | 12 | `content/`의 골드 11개와 curve-road `.omc/agreement/s1_p2.gold-1.json` |
+| 제품 대상 단락 | 11 | `content/`의 실제 `gold.json` 보유 디렉터리; `content/passages/` manifest와 curve-road legacy asset은 제외 |
+| 앱 `content/` 등록 단락 | 11 | `content/`, `packages/app/src/server/content.ts` |
+| G1 골드 생성 | 12/12 | 위 tracked 골드 |
+| G2 사람 검수 | 11/11 제품 단락 | `packages/pipeline/fixtures/query-oracles/`, 검수된 생성 질의, `docs/experiments/photosynthesis-full-passage-2026-08-13.md` |
+| G3 질의 완료 | 11/11 제품 단락 | `content/` 아래 각 문단의 tracked `queries.json`과 `title-queries.json` |
+| G4 표준 회귀 완료 | 11/11 제품 단락 | `packages/pipeline/src/cli/assess.ts`, `packages/pipeline/fixtures/regression/` |
+| G5a 앱 연결 | 11/11 제품 단락 | `content/`, `packages/app/src/server/content.ts`, `packages/app/src/server/index.ts` |
+| G5b 엄격한 tracked E2E 완료 | 0/11 제품 단락 | 대표 단락 학습 루프 E2E는 있으나 전 지문 완주 E2E는 아직 없음: `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/src/server/session.test.ts` |
+| 현재 표준 회귀 | 58프로브, 11단락 | 기존 42프로브에 photosynthesis p1 4, p2 6, p6 6 production-query guard 추가 |
+| G1~G4를 모두 충족한 전체 지문 | 1 | `photosynthesis`: `content/passages/photosynthesis.json`, `content/photosynthesis-p1/`~`content/photosynthesis-p6/` |
 | 엄격한 의미의 완성된 전체 지문 | 0 | 모든 단락 G1~G4와 대표 G5b를 함께 충족한 지문이 없음 |
 
 세부 상태:
@@ -44,7 +45,7 @@ G 단계는 다음처럼 판정한다.
 - 표준 회귀 밖의 골드 단락은 curve-road `s1_p2` 하나다.
 - `nietzsche-p1`은 기존 attribution eval-case의 검수된 3프로브를 production 질의셋 guard로 승격했다: `packages/pipeline/fixtures/regression/nietzsche-p1.json`, `docs/experiments/nietzsche-low-off-standard-2026-08-13.log`.
 - curve-road `s1_p2`는 제품으로 승격하지 않고 legacy experiment asset으로 유지한다. G1 생성·합의 실험 증거는 보존하되 G2~G5 대상이나 제품 콘텐츠 수에는 포함하지 않는다: `.omc/agreement/s1_p2.gold-1.json`, `.omc/agreement/s1_p2.gold-2.json`, `.omc/agreement/s1_p2.gold-3.json`, `.omc/agreement/s1_p2.agreement.json`.
-- 광합성 원 지문은 6단락이고 현재 p3·p4·p5만 G1~G4를 충족한다: `docs/experiments/student-loop-photosynthesis-2026-07-27.md`, `content/photosynthesis-p3/`, `content/photosynthesis-p4/`, `content/photosynthesis-p5/`.
+- 광합성 원 지문 6단락은 모두 G1~G4와 G5a를 충족한다. p1·p2·p6은 provenance가 기록된 medium 생성 골드를 사람이 검수했고, 새 16프로브 `low/off` 실행은 16/16 기대 일치·위험 과대통과 0이었다: 커밋 `48ff00d`, `docs/experiments/photosynthesis-full-passage-2026-08-13.md`.
 - `sessions/local/` 실행 기록은 ignored 증거다. 문단별 사용 흔적은 보여 주지만 tracked·재현 가능한 G5b 증거로 세지 않는다.
 - `photosynthesis-p4`의 제출→피드백→수정→타이틀→저장·복원→다음 문단 이동은 고정 평가 fixture를 쓰는 tracked Playwright E2E로 검증한다. 이는 대표 단락 안전망이며 전체 지문 완주 G5b로 세지 않는다: `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/e2e/fixtures/photosynthesis-p4-flow.json`.
 - `packages/app/dist-client/`는 빌드 산출물이므로 자산 수에 포함하지 않는다.
@@ -65,8 +66,9 @@ G 단계는 다음처럼 판정한다.
 실험 설계와 이전 기준선은 `docs/experiments/HANDOFF-low-nocoverage-regression.md`와 `docs/experiments/effort-medium-2026-08-09.md`에 있다. 전자는 실행 전 37프로브 상태의 인계 문서이므로 최종 39프로브 수치의 원시 근거를 대신하지 않는다.
 
 39프로브 수치는 `low/off` 채택 당시의 비교 기준선으로 보존한다. 현재 표준 suite는 2026-08-13
-Nietzsche guard 3개를 추가해 42프로브·8단락이다. 새 3프로브의 production 질의셋 `low/off`
-실행은 기대 일치 3/3, 과대통과 0, 기준 질의셋 불일치 0/3이었다.
+Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프로브·11단락이다.
+새 광합성 16프로브의 production 질의셋 `low/off` 실행은 기대 일치 16/16, 과대통과 0,
+기준 질의셋 불일치 0/16이었다.
 
 ## Decision log
 
@@ -114,22 +116,22 @@ Nietzsche guard 3개를 추가해 42프로브·8단락이다. 새 3프로브의 
 | 상태 | completed |
 | 목표 | 새 골드에 provider/model, effort, 프롬프트·스키마 버전, 생성 시각, source hash, generator fingerprint, 사람 검수 여부와 수정 이력을 보존한다. |
 | 완료 기준 | 새 골드에서 메타데이터가 자동 기록·검증되고 기존 골드는 재생성 없이 `legacy/no-fingerprint`로 식별되며 기존 로더와 앱 호환성이 유지된다. |
-| 현재 결과 | `buildGold()`가 새 골드에 provider/model/effort, prompt/schema version, 생성 시각, 정규화 원문 SHA-256, 생성기 fingerprint, 미검수 상태와 빈 수정 이력을 자동 기록하고 runtime schema로 검증한다. metadata가 없는 기존 content 골드 8개는 모두 정상 `legacy/no-fingerprint`로 식별되며 파일은 수정하지 않았다. 전체 Vitest 294개, build와 대표 앱 E2E가 통과했다. |
+| 현재 결과 | `buildGold()`가 새 골드에 provider/model/effort, prompt/schema version, 생성 시각, 정규화 원문 SHA-256, 생성기 fingerprint, 미검수 상태와 빈 수정 이력을 자동 기록하고 runtime schema로 검증한다. metadata가 없는 기존 content 골드 8개는 정상 `legacy/no-fingerprint`, 새 광합성 골드 3개는 `recorded`·`reviewed`로 식별된다. 전체 Vitest 302개, build와 대표 앱 E2E가 통과했다. |
 | 증거 | 커밋 `1f26300`; `docs/GOLD-GENERATION-METADATA.md`, `packages/pipeline/src/gold-generation-metadata.ts`, `packages/pipeline/src/gold-generation-metadata.test.ts`, `packages/pipeline/src/gold.ts`, `packages/pipeline/src/cli/content-import.ts` |
 | 남은 작업 | 없음. 향후 프롬프트나 의미 스키마 변경 시 version 상수를 함께 올리고, 실제 사람 검수 후에만 review 상태와 수정 이력을 기록한다. |
-| 다음 행동 | 4단계의 photosynthesis p1·p2·p6 원문 문장 경계를 확정한다. |
+| 다음 행동 | 5단계의 p1~p6 전체 지문 E2E 상태 전이를 설계한다. |
 
 ### 4. 첫 번째 전체 지문 완성
 
 | 항목 | 내용 |
 | --- | --- |
-| 상태 | in_progress |
+| 상태 | completed |
 | 목표 | photosynthesis 전체 6단락 중 미완인 p1·p2·p6의 골드, 사람 검수, 영역·타이틀 질의와 회귀 프로브를 만든다. |
 | 완료 기준 | 6단락 모두 G1~G4를 충족하고 앱에서 p1부터 p6까지 일관된 순서로 로드된다. 일반 단락은 핵심 프로브 3~4개, 새 관계 구조·경계는 6~8개를 둔다. |
-| 현재 결과 | 원 지문은 6단락이며 p3·p4·p5만 G1~G4 및 앱 등록 상태다. p1·p2·p6의 제품 fixture는 없다. 현재 앱 `order`는 전체 지문 내 p순서가 아니라 전역 난도 순서다. |
-| 증거 | `docs/experiments/student-loop-photosynthesis-2026-07-27.md`, `content/photosynthesis-p3/`, `content/photosynthesis-p4/`, `content/photosynthesis-p5/`, `packages/pipeline/fixtures/query-oracles/photosynthesis-p3-hand.json`, `packages/pipeline/fixtures/query-oracles/photosynthesis-p4-hand.json`, `packages/pipeline/fixtures/query-oracles/photosynthesis-p5-hand.json` |
-| 남은 작업 | p1·p2·p6의 G1~G4 자산과 지문/단락 계층 및 로딩 순서를 구현해야 한다. |
-| 다음 행동 | tracked 원문에서 photosynthesis p1·p2·p6의 정확한 문장 경계를 확정한다. |
+| 현재 결과 | p1·p2·p6을 원본 세트의 정확한 문장 경계로 생성하고 사람 검수했다. 세 문단 모두 영역·타이틀 질의와 표준 회귀 fixture가 있으며 새 16프로브는 `low/off`에서 16/16 기대 일치, 위험 과대통과 0이었다. tracked manifest와 앱 `order`가 p1~p6의 연속 순서를 고정하고, 전체 6단락이 G1~G4와 G5a를 충족한다. |
+| 증거 | 구현 커밋 `48ff00d`; `content/passages/photosynthesis.json`, `content/photosynthesis-p1/`~`content/photosynthesis-p6/`, `packages/pipeline/fixtures/regression/photosynthesis-p1.json`, `packages/pipeline/fixtures/regression/photosynthesis-p2.json`, `packages/pipeline/fixtures/regression/photosynthesis-p6.json`, `packages/pipeline/src/photosynthesis-completion.test.ts`, `packages/app/src/server/content.test.ts`, `docs/experiments/photosynthesis-full-passage-2026-08-13.md` |
+| 남은 작업 | 없음. p1~p6 전체 완주와 마지막 지문 표제 전환은 5단계 범위다. |
+| 다음 행동 | p1 제출부터 p6 완료와 지문 표제 진입까지 결정론적 E2E 상태 전이 표를 작성한다. |
 
 ### 5. 광합성 전체 지문 E2E
 
@@ -138,10 +140,10 @@ Nietzsche guard 3개를 추가해 42프로브·8단락이다. 새 3프로브의 
 | 상태 | pending |
 | 목표 | p1 제출 → 피드백 → 수정 → 타이틀 → 저장 → 재접속·복원 → 다음 단락 이동 → p6 완료 → 지문 표제 흐름을 검증한다. |
 | 완료 기준 | 전체 흐름의 tracked E2E가 존재하고 세션 저장·복원과 상태 누적, 마지막 단락 이후 지문 표제 진입을 확인하며 API 의존성을 통제한 반복 실행이 가능하다. |
-| 현재 결과 | 단일 문단 제출·복원·다음 문단 UI와 단위 테스트는 있으나 지문 계층, p1~p6 연속 흐름, 지문 표제 단계와 tracked E2E가 없다. |
-| 증거 | `packages/app/src/client/App.tsx`, `packages/app/src/server/index.ts`, `packages/app/src/server/session.test.ts`, `packages/app/src/server/view.test.ts` |
-| 남은 작업 | 4단계 완료 뒤 결정론적 evaluator 대역을 사용한 전체 브라우저 E2E와 지문 표제 전환이 필요하다. |
-| 다음 행동 | 4단계 완료 후 사용할 p1~p6 E2E 시나리오의 상태 전이 표를 작성한다. |
+| 현재 결과 | `content/passages/photosynthesis.json`과 앱 순서로 p1~p6이 연속 로드된다. 단일 p4 제출·복원·p5 이동 E2E는 통과하지만, p1~p6 상태 누적과 마지막 지문 표제 단계는 아직 구현·검증되지 않았다. |
+| 증거 | 커밋 `48ff00d`, `content/passages/photosynthesis.json`, `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/src/server/session.test.ts`, `packages/app/src/server/view.test.ts` |
+| 남은 작업 | 결정론적 evaluator 대역을 사용한 전체 브라우저 E2E와 마지막 지문 표제 전환이 필요하다. |
+| 다음 행동 | p1~p6 E2E 시나리오의 상태 전이 표를 작성한다. |
 
 ### 6. 분야별 전체 지문 확장
 
@@ -150,9 +152,9 @@ Nietzsche guard 3개를 추가해 42프로브·8단락이다. 새 3프로브의 
 | 상태 | pending |
 | 목표 | 광합성(과학), 법인(법학), 후기 묵가(철학), 공시 의무(경제·법), NCM 전지(기술), 니체(인문) 순으로 확장해 전체 지문 5개를 우선 완성한다. |
 | 완료 기준 | 각 지문의 모든 단락이 G1~G4를 충족하고 분야·관계 구조가 편중되지 않으며 대표 지문은 G5b까지 검증된다. |
-| 현재 결과 | 각 분야의 대표 단락은 있으나 모든 단락이 갖춰진 전체 지문은 없다. 원 지문 전체 단락 수를 보존한 공통 manifest도 없다. |
+| 현재 결과 | 광합성은 전체 6단락이 G1~G4를 충족하고 tracked manifest가 있다. 나머지 분야는 대표 단락만 있으며 전체 지문과 manifest가 없다. |
 | 증거 | `content/`, `packages/pipeline/src/cli/content-import.ts`, `docs/PROJECT-BRIEFING.md` |
-| 남은 작업 | 지문 단위 source manifest와 완성 순서, 분야·관계 구조 표본 기준을 정하고 각 지문의 누락 단락을 생산해야 한다. |
+| 남은 작업 | 광합성 외 전체 지문 4개를 더 완성하려면 지문 단위 source manifest와 완성 순서, 분야·관계 구조 표본 기준을 정하고 누락 단락을 생산해야 한다. |
 | 다음 행동 | 6개 후보 각각의 원 지문 ID와 전체 단락 수를 tracked manifest 후보 표로 정리한다. |
 
 ### 7. 실제 학생 파일럿
