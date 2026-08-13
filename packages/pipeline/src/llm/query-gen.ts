@@ -13,6 +13,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod/v4';
 
 import { MODEL, QUERY_GENERATION_EFFORT, getClient, instrumented } from './client.js';
+import type { SemanticVerificationRecord } from '../semantic-verification.js';
 
 /**
  * 동결 버전 태그. 실험 기간 동안 프롬프트·스키마를 고정한다 — 새 관계 유형에 대한
@@ -97,7 +98,9 @@ export const GeneratedQuerySetSchema = z.object({
 
 export type GeneratedQuery = z.infer<typeof GeneratedQuerySchema>;
 export type GeneratedRegion = z.infer<typeof GeneratedRegionSchema>;
-export type GeneratedQuerySet = z.infer<typeof GeneratedQuerySetSchema>;
+export type GeneratedQuerySet = z.infer<typeof GeneratedQuerySetSchema> & {
+  readonly semanticVerification?: SemanticVerificationRecord;
+};
 
 const SYSTEM = `당신은 수능 국어 비문학 문단의 **정독 평가용 보존 질의**를 생성한다.
 학생이 문단을 자유롭게 요약했을 때, 그 요약이 문단의 핵심 의미를 어느 수준까지 보존했는지

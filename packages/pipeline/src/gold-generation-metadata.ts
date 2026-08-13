@@ -29,7 +29,8 @@ export const GoldGenerationMetadataSchema = z.object({
   revisions: z.array(
     z.object({
       at: z.string().datetime(),
-      kind: z.enum(['human_edit', 'regeneration', 'migration']),
+      kind: z.enum(['human_edit', 'ai_repair', 'regeneration', 'migration', 'legacy_correction']),
+      actor: z.enum(['human', 'codex_agent', 'semantic_repairer', 'system']).optional(),
       note: z.string().min(1).optional(),
     }),
   ),

@@ -14,6 +14,7 @@ import { dirname } from 'node:path';
 import { compose, decompose, slotCores, verifyLinks } from './llm/kernel.js';
 import type { Composed, Decomposed, LinkVerdicts, SlotCores } from './llm/schemas.js';
 import { createGoldGenerationMetadata, type GoldGenerationMetadata } from './gold-generation-metadata.js';
+import type { SemanticVerificationRecord } from './semantic-verification.js';
 import {
   type DraftLink,
   type DraftNode,
@@ -44,6 +45,8 @@ export interface Gold {
   readonly log: readonly string[];
   /** 새 생성물에만 기록한다. 없는 기존 골드는 `legacy/no-fingerprint`로 정상 로드한다. */
   readonly generationMetadata?: GoldGenerationMetadata;
+  /** production 편입 전 원문과 독립 대조한 결과. 생성 review 기록과 별개다. */
+  readonly semanticVerification?: SemanticVerificationRecord;
 }
 
 function toDraft(d: Decomposed, c: Composed): { nodes: DraftNode[]; links: DraftLink[] } {

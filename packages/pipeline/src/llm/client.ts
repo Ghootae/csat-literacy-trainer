@@ -38,7 +38,15 @@ export type Op =
   /** 고아 명제에 전용 질의 하나를 붙인다. 명제 단위 커버리지 보강. */
   | 'proposition-query-gen'
   /** 전용 질의가 그 명제를 정확히 묻는지 감사. 검증 세트 확정용, 1회성. */
-  | 'dedicated-query-audit';
+  | 'dedicated-query-audit'
+  /** production 편입 전 원문-골드 의미 대조. 온라인 채점과 독립된 offline 품질 게이트다. */
+  | 'gold-semantic-verify'
+  /** verifier가 찾은 오류만 최소 수정하는 offline repair 단계다. */
+  | 'gold-semantic-repair'
+  /** 원문-질의의 근거·정답·수용 기준을 독립적으로 검증한다. */
+  | 'query-semantic-verify'
+  /** 질의 verifier가 찾은 오류만 최소 수정한다. */
+  | 'query-semantic-repair';
 
 export interface CallMetric {
   readonly ts: string;

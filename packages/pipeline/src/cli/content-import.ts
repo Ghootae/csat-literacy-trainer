@@ -20,6 +20,7 @@ import { resolve } from 'node:path';
 
 import type { Gold } from '../gold.js';
 import type { GeneratedQuery, GeneratedQuerySet, GeneratedRegion } from '../llm/query-gen.js';
+import { assertVerificationGate } from '../semantic-verification.js';
 
 interface OracleQuery {
   readonly id: string;
@@ -245,13 +246,18 @@ function main(): void {
     // 골드의 paragraphId는 실험용 해시다. 콘텐츠 id로 맞춰 두지 않으면 캐시 키와 세션
     // 기록에 해시가 섞여 나중에 어느 문단인지 못 읽는다.
     const outGold = { ...gold, paragraphId: s.id };
+    const sourceText = gold.sentences.map((x) => x.text).join(' ');
+    // 의미 검증을 통과하지 않은 후보는 production content로 편입하지 않는다. paragraphId는
+    // semantic hash 대상이 아니므로 실험 ID를 content ID로 바꿔도 검증은 유지된다.
+    assertVerificationGate(sourceText, outGold, outGold.semanticVerification);
+    assertVerificationGate(sourceText, queries, queries.semanticVerification);
     const passage = {
       paragraphId: s.id,
       title: s.title,
       source: s.source,
       tags: s.tags,
       order: s.order,
-      text: gold.sentences.map((x) => x.text).join(' '),
+      text: sourceText,
       sentences: gold.sentences.map((x) => ({ id: x.id, text: x.text })),
     };
 
