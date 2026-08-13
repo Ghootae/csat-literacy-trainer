@@ -4,8 +4,8 @@
 
 - **목적:** 다음 작업자가 프로젝트의 확인된 현재 상태, 운영 결정, 완료 기준과 바로 이어서 할 한 가지를 빠르게 파악하기 위한 canonical 현황판이다. 상세 실험 결과는 `docs/experiments/`에 둔다.
 - **최종 갱신일:** 2026-08-13
-- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, 대표 단락 E2E 구현 HEAD `0a8115e9469992321b50ace13b410a506cc566e8`
-- **현재 최우선 작업:** 3단계 — 하위 호환 가능한 골드 생성 메타데이터 스키마와 legacy 판별 규칙을 정의한다.
+- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, 골드 provenance 구현 HEAD `1f263008f75efdf36522a2236e26084bdd3a0b8f`
+- **현재 최우선 작업:** 4단계 — tracked 원문에서 photosynthesis p1·p2·p6의 정확한 문장 경계를 확정한다.
 - **현재 운영 결정:** 학생 영역 응답은 Anthropic `claude-opus-4-8`, effort `low`, proposition coverage `off`를 사용한다. 타이틀 평가는 기존 `medium/on`, 골드·질의 생성은 `medium`이며 학생 영역은 환경변수로 `medium/on` 롤백이 가능하다.
 - **상태 정의:** `pending`은 시작 전, `in_progress`는 일부 근거나 구현이 있으나 완료 기준 미충족, `blocked`는 외부 결정·자료 없이는 진행 불가, `completed`는 완료 기준과 재현 가능한 증거를 모두 충족한 상태다.
 
@@ -111,13 +111,13 @@ Nietzsche guard 3개를 추가해 42프로브·8단락이다. 새 3프로브의 
 
 | 항목 | 내용 |
 | --- | --- |
-| 상태 | pending |
+| 상태 | completed |
 | 목표 | 새 골드에 provider/model, effort, 프롬프트·스키마 버전, 생성 시각, source hash, generator fingerprint, 사람 검수 여부와 수정 이력을 보존한다. |
 | 완료 기준 | 새 골드에서 메타데이터가 자동 기록·검증되고 기존 골드는 재생성 없이 `legacy/no-fingerprint`로 식별되며 기존 로더와 앱 호환성이 유지된다. |
-| 현재 결과 | `content/`와 `.omc/agreement/`의 legacy 골드에는 충분한 생성 model/fingerprint 메타데이터가 없다. 생성 질의 일부의 `_meta`만 모델·버전을 보존한다. |
-| 증거 | `packages/pipeline/src/gold.ts`, `packages/pipeline/src/llm/kernel.ts`, `content/`, `.omc/agreement/`, `packages/pipeline/fixtures/generated-queries/` |
-| 남은 작업 | 메타데이터 스키마, 생성 시 자동 기록, legacy 판별, 로더 호환 테스트가 모두 필요하다. 기존 골드는 재생성하지 않는다. |
-| 다음 행동 | 하위 호환 가능한 선택형 `generationMetadata` 스키마와 legacy 판별 규칙을 문서로 먼저 정의한다. |
+| 현재 결과 | `buildGold()`가 새 골드에 provider/model/effort, prompt/schema version, 생성 시각, 정규화 원문 SHA-256, 생성기 fingerprint, 미검수 상태와 빈 수정 이력을 자동 기록하고 runtime schema로 검증한다. metadata가 없는 기존 content 골드 8개는 모두 정상 `legacy/no-fingerprint`로 식별되며 파일은 수정하지 않았다. 전체 Vitest 294개, build와 대표 앱 E2E가 통과했다. |
+| 증거 | 커밋 `1f26300`; `docs/GOLD-GENERATION-METADATA.md`, `packages/pipeline/src/gold-generation-metadata.ts`, `packages/pipeline/src/gold-generation-metadata.test.ts`, `packages/pipeline/src/gold.ts`, `packages/pipeline/src/cli/content-import.ts` |
+| 남은 작업 | 없음. 향후 프롬프트나 의미 스키마 변경 시 version 상수를 함께 올리고, 실제 사람 검수 후에만 review 상태와 수정 이력을 기록한다. |
+| 다음 행동 | 4단계의 photosynthesis p1·p2·p6 원문 문장 경계를 확정한다. |
 
 ### 4. 첫 번째 전체 지문 완성
 
