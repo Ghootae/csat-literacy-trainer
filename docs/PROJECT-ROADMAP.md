@@ -4,8 +4,8 @@
 
 - **목적:** 다음 작업자가 프로젝트의 확인된 현재 상태, 운영 결정, 완료 기준과 바로 이어서 할 한 가지를 빠르게 파악하기 위한 canonical 현황판이다. 상세 실험 결과는 `docs/experiments/`에 둔다.
 - **최종 갱신일:** 2026-08-13
-- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, 1단계 구현 HEAD `0b582b9d87486a5dc196fd2822fdf8cf300baa88`
-- **현재 최우선 작업:** 2단계 — `nietzsche-p1`을 표준 회귀에 편입할 프로브와 기대 판정을 기존 eval-case에서 정리한다.
+- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, Nietzsche 회귀 구현 HEAD `3ff76134d8eddefdf0d1194062af00f216abf4a5`
+- **현재 최우선 작업:** 2단계 — curve-road `s1_p2`를 제품 후보로 승격할지 legacy 실험 자산으로 유지할지 결정한다.
 - **현재 운영 결정:** 학생 영역 응답은 Anthropic `claude-opus-4-8`, effort `low`, proposition coverage `off`를 사용한다. 타이틀 평가는 기존 `medium/on`, 골드·질의 생성은 `medium`이며 학생 영역은 환경변수로 `medium/on` 롤백이 가능하다.
 - **상태 정의:** `pending`은 시작 전, `in_progress`는 일부 근거나 구현이 있으나 완료 기준 미충족, `blocked`는 외부 결정·자료 없이는 진행 불가, `completed`는 완료 기준과 재현 가능한 증거를 모두 충족한 상태다.
 
@@ -32,16 +32,16 @@ G 단계는 다음처럼 판정한다.
 | G1 골드 생성 | 9/9 | 위 tracked 골드 |
 | G2 사람 검수 | 8/9 | `packages/pipeline/fixtures/query-oracles/`, `packages/pipeline/fixtures/queries-corporate-law-p0.json`, `docs/experiments/student-loop-nietzsche-2026-08-07.md` |
 | G3 질의 완료 | 8/9 | `content/` 아래 각 문단의 tracked `queries.json`과 `title-queries.json` |
-| G4 표준 회귀 완료 | 7/9 | `packages/pipeline/src/cli/assess.ts` |
+| G4 표준 회귀 완료 | 8/9 | `packages/pipeline/src/cli/assess.ts`, `packages/pipeline/fixtures/regression/nietzsche-p1.json` |
 | G5a 앱 연결 | 8/9 | `content/`, `packages/app/src/server/content.ts`, `packages/app/src/server/index.ts` |
 | G5b 엄격한 tracked E2E 완료 | 0/9 | 저장·복원 단위 테스트는 있으나 전 지문 완주 tracked E2E가 없음: `packages/app/src/server/session.test.ts`, `packages/app/src/server/view.test.ts` |
-| 현재 표준 회귀 | 39프로브, 7단락 | `packages/pipeline/src/cli/assess.ts`의 base 12, new 12, n2 15 |
+| 현재 표준 회귀 | 42프로브, 8단락 | 기존 base 12, new 12, n2 15와 Nietzsche production-query guard 3 |
 | 엄격한 의미의 완성된 전체 지문 | 0 | 모든 단락 G1~G4와 대표 G5b를 함께 충족한 지문이 없음 |
 
 세부 상태:
 
-- 표준 회귀 밖의 골드 단락은 `nietzsche-p1`과 curve-road `s1_p2`다.
-- `nietzsche-p1`은 제품 콘텐츠이며 개별 eval-case와 학생 루프 기록이 있지만 현재 39프로브에는 없다: `content/nietzsche-p1/`, `packages/pipeline/fixtures/eval-cases/nietzsche-p1-attribution-swap.json`.
+- 표준 회귀 밖의 골드 단락은 curve-road `s1_p2` 하나다.
+- `nietzsche-p1`은 기존 attribution eval-case의 검수된 3프로브를 production 질의셋 guard로 승격했다: `packages/pipeline/fixtures/regression/nietzsche-p1.json`, `docs/experiments/nietzsche-low-off-standard-2026-08-13.log`.
 - curve-road `s1_p2`는 G1만 존재하며 현재 제품 콘텐츠가 아니다: `.omc/agreement/s1_p2.gold-1.json`, `.omc/agreement/s1_p2.gold-2.json`, `.omc/agreement/s1_p2.gold-3.json`, `.omc/agreement/s1_p2.agreement.json`.
 - 광합성 원 지문은 6단락이고 현재 p3·p4·p5만 G1~G4를 충족한다: `docs/experiments/student-loop-photosynthesis-2026-07-27.md`, `content/photosynthesis-p3/`, `content/photosynthesis-p4/`, `content/photosynthesis-p5/`.
 - `sessions/local/` 실행 기록은 ignored 증거다. 문단별 사용 흔적은 보여 주지만 tracked·재현 가능한 G5b 증거로 세지 않는다.
@@ -61,6 +61,10 @@ G 단계는 다음처럼 판정한다.
 - `docs/experiments/medium-nocoverage-n2.log`
 
 실험 설계와 이전 기준선은 `docs/experiments/HANDOFF-low-nocoverage-regression.md`와 `docs/experiments/effort-medium-2026-08-09.md`에 있다. 전자는 실행 전 37프로브 상태의 인계 문서이므로 최종 39프로브 수치의 원시 근거를 대신하지 않는다.
+
+39프로브 수치는 `low/off` 채택 당시의 비교 기준선으로 보존한다. 현재 표준 suite는 2026-08-13
+Nietzsche guard 3개를 추가해 42프로브·8단락이다. 새 3프로브의 production 질의셋 `low/off`
+실행은 기대 일치 3/3, 과대통과 0, 기준 질의셋 불일치 0/3이었다.
 
 ## Decision log
 
@@ -95,10 +99,10 @@ G 단계는 다음처럼 판정한다.
 | 상태 | in_progress |
 | 목표 | `nietzsche-p1`을 표준 회귀에 편입하고 curve-road `s1_p2`의 처리 방침을 결정하며 대표 콘텐츠 tracked E2E를 구축한다. |
 | 완료 기준 | 니체 표준 프로브와 기대 판정이 존재하고, curve-road의 제품 승격 또는 과거 자산 유지 방침이 명시되며, 대표 E2E가 CI 또는 재현 가능한 테스트로 통과한다. |
-| 현재 결과 | 앱에는 검수된 8문단이 등록됐다. 7문단만 39프로브에 포함된다. 니체는 개별 eval-case와 학생 루프만 있고 curve-road는 G1만 있다. 저장·복원 단위 테스트는 있으나 대표 완주 E2E는 없다. |
-| 증거 | `content/`, `packages/pipeline/src/cli/assess.ts`, `content/nietzsche-p1/`, `packages/pipeline/fixtures/eval-cases/nietzsche-p1-attribution-swap.json`, `.omc/agreement/s1_p2.gold-1.json`, `packages/app/src/server/session.test.ts` |
-| 남은 작업 | 니체 표준 fixture, curve-road 결정 기록, 실제 화면 흐름을 고정하는 tracked E2E가 필요하다. |
-| 다음 행동 | `nietzsche-p1`의 기존 eval-case를 표준 회귀 프로브 후보로 정리한다. |
+| 현재 결과 | 앱의 검수된 8문단 모두 표준 회귀에 포함된다. Nietzsche는 귀속 오류 1개와 올바른 최소대조·실제응답 2개를 production 질의셋 guard로 추가했고 `low/off` 실측 3/3을 통과했다. curve-road는 G1만 있고 저장·복원 단위 테스트는 있으나 대표 완주 E2E는 없다. |
+| 증거 | 커밋 `3ff7613`; `packages/pipeline/fixtures/regression/nietzsche-p1.json`, `packages/pipeline/src/regression-fixture.test.ts`, `docs/experiments/nietzsche-low-off-standard-2026-08-13.log`, `.omc/agreement/s1_p2.gold-1.json`, `packages/app/src/server/session.test.ts` |
+| 남은 작업 | curve-road 처리 결정과 실제 화면 흐름을 고정하는 tracked E2E가 필요하다. 따라서 2단계 전체는 아직 완료가 아니다. |
+| 다음 행동 | curve-road `s1_p2`의 제품 승격 여부를 결정한다. |
 
 ### 3. 골드 생성 재현성 보완
 
