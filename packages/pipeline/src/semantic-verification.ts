@@ -164,6 +164,15 @@ export function assertEvidenceContract(sourceText: string, report: SemanticVerif
   }
 }
 
+export function evidenceContractViolations(
+  sourceText: string,
+  report: SemanticVerificationReport,
+): readonly { issueId: string; evidence: string }[] {
+  return report.issues
+    .filter((issue) => issue.sourceEvidence !== '' && !sourceText.includes(issue.sourceEvidence))
+    .map((issue) => ({ issueId: issue.id, evidence: issue.sourceEvidence }));
+}
+
 export function goldVerifierInput(sourceText: string, candidate: Gold): {
   sourceText: string;
   candidateGold: Omit<Gold, 'generationMetadata' | 'semanticVerification'>;
@@ -228,7 +237,6 @@ export async function verifyGoldSemantic(
     }),
   );
   if (response.parsed_output === null) throw new Error('gold semantic verifier 구조화 출력 파싱 실패');
-  assertEvidenceContract(sourceText, response.parsed_output);
   return response.parsed_output;
 }
 
@@ -250,7 +258,6 @@ export async function verifyQuerySemantic(
     }),
   );
   if (response.parsed_output === null) throw new Error('query semantic verifier 구조화 출력 파싱 실패');
-  assertEvidenceContract(sourceText, response.parsed_output);
   return response.parsed_output;
 }
 

@@ -17,6 +17,7 @@ import { GeneratedQuerySetSchema, type GeneratedQuerySet } from '../llm/query-ge
 import {
   applyRepairPlan,
   assertVerificationGate,
+  evidenceContractViolations,
   makeVerificationRecord,
   planSemanticRepair,
   reportBlockers,
@@ -82,6 +83,14 @@ async function verifyWithRepair<T extends Gold | GeneratedQuerySet>(args: {
     reports.push(report);
     const relative = `packages/pipeline/fixtures/semantic-verification/${args.paragraphId}/${args.artifactDir.split('/').at(-1)}/${args.kind}-pass-${pass}.json`;
     writeJson(resolve(ROOT, relative), report);
+    const evidencePath = resolve(args.artifactDir, `${args.kind}-pass-${pass}-evidence.json`);
+    const violations = evidenceContractViolations(args.sourceText, report);
+    writeJson(evidencePath, {
+      compliant: violations.length === 0,
+      issueCount: report.issues.length,
+      violationCount: violations.length,
+      violations,
+    });
     reportPaths.push(relative);
     const blockers = reportBlockers(report);
     console.log(`    ${args.kind} pass ${pass}: blocker ${blockers.length}, warning ${report.issues.length - blockers.length}`);

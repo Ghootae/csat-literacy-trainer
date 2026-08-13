@@ -9,6 +9,7 @@ import {
   applyRepairPlan,
   assertEvidenceContract,
   assertVerificationGate,
+  evidenceContractViolations,
   goldVerifierInput,
   makeVerificationRecord,
   queryVerifierInput,
@@ -59,6 +60,10 @@ describe('독립 semantic verification 계약', () => {
       summary: '',
       issues: [{ id: 'i1', severity: 'error', category: 'unsupported_content', goldPath: '/nodes/0', sourceSentenceIds: [], sourceEvidence: '원문을 바꾼 근거', problem: 'x', suggestedAction: 'remove' }],
     })).toThrow(/연속 부분 문자열/);
+    expect(evidenceContractViolations('원문의 정확한 근거', {
+      summary: '',
+      issues: [{ id: 'i1', severity: 'warning', category: 'title_scope', goldPath: '/nodes/0', sourceSentenceIds: [], sourceEvidence: '바꾼 근거', problem: 'x', suggestedAction: 'narrow' }],
+    })).toEqual([{ issueId: 'i1', evidence: '바꾼 근거' }]);
   });
 
   it('repair는 지정된 JSON Pointer만 결정론적으로 바꾼다', () => {
