@@ -52,14 +52,19 @@ interface Probe {
   readonly id: string;
   readonly text: string;
   readonly expectFocal: RegionSemanticVerdict;
+  /** 기존 eval-case에서 승격한 프로브의 원본 id. 실행에는 쓰지 않고 추적성만 제공한다. */
+  readonly sourceCaseId?: string;
   /** 이 프로브만 다른 영역을 focal로 본다. 같은 문단 안 대조군(선형 인과) 검사용. */
   readonly focal?: string;
 }
 interface Config {
   readonly name: string;
   readonly gold: string;
-  readonly oracle: string;
-  readonly genPrefix: string;
+  /** 기존 생성기 비교 회귀: 손 오라클과 생성 질의 3종을 비교한다. */
+  readonly oracle?: string;
+  readonly genPrefix?: string;
+  /** 검수된 production 질의셋 하나를 직접 고정하는 guard 회귀. */
+  readonly querySet?: string;
   readonly focal: string;
   readonly probes: readonly Probe[];
 }
@@ -104,6 +109,7 @@ const CONFIGS: readonly Config[] = [
       { id: 'Bd1(경계)', expectFocal: 'topic_only', text: '하나의 실과 여러 명, 흰 말과 검은 말' },
     ],
   },
+  readJson<Config>(resolve(process.cwd(), 'packages/pipeline/fixtures/regression/nietzsche-p1.json')),
 ];
 
 // ── 미사용 지문 (새 관계 구조) — v0 그대로 적용 ──
@@ -381,26 +387,52 @@ async function main(): Promise<void> {
   for (const cfg of ACTIVE) {
     console.log(`${'━'.repeat(76)}\n${cfg.name}  (focal=${cfg.focal})`);
     const gold = readJson<Gold>(resolve(process.cwd(), cfg.gold));
-    const oracleFx = readJson<OracleFixture>(cfg.oracle.startsWith('packages/') ? resolve(process.cwd(), cfg.oracle) : resolve(ORACLE_DIR, cfg.oracle));
     const paraText = paragraphText(gold);
     const propShort = new Map(gold.propositions.map((p) => [p.id, p.shortForm]));
 
-    const oracle = oracleEvalSet(oracleFx);
-    oracle.functionalPolicy = rebucketToOracle(oracle, oracle.shapes);
-    const regionMeta: AssessRegionMeta[] = oracle.shapes.map((s) => ({ id: s.key, label: s.label, propositionIds: s.propositionIds }));
-
-    const sets: EvalSet[] = [oracle];
-    const genInput = buildGeneratorInput(gold);
-    for (let i = 1; i <= 3; i++) {
-      const p = genFixturePath(cfg.genPrefix, i);
-      let fx: GeneratedQuerySet;
-      if (existsSync(p)) fx = readJson<GeneratedQuerySet>(p);
-      else {
-        console.log(`  생성 run${i} (fixture 없음, ${GENERATOR_VERSION} 생성)…`);
-        fx = await generateQuerySet(genInput);
-        writeFileSync(p, JSON.stringify({ _meta: { kind: 'generated', run: i, generatorVersion: GENERATOR_VERSION, schemaVersion: EVAL_SCHEMA_VERSION, model: MODEL, generatedAt: new Date().toISOString(), note: '실험용' }, ...fx }, null, 2), 'utf8');
+    let sets: EvalSet[];
+    let regionMeta: AssessRegionMeta[];
+    if (cfg.querySet !== undefined) {
+      const production = generatedEvalSet(
+        'production',
+        readJson<GeneratedQuerySet>(resolve(process.cwd(), cfg.querySet)),
+      );
+      sets = [production];
+      regionMeta = production.shapes.map((s) => ({
+        id: s.key,
+        label: s.label,
+        propositionIds: s.propositionIds,
+      }));
+    } else {
+      if (cfg.oracle === undefined || cfg.genPrefix === undefined) {
+        throw new Error(`${cfg.name}: oracle/genPrefix 또는 querySet이 필요하다`);
       }
-      sets.push(loadSet(`gen${i}`, fx, oracle.shapes));
+      const oracleFx = readJson<OracleFixture>(
+        cfg.oracle.startsWith('packages/')
+          ? resolve(process.cwd(), cfg.oracle)
+          : resolve(ORACLE_DIR, cfg.oracle),
+      );
+      const oracle = oracleEvalSet(oracleFx);
+      oracle.functionalPolicy = rebucketToOracle(oracle, oracle.shapes);
+      regionMeta = oracle.shapes.map((s) => ({
+        id: s.key,
+        label: s.label,
+        propositionIds: s.propositionIds,
+      }));
+
+      sets = [oracle];
+      const genInput = buildGeneratorInput(gold);
+      for (let i = 1; i <= 3; i++) {
+        const p = genFixturePath(cfg.genPrefix, i);
+        let fx: GeneratedQuerySet;
+        if (existsSync(p)) fx = readJson<GeneratedQuerySet>(p);
+        else {
+          console.log(`  생성 run${i} (fixture 없음, ${GENERATOR_VERSION} 생성)…`);
+          fx = await generateQuerySet(genInput);
+          writeFileSync(p, JSON.stringify({ _meta: { kind: 'generated', run: i, generatorVersion: GENERATOR_VERSION, schemaVersion: EVAL_SCHEMA_VERSION, model: MODEL, generatedAt: new Date().toISOString(), note: '실험용' }, ...fx }, null, 2), 'utf8');
+        }
+        sets.push(loadSet(`gen${i}`, fx, oracle.shapes));
+      }
     }
 
     for (const probe of cfg.probes) {
@@ -414,13 +446,13 @@ async function main(): Promise<void> {
       const under: RegionSemanticVerdict[] = ['topic_only', 'contradicted', 'region_not_evidenced', 'partial_relation_preservation'];
       const oc = under.includes(probe.expectFocal) && verdicts.some((v) => v === 'relation_preserved');
       if (oc) overcredit++;
-      // 오라클이 기대와 어긋나면 손 오라클 자체를 재검토해야 한다 (생성기 문제와 구분).
-      const oracleMismatch = verdicts[0] !== probe.expectFocal;
-      if (oracleMismatch) oracleMiss++;
+      // 첫 기준 질의셋이 기대와 어긋나면 fixture 자체를 재검토해야 한다 (다른 질의셋 문제와 구분).
+      const canonicalMismatch = verdicts[0] !== probe.expectFocal;
+      if (canonicalMismatch) oracleMiss++;
       const probeFocal = probe.focal ?? cfg.focal;
       console.log(`\n  [${probe.id}] 기대 focal(${probeFocal})=${VSHORT[probe.expectFocal]}`);
-      console.log(`     focal 판정 (오라클|gen1|gen2|gen3): ${verdicts.map((v) => VSHORT[v]).join(' | ')}  ${unanimous ? '✓안정' : '⚠분해변이'}${oracleMismatch ? '  ⚠오라클≠기대' : ''}${oc ? '  ✗과대평가!' : ''}`);
-      // 피드백 예시: 오라클 세트의 focal 영역
+      console.log(`     focal 판정 (${sets.map((s) => s.name).join('|')}): ${verdicts.map((v) => VSHORT[v]).join(' | ')}  ${unanimous ? '✓안정' : '⚠질의셋변이'}${canonicalMismatch ? '  ⚠기준질의≠기대' : ''}${oc ? '  ✗과대평가!' : ''}`);
+      // 피드백 예시: 첫 번째(기준) 질의셋의 focal 영역
       const focalAssess = results[0]!.assessments.find((a) => a.regionId === probeFocal);
       if (focalAssess && ['관계보존', '주제만', '관계오류', '암묵적'].some((k) => probe.id.includes(k))) {
         feedbackSamples.push(`[${cfg.name} · ${probe.id}] "${probe.text.split('\n').slice(0, 2).join(' / ')}…"\n    판정: ${VSHORT[focalAssess.verdict]}\n    피드백: ${focalAssess.feedback}\n    명제 evidence: ${focalAssess.propositionEvidence.map((e) => `${e.propositionId}:${e.state}`).join(' ')}`);
@@ -431,8 +463,8 @@ async function main(): Promise<void> {
   const total = ACTIVE.reduce((n, c) => n + c.probes.length, 0);
   console.log(`\n${'═'.repeat(76)}\n요약`);
   console.log(`  과대평가 오류(관계보존 미만 기대 → 관계보존 판정): ${overcredit}건`);
-  console.log(`  손 오라클이 기대와 어긋난 프로브: ${oracleMiss}/${total} (오라클 재검토 대상)`);
-  console.log(`  분해 4종 간 focal 판정 불안정: ${unstable}/${total} 프로브`);
+  console.log(`  기준 질의셋이 기대와 어긋난 프로브: ${oracleMiss}/${total} (fixture 재검토 대상)`);
+  console.log(`  질의셋 간 focal 판정 불안정: ${unstable}/${total} 프로브`);
   if (SUITE_NAME === 'n2') {
     console.log(`\n  N2 판정 기준:`);
     console.log(`    - '순환중간생략'·'한쪽공간만'에서 생성기가 관계보존 → **위험 실증** (v0 프롬프트 수정 필요)`);
