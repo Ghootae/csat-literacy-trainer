@@ -4,8 +4,8 @@
 
 - **목적:** 다음 작업자가 프로젝트의 확인된 현재 상태, 운영 결정, 완료 기준과 바로 이어서 할 한 가지를 빠르게 파악하기 위한 canonical 현황판이다. 상세 실험 결과는 `docs/experiments/`에 둔다.
 - **최종 갱신일:** 2026-08-13
-- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, Nietzsche 회귀 구현 HEAD `3ff76134d8eddefdf0d1194062af00f216abf4a5`
-- **현재 최우선 작업:** 2단계 — 대표 콘텐츠의 저장·복원·수정·이동·완주 흐름을 검증하는 tracked E2E를 구축한다.
+- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, 대표 단락 E2E 구현 HEAD `0a8115e9469992321b50ace13b410a506cc566e8`
+- **현재 최우선 작업:** 3단계 — 하위 호환 가능한 골드 생성 메타데이터 스키마와 legacy 판별 규칙을 정의한다.
 - **현재 운영 결정:** 학생 영역 응답은 Anthropic `claude-opus-4-8`, effort `low`, proposition coverage `off`를 사용한다. 타이틀 평가는 기존 `medium/on`, 골드·질의 생성은 `medium`이며 학생 영역은 환경변수로 `medium/on` 롤백이 가능하다.
 - **상태 정의:** `pending`은 시작 전, `in_progress`는 일부 근거나 구현이 있으나 완료 기준 미충족, `blocked`는 외부 결정·자료 없이는 진행 불가, `completed`는 완료 기준과 재현 가능한 증거를 모두 충족한 상태다.
 
@@ -28,13 +28,14 @@ G 단계는 다음처럼 판정한다.
 | --- | --- | --- |
 | 고유 지문 | 7 | `content/`, `.omc/agreement/s1_p2.gold-1.json`, `docs/experiments/student-loop-photosynthesis-2026-07-27.md` |
 | tracked 골드 단락 | 9 | `content/`의 골드 8개와 `.omc/agreement/s1_p2.gold-1.json` |
+| 제품 대상 단락 | 8 | `content/`; curve-road `s1_p2` legacy asset은 제외 |
 | 앱 `content/` 등록 단락 | 8 | `content/`, `packages/app/src/server/content.ts` |
 | G1 골드 생성 | 9/9 | 위 tracked 골드 |
-| G2 사람 검수 | 8/9 | `packages/pipeline/fixtures/query-oracles/`, `packages/pipeline/fixtures/queries-corporate-law-p0.json`, `docs/experiments/student-loop-nietzsche-2026-08-07.md` |
-| G3 질의 완료 | 8/9 | `content/` 아래 각 문단의 tracked `queries.json`과 `title-queries.json` |
-| G4 표준 회귀 완료 | 8/9 | `packages/pipeline/src/cli/assess.ts`, `packages/pipeline/fixtures/regression/nietzsche-p1.json` |
-| G5a 앱 연결 | 8/9 | `content/`, `packages/app/src/server/content.ts`, `packages/app/src/server/index.ts` |
-| G5b 엄격한 tracked E2E 완료 | 0/9 | 저장·복원 단위 테스트는 있으나 전 지문 완주 tracked E2E가 없음: `packages/app/src/server/session.test.ts`, `packages/app/src/server/view.test.ts` |
+| G2 사람 검수 | 8/8 제품 단락 | `packages/pipeline/fixtures/query-oracles/`, `packages/pipeline/fixtures/queries-corporate-law-p0.json`, `docs/experiments/student-loop-nietzsche-2026-08-07.md` |
+| G3 질의 완료 | 8/8 제품 단락 | `content/` 아래 각 문단의 tracked `queries.json`과 `title-queries.json` |
+| G4 표준 회귀 완료 | 8/8 제품 단락 | `packages/pipeline/src/cli/assess.ts`, `packages/pipeline/fixtures/regression/nietzsche-p1.json` |
+| G5a 앱 연결 | 8/8 제품 단락 | `content/`, `packages/app/src/server/content.ts`, `packages/app/src/server/index.ts` |
+| G5b 엄격한 tracked E2E 완료 | 0/8 제품 단락 | 대표 단락 학습 루프 E2E는 있으나 전 지문 완주 E2E는 아직 없음: `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/src/server/session.test.ts` |
 | 현재 표준 회귀 | 42프로브, 8단락 | 기존 base 12, new 12, n2 15와 Nietzsche production-query guard 3 |
 | 엄격한 의미의 완성된 전체 지문 | 0 | 모든 단락 G1~G4와 대표 G5b를 함께 충족한 지문이 없음 |
 
@@ -45,6 +46,7 @@ G 단계는 다음처럼 판정한다.
 - curve-road `s1_p2`는 제품으로 승격하지 않고 legacy experiment asset으로 유지한다. G1 생성·합의 실험 증거는 보존하되 G2~G5 대상이나 제품 콘텐츠 수에는 포함하지 않는다: `.omc/agreement/s1_p2.gold-1.json`, `.omc/agreement/s1_p2.gold-2.json`, `.omc/agreement/s1_p2.gold-3.json`, `.omc/agreement/s1_p2.agreement.json`.
 - 광합성 원 지문은 6단락이고 현재 p3·p4·p5만 G1~G4를 충족한다: `docs/experiments/student-loop-photosynthesis-2026-07-27.md`, `content/photosynthesis-p3/`, `content/photosynthesis-p4/`, `content/photosynthesis-p5/`.
 - `sessions/local/` 실행 기록은 ignored 증거다. 문단별 사용 흔적은 보여 주지만 tracked·재현 가능한 G5b 증거로 세지 않는다.
+- `photosynthesis-p4`의 제출→피드백→수정→타이틀→저장·복원→다음 문단 이동은 고정 평가 fixture를 쓰는 tracked Playwright E2E로 검증한다. 이는 대표 단락 안전망이며 전체 지문 완주 G5b로 세지 않는다: `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/e2e/fixtures/photosynthesis-p4-flow.json`.
 - `packages/app/dist-client/`는 빌드 산출물이므로 자산 수에 포함하지 않는다.
 
 ### 평가 기준선
@@ -97,13 +99,13 @@ Nietzsche guard 3개를 추가해 42프로브·8단락이다. 새 3프로브의 
 
 | 항목 | 내용 |
 | --- | --- |
-| 상태 | in_progress |
+| 상태 | completed |
 | 목표 | `nietzsche-p1`을 표준 회귀에 편입하고 curve-road `s1_p2`의 처리 방침을 결정하며 대표 콘텐츠 tracked E2E를 구축한다. |
 | 완료 기준 | 니체 표준 프로브와 기대 판정이 존재하고, curve-road의 제품 승격 또는 과거 자산 유지 방침이 명시되며, 대표 E2E가 CI 또는 재현 가능한 테스트로 통과한다. |
-| 현재 결과 | 앱의 검수된 8문단 모두 표준 회귀에 포함된다. Nietzsche는 귀속 오류 1개와 올바른 최소대조·실제응답 2개를 production 질의셋 guard로 추가했고 `low/off` 실측 3/3을 통과했다. curve-road `s1_p2`는 제품으로 승격하지 않고 legacy experiment asset으로 유지하기로 결정했다. 저장·복원 단위 테스트는 있으나 대표 완주 E2E는 없다. |
-| 증거 | 커밋 `3ff7613`; `packages/pipeline/fixtures/regression/nietzsche-p1.json`, `packages/pipeline/src/regression-fixture.test.ts`, `docs/experiments/nietzsche-low-off-standard-2026-08-13.log`, `.omc/agreement/s1_p2.gold-1.json`, `packages/app/src/server/session.test.ts` |
-| 남은 작업 | 실제 화면 흐름을 고정하는 tracked E2E가 필요하다. 따라서 2단계 전체는 아직 완료가 아니다. |
-| 다음 행동 | 대표 콘텐츠 한 건의 저장·복원·수정·다음 단락 이동을 재현하는 tracked E2E를 추가한다. |
+| 현재 결과 | 앱의 검수된 8문단 모두 표준 회귀에 포함된다. Nietzsche guard는 `low/off` 실측 3/3을 통과했다. curve-road `s1_p2`는 legacy experiment asset으로 유지한다. `photosynthesis-p4`의 topic-only 응답→피드백→수정→관계보존→타이틀 보상→두 차례 복원→다음 문단 이동을 고정 evaluator와 임시 세션 저장소로 재현하는 Playwright E2E가 통과했다. |
+| 증거 | 커밋 `3ff7613`, `7cf6d75`, `0a8115e`; `packages/pipeline/fixtures/regression/nietzsche-p1.json`, `docs/experiments/nietzsche-low-off-standard-2026-08-13.log`, `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/e2e/fixtures/photosynthesis-p4-flow.json`, `playwright.config.ts` |
+| 남은 작업 | 없음. 전체 지문 완주 E2E는 별도 5단계의 완료 기준이다. |
+| 다음 행동 | 3단계의 선택형 골드 생성 메타데이터 스키마와 legacy 판별 규칙을 문서로 정의한다. |
 
 ### 3. 골드 생성 재현성 보완
 
