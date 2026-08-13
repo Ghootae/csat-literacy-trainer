@@ -4,9 +4,9 @@
 
 - **목적:** 다음 작업자가 프로젝트의 확인된 현재 상태, 운영 결정, 완료 기준과 바로 이어서 할 한 가지를 빠르게 파악하기 위한 canonical 현황판이다. 상세 실험 결과는 `docs/experiments/`에 둔다.
 - **최종 갱신일:** 2026-08-13
-- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, HEAD `6d5d54bb4fbb50573ff285d1d511933a6b8d4087`
-- **현재 최우선 작업:** 1단계 — 학생 영역 평가 기본값을 `low/off`로 바꾸되 골드·질의 생성과 타이틀 평가 설정을 분리하고 `medium/on` 롤백을 코드와 결정론적 테스트로 고정한다.
-- **현재 운영 결정:** 학생 영역 응답은 Anthropic `claude-opus-4-8`, effort `low`, proposition coverage `off`를 채택한다. 단, 현재 HEAD의 무설정 런타임은 아직 `medium/on`이므로 정책과 구현이 일치하지 않는다.
+- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, 1단계 구현 HEAD `0b582b9d87486a5dc196fd2822fdf8cf300baa88`
+- **현재 최우선 작업:** 2단계 — `nietzsche-p1`을 표준 회귀에 편입할 프로브와 기대 판정을 기존 eval-case에서 정리한다.
+- **현재 운영 결정:** 학생 영역 응답은 Anthropic `claude-opus-4-8`, effort `low`, proposition coverage `off`를 사용한다. 타이틀 평가는 기존 `medium/on`, 골드·질의 생성은 `medium`이며 학생 영역은 환경변수로 `medium/on` 롤백이 가능하다.
 - **상태 정의:** `pending`은 시작 전, `in_progress`는 일부 근거나 구현이 있으나 완료 기준 미충족, `blocked`는 외부 결정·자료 없이는 진행 불가, `completed`는 완료 기준과 재현 가능한 증거를 모두 충족한 상태다.
 
 퍼센트 진행률은 사용하지 않는다. “계획”, “정책 결정”, “현재 HEAD의 구현 결과”를 서로 대체해서 읽지 않는다.
@@ -66,11 +66,11 @@ G 단계는 다음처럼 판정한다.
 
 | 날짜 | 결정 | 현재 HEAD와 증거 |
 | --- | --- | --- |
-| 2026-08-13 | 학생 영역 응답 평가 provider는 Anthropic, model은 `claude-opus-4-8`, effort는 `low`, proposition coverage는 `off`로 채택한다. `medium/on` 롤백 경로를 유지한다. | 모델과 환경변수 경로는 `packages/pipeline/src/llm/client.ts`, `packages/pipeline/src/llm/query-eval.ts`. 현재 무설정 기본값은 여전히 `medium/on`이므로 구현은 미완료다. 회귀 원시는 위 untracked 로그 6개다. |
-| 2026-08-13 | 골드·질의 생성은 Anthropic `claude-opus-4-8`, effort `medium`으로 오프라인 품질을 우선하고 자동 생성 뒤 사람이 검수한다. | `packages/pipeline/src/llm/client.ts`의 provider/model은 일치한다. 그러나 `packages/pipeline/src/llm/kernel.ts`, `query-gen.ts`, `title-gen.ts`에는 `high` 등 혼합 effort가 남아 있어 결정과 코드가 아직 일치하지 않는다. 기존 골드는 생성 fingerprint가 없는 legacy 자산이다. |
-| 2026-08-13 | 타이틀 평가는 이번 학생 영역 모델 변경 범위 밖이며 기존 설정을 유지한다. 별도 검증 없이 low로 내리지 않는다. | 타이틀 제출도 현재 `packages/app/src/server/index.ts`에서 공용 `evaluateResponse`를 호출하고 `EVAL_EFFORT`를 공유한다. 학생 영역 기본값과 분리하는 코드 경계가 필요하다. 타이틀 근거는 `docs/experiments/title-compression-2026-08-10.md`다. |
+| 2026-08-13 | 학생 영역 응답 평가 provider는 Anthropic, model은 `claude-opus-4-8`, effort는 `low`, proposition coverage는 `off`로 채택한다. `medium/on` 롤백 경로를 유지한다. | `0b582b9`: 무설정 기본값과 롤백, prompt/schema fingerprint 분리를 구현·검증했다. 결과 요약은 `docs/experiments/eval-low-off-decision-2026-08-13.md`, 원시는 위 untracked 로그 6개다. |
+| 2026-08-13 | 골드·질의 생성은 Anthropic `claude-opus-4-8`, effort `medium`으로 오프라인 품질을 우선하고 자동 생성 뒤 사람이 검수한다. | `0b582b9`: 골드 분해·합성·재생성과 영역·타이틀 질의 생성을 공통 `medium` 상수로 고정했다. 기존 골드는 생성 fingerprint가 없는 legacy 자산이다. |
+| 2026-08-13 | 타이틀 평가는 이번 학생 영역 모델 변경 범위 밖이며 기존 설정을 유지한다. 별도 검증 없이 low로 내리지 않는다. | `0b582b9`: 앱과 title probe가 명시적 `TITLE_EVAL_CONFIG`(`medium/on`)를 전달하며 학생 영역 환경변수와 분리된다. 타이틀 근거는 `docs/experiments/title-compression-2026-08-10.md`다. |
 | 2026-08-13 | Luna, Terra, Gemini는 운영 응답 평가기로 채택하지 않고 다른 worktree의 코드를 현재 브랜치에 병합하지 않는다. | 현재 worktree에는 세 모델의 탈락 성능을 설명하는 tracked 실험 문서나 로그가 없다. 따라서 상세 탈락 근거 경로는 확인되지 않은 상태이며 이 문서가 결과를 추정하지 않는다. 해당 근거를 보존하려면 원본 결과를 별도 검증 후 현재 저장소의 `docs/experiments/`에 tracked 문서로 옮겨야 한다. |
-| 2026-08-09 | 기존 학생 평가 기본 effort를 high에서 medium으로 낮췄다. | `docs/experiments/effort-medium-2026-08-09.md`, 관련 코드 `packages/pipeline/src/llm/query-eval.ts`. 2026-08-13의 low/off 결정이 이를 대체하지만 아직 코드 기본값에는 반영되지 않았다. |
+| 2026-08-09 | 기존 학생 평가 기본 effort를 high에서 medium으로 낮췄다. | `docs/experiments/effort-medium-2026-08-09.md`. 이 결정은 2026-08-13의 low/off 결정으로 대체됐고 `0b582b9`에서 코드 기본값에도 반영됐다. |
 
 과거 결정을 바꿀 때 위 행을 삭제하지 않고 새 행에 이유와 증거를 추가한다.
 
@@ -80,13 +80,13 @@ G 단계는 다음처럼 판정한다.
 
 | 항목 | 내용 |
 | --- | --- |
-| 상태 | in_progress |
+| 상태 | completed |
 | 목표 | 학생 영역 평가 기본값을 `low/off`로 확정하고, 골드·질의 생성은 `medium`, 타이틀 평가는 기존 설정을 유지하며 명시적 `medium/on` 롤백을 제공한다. |
 | 완료 기준 | 기본값과 호출 경로 분리가 코드·테스트로 증명되고 설정 fingerprint가 분리된다. typecheck/test/build가 통과하며 결정 문서·커밋과 39프로브 근거가 tracked 상태로 연결된다. |
-| 현재 결과 | `EVAL_EFFORT`와 `EVAL_PROPOSITION_COVERAGE`가 fingerprint에 포함되고 명시적 `low/off`, `medium/on` 실행은 가능하다. 하지만 무설정 기본값은 `medium/on`이며 타이틀도 공용 effort를 사용한다. 골드·질의 생성 effort도 코드에서 혼합되어 있다. 정책만 결정됐고 기본값 변경 커밋은 없다. |
-| 증거 | `packages/pipeline/src/llm/query-eval.ts`, `packages/pipeline/src/eval-cache-key.ts`, `packages/app/src/server/index.ts`, `docs/experiments/HANDOFF-low-nocoverage-regression.md`, 위 untracked 로그 6개 |
-| 남은 작업 | 학생 영역·타이틀·오프라인 생성 설정을 분리하고 기본값·롤백·fingerprint 테스트를 추가한 뒤 검증 및 독립 커밋을 남겨야 한다. |
-| 다음 행동 | 학생 영역 평가 설정을 명시적으로 받는 좁은 config 경계와 그 결정론적 기본값 테스트를 먼저 설계한다. |
+| 현재 결과 | 무설정 학생 영역은 `low/off`, 환경변수 롤백은 `medium/on`이다. 타이틀 평가는 명시적 `medium/on`, 골드·영역·타이틀 질의 생성은 `medium`이다. resolved 설정과 prompt/schema가 fingerprint를 분리한다. typecheck, 284개 전체 Vitest, build가 통과했다. |
+| 증거 | 구현 커밋 `0b582b9`; `packages/pipeline/src/llm/query-eval.ts`, `packages/pipeline/src/llm/query-eval-config.test.ts`, `packages/pipeline/src/llm/operation-config.test.ts`, `packages/app/src/boundary.test.ts`, `docs/experiments/eval-low-off-decision-2026-08-13.md` |
+| 남은 작업 | 없음. 실제 학생 사용에서 운영 결정을 다시 여는 조건은 별도 파일럿 단계에서 정한다. |
+| 다음 행동 | 2단계의 `nietzsche-p1` 표준 회귀 편입으로 이동한다. |
 
 ### 2. 기존 8개 검수 단락 마무리
 
@@ -187,7 +187,7 @@ G 단계는 다음처럼 판정한다.
 
 ## 알려진 증거 공백
 
-- 최종 39프로브 `low/off`·`medium/off` 비교는 현재 untracked 로그에만 있다. 운영 기본값 변경 전에 핵심 결과를 tracked 결정 문서로 동결해야 한다.
+- 최종 39프로브 `low/off`·`medium/off` 핵심 결과는 `docs/experiments/eval-low-off-decision-2026-08-13.md`에 tracked 상태로 동결됐다. 원시 출력 여섯 파일은 계속 untracked 증거다.
 - Luna·Terra·Gemini의 탈락 근거는 현재 HEAD에 없다. 다른 worktree의 내용을 이 문서에서 추정하거나 혼합하지 않았다.
 - legacy 골드는 생성 model·effort·prompt/schema version·source hash·fingerprint·사람 검수 이력을 한 레코드로 보존하지 않는다.
 - ignored `sessions/local/`은 사용 흔적이지 반복 가능한 G5b 테스트가 아니다.
