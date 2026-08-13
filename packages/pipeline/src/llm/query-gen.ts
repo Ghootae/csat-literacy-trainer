@@ -12,7 +12,7 @@
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod/v4';
 
-import { MODEL, getClient, instrumented } from './client.js';
+import { MODEL, QUERY_GENERATION_EFFORT, getClient, instrumented } from './client.js';
 
 /**
  * 동결 버전 태그. 실험 기간 동안 프롬프트·스키마를 고정한다 — 새 관계 유형에 대한
@@ -168,12 +168,12 @@ export async function generateQuerySet(input: GeneratorInput): Promise<Generated
     )
     .join('\n');
 
-  const response = await instrumented('query-gen', 'high', input.paragraphId, () =>
+  const response = await instrumented('query-gen', QUERY_GENERATION_EFFORT, input.paragraphId, () =>
     getClient().messages.parse({
       model: MODEL,
       max_tokens: 16000,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'high', format: zodOutputFormat(GeneratedQuerySetSchema) },
+      output_config: { effort: QUERY_GENERATION_EFFORT, format: zodOutputFormat(GeneratedQuerySetSchema) },
       system: SYSTEM,
       messages: [
         {

@@ -11,6 +11,7 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 
 import {
+  TITLE_EVAL_CONFIG,
   evaluateResponse,
   propositionEvidenceEvaluator,
   warmResponsePrefix,
@@ -195,7 +196,9 @@ const server = createServer((req, res) => {
       const prior = loadSession(OWNER, sessionId);
       const attempted = judgedTitleCount(prior) > 0;
       // Title evaluation deliberately stays on the existing query-only path.
-      const evaluated = await evaluateResponse(content.gold, content.titleQueries, text, EVAL_CACHE);
+      const evaluated = await evaluateResponse(content.gold, content.titleQueries, text, EVAL_CACHE, {
+        queryEvaluation: TITLE_EVAL_CONFIG,
+      });
       const assessment = evaluated.assessments[0];
       if (assessment === undefined) return json(res, 500, { error: '타이틀 판정 없음' });
 

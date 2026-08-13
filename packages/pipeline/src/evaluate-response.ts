@@ -17,7 +17,13 @@ import {
 } from './assessment.js';
 import { evalCacheKey } from './eval-cache-key.js';
 import type { Gold as PipelineGold } from './gold.js';
-import { evalRequestFingerprint, type QueryEval, evaluateQueries, warmEvalPrefix } from './llm/query-eval.js';
+import {
+  evalRequestFingerprint,
+  type QueryEval,
+  type QueryEvaluationConfig,
+  evaluateQueries,
+  warmEvalPrefix,
+} from './llm/query-eval.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
 import {
   evaluateSemanticFulfillment,
@@ -54,6 +60,8 @@ export interface EvaluatedResponse {
 export interface EvaluateResponseOptions {
   /** Defaults to the existing production behavior. The app enables semantic-view only for attempts. */
   readonly propositionEvidenceEvaluator?: PropositionEvidenceEvaluator;
+  /** Student regions default to low/off. Title callers pass their isolated medium/on profile. */
+  readonly queryEvaluation?: QueryEvaluationConfig;
 }
 
 /**
@@ -64,9 +72,18 @@ export interface EvaluateResponseOptions {
  * **다른 캐시를 데우고 예열이 통째로 헛일이 된다**(실측 2026-08-10: 예열 write=5621,
  * 실호출 write=5805, read=0). 같은 유도 경로를 쓰는 것이 유일한 보장이다.
  */
-export async function warmResponsePrefix(gold: PipelineGold, gen: GeneratedQuerySet): Promise<void> {
+export async function warmResponsePrefix(
+  gold: PipelineGold,
+  gen: GeneratedQuerySet,
+  queryEvaluation: QueryEvaluationConfig = {},
+): Promise<void> {
   const set: EvalSet = generatedEvalSet('gen', gen);
-  await warmEvalPrefix(paragraphText(gold as unknown as LibGold), set.queries, gold.paragraphId);
+  await warmEvalPrefix(
+    paragraphText(gold as unknown as LibGold),
+    set.queries,
+    gold.paragraphId,
+    queryEvaluation,
+  );
 }
 
 /**
@@ -83,7 +100,14 @@ export async function evaluateResponse(
   const set: EvalSet = withPropositions(generatedEvalSet('gen', gen), gold, gen);
   const paraText = paragraphText(gold as unknown as LibGold);
   const queryStarted = performance.now();
-  const qeval = await runEval(paraText, set, response, gold.paragraphId, cacheDir);
+  const qeval = await runEval(
+    paraText,
+    set,
+    response,
+    gold.paragraphId,
+    cacheDir,
+    options.queryEvaluation,
+  );
   const queryLatencyMs = Math.round(performance.now() - queryStarted);
   const evaluator = options.propositionEvidenceEvaluator ?? 'query';
   if (evaluator === 'query') {
@@ -228,20 +252,21 @@ async function runEval(
   response: string,
   paragraphId: string,
   cacheDir?: string,
+  queryEvaluation: QueryEvaluationConfig = {},
 ): Promise<QueryEval> {
   if (cacheDir === undefined) {
-    return evaluateQueries(paraText, set.queries, response, paragraphId);
+    return evaluateQueries(paraText, set.queries, response, paragraphId, queryEvaluation);
   }
   mkdirSync(cacheDir, { recursive: true });
   const key = evalCacheKey({
     paragraphId,
     probeText: response,
     queries: set.queries,
-    requestFingerprint: evalRequestFingerprint(),
+    requestFingerprint: evalRequestFingerprint(queryEvaluation),
   });
   const path = resolve(cacheDir, `${key}.json`);
   if (existsSync(path)) return JSON.parse(readFileSync(path, 'utf8')) as QueryEval;
-  const fresh = await evaluateQueries(paraText, set.queries, response, paragraphId);
+  const fresh = await evaluateQueries(paraText, set.queries, response, paragraphId, queryEvaluation);
   writeFileSync(path, JSON.stringify(fresh, null, 2), 'utf8');
   return fresh;
 }

@@ -13,7 +13,7 @@
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 
 import { validateCompleteness } from '../normalize.js';
-import { MODEL, getClient, instrumented } from './client.js';
+import { GOLD_GENERATION_EFFORT, MODEL, getClient, instrumented } from './client.js';
 import {
   ComposeSchema,
   type Composed,
@@ -163,12 +163,12 @@ export async function decompose(
   let correction = '';
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const response = await instrumented('decompose', 'high', paragraphId, () =>
+    const response = await instrumented('decompose', GOLD_GENERATION_EFFORT, paragraphId, () =>
       getClient().messages.parse({
         model: MODEL,
         max_tokens: 16000,
         thinking: { type: 'adaptive' },
-        output_config: { effort: 'high', format: zodOutputFormat(DecomposeSchema) },
+        output_config: { effort: GOLD_GENERATION_EFFORT, format: zodOutputFormat(DecomposeSchema) },
         system: DECOMPOSE_SYSTEM,
         messages: [{ role: 'user', content: base + correction }],
       }),
@@ -212,12 +212,12 @@ export async function compose(
     })
     .join('\n');
 
-  const response = await instrumented('compose', 'high', paragraphId, () =>
+  const response = await instrumented('compose', GOLD_GENERATION_EFFORT, paragraphId, () =>
     getClient().messages.parse({
       model: MODEL,
       max_tokens: 16000,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'high', format: zodOutputFormat(ComposeSchema) },
+      output_config: { effort: GOLD_GENERATION_EFFORT, format: zodOutputFormat(ComposeSchema) },
       system: COMPOSE_SYSTEM,
       messages: [
         { role: 'user', content: `원문 문단:\n${paragraphText}\n\n최소 명제:\n${list}` },
@@ -231,8 +231,7 @@ export async function compose(
 /**
  * 자식 하나를 뺀 상위 노드를 재생성한다. ablation 가중치의 분자.
  *
- * effort는 `low`다 — 짧고 국소적인 작업이라 상위 설정이 낭비이고, 이 호출이 배치 비용의
- * 대부분(간선 수만큼)을 차지한다.
+ * 골드 생성은 온라인 평가와 분리된 medium 품질 프로필을 일관되게 쓴다.
  */
 export async function regenerate(
   parentText: string,
@@ -244,12 +243,12 @@ export async function regenerate(
       ? '(남은 하위 요소가 없다)'
       : remainingChildTexts.map((t, i) => `${i + 1}. ${t}`).join('\n');
 
-  const response = await instrumented('regenerate', 'low', paragraphId, () =>
+  const response = await instrumented('regenerate', GOLD_GENERATION_EFFORT, paragraphId, () =>
     getClient().messages.parse({
       model: MODEL,
       max_tokens: 2000,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'low', format: zodOutputFormat(RegenerateSchema) },
+      output_config: { effort: GOLD_GENERATION_EFFORT, format: zodOutputFormat(RegenerateSchema) },
       system: REGENERATE_SYSTEM,
       messages: [
         {

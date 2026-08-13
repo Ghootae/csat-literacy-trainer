@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { evaluateResponse } from '../evaluate-response.js';
+import { TITLE_EVAL_CONFIG } from '../llm/query-eval.js';
 import type { Gold } from '../gold.js';
 import type { GeneratedQuerySet } from '../llm/query-gen.js';
 
@@ -197,7 +198,9 @@ async function main(): Promise<void> {
       const verdicts: string[] = [];
       for (let i = 0; i < runs; i++) {
         process.stderr.write(`   ${probe.id} ${i + 1}/${runs}\r`);
-        const { assessments, rawVerdicts } = await evaluateResponse(gold, queries, probe.text);
+        const { assessments, rawVerdicts } = await evaluateResponse(gold, queries, probe.text, undefined, {
+          queryEvaluation: TITLE_EVAL_CONFIG,
+        });
         rel.push(rawVerdicts.get('qT2')?.semanticState === 'preserved');
         comp.push(rawVerdicts.get('qT3')?.semanticState === 'preserved');
         verdicts.push(assessments[0]?.verdict ?? '?');

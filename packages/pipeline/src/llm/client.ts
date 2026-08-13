@@ -13,6 +13,11 @@ import Anthropic from '@anthropic-ai/sdk';
 
 export const MODEL = 'claude-opus-4-8';
 
+/** Offline generation profiles are intentionally separate from the online student evaluator. */
+export const GOLD_GENERATION_EFFORT = 'medium' as const;
+export const QUERY_GENERATION_EFFORT = 'medium' as const;
+export const TITLE_GENERATION_EFFORT = 'medium' as const;
+
 /** 호출 종류. 계측 집계와 모델/effort 선택의 기준이 된다. */
 export type Op =
   | 'decompose'

@@ -63,25 +63,68 @@ const QueryEvalSchemaNoCoverage = z.object({
 });
 
 /**
- * `propositionCoverage`를 낼 것인가. **실험 스위치이며 기본값은 켜짐**(운영 동작 유지).
+ * 학생 영역 평가의 운영 기본값. 타이틀 평가는 별도 상수로 기존 medium/on을 유지한다.
  *
- * 이 필드는 4a 측정용으로 들어왔고 `aggregatePropositionState`는 읽지 않는다. 그러나 명제별
- * 근거 확인이라는 **보조 과제가 본 판정을 붙들고 있을 수** 있다 — 끄면 빨라지는 대신 판정이
- * 물러질 가능성이 있고, 그 교환비를 재려고 둔 스위치다. 출력 바이트는 25토큰이지만 SYSTEM의
- * 19%를 차지하므로 절감분은 바이트가 아니라 사고 토큰에서 나온다.
- *
- * **상수가 아니라 함수인 이유는 effort와 같다** — 모듈 적재 시점에 굳히면 한 프로세스 안에서
- * 설정을 바꿔 재는 실험이 바뀌지 않은 프롬프트를 재게 된다.
+ * 2026-08-13 회귀: low/off 39프로브 × 4분해 = 132/156 기대 일치, 신규 위험 과대통과 0.
+ * 환경변수 EVAL_EFFORT=medium + EVAL_PROPOSITION_COVERAGE=on이 명시적 롤백 경로다.
  */
-function propositionCoverageEnabled(): boolean {
+export const STUDENT_REGION_EVAL_DEFAULTS = {
+  effort: 'low',
+  propositionCoverage: false,
+} as const;
+
+/** 타이틀 평가는 low/off 채택 범위 밖이다. 기존 medium/on 계약을 호출부에서 명시한다. */
+export const TITLE_EVAL_CONFIG = {
+  effort: 'medium',
+  propositionCoverage: true,
+} as const;
+
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type Effort = (typeof EFFORTS)[number];
+
+export interface QueryEvaluationConfig {
+  readonly model?: string;
+  readonly effort?: Effort;
+  readonly propositionCoverage?: boolean;
+}
+
+interface ResolvedQueryEvaluationConfig {
+  readonly model: string;
+  readonly effort: Effort;
+  readonly propositionCoverage: boolean;
+}
+
+function environmentCoverage(): boolean | undefined {
   const raw = process.env['EVAL_PROPOSITION_COVERAGE'];
-  if (raw === undefined || raw === 'on') return true;
+  if (raw === undefined) return undefined;
+  if (raw === 'on') return true;
   if (raw === 'off') return false;
   throw new Error(`EVAL_PROPOSITION_COVERAGE가 잘못됐다: ${raw} (on|off)`);
 }
 
-function queryEvalSchema() {
-  return propositionCoverageEnabled() ? QueryEvalSchema : QueryEvalSchemaNoCoverage;
+function environmentEffort(): Effort | undefined {
+  const raw = process.env['EVAL_EFFORT'];
+  if (raw === undefined) return undefined;
+  const found = EFFORTS.find((e) => e === raw);
+  if (found === undefined) throw new Error(`EVAL_EFFORT가 잘못됐다: ${raw} (${EFFORTS.join('|')})`);
+  return found;
+}
+
+export function resolveQueryEvaluationConfig(
+  config: QueryEvaluationConfig = {},
+): ResolvedQueryEvaluationConfig {
+  return {
+    model: config.model ?? process.env['EVAL_MODEL'] ?? MODEL,
+    effort: config.effort ?? environmentEffort() ?? STUDENT_REGION_EVAL_DEFAULTS.effort,
+    propositionCoverage:
+      config.propositionCoverage ??
+      environmentCoverage() ??
+      STUDENT_REGION_EVAL_DEFAULTS.propositionCoverage,
+  };
+}
+
+function queryEvalSchema(config: ResolvedQueryEvaluationConfig) {
+  return config.propositionCoverage ? QueryEvalSchema : QueryEvalSchemaNoCoverage;
 }
 
 type QueryVerdictFull = z.infer<typeof QueryVerdictSchema>;
@@ -123,10 +166,6 @@ const EVAL_MAX_TOKENS = 16000;
  * 채점은 학생이 쓸 때마다 도는 온라인 경로라 비용·지연이 걸린다. 둘을 한 상수로 묶으면
  * 채점만 싼 모델로 재는 실험이 골드 파이프라인까지 흔든다.
  */
-function evalModel(): string {
-  return process.env['EVAL_MODEL'] ?? MODEL;
-}
-
 /**
  * 사고 깊이. **판정을 만드는 값이므로 바꾸면 회귀 3세트를 다시 재야 한다.**
  *
@@ -142,22 +181,9 @@ function evalModel(): string {
  *   불안정        4/37 → 6/37 (전부 주제만↔미포착 경계. 반복 변동 1~2/9와 구분되지 않는다)
  *   채점 1건    $0.1435 → $0.0546   지연 68.5s → 23.1s
  *
- * 환경변수는 **실험 전용이다.** 지문(fingerprint)에 effort가 들어가므로 값이 다르면 캐시도
- * 갈라져, 다른 effort의 결과가 운영 캐시를 오염시키지 않는다.
+ * 환경변수는 운영 기본값의 명시적 override이자 롤백 경로다. 지문(fingerprint)에 effort가
+ * 들어가므로 값이 다르면 캐시도 갈려 다른 설정의 결과가 운영 캐시를 오염시키지 않는다.
  */
-
-const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
-export type Effort = (typeof EFFORTS)[number];
-
-function evalEffort(): Effort {
-  const raw = process.env['EVAL_EFFORT'];
-  if (raw === undefined) return 'medium';
-  // 오타를 API까지 보내지 않는다. 조용히 기본값으로 되돌리면 낮은 effort를 쟀다고 믿으면서
-  // 실은 high를 재는 실험이 된다.
-  const found = EFFORTS.find((e) => e === raw);
-  if (found === undefined) throw new Error(`EVAL_EFFORT가 잘못됐다: ${raw} (${EFFORTS.join('|')})`);
-  return found;
-}
 const EVAL_THINKING = 'adaptive';
 
 export interface PreservationQuery {
@@ -312,8 +338,8 @@ contradicted라면 어긋난 **모양**도 함께 낸다(contradictionKind):
  * 실제로 보내는 system 프롬프트. **함수여야 한다** — 상수로 굳히면 한 프로세스에서 설정을
  * 바꿔 재는 실험이 이전 프롬프트를 그대로 쓴다(effort에서 이미 겪은 사고다).
  */
-function systemPrompt(): string {
-  return propositionCoverageEnabled()
+function systemPrompt(config: ResolvedQueryEvaluationConfig): string {
+  return config.propositionCoverage
     ? `${SYSTEM_HEAD}${COVERAGE_SECTION}${SYSTEM_TAIL}`
     : `${SYSTEM_HEAD}${SYSTEM_TAIL}`;
 }
@@ -330,16 +356,16 @@ function systemPrompt(): string {
  * 과금만 바꾸므로, 캐싱을 켜고 끄는 것으로 과거 평가 결과가 무효화되면 안 된다. 여기 담을
  * 것은 **판정을 바꾸는 것**뿐이다.
  */
-export function evalRequestFingerprint() {
+export function evalRequestFingerprint(config: QueryEvaluationConfig = {}) {
+  const resolved = resolveQueryEvaluationConfig(config);
   return {
-    model: evalModel(),
-    systemPrompt: systemPrompt(),
+    model: resolved.model,
+    systemPrompt: systemPrompt(resolved),
     maxTokens: EVAL_MAX_TOKENS,
-    // **상수가 아니라 함수인 이유다.** effort를 실험으로 바꿀 수 있으므로 모듈 적재 시점에
-    // 굳히면 낮은 effort의 결과가 운영 effort의 캐시 키를 쓰게 된다.
-    effort: evalEffort(),
+    effort: resolved.effort,
+    propositionCoverage: resolved.propositionCoverage,
     thinking: EVAL_THINKING,
-    outputFormat: zodOutputFormat(queryEvalSchema()),
+    outputFormat: zodOutputFormat(queryEvalSchema(resolved)),
   };
 }
 
@@ -384,9 +410,10 @@ export async function warmEvalPrefix(
   paragraphText: string,
   queries: readonly PreservationQuery[],
   paragraphId?: string,
+  config: QueryEvaluationConfig = {},
 ): Promise<void> {
-  const effort = evalEffort();
-  const model = evalModel();
+  const resolved = resolveQueryEvaluationConfig(config);
+  const { effort, model } = resolved;
   try {
     await instrumented(
       'query-eval-warm',
@@ -397,8 +424,8 @@ export async function warmEvalPrefix(
           model,
           max_tokens: 1,
           thinking: { type: EVAL_THINKING },
-          output_config: { effort, format: zodOutputFormat(queryEvalSchema()) },
-          system: systemPrompt(),
+          output_config: { effort, format: zodOutputFormat(queryEvalSchema(resolved)) },
+          system: systemPrompt(resolved),
           messages: [
             {
               role: 'user',
@@ -418,9 +445,10 @@ export async function evaluateQueries(
   queries: readonly PreservationQuery[],
   studentResponse: string,
   paragraphId?: string,
+  config: QueryEvaluationConfig = {},
 ): Promise<QueryEval> {
-  const effort = evalEffort();
-  const model = evalModel();
+  const resolved = resolveQueryEvaluationConfig(config);
+  const { effort, model } = resolved;
   const response = await instrumented(
     'query-eval',
     effort,
@@ -430,8 +458,8 @@ export async function evaluateQueries(
         model,
         max_tokens: EVAL_MAX_TOKENS,
         thinking: { type: EVAL_THINKING },
-        output_config: { effort, format: zodOutputFormat(queryEvalSchema()) },
-        system: systemPrompt(),
+        output_config: { effort, format: zodOutputFormat(queryEvalSchema(resolved)) },
+        system: systemPrompt(resolved),
         messages: [
           {
             role: 'user',

@@ -82,8 +82,13 @@ describe('semantic-view runtime wiring은 제출 경로에만 있다', () => {
   const server = readFileSync(resolve(SRC, 'server/index.ts'), 'utf8');
 
   it('attempt는 feature flag를 evaluateResponse에 전달하고 evaluator/지연만 로그한다', () => {
+    const attemptRoute = server.slice(
+      server.indexOf("url.pathname.startsWith('/api/attempt/')"),
+      server.indexOf("url.pathname.startsWith('/api/title/')"),
+    );
     expect(server).toContain("process.env['PROPOSITION_EVIDENCE_EVALUATOR']");
-    expect(server).toContain('propositionEvidenceEvaluator: ATTEMPT_PROPOSITION_EVALUATOR');
+    expect(attemptRoute).toContain('propositionEvidenceEvaluator: ATTEMPT_PROPOSITION_EVALUATOR');
+    expect(attemptRoute).not.toContain('TITLE_EVAL_CONFIG');
     expect(server).toContain('evaluator=${evaluated.propositionEvaluation.evaluator}');
     expect(server).toContain('latency=${evaluated.propositionEvaluation.latencyMs}ms');
   });
@@ -93,5 +98,6 @@ describe('semantic-view runtime wiring은 제출 경로에만 있다', () => {
     const titleCall = titleRoute.match(/evaluateResponse\([^;]+\);/)?.[0] ?? '';
     expect(titleCall).toContain('content.titleQueries');
     expect(titleCall).not.toContain('propositionEvidenceEvaluator');
+    expect(titleCall).toContain('queryEvaluation: TITLE_EVAL_CONFIG');
   });
 });

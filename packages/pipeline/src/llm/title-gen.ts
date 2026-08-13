@@ -24,7 +24,7 @@
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod/v4';
 
-import { MODEL, getClient, instrumented } from './client.js';
+import { MODEL, TITLE_GENERATION_EFFORT, getClient, instrumented } from './client.js';
 import { GeneratedQuerySetSchema, type GeneratedQuerySet } from './query-gen.js';
 
 /** 프롬프트를 고치면 올린다. 생성 fixture 경로에 들어가므로 기존 산출물이 덮이지 않는다. */
@@ -134,12 +134,12 @@ export async function generateTitleQuerySet(input: TitleGeneratorInput): Promise
   const sentenceBlock = input.sentences.map((s) => `[${s.id}] ${s.text}`).join('\n');
   const slotBlock = input.slots.map((s) => `[${s.id}] ${s.shortForm}`).join('\n');
 
-  const response = await instrumented('title-gen', 'high', input.paragraphId, () =>
+  const response = await instrumented('title-gen', TITLE_GENERATION_EFFORT, input.paragraphId, () =>
     getClient().messages.parse({
       model: MODEL,
       max_tokens: 8000,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'high', format: zodOutputFormat(GeneratedQuerySetSchema) },
+      output_config: { effort: TITLE_GENERATION_EFFORT, format: zodOutputFormat(GeneratedQuerySetSchema) },
       system: SYSTEM,
       messages: [
         {
