@@ -20,7 +20,13 @@ export function App(): React.JSX.Element {
     fetchPassages()
       .then((xs) => {
         setList(xs);
-        setCurrent(xs[0]?.paragraphId ?? null);
+        let remembered: string | null = null;
+        try {
+          remembered = sessionStorage.getItem('csat.currentParagraph');
+        } catch {
+          /* 저장소를 못 쓰면 첫 문단으로 시작한다 */
+        }
+        setCurrent(xs.some((p) => p.paragraphId === remembered) ? remembered : (xs[0]?.paragraphId ?? null));
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
   }, []);
@@ -33,6 +39,15 @@ export function App(): React.JSX.Element {
   const i = list.findIndex((p) => p.paragraphId === current);
   const next = i >= 0 ? list[i + 1] : undefined;
 
+  function selectParagraph(paragraphId: string): void {
+    setCurrent(paragraphId);
+    try {
+      sessionStorage.setItem('csat.currentParagraph', paragraphId);
+    } catch {
+      /* 화면 이동은 저장소 가용성과 무관하게 동작한다 */
+    }
+  }
+
   return (
     <>
       <nav className="picker">
@@ -40,7 +55,7 @@ export function App(): React.JSX.Element {
           <button
             key={p.paragraphId}
             className={p.paragraphId === current ? 'chip on' : 'chip'}
-            onClick={() => setCurrent(p.paragraphId)}
+            onClick={() => selectParagraph(p.paragraphId)}
             title={p.tags.join(' · ')}
           >
             <span className="n">{n + 1}</span>
@@ -52,7 +67,7 @@ export function App(): React.JSX.Element {
         key={current}
         paragraphId={current}
         next={next}
-        onNext={() => next !== undefined && setCurrent(next.paragraphId)}
+        onNext={() => next !== undefined && selectParagraph(next.paragraphId)}
       />
     </>
   );

@@ -16,11 +16,11 @@ import { resolve } from 'node:path';
 import type { RegionRecord } from './view.js';
 
 /**
- * 호출 시점에 푼다. 상수로 잡아 두면 모듈 로드 때 cwd가 박혀서, 테스트가
- * `process.chdir`로 임시 폴더를 잡아도 실제 `sessions/`에 쓰고 서로 오염시킨다.
+ * 호출 시점에 푼다. 운영은 cwd의 `sessions/`를 쓰고, E2E는 `CSAT_SESSION_ROOT`로
+ * 임시 디렉터리를 주입해 실제 학생 기록과 서로 오염되지 않게 한다.
  */
 function root(): string {
-  return resolve(process.cwd(), 'sessions');
+  return process.env['CSAT_SESSION_ROOT'] ?? resolve(process.cwd(), 'sessions');
 }
 
 export interface Attempt {

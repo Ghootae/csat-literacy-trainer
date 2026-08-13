@@ -9,9 +9,14 @@
 
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import {
   TITLE_EVAL_CONFIG,
+  type EvaluatedResponse,
+  type GeneratedQuerySet,
+  type Gold,
+  type EvaluateResponseOptions,
   evaluateResponse,
   propositionEvidenceEvaluator,
   warmResponsePrefix,
@@ -29,22 +34,7 @@ import { appendAttempt, appendTitleAttempt, judgedTitleCount, loadSession, revis
 import { bestOf, isBlocked, toRecord, toRegionViews, viewsFromRecords } from './view.js';
 import { restoreTitleView, toTitleView } from './title-view.js';
 
-const PORT = Number(process.env['PORT'] ?? 5174);
 const OWNER = 'local'; // D4 — 리포지토리는 처음부터 ownerId를 받는다. 로컬은 고정.
-const EVAL_CACHE = resolve(process.cwd(), 'sessions', '.eval-cache');
-const ATTEMPT_PROPOSITION_EVALUATOR = propositionEvidenceEvaluator(
-  process.env['PROPOSITION_EVIDENCE_EVALUATOR'],
-);
-
-/**
- * 채점 호출 예산 (서버 기동당).
- *
- * 이 서버는 인증이 없고 `ANTHROPIC_API_KEY`를 들고 있다. 터널로 외부에 노출하면 URL을 아는
- * 누구나 채점을 호출해 크레딧을 태울 수 있다. 인증을 붙이면 클라이언트까지 복잡해지므로,
- * **실질 위험인 비용에 직접 상한을 건다.** 캐시 히트는 API를 부르지 않으므로 세지 않는다.
- */
-const BUDGET = Number(process.env['EVAL_BUDGET'] ?? 60);
-let spent = 0;
 
 /**
  * 최근 예열 시각. **문단을 여는 요청이 중복으로 와도 한 번만 데운다.**
@@ -65,8 +55,6 @@ function titleExemplar(paragraphId: string): string {
   const node = gold.nodes.find((n) => n.id === gold.titleId);
   return node?.shortForm ?? '';
 }
-const lastWarm = new Map<string, number>();
-
 function json(res: import('node:http').ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
@@ -83,9 +71,42 @@ async function readBody(req: import('node:http').IncomingMessage): Promise<unkno
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
-const server = createServer((req, res) => {
+type ResponseEvaluator = (
+  gold: Gold,
+  queries: GeneratedQuerySet,
+  response: string,
+  cacheDir?: string,
+  options?: EvaluateResponseOptions,
+) => Promise<EvaluatedResponse>;
+
+export interface LearningServerOptions {
+  readonly port?: number;
+  readonly budget?: number;
+  /** E2E가 실제 API 대신 결정론적 결과를 주입하는 유일한 경계다. */
+  readonly responseEvaluator?: ResponseEvaluator;
+  readonly warmer?: typeof warmResponsePrefix;
+}
+
+/**
+ * HTTP 앱을 만들되 listen은 호출자가 결정한다. 운영 진입점은 아래에서 즉시 listen하고,
+ * 브라우저 E2E는 같은 라우팅·저장·뷰 조립을 쓰면서 평가기와 포트만 주입한다.
+ */
+export function createLearningServer(options: LearningServerOptions = {}): ReturnType<typeof createServer> {
+  const port = options.port ?? Number(process.env['PORT'] ?? 5174);
+  // 인증 없는 터널 노출 시 API 비용을 직접 제한한다. 캐시 히트는 호출하지 않으므로 세지 않는다.
+  const budget = options.budget ?? Number(process.env['EVAL_BUDGET'] ?? 60);
+  const evalCache = resolve(process.env['CSAT_SESSION_ROOT'] ?? resolve(process.cwd(), 'sessions'), '.eval-cache');
+  const attemptPropositionEvaluator = propositionEvidenceEvaluator(
+    process.env['PROPOSITION_EVIDENCE_EVALUATOR'],
+  );
+  const runEvaluation = options.responseEvaluator ?? evaluateResponse;
+  const warm = options.warmer ?? warmResponsePrefix;
+  let spent = 0;
+  const lastWarm = new Map<string, number>();
+
+  const server = createServer((req, res) => {
   void (async () => {
-    const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
+    const url = new URL(req.url ?? '/', `http://localhost:${port}`);
 
     if (req.method === 'OPTIONS') return json(res, 204, {});
 
@@ -105,7 +126,7 @@ const server = createServer((req, res) => {
       const now = Date.now();
       if (now - (lastWarm.get(id) ?? 0) > WARM_DEDUPE_MS) {
         lastWarm.set(id, now);
-        void warmResponsePrefix(content.gold, content.queries);
+        void warm(content.gold, content.queries);
       }
       return;
     }
@@ -121,16 +142,16 @@ const server = createServer((req, res) => {
       const sections = body.sections.map((s) => s.trim()).filter((s) => s !== '');
       if (sections.length === 0) return json(res, 400, { error: '빈 응답' });
 
-      if (spent >= BUDGET) {
-        console.warn(`예산 소진 ${spent}/${BUDGET} — 채점 거부`);
-        return json(res, 429, { error: `채점 예산을 다 썼습니다 (${BUDGET}회). 서버를 다시 시작하세요.` });
+      if (spent >= budget) {
+        console.warn(`예산 소진 ${spent}/${budget} — 채점 거부`);
+        return json(res, 429, { error: `채점 예산을 다 썼습니다 (${budget}회). 서버를 다시 시작하세요.` });
       }
       spent += 1;
-      console.log(`[${new Date().toISOString()}] 채점 ${spent}/${BUDGET}  session=${sessionId}  섹션=${sections.length}`);
+      console.log(`[${new Date().toISOString()}] 채점 ${spent}/${budget}  session=${sessionId}  섹션=${sections.length}`);
 
       const { gold, queries } = loadContent(paragraphId);
-      const evaluated = await evaluateResponse(gold, queries, sections.join('\n'), EVAL_CACHE, {
-        propositionEvidenceEvaluator: ATTEMPT_PROPOSITION_EVALUATOR,
+      const evaluated = await runEvaluation(gold, queries, sections.join('\n'), evalCache, {
+        propositionEvidenceEvaluator: attemptPropositionEvaluator,
       });
       console.log(
         `[proposition] evaluator=${evaluated.propositionEvaluation.evaluator} ` +
@@ -186,17 +207,17 @@ const server = createServer((req, res) => {
       if (content.titleQueries === undefined) {
         return json(res, 400, { error: '이 문단에는 타이틀 질의가 없습니다' });
       }
-      if (spent >= BUDGET) {
-        console.warn(`예산 소진 ${spent}/${BUDGET} — 타이틀 채점 거부`);
-        return json(res, 429, { error: `채점 예산을 다 썼습니다 (${BUDGET}회).` });
+      if (spent >= budget) {
+        console.warn(`예산 소진 ${spent}/${budget} — 타이틀 채점 거부`);
+        return json(res, 429, { error: `채점 예산을 다 썼습니다 (${budget}회).` });
       }
       spent += 1;
-      console.log(`[${new Date().toISOString()}] 타이틀 ${spent}/${BUDGET}  session=${sessionId}`);
+      console.log(`[${new Date().toISOString()}] 타이틀 ${spent}/${budget}  session=${sessionId}`);
 
       const prior = loadSession(OWNER, sessionId);
       const attempted = judgedTitleCount(prior) > 0;
       // Title evaluation deliberately stays on the existing query-only path.
-      const evaluated = await evaluateResponse(content.gold, content.titleQueries, text, EVAL_CACHE, {
+      const evaluated = await runEvaluation(content.gold, content.titleQueries, text, evalCache, {
         queryEvaluation: TITLE_EVAL_CONFIG,
       });
       const assessment = evaluated.assessments[0];
@@ -282,8 +303,15 @@ const server = createServer((req, res) => {
     console.error(error);
     json(res, 500, { error: error instanceof Error ? error.message : String(error) });
   });
-});
+  });
 
-server.listen(PORT, () => {
-  console.log(`학습 UI 서버 http://localhost:${PORT}`);
-});
+  return server;
+}
+
+const entry = process.argv[1];
+if (entry !== undefined && import.meta.url === pathToFileURL(resolve(entry)).href) {
+  const port = Number(process.env['PORT'] ?? 5174);
+  createLearningServer({ port }).listen(port, () => {
+    console.log(`학습 UI 서버 http://localhost:${port}`);
+  });
+}
