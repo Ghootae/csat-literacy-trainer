@@ -2,6 +2,7 @@
  * 실험 fixture → 학생용 콘텐츠 이관.
  *
  *   npm run content:import [-- --dry]
+ *   npm run content:import -- --id photosynthesis-p1
  *
  * 골드와 질의셋은 이미 만들어져 회귀로 검증까지 끝났는데 **실험 경로에만 있었다.**
  * 학생이 풀 수 있는 문단은 니체 하나뿐이었다. 이 CLI가 그 간극을 메운다 — LLM 호출 0회.
@@ -94,6 +95,24 @@ const SOURCES: readonly Source[] = [
     tags: ['인문', '주장·근거'],
   },
   {
+    id: 'photosynthesis-p1',
+    order: 40,
+    gold: '.omc/agreement/69bce4ece23376a28e12cb7c_s1_p1.gold-1.json',
+    generated: 'photosynthesis-p1-v1-run1.json',
+    title: '광합성 방식의 공통성과 환경 적응',
+    source: '고1 2025년 3월 교육청 모의평가',
+    tags: ['과학', '광합성', '환경 적응'],
+  },
+  {
+    id: 'photosynthesis-p2',
+    order: 41,
+    gold: '.omc/agreement/69bce4ece23376a28e12cb7c_s1_p2.gold-1.json',
+    generated: 'photosynthesis-p2-v1-run1.json',
+    title: '명반응과 기공의 기능',
+    source: '고1 2025년 3월 교육청 모의평가',
+    tags: ['과학', '광합성', '명반응'],
+  },
+  {
     id: 'disclosure-p3',
     order: 50,
     gold: '.omc/agreement/s1_p3.gold-1.json',
@@ -104,7 +123,7 @@ const SOURCES: readonly Source[] = [
   },
   {
     id: 'photosynthesis-p3',
-    order: 60,
+    order: 42,
     gold: '.omc/agreement/69bce4ece23376a28e12cb7c_s1_p3.gold-1.json',
     oracle: 'photosynthesis-p3-hand.json',
     title: '캘빈 회로',
@@ -113,7 +132,7 @@ const SOURCES: readonly Source[] = [
   },
   {
     id: 'photosynthesis-p4',
-    order: 40,
+    order: 43,
     gold: '.omc/agreement/s1_p4.gold-1.json',
     oracle: 'photosynthesis-p4-hand.json',
     title: 'C3 식물의 한계와 C4 연구',
@@ -122,12 +141,21 @@ const SOURCES: readonly Source[] = [
   },
   {
     id: 'photosynthesis-p5',
-    order: 70,
+    order: 44,
     gold: '.omc/agreement/69bce4ece23376a28e12cb7c_s1_p5.gold-1.json',
     oracle: 'photosynthesis-p5-hand.json',
     title: 'C4 식물의 두 공간 분업',
     source: '수능 국어 비문학 (과학)',
     tags: ['과학', '분업'],
+  },
+  {
+    id: 'photosynthesis-p6',
+    order: 45,
+    gold: '.omc/agreement/69bce4ece23376a28e12cb7c_s1_p6.gold-1.json',
+    generated: 'photosynthesis-p6-v1-run1.json',
+    title: 'C4 식물의 광합성 기여와 연구 가치',
+    source: '고1 2025년 3월 교육청 모의평가',
+    tags: ['과학', '광합성', '기후 위기'],
   },
 ];
 
@@ -185,9 +213,14 @@ function oracleToQuerySet(fx: OracleFixture, paragraphId: string): GeneratedQuer
 
 function main(): void {
   const dry = process.argv.includes('--dry');
+  const idIndex = process.argv.indexOf('--id');
+  const onlyId = idIndex === -1 ? undefined : process.argv[idIndex + 1];
+  if (idIndex !== -1 && onlyId === undefined) throw new Error('--id 뒤에 문단 ID가 필요하다');
+  const selected = onlyId === undefined ? SOURCES : SOURCES.filter((source) => source.id === onlyId);
+  if (selected.length === 0) throw new Error(`이관 대상에 없는 문단: ${onlyId}`);
   console.log(`실험 fixture → content/ 이관${dry ? ' (드라이런)' : ''}\n`);
 
-  for (const s of SOURCES) {
+  for (const s of selected) {
     const goldPath = resolve(process.cwd(), s.gold);
     if (!existsSync(goldPath)) {
       console.error(`  ✗ ${s.id}: 골드 없음 ${s.gold}`);
@@ -235,7 +268,7 @@ function main(): void {
     writeFileSync(resolve(dir, 'queries.json'), `${JSON.stringify(queries, null, 2)}\n`, 'utf8');
   }
 
-  console.log(dry ? '\n(드라이런 — 파일을 쓰지 않았다)' : `\n${SOURCES.length}문단 이관 완료`);
+  console.log(dry ? '\n(드라이런 — 파일을 쓰지 않았다)' : `\n${selected.length}문단 이관 완료`);
 }
 
 main();

@@ -110,6 +110,9 @@ const CONFIGS: readonly Config[] = [
     ],
   },
   readJson<Config>(resolve(process.cwd(), 'packages/pipeline/fixtures/regression/nietzsche-p1.json')),
+  readJson<Config>(resolve(process.cwd(), 'packages/pipeline/fixtures/regression/photosynthesis-p1.json')),
+  readJson<Config>(resolve(process.cwd(), 'packages/pipeline/fixtures/regression/photosynthesis-p2.json')),
+  readJson<Config>(resolve(process.cwd(), 'packages/pipeline/fixtures/regression/photosynthesis-p6.json')),
 ];
 
 // ── 미사용 지문 (새 관계 구조) — v0 그대로 적용 ──

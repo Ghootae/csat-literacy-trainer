@@ -164,5 +164,5 @@ test('photosynthesis-p4 학습 루프를 저장·복원하고 다음 단락으�
   await expect(page.getByText('보상 2단계')).toBeVisible();
   expect(evaluationCalls).toEqual([fixture.firstResponse, fixture.revisedResponse, fixture.finalTitle]);
   await page.getByRole('button', { name: /다음 문단/ }).click();
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('증권 공시 의무의 조건과 예외');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('C4 식물의 두 공간 분업');
 });

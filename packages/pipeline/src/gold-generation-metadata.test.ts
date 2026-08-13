@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -44,16 +44,20 @@ describe('골드 생성 provenance', () => {
     ).not.toBe(first.generatorFingerprint);
   });
 
-  it('기존 content 골드는 metadata 없이 모두 정상 legacy로 식별된다', () => {
+  it('기존 content 골드는 legacy로, 새 provenance 골드는 recorded로 식별된다', () => {
     const contentRoot = resolve(process.cwd(), 'content');
     const golds = readdirSync(contentRoot, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) => resolve(contentRoot, entry.name, 'gold.json'));
-    expect(golds).toHaveLength(8);
+      .map((entry) => resolve(contentRoot, entry.name, 'gold.json'))
+      .filter((path) => existsSync(path));
+    expect(golds).toHaveLength(11);
+    const statuses: string[] = [];
     for (const path of golds) {
-      const legacy = JSON.parse(readFileSync(path, 'utf8')) as { generationMetadata?: unknown };
-      expect(goldGenerationStatus(legacy), path).toBe('legacy/no-fingerprint');
+      const gold = JSON.parse(readFileSync(path, 'utf8')) as { generationMetadata?: unknown };
+      statuses.push(goldGenerationStatus(gold));
     }
+    expect(statuses.filter((status) => status === 'legacy/no-fingerprint')).toHaveLength(8);
+    expect(statuses.filter((status) => status === 'recorded')).toHaveLength(3);
     expect(
       goldGenerationStatus({
         generationMetadata: createGoldGenerationMetadata('새 원문', '2026-08-13T00:00:00.000Z'),
