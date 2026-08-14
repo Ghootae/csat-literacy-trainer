@@ -65,4 +65,3 @@ API transport 실패는 0이었다. p4의 incomplete는 API 실패가 아니라 
 - regression fixtures: `packages/pipeline/fixtures/regression/corporate-law-p2.json`, `corporate-law-p3.json`, `corporate-law-p5.json`
 - generator CLI: `packages/pipeline/src/cli/content-generate-candidate.ts`
 - regression CLI: `packages/pipeline/src/cli/content-candidate-regression.ts`
-
