@@ -10,7 +10,7 @@ import type { GeneratedQuerySet } from './llm/query-gen.js';
 import type { SourceBundle } from './candidate-qualification.js';
 
 export const PROBE_VERIFIER_VERSION = 'regression-probe-verifier-v1';
-export const PROBE_QUALIFICATION_VERSION = 'regression-probe-qualification-v1';
+export const PROBE_QUALIFICATION_VERSION = 'regression-probe-qualification-v2-state-evidence-agreement';
 
 const Sha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 const VerdictSchema = z.enum([
@@ -106,6 +106,7 @@ export function probeVerifierFingerprint(): string {
     provider: 'anthropic', model: MODEL, effort: 'medium',
     promptVersion: PROBE_VERIFIER_VERSION,
     schemaVersion: 'regression-probe-verifier-report-v1',
+    qualificationVersion: PROBE_QUALIFICATION_VERSION,
   });
 }
 
@@ -210,8 +211,6 @@ function normalizedJudgments(report: ProbeVerifierReport): unknown {
     .map((item) => ({
       queryId: item.queryId,
       semanticState: item.semanticState,
-      expressionMode: item.expressionMode,
-      evidenceRole: item.evidenceRole,
       sourceEvidenceRefs: item.sourceEvidenceRefs.map((ref) => ref.sourceSegmentId).sort(),
     }))
     .sort((a, b) => a.queryId.localeCompare(b.queryId));
@@ -235,7 +234,7 @@ export function qualifyProbeFromPasses(args: {
   }
   if (args.passes.length === 2
     && canonical(normalizedJudgments(args.passes[0]!.report)) !== canonical(normalizedJudgments(args.passes[1]!.report))) {
-    reasons.push('query별 state/expression/evidenceRole/sourceEvidenceRefs가 일치하지 않는다');
+    reasons.push('query별 semanticState/sourceEvidenceRefs가 일치하지 않는다');
   }
   const verdicts = args.passes.map((pass) => deriveProbeVerdict(args.querySet, pass.report, focal));
   if (new Set(verdicts).size > 1) reasons.push('두 pass의 결정론적 focal verdict가 다르다');

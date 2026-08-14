@@ -64,6 +64,16 @@ describe('regression probe qualification', () => {
     expect(result.fixtureAgreement).toBe(true);
   });
 
+  it('부수 진단 expressionMode 차이는 semantic oracle agreement를 깨지 않는다', () => {
+    const second = structuredClone(report('not_evidenced'));
+    second.judgments[0]!.expressionMode = 'implicit';
+    const result = qualifyProbeFromPasses({ paragraphId: 'p-test', probe: PROBE, defaultFocal: 'r1', querySet: QUERY, queryCandidateHash: `sha256:${'1'.repeat(64)}`, sourceBundleHash: `sha256:${'2'.repeat(64)}`, passes: [
+      { invocationId: 'a', resultReplay: false, report: report('not_evidenced') },
+      { invocationId: 'b', resultReplay: false, report: second },
+    ], now: '2026-08-14T00:00:00.000Z' });
+    expect(result.qualificationOutcome).toBe('auto_qualified');
+  });
+
   it('query state나 source evidence ref가 다르면 quarantine한다', () => {
     const changedRefs = report('not_evidenced', []);
     const result = qualifyProbeFromPasses({ paragraphId: 'p-test', probe: PROBE, defaultFocal: 'r1', querySet: QUERY, queryCandidateHash: `sha256:${'1'.repeat(64)}`, sourceBundleHash: `sha256:${'2'.repeat(64)}`, passes: [
