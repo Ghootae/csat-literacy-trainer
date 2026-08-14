@@ -27,6 +27,7 @@ describe('candidate production regression', () => {
       expect(ids.size).toBe(count);
       const plan = planCandidateRegression(['--manifest', manifestPath, '--fixture', fixturePath, '--dry-run']);
       expect(plan.expectedApiCalls).toBe(count);
+      expect(plan.logPath.endsWith('production-regression.jsonl')).toBe(true);
       expect(plan.settings).toMatchObject({ provider: 'anthropic', effort: 'low', propositionCoverage: 'off' });
     });
   }

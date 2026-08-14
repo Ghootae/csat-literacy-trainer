@@ -1,6 +1,6 @@
 /** candidate query를 content/ 승격 전에 운영 평가 설정으로 회귀한다. */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod/v4';
@@ -64,6 +64,7 @@ export interface CandidateRegressionPlan {
   readonly manifestPath: string;
   readonly fixturePath: string;
   readonly resultPath: string;
+  readonly logPath: string;
   readonly paragraphId: string;
   readonly probeIds: readonly string[];
   readonly expectedApiCalls: number;
@@ -77,6 +78,7 @@ export function planCandidateRegression(argv: readonly string[]): CandidateRegre
   const manifestPath = resolve(ROOT, required(argv, '--manifest'));
   const fixturePath = resolve(ROOT, required(argv, '--fixture'));
   const resultPath = resolve(dirname(manifestPath), 'production-regression-result.json');
+  const logPath = resolve(dirname(manifestPath), 'production-regression.jsonl');
   const manifest = QualificationManifestSchema.parse(readJson<unknown>(manifestPath));
   const fixture = CandidateRegressionFixtureSchema.parse(readJson<unknown>(fixturePath));
   const config = { effort: 'low' as const, propositionCoverage: false };
@@ -86,6 +88,7 @@ export function planCandidateRegression(argv: readonly string[]): CandidateRegre
     manifestPath,
     fixturePath,
     resultPath,
+    logPath,
     paragraphId: manifest.paragraphId,
     probeIds: fixture.probes.map((probe) => probe.id),
     expectedApiCalls: fixture.probes.length,
@@ -117,28 +120,58 @@ export async function runCandidateRegressionCli(argv = process.argv.slice(2)): P
     throw new Error('regression fixture가 manifest candidate query와 결속되지 않았다');
   }
   const regionIds = new Set(query.regions.map((region) => region.regionId));
-  const observed: { probeId: string; expectedFocal: RegionSemanticVerdict; actualFocal: RegionSemanticVerdict }[] = [];
-  const diagnostics: unknown[] = [];
-  let totalLatencyMs = 0;
+  type Diagnostic = {
+    probeId: string;
+    focal: string;
+    expectedFocal: RegionSemanticVerdict;
+    actualFocal: RegionSemanticVerdict;
+    latencyMs: number;
+    fingerprint: string;
+    completedAt: string;
+    rawVerdicts: unknown[];
+  };
+  const prior = existsSync(plan.logPath)
+    ? readFileSync(plan.logPath, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Diagnostic)
+    : [];
+  if (prior.some((row) => row.fingerprint !== plan.fingerprint)) {
+    throw new Error('기존 regression ledger fingerprint가 현재 실행과 다르다');
+  }
+  const byProbe = new Map(prior.map((row) => [row.probeId, row]));
+  const diagnostics: Diagnostic[] = [];
   for (const probe of fixture.probes) {
     const focal = probe.focal ?? fixture.focal;
     if (!regionIds.has(focal)) throw new Error(`${probe.id}: focal region ${focal} 없음`);
+    const completed = byProbe.get(probe.id);
+    if (completed !== undefined) {
+      if (completed.expectedFocal !== probe.expectFocal || completed.focal !== focal) {
+        throw new Error(`${probe.id}: 기존 ledger의 기대값 또는 focal이 fixture와 다르다`);
+      }
+      diagnostics.push(completed);
+      console.log(`${probe.id}: 완료 ledger 재사용`);
+      continue;
+    }
     const started = performance.now();
     const evaluated = await evaluateResponse(gold, query, probe.text, undefined, {
       queryEvaluation: { effort: 'low', propositionCoverage: false },
     });
     const latencyMs = Math.round(performance.now() - started);
-    totalLatencyMs += latencyMs;
     const actual = evaluated.regions.find((region) => region.id === focal)?.regionSemanticVerdict ?? 'region_not_evidenced';
-    observed.push({ probeId: probe.id, expectedFocal: probe.expectFocal, actualFocal: actual });
-    diagnostics.push({
+    const diagnostic: Diagnostic = {
       probeId: probe.id,
       focal,
+      expectedFocal: probe.expectFocal,
+      actualFocal: actual,
       latencyMs,
+      fingerprint: plan.fingerprint,
+      completedAt: new Date().toISOString(),
       rawVerdicts: [...evaluated.rawVerdicts.entries()].map(([queryId, verdict]) => ({ queryId, ...verdict })),
-    });
+    };
+    diagnostics.push(diagnostic);
+    appendFileSync(plan.logPath, `${JSON.stringify(diagnostic)}\n`, 'utf8');
     console.log(`${probe.id}: ${probe.expectFocal} → ${actual} (${latencyMs}ms)`);
   }
+  const observed = diagnostics.map(({ probeId, expectedFocal, actualFocal }) => ({ probeId, expectedFocal, actualFocal }));
+  const totalLatencyMs = diagnostics.reduce((sum, row) => sum + row.latencyMs, 0);
   const evaluatedCases = evaluateProductionRegressionCases(observed);
   const resultValue = {
     schemaVersion: 'production-query-regression-result-v1' as const,
@@ -153,6 +186,8 @@ export async function runCandidateRegressionCli(argv = process.argv.slice(2)): P
       meanLatencyMs: Math.round(totalLatencyMs / fixture.probes.length),
       apiCalls: fixture.probes.length,
     },
+    logPath: relative(ROOT, plan.logPath),
+    completedAt: new Date().toISOString(),
     diagnostics,
   };
   ProductionRegressionResultSchema.parse(resultValue);
