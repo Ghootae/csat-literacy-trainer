@@ -170,12 +170,16 @@ export function verifierFingerprint(): string {
 }
 
 /** v2 qualification은 verifier 종류까지 fingerprint에 넣어 prompt 교차 연결을 차단한다. */
-export function semanticVerifierFingerprint(kind: 'gold' | 'query' | 'title-query'): string {
+export function semanticVerifierFingerprint(
+  kind: 'gold' | 'query' | 'title-query',
+  inputContractVersion = 'plain-source-v1',
+): string {
   return sha256(stable({
     provider: 'anthropic',
     model: MODEL,
     effort: SEMANTIC_VERIFICATION_EFFORT,
     verifierKind: kind,
+    inputContractVersion,
     verifierVersion: SEMANTIC_VERIFIER_VERSION,
     reportSchemaVersion: SEMANTIC_REPORT_SCHEMA_VERSION,
     workflowVersion: SEMANTIC_WORKFLOW_VERSION,

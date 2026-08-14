@@ -61,3 +61,23 @@ export function sourceTextHash(text: string): string {
 export function assemblePassageSource(fixture: PassageSourceFixture): string {
   return [...fixture.paragraphs, ...fixture.footnotes].map((item) => item.text).join('\n');
 }
+
+export function assertPassageSourceFixtureIntegrity(value: unknown): PassageSourceFixture {
+  const fixture = PassageSourceFixtureSchema.parse(value);
+  const paragraphIds = fixture.paragraphs.map((paragraph) => paragraph.id);
+  const footnoteIds = fixture.footnotes.map((footnote) => footnote.id);
+  if (new Set(paragraphIds).size !== paragraphIds.length) throw new Error('source fixture paragraph ID 중복');
+  if (new Set(footnoteIds).size !== footnoteIds.length) throw new Error('source fixture footnote ID 중복');
+  for (const paragraph of fixture.paragraphs) {
+    if (paragraph.hash !== sourceTextHash(paragraph.text)) throw new Error(`${paragraph.id}: source paragraph hash 불일치`);
+  }
+  if (fixture.fullSourceHash !== sourceTextHash(assemblePassageSource(fixture))) {
+    throw new Error('source fixture fullSourceHash 불일치');
+  }
+  for (const footnote of fixture.footnotes) {
+    if (!paragraphIds.includes(footnote.targetParagraphId)) {
+      throw new Error(`${footnote.id}: source footnote target 문단 없음`);
+    }
+  }
+  return fixture;
+}

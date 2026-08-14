@@ -85,6 +85,7 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 2026-08-14 | 지문 전체 표제는 지문 층위 의미 골드(N3)가 생기기 전까지 채점하지 않는다. p1~p6 완료 뒤 작성·저장·복원하는 reflection으로만 제공하며 문단 타이틀 evaluator를 재사용하지 않는다. | `48068d7`; `packages/app/src/server/index.ts`, `packages/app/src/server/session.ts`, `packages/app/e2e/full-passage-flow.spec.ts` |
 | 2026-08-14 | 두 번째 전체 지문은 법학 분야의 `법인의 종류와 자산 운용의 법적 통제`로 확정한다. 공시 의무는 차선, 후기 묵가는 이후 철학 후보로 유지하고 NCM은 p2 삽화 문제 해결 전 후순위로 둔다. | `docs/experiments/roadmap-6a-passage-selection-2026-08-14.md`, `packages/pipeline/fixtures/sources/69bbf88d8937cf14551903ca.json` |
 | 2026-08-14 | 신규 자산은 source hash와 generator fingerprint가 일치해야 한다. legacy 자산은 `legacy/no-fingerprint`를 보존하고 tracked source 결속, 현행 semantic verification과 production-query 회귀로 재승격한다. 과거 generation metadata를 추정하지 않는다. | `docs/CONTENT-ASSET-QUALIFICATION.md` |
+| 2026-08-14 | 기존 v1 semantic verification은 runtime 호환용으로 유지하되 신규 promotion 증거로 자동 승격하지 않는다. 신규·legacy candidate는 source bundle에 결속된 v2 clean pass 두 번과 candidate query regression proof를 통과해야 한다. | `packages/pipeline/src/semantic-qualification.ts`, `packages/pipeline/src/candidate-qualification.ts`, `docs/CONTENT-ASSET-QUALIFICATION.md` |
 | 2026-08-09 | 기존 학생 평가 기본 effort를 high에서 medium으로 낮췄다. | `docs/experiments/effort-medium-2026-08-09.md`. 이 결정은 2026-08-13의 low/off 결정으로 대체됐고 `0b582b9`에서 코드 기본값에도 반영됐다. |
 
 과거 결정을 바꿀 때 위 행을 삭제하지 않고 새 행에 이유와 증거를 추가한다.
@@ -170,10 +171,10 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 상태 | in_progress |
 | 목표 | 광합성(과학), 법인(법학), 후기 묵가(철학), 공시 의무(경제·법), NCM 전지(기술), 니체(인문) 순으로 확장해 전체 지문 5개를 우선 완성한다. |
 | 완료 기준 | 각 지문의 모든 단락이 G1~G4를 충족하고 분야·관계 구조가 편중되지 않으며 대표 지문은 G5b까지 검증된다. 신규 생성 자산은 source hash와 generator fingerprint가 일치해야 한다. legacy 자산은 `legacy/no-fingerprint`를 보존하되 tracked source 결속, 현행 semantic verification 및 production-query 회귀 gate를 통과해야 한다. |
-| 현재 결과 | 6A에서 두 번째 전체 지문을 법인으로 확정하고 source set `69bbf88d8937cf14551903ca`의 본문 5문단과 각주 2개를 tracked fixture로 동결했다. 기존 원문 p1은 `corporate-law-p1`에 대응하지만 제품 문자열에는 각주 표식 `*`가 없어 hash가 다르다. p1은 G1·G3과 legacy 검증·회귀 자산을 보유하며 G2, 신규 G4와 source 결속 재승격이 필요하다. 신규 제작 대상은 p2~p5다. |
-| 증거 | `packages/pipeline/fixtures/sources/69bbf88d8937cf14551903ca.json`, `packages/pipeline/src/corporate-law-source-fixture.test.ts`, `docs/experiments/roadmap-6a-passage-selection-2026-08-14.md`, `docs/CONTENT-ASSET-QUALIFICATION.md` |
-| 남은 작업 | p1 legacy 재승격, p2~p5 G1~G4 제작, 법인 manifest와 G5b가 남았다. 공통 E2E harness 일반화 전 `pending state-model audit before 6C/G5b`를 해결해 문단 세션을 완료 상태의 정본으로 삼고 passage 진행률을 계산하는지 확인해야 한다. |
-| 다음 행동 | API 실행 전에 `corporate-law-p1`의 tracked source 결속 차이와 기존 연속 두 번 blocker 0 기록을 감사해 재승격 실행 manifest를 확정한다. |
+| 현재 결과 | 6A에서 두 번째 전체 지문을 법인으로 확정하고 source set `69bbf88d8937cf14551903ca`의 본문 5문단과 각주 2개를 tracked fixture로 동결했다. 6V-B에서 semantic qualification을 v2 fail-closed 상태 기계로 강화하고 tracked source bundle 기반 candidate qualification·dry-run·promotion gate를 구현했다. 기존 원문 p1은 `corporate-law-p1`에 대응하지만 제품 문자열에는 각주 표식 `*`가 없어 hash가 다르다. p1 dry-run은 이 mismatch, 각주 1개, 세 v1 record와 4프로브 regression pending을 확인했다. 실제 재검증은 실행하지 않았다. 신규 제작 대상은 p2~p5다. |
+| 증거 | `packages/pipeline/fixtures/sources/69bbf88d8937cf14551903ca.json`, `packages/pipeline/src/corporate-law-source-fixture.test.ts`, `packages/pipeline/src/semantic-qualification.ts`, `packages/pipeline/src/candidate-qualification.ts`, `packages/pipeline/src/candidate-qualification.test.ts`, `packages/pipeline/src/cli/content-qualify.ts`, `docs/experiments/roadmap-6a-passage-selection-2026-08-14.md`, `docs/CONTENT-ASSET-QUALIFICATION.md` |
+| 남은 작업 | p1 source mismatch 처리 방침과 실제 legacy v2 재승격, candidate query regression proof 결속·실행, p2~p5 G1~G4 제작, 법인 manifest와 G5b가 남았다. 공통 E2E harness 일반화 전 `pending state-model audit before 6C/G5b`를 해결해 문단 세션을 완료 상태의 정본으로 삼고 passage 진행률을 계산하는지 확인해야 한다. |
+| 다음 행동 | `corporate-law-p1`의 각주 표식 차이를 source identity에서 어떻게 처리할지 결정한 뒤 legacy qualification dry-run blocker를 해소한다. |
 
 ### 7. 실제 학생 파일럿
 

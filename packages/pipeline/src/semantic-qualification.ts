@@ -157,6 +157,8 @@ export interface QualificationRunConfig<T> {
   readonly assetType: SemanticAssetType;
   readonly verifierKind: SemanticVerifierKind;
   readonly sourceText: string;
+  /** 역할 라벨이 포함된 verifier input과 별개로 evidence가 실제로 속해야 하는 원문 조각. */
+  readonly evidenceSourceTexts?: readonly string[];
   readonly initial: T;
   readonly provider: string;
   readonly model: string;
@@ -305,7 +307,16 @@ export async function runSemanticQualification<T>(
 
     const report = parsed.data;
     try {
-      assertEvidenceContract(config.sourceText, report);
+      if (config.evidenceSourceTexts === undefined) {
+        assertEvidenceContract(config.sourceText, report);
+      } else {
+        for (const issue of report.issues) {
+          if (issue.sourceEvidence !== ''
+            && !config.evidenceSourceTexts.some((source) => source.includes(issue.sourceEvidence))) {
+            throw new Error(`${issue.id}: sourceEvidence가 primary/context 원문의 연속 부분 문자열이 아니다`);
+          }
+        }
+      }
       config.validate(candidate);
     } catch (error) {
       const failureReason = error instanceof Error ? error.message : 'deterministic postflight 실패';
@@ -538,6 +549,7 @@ export function assertV2QualificationGate(args: {
   readonly expectedAssetType: SemanticAssetType;
   readonly expectedVerifierKind: SemanticVerifierKind;
   readonly sourceText: string;
+  readonly evidenceSourceTexts?: readonly string[];
   readonly candidate: Gold | GeneratedQuerySet;
   readonly verifierFingerprint: string;
   readonly loadReport: (path: string) => unknown;
@@ -564,7 +576,16 @@ export function assertV2QualificationGate(args: {
     if (run.reportPath === undefined || run.reportHash === undefined) throw new Error('qualification report binding 없음');
     const report = SemanticVerificationReportSchema.parse(args.loadReport(run.reportPath));
     if (semanticReportHash(report) !== run.reportHash) throw new Error('qualification report hash 불일치');
-    assertEvidenceContract(args.sourceText, report);
+    if (args.evidenceSourceTexts === undefined) {
+      assertEvidenceContract(args.sourceText, report);
+    } else {
+      for (const issue of report.issues) {
+        if (issue.sourceEvidence !== ''
+          && !args.evidenceSourceTexts.some((source) => source.includes(issue.sourceEvidence))) {
+          throw new Error(`${issue.id}: qualification evidence가 primary/context 원문에 없다`);
+        }
+      }
+    }
     if (reportBlockers(report).length !== 0) throw new Error('qualification report에 blocker 존재');
   }
 }

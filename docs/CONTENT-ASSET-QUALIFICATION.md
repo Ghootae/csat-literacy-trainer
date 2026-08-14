@@ -46,3 +46,69 @@
 신규 p2~p5의 기존 계획 범위 72~82회는 유지하되, 실제 실행 전 probe manifest로 정확한 호출 수를 다시 고정한다. 이 범위는 gold 생성 4회, gold verifier 8회, 예상 repair 0~4회, 영역 질의 생성 4회, 타이틀 질의 생성 4회, 두 질의군 verifier 16회와 회귀 판정 36~42회를 구분한 계획치다.
 
 기존 p1은 위 비용에 섞지 않는다. 기본 재승격 계획은 gold verifier 2회, 영역 질의 verifier 2회, 타이틀 질의 verifier 2회, 현행 4프로브를 출발점으로 한 production-query 회귀 4회다. verifier calibration, 실패 재시도, 추가 repair와 그 second pass는 별도 비용이며 기본 계획에 포함하지 않는다. 기존 p1 전체 재생성도 기본 계획에 포함하지 않는다.
+
+## Semantic qualification v2
+
+기존 `semantic-verification-v1` record는 읽기와 기존 runtime 호환을 위해 유지한다. 그러나 v1의 `passed` 상태만으로 신규 promotion 또는 legacy 재승격을 증명하지 않는다. v2 record는 자산 종류와 verifier 종류를 분리하고 source, candidate, verifier fingerprint에 결속된 실행 이력을 보존한다.
+
+- 자산과 verifier 종류는 `gold`, `query`, `title-query` 중 하나이며 서로 일치해야 한다.
+- qualification은 동일 candidate에 대한 서로 다른 invocation의 clean report 두 개를 요구한다.
+- Anthropic prompt cache는 허용하지만 이전 result JSON replay, 같은 invocation ID 또는 run record 복제는 두 번째 pass가 아니다.
+- 마지막 두 report artifact를 다시 읽어 hash, blocker 0, evidence 계약과 run history를 직접 검증한다. record의 상태 문자열만 신뢰하지 않는다.
+- source, candidate 또는 verifier input contract가 바뀌면 기존 clean streak는 무효다.
+- malformed output, timeout, 빈 응답, parse 실패와 deterministic postflight 실패는 clean이 아니라 `incomplete`다.
+- `critical`과 `error`는 production blocker이고 `warning`은 non-blocking이다.
+
+상태 전이는 `pending → verifying → clean_streak_1 → verifying → qualified`가 기본 경로다. blocker가 있으면 streak를 0으로 초기화하고 repair가 가능할 때만 `repair_required → repairing`으로 이동한다. repair 이후에도 처음부터 clean 두 번을 다시 쌓는다. 기본 repair 상한은 두 cycle이며 초과하면 fail-closed `quarantined`다.
+
+LLM verifier의 의미 판단과 deterministic 검사는 역할이 다르다. deterministic preflight/postflight는 schema, 중복 ID, node/edge 참조, source evidence의 연속 부분문자열 여부를 검사한다. 이 계약을 어긴 verifier report는 의미상 clean처럼 보여도 qualification에 포함하지 않는다.
+
+Repair는 verifier가 지적한 semantic path만 수정할 수 있다. paragraph/source identity, source hash, generation provenance, generator fingerprint, semantic verification metadata, revision history, verifier record, asset/verifier kind는 보호한다. issue ID는 모델이 낸 문자열을 신뢰하지 않고 category, location과 source evidence에서 안정적인 key를 계산한다. 적용된 repair에는 수정 JSON Pointer, before/after, cycle과 artifact 경로를 기록한다.
+
+## Source bundle과 각주
+
+tracked passage source에서 문단별 verifier 입력을 다음 세 hash로 결속한다.
+
+- `sourceHash`: `normalizeGoldSource-v1`을 적용한 `primaryText` hash
+- `contextHash`: 해당 문단에 연결된 `contextOnlyFootnotes`를 역할과 함께 canonical serialization한 hash
+- `verifierInputHash`: `[PRIMARY_TEXT]`와 `[CONTEXT_ONLY_FOOTNOTES]` 역할 경계를 포함한 전체 verifier input hash
+
+각주는 본문 용어 해석에 사용할 수 있지만 학생 요약의 기본 필수 명제가 아니다. 각주 내용이 gold에 없다는 이유만으로 blocker를 만들지 않는다. 각주는 `primaryText`에 합치지 않으며, 각주만 바뀌면 `contextHash`와 `verifierInputHash`가 바뀌고 본문만 바뀌면 `sourceHash`와 `verifierInputHash`가 바뀐다.
+
+## Candidate staging과 promotion
+
+신규 자산과 legacy 자산 모두 production `content/`에 먼저 복사하지 않는다.
+
+```text
+candidate 준비
+→ tracked source deterministic preflight
+→ gold/query/title-query semantic qualification v2
+→ candidate query 기반 production regression
+→ qualification manifest 완성
+→ promotion gate 재검증
+→ content/ promotion
+```
+
+qualification manifest는 candidate와 source bundle identity, 세 자산의 v2 record, 신규/legacy mode, preflight, regression binding, promotion blocker를 연결한다. promotion gate는 단순 `ready` 값을 믿지 않고 candidate와 record artifact hash, v2 report history, regression proof를 다시 확인한다. regression proof가 아직 없으면 candidate는 명시적으로 pending이며 promotion이 차단된다. 현재 CLI는 candidate qualification과 pending manifest 생성까지 담당하고 production import나 regression 실행은 하지 않는다.
+
+신규 mode는 세 자산의 generation provenance와 gold의 현재 generator fingerprint를 요구한다. legacy mode는 반드시 `--legacy-requalification`으로 선택하며 `legacy/no-fingerprint`를 보존하고 requalification history를 요구한다. legacy를 신규 mode로 묵시적으로 통과시키지 않는다. 기존 runtime loader에는 전역 hard block을 걸지 않아 현재 콘텐츠 로딩은 유지한다.
+
+## CLI와 dry-run
+
+빌드된 pipeline CLI는 다음처럼 candidate 하나를 계획한다.
+
+```bash
+npm run content:qualify -- \
+  --candidate-dir content/corporate-law-p1 \
+  --source-fixture packages/pipeline/fixtures/sources/69bbf88d8937cf14551903ca.json \
+  --paragraph-id corporate-law-p1 \
+  --source-paragraph-id p1 \
+  --asset-type all \
+  --regression-probes 4 \
+  --legacy-requalification \
+  --dry-run
+```
+
+`--dry-run`은 API key나 provider client를 읽지 않고 파일도 쓰지 않는다. 자산별 clean verifier 최소 2회, 최대 repair 2 cycle과 clean streak 재구축 경로를 구분해 verifier·repair·regression의 논리 호출 범위를 출력한다. HTTP 최대치는 각 논리 호출에 기존 retry 상한 4회를 더한 5 attempts로 별도 표시한다. prompt cache는 허용하지만 result replay는 clean pass로 인정하지 않는다.
+
+현재 `corporate-law-p1` dry-run은 연결 각주 1개, 제품 문자열의 각주 표식 누락에 따른 tracked source mismatch, gold/query/title-query의 v1 record, production regression 4프로브 pending을 보고해야 한다. source mismatch를 먼저 해소하는 정책 결정 없이는 실제 verifier를 호출하지 않는다.
