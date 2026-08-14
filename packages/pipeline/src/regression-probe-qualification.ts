@@ -9,8 +9,8 @@ import { MODEL, getClient, instrumented } from './llm/client.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
 import type { SourceBundle } from './candidate-qualification.js';
 
-export const PROBE_VERIFIER_VERSION = 'regression-probe-verifier-v1';
-export const PROBE_QUALIFICATION_VERSION = 'regression-probe-qualification-v2-state-evidence-agreement';
+export const PROBE_VERIFIER_VERSION = 'regression-probe-verifier-v2-state-consistency';
+export const PROBE_QUALIFICATION_VERSION = 'regression-probe-qualification-v3-state-evidence-agreement';
 
 const Sha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 const VerdictSchema = z.enum([
@@ -47,18 +47,28 @@ export const QualifiedProbeSchema = z.object({
   mutationSpec: ProbeMutationSchema,
 });
 
-export const ProbeQueryJudgmentSchema = z.object({
+const ProbeQueryJudgmentBaseSchema = z.object({
   queryId: z.string().min(1),
-  semanticState: z.enum(['preserved', 'not_evidenced', 'contradicted']),
-  expressionMode: z.enum(['explicit', 'implicit', 'none']),
-  evidenceRole: z.enum(['relation', 'entity_identification', 'scope', 'none']),
   studentEvidence: z.string(),
   sourceEvidenceRefs: z.array(z.object({ sourceSegmentId: z.string().regex(/^S[1-9][0-9]*$/) })),
   rationale: z.string().min(1),
 });
 
+export const ProbeQueryJudgmentSchema = z.discriminatedUnion('semanticState', [
+  ProbeQueryJudgmentBaseSchema.extend({
+    semanticState: z.literal('preserved'),
+    expressionMode: z.enum(['explicit', 'implicit']),
+    evidenceRole: z.enum(['relation', 'entity_identification', 'scope']),
+  }),
+  ProbeQueryJudgmentBaseSchema.extend({
+    semanticState: z.enum(['not_evidenced', 'contradicted']),
+    expressionMode: z.literal('none'),
+    evidenceRole: z.literal('none'),
+  }),
+]);
+
 export const ProbeVerifierReportSchema = z.object({
-  schemaVersion: z.literal('regression-probe-verifier-report-v1'),
+  schemaVersion: z.literal('regression-probe-verifier-report-v2-state-consistency'),
   judgments: z.array(ProbeQueryJudgmentSchema),
 });
 export type ProbeVerifierReport = z.infer<typeof ProbeVerifierReportSchema>;
@@ -105,7 +115,7 @@ export function probeVerifierFingerprint(): string {
   return probeQualificationHash({
     provider: 'anthropic', model: MODEL, effort: 'medium',
     promptVersion: PROBE_VERIFIER_VERSION,
-    schemaVersion: 'regression-probe-verifier-report-v1',
+    schemaVersion: 'regression-probe-verifier-report-v2-state-consistency',
     qualificationVersion: PROBE_QUALIFICATION_VERSION,
   });
 }
@@ -162,11 +172,9 @@ export function assertProbeVerifierReport(input: VerifyProbeInput, report: Probe
       throw new Error(`${judgment.queryId}: 존재하지 않는 source segment ID`);
     }
     if (judgment.semanticState === 'preserved') {
-      if (judgment.expressionMode === 'none' || judgment.evidenceRole === 'none' || judgment.studentEvidence === '') {
+      if (judgment.studentEvidence === '') {
         throw new Error(`${judgment.queryId}: preserved 판정의 표현/evidence 계약 위반`);
       }
-    } else if (judgment.expressionMode !== 'none' || judgment.evidenceRole !== 'none') {
-      throw new Error(`${judgment.queryId}: 미보존/모순 판정의 표현 축은 none이어야 한다`);
     }
   }
 }

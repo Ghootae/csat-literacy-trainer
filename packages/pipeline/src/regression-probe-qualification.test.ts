@@ -27,7 +27,7 @@ const BUNDLE = {
 
 function report(rel: 'preserved' | 'not_evidenced' | 'contradicted', refs = ['S1']): ProbeVerifierReport {
   return {
-    schemaVersion: 'regression-probe-verifier-report-v1',
+    schemaVersion: 'regression-probe-verifier-report-v2-state-consistency',
     judgments: [
       { queryId: 'q-scope', semanticState: 'preserved', expressionMode: 'explicit', evidenceRole: 'scope', studentEvidence: '자산', sourceEvidenceRefs: [{ sourceSegmentId: 'S1' }], rationale: '화제' },
       { queryId: 'q-rel', semanticState: rel, expressionMode: rel === 'preserved' ? 'explicit' : 'none', evidenceRole: rel === 'preserved' ? 'relation' : 'none', studentEvidence: rel === 'preserved' ? '처분에는 허가' : '', sourceEvidenceRefs: refs.map((sourceSegmentId) => ({ sourceSegmentId })), rationale: '관계' },
