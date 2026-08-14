@@ -28,7 +28,7 @@ import { assertPassageSourceFixtureIntegrity, PassageSourceFixtureSchema, source
 
 const Sha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 
-const ContextFootnoteSchema = z.object({
+const IgnoredFootnoteSchema = z.object({
   id: z.string().min(1),
   marker: z.string().min(1),
   targetTerm: z.string().min(1),
@@ -36,14 +36,16 @@ const ContextFootnoteSchema = z.object({
 });
 
 export const SourceBundleSchema = z.object({
-  schemaVersion: z.literal('semantic-source-bundle-v1'),
-  canonicalizationVersion: z.literal('semantic-source-bundle-canonical-v1'),
+  schemaVersion: z.literal('semantic-source-bundle-v2'),
+  canonicalizationVersion: z.literal('semantic-source-bundle-canonical-v2-footnotes-ignored'),
   sourceSetId: z.string().min(1),
   sourceParagraphId: z.string().min(1),
   primaryText: z.string().min(1),
-  contextOnlyFootnotes: z.array(ContextFootnoteSchema),
-  sourceHash: Sha256Schema,
-  contextHash: Sha256Schema,
+  qualificationPrimaryText: z.string().min(1),
+  ignoredFootnotes: z.array(IgnoredFootnoteSchema),
+  rawSourceHash: Sha256Schema,
+  qualificationSourceHash: Sha256Schema,
+  ignoredFootnotesHash: Sha256Schema,
   verifierInputHash: Sha256Schema,
 });
 
@@ -95,14 +97,15 @@ const RegressionBindingSchema = z.object({
 });
 
 export const QualificationManifestSchema = z.object({
-  schemaVersion: z.literal('semantic-qualification-manifest-v1'),
+  schemaVersion: z.literal('semantic-qualification-manifest-v2'),
   paragraphId: z.string().min(1),
   mode: z.enum(['new', 'legacy-requalification']),
   sourceFixturePath: z.string().min(1),
   sourceSetId: z.string().min(1),
   sourceParagraphId: z.string().min(1),
-  sourceHash: Sha256Schema,
-  contextHash: Sha256Schema,
+  rawSourceHash: Sha256Schema,
+  qualificationSourceHash: Sha256Schema,
+  ignoredFootnotesHash: Sha256Schema,
   verifierInputHash: Sha256Schema,
   preflight: z.object({
     status: z.enum(['passed', 'blocked']),
@@ -141,20 +144,27 @@ export function qualificationArtifactHash(value: unknown): string {
   return sha256(canonical(value));
 }
 
-function canonicalContext(footnotes: SourceBundle['contextOnlyFootnotes']): string {
-  return canonical({ role: 'contextOnlyFootnotes', items: footnotes });
+function canonicalIgnoredFootnotes(footnotes: SourceBundle['ignoredFootnotes']): string {
+  return canonical({ role: 'ignoredFootnotes', items: footnotes });
 }
 
-export function verifierInputText(bundle: Pick<SourceBundle, 'primaryText' | 'contextOnlyFootnotes'>): string {
-  const context = bundle.contextOnlyFootnotes.length === 0
-    ? '(없음)'
-    : bundle.contextOnlyFootnotes.map((footnote) => `${footnote.id}: ${footnote.text}`).join('\n');
+export function qualificationPrimaryText(
+  primaryText: string,
+  ignoredFootnotes: readonly Pick<SourceBundle['ignoredFootnotes'][number], 'marker' | 'targetTerm'>[],
+): string {
+  let normalized = primaryText;
+  for (const footnote of ignoredFootnotes) {
+    normalized = normalized.split(`${footnote.targetTerm}${footnote.marker}`).join(footnote.targetTerm);
+  }
+  return normalizeGoldSource(normalized);
+}
+
+export function verifierInputText(bundle: Pick<SourceBundle, 'qualificationPrimaryText' | 'ignoredFootnotes'>): string {
   return [
-    '[PRIMARY_TEXT — 의미 명제의 유일한 본문]',
-    bundle.primaryText,
+    '[PRIMARY_TEXT — 각주 표식과 각주 본문을 제외한 의미 검수 대상]',
+    bundle.qualificationPrimaryText,
     '',
-    '[CONTEXT_ONLY_FOOTNOTES — 용어 해석 문맥이며 그 자체를 필수 명제로 요구하지 않음]',
-    context,
+    '[FOOTNOTES_IGNORED — 내용은 모델 입력에서 제외]',
   ].join('\n');
 }
 
@@ -162,18 +172,20 @@ export function buildSourceBundle(fixtureValue: unknown, sourceParagraphId: stri
   const fixture = assertPassageSourceFixtureIntegrity(fixtureValue);
   const paragraph = fixture.paragraphs.find((item) => item.id === sourceParagraphId);
   if (paragraph === undefined) throw new Error(`${sourceParagraphId}: source fixture 문단 없음`);
-  const contextOnlyFootnotes = fixture.footnotes
+  const ignoredFootnotes = fixture.footnotes
     .filter((footnote) => footnote.targetParagraphId === sourceParagraphId)
     .map(({ id, marker, targetTerm, text }) => ({ id, marker, targetTerm, text }));
   const partial = {
-    schemaVersion: 'semantic-source-bundle-v1' as const,
-    canonicalizationVersion: 'semantic-source-bundle-canonical-v1' as const,
+    schemaVersion: 'semantic-source-bundle-v2' as const,
+    canonicalizationVersion: 'semantic-source-bundle-canonical-v2-footnotes-ignored' as const,
     sourceSetId: fixture.sourceSetId,
     sourceParagraphId,
     primaryText: paragraph.text,
-    contextOnlyFootnotes,
-    sourceHash: sourceTextHash(paragraph.text),
-    contextHash: sha256(canonicalContext(contextOnlyFootnotes)),
+    qualificationPrimaryText: qualificationPrimaryText(paragraph.text, ignoredFootnotes),
+    ignoredFootnotes,
+    rawSourceHash: sourceTextHash(paragraph.text),
+    qualificationSourceHash: sourceTextHash(qualificationPrimaryText(paragraph.text, ignoredFootnotes)),
+    ignoredFootnotesHash: sha256(canonicalIgnoredFootnotes(ignoredFootnotes)),
   };
   return SourceBundleSchema.parse({
     ...partial,
@@ -283,10 +295,11 @@ export interface QualificationDryRunSummary {
   readonly source: {
     readonly sourceSetId: string;
     readonly sourceParagraphId: string;
-    readonly sourceHash: string;
-    readonly contextHash: string;
+    readonly rawSourceHash: string;
+    readonly qualificationSourceHash: string;
+    readonly ignoredFootnotesHash: string;
     readonly verifierInputHash: string;
-    readonly contextOnlyFootnoteCount: number;
+    readonly ignoredFootnoteCount: number;
   };
   readonly existingRecordVersions: QualificationPlan['existingRecordVersions'];
   readonly preflight: QualificationManifest['preflight'];
@@ -308,10 +321,11 @@ export function createQualificationDryRunSummary(
     source: {
       sourceSetId: plan.bundle.sourceSetId,
       sourceParagraphId: plan.bundle.sourceParagraphId,
-      sourceHash: plan.bundle.sourceHash,
-      contextHash: plan.bundle.contextHash,
+      rawSourceHash: plan.bundle.rawSourceHash,
+      qualificationSourceHash: plan.bundle.qualificationSourceHash,
+      ignoredFootnotesHash: plan.bundle.ignoredFootnotesHash,
       verifierInputHash: plan.bundle.verifierInputHash,
-      contextOnlyFootnoteCount: plan.bundle.contextOnlyFootnotes.length,
+      ignoredFootnoteCount: plan.bundle.ignoredFootnotes.length,
     },
     existingRecordVersions: plan.existingRecordVersions,
     preflight: manifest.preflight,
@@ -358,8 +372,11 @@ export function planCandidateQualification(args: {
     preflightReasons.push('title-query 구조 검사 실패: 1개 영역과 qT1~qT3가 필요하다');
   }
   const candidateText = candidateSourceText(candidates.gold);
-  if (normalizeGoldSource(candidateText) !== normalizeGoldSource(bundle.primaryText)) {
-    preflightReasons.push(`tracked source mismatch: candidate=${sourceTextHash(candidateText)} fixture=${bundle.sourceHash}`);
+  const qualificationCandidateText = qualificationPrimaryText(candidateText, bundle.ignoredFootnotes);
+  if (qualificationCandidateText !== bundle.qualificationPrimaryText) {
+    preflightReasons.push(
+      `tracked source mismatch: candidate=${sourceTextHash(qualificationCandidateText)} fixture=${bundle.qualificationSourceHash}`,
+    );
   }
 
   const rawByType: Record<SemanticAssetType, Record<string, unknown>> = {
@@ -443,14 +460,15 @@ export function buildPendingQualificationManifest(args: {
     'production-query regression proof pending',
   ];
   return QualificationManifestSchema.parse({
-    schemaVersion: 'semantic-qualification-manifest-v1',
+    schemaVersion: 'semantic-qualification-manifest-v2',
     paragraphId: args.paragraphId,
     mode: args.plan.mode,
     sourceFixturePath: args.sourceFixturePath,
     sourceSetId: args.plan.bundle.sourceSetId,
     sourceParagraphId: args.plan.bundle.sourceParagraphId,
-    sourceHash: args.plan.bundle.sourceHash,
-    contextHash: args.plan.bundle.contextHash,
+    rawSourceHash: args.plan.bundle.rawSourceHash,
+    qualificationSourceHash: args.plan.bundle.qualificationSourceHash,
+    ignoredFootnotesHash: args.plan.bundle.ignoredFootnotesHash,
     verifierInputHash: args.plan.bundle.verifierInputHash,
     preflight: { status: args.plan.preflightReasons.length === 0 ? 'passed' : 'blocked', reasons: args.plan.preflightReasons },
     assets,
@@ -475,8 +493,9 @@ export function assertCandidatePromotionGate(args: {
   readonly verifierFingerprints: Readonly<Record<SemanticAssetType, string>>;
 }): void {
   const manifest = QualificationManifestSchema.parse(args.manifest);
-  if (manifest.sourceHash !== args.bundle.sourceHash
-    || manifest.contextHash !== args.bundle.contextHash
+  if (manifest.sourceSetId !== args.bundle.sourceSetId
+    || manifest.sourceParagraphId !== args.bundle.sourceParagraphId
+    || manifest.qualificationSourceHash !== args.bundle.qualificationSourceHash
     || manifest.verifierInputHash !== args.bundle.verifierInputHash) {
     throw new Error('qualification source bundle hash 불일치');
   }
@@ -503,7 +522,7 @@ export function assertCandidatePromotionGate(args: {
       expectedAssetType: link.assetType,
       expectedVerifierKind: link.verifierKind,
       sourceText: sourceInput,
-      evidenceSourceTexts: [args.bundle.primaryText, ...args.bundle.contextOnlyFootnotes.map((footnote) => footnote.text)],
+      evidenceSourceTexts: [args.bundle.qualificationPrimaryText],
       candidate,
       verifierFingerprint: args.verifierFingerprints[link.assetType],
       loadReport: args.loadJson,

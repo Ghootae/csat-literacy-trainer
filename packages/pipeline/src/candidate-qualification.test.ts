@@ -122,13 +122,16 @@ describe('source-bound candidate qualification', () => {
     const primaryChanged = buildSourceBundle(sourceFixture(`${base.primaryText} 변경`), 'p4');
     const contextChanged = buildSourceBundle(sourceFixture(base.primaryText, '변경된 설명 각주'), 'p4');
 
-    expect(primaryChanged.sourceHash).not.toBe(base.sourceHash);
+    expect(primaryChanged.rawSourceHash).not.toBe(base.rawSourceHash);
+    expect(primaryChanged.qualificationSourceHash).not.toBe(base.qualificationSourceHash);
     expect(primaryChanged.verifierInputHash).not.toBe(base.verifierInputHash);
-    expect(contextChanged.sourceHash).toBe(base.sourceHash);
-    expect(contextChanged.contextHash).not.toBe(base.contextHash);
-    expect(contextChanged.verifierInputHash).not.toBe(base.verifierInputHash);
+    expect(contextChanged.rawSourceHash).toBe(base.rawSourceHash);
+    expect(contextChanged.qualificationSourceHash).toBe(base.qualificationSourceHash);
+    expect(contextChanged.ignoredFootnotesHash).not.toBe(base.ignoredFootnotesHash);
+    expect(contextChanged.verifierInputHash).toBe(base.verifierInputHash);
     expect(base.primaryText).not.toContain('광호흡은 빛이 있을 때 일어난다.');
-    expect(verifierInputText(base)).toContain('[CONTEXT_ONLY_FOOTNOTES');
+    expect(verifierInputText(base)).not.toContain('광호흡은 빛이 있을 때 일어난다.');
+    expect(verifierInputText(base)).toContain('[FOOTNOTES_IGNORED');
   });
 
   it('tracked source fixture의 저장 hash가 실제 문자열과 다르면 fail-closed한다', () => {
@@ -140,9 +143,9 @@ describe('source-bound candidate qualification', () => {
     expect(() => buildSourceBundle(tampered, 'p4')).toThrow(/source paragraph hash/);
   });
 
-  it('context-only 각주가 gold에 없다는 사실만으로 deterministic preflight를 실패시키지 않는다', () => {
+  it('제외된 각주가 gold에 없다는 사실만으로 deterministic preflight를 실패시키지 않는다', () => {
     const plan = makePlan('legacy-requalification');
-    expect(plan.bundle.contextOnlyFootnotes).toHaveLength(1);
+    expect(plan.bundle.ignoredFootnotes).toHaveLength(1);
     expect(plan.preflightReasons).toEqual([]);
   });
 
@@ -150,7 +153,7 @@ describe('source-bound candidate qualification', () => {
     const bundle = buildSourceBundle(sourceFixture(), 'p4');
     const execution = await runSemanticQualification({
       assetType: 'gold', verifierKind: 'gold', sourceText: verifierInputText(bundle), initial: { value: 1 },
-      evidenceSourceTexts: [bundle.primaryText, ...bundle.contextOnlyFootnotes.map((footnote) => footnote.text)],
+      evidenceSourceTexts: [bundle.qualificationPrimaryText],
       provider: 'anthropic', model: 'fake', effort: 'medium', promptVersion: 'test',
       reportSchemaVersion: SEMANTIC_REPORT_SCHEMA_VERSION,
       verify: async () => ({
@@ -210,9 +213,9 @@ describe('source-bound candidate qualification', () => {
     expect(() => assertCandidatePromotionGate({
       manifest, bundle: plan.bundle, loadJson: () => undefined,
       verifierFingerprints: {
-        gold: semanticVerifierFingerprint('gold', 'semantic-source-bundle-v1'),
-        query: semanticVerifierFingerprint('query', 'semantic-source-bundle-v1'),
-        'title-query': semanticVerifierFingerprint('title-query', 'semantic-source-bundle-v1'),
+        gold: semanticVerifierFingerprint('gold', 'semantic-source-bundle-v2-footnotes-ignored'),
+        query: semanticVerifierFingerprint('query', 'semantic-source-bundle-v2-footnotes-ignored'),
+        'title-query': semanticVerifierFingerprint('title-query', 'semantic-source-bundle-v2-footnotes-ignored'),
       },
     })).toThrow(/record binding/);
   });
@@ -232,7 +235,7 @@ describe('source-bound candidate qualification', () => {
     expect(summary.estimate.logicalLlmInvocations).toEqual({ minimum: 10, maximum: 28 });
   });
 
-  it('법인 p1 dry-run 계획은 source mismatch·각주·legacy v1·4 probe를 정확히 보고한다', () => {
+  it('법인 p1 dry-run은 각주 표식 차이를 무시하고 legacy v1·4 probe를 정확히 보고한다', () => {
     const paragraphId = 'corporate-law-p1';
     const plan = planCandidateQualification({
       paragraphId,
@@ -254,8 +257,8 @@ describe('source-bound candidate qualification', () => {
       regressionProbes: 4,
     });
     const summary = createQualificationDryRunSummary(paragraphId, plan, manifest);
-    expect(summary.source.contextOnlyFootnoteCount).toBe(1);
-    expect(summary.preflight.reasons.some((reason) => reason.startsWith('tracked source mismatch:'))).toBe(true);
+    expect(summary.source.ignoredFootnoteCount).toBe(1);
+    expect(summary.preflight.reasons.some((reason) => reason.startsWith('tracked source mismatch:'))).toBe(false);
     expect(summary.existingRecordVersions).toEqual({ gold: 'v1', query: 'v1', 'title-query': 'v1' });
     expect(summary.estimate.regression).toBe(4);
     expect(summary.promotionStatus).toBe('blocked');
@@ -280,9 +283,9 @@ describe('candidate promotion gate', () => {
     ]);
     const assets: Record<string, unknown> = {};
     const fingerprints = {
-      gold: semanticVerifierFingerprint('gold', 'semantic-source-bundle-v1'),
-      query: semanticVerifierFingerprint('query', 'semantic-source-bundle-v1'),
-      'title-query': semanticVerifierFingerprint('title-query', 'semantic-source-bundle-v1'),
+      gold: semanticVerifierFingerprint('gold', 'semantic-source-bundle-v2-footnotes-ignored'),
+      query: semanticVerifierFingerprint('query', 'semantic-source-bundle-v2-footnotes-ignored'),
+      'title-query': semanticVerifierFingerprint('title-query', 'semantic-source-bundle-v2-footnotes-ignored'),
     } as const;
 
     for (const assetType of ['gold', 'query', 'title-query'] as const) {
@@ -321,10 +324,12 @@ describe('candidate promotion gate', () => {
     }
 
     const manifest: QualificationManifest = QualificationManifestSchema.parse({
-      schemaVersion: 'semantic-qualification-manifest-v1', paragraphId: PARAGRAPH_ID,
+      schemaVersion: 'semantic-qualification-manifest-v2', paragraphId: PARAGRAPH_ID,
       mode: 'legacy-requalification', sourceFixturePath: 'source.json',
       sourceSetId: plan.bundle.sourceSetId, sourceParagraphId: plan.bundle.sourceParagraphId,
-      sourceHash: plan.bundle.sourceHash, contextHash: plan.bundle.contextHash,
+      rawSourceHash: plan.bundle.rawSourceHash,
+      qualificationSourceHash: plan.bundle.qualificationSourceHash,
+      ignoredFootnotesHash: plan.bundle.ignoredFootnotesHash,
       verifierInputHash: plan.bundle.verifierInputHash,
       preflight: { status: 'passed', reasons: [] }, assets,
       regression: {
@@ -341,7 +346,7 @@ describe('candidate promotion gate', () => {
       manifest, bundle: plan.bundle, loadJson: (path) => store.get(path), verifierFingerprints: fingerprints,
     })).not.toThrow();
     expect(() => assertCandidatePromotionGate({
-      manifest: { ...manifest, contextHash: sha256('changed') },
+      manifest: { ...manifest, qualificationSourceHash: sha256('changed') },
       bundle: plan.bundle, loadJson: (path) => store.get(path), verifierFingerprints: fingerprints,
     })).toThrow(/source bundle hash/);
   });

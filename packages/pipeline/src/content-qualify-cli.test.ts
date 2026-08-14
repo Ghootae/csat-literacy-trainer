@@ -16,15 +16,15 @@ describe('content:qualify dry-run', () => {
       '--dry-run',
     ]) as {
       dryRun: boolean;
-      source: { contextOnlyFootnoteCount: number };
+      source: { ignoredFootnoteCount: number };
       estimate: { logicalLlmInvocations: { minimum: number; maximum: number } };
       promotionBlockers: string[];
     };
 
     expect(result.dryRun).toBe(true);
-    expect(result.source.contextOnlyFootnoteCount).toBe(1);
+    expect(result.source.ignoredFootnoteCount).toBe(1);
     expect(result.estimate.logicalLlmInvocations).toEqual({ minimum: 10, maximum: 28 });
-    expect(result.promotionBlockers.some((reason) => reason.startsWith('tracked source mismatch:'))).toBe(true);
+    expect(result.promotionBlockers.some((reason) => reason.startsWith('tracked source mismatch:'))).toBe(false);
     expect(log).toHaveBeenCalledTimes(1);
     log.mockRestore();
   });

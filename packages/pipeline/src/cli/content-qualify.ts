@@ -180,12 +180,12 @@ export async function runContentQualificationCli(argv = process.argv.slice(2)): 
       assetType,
       verifierKind: assetType,
       sourceText: sourceInput,
-      evidenceSourceTexts: [plan.bundle.primaryText, ...plan.bundle.contextOnlyFootnotes.map((footnote) => footnote.text)],
+      evidenceSourceTexts: [plan.bundle.qualificationPrimaryText],
       initial,
       provider: 'anthropic',
       model: MODEL,
       effort: SEMANTIC_VERIFICATION_EFFORT,
-      promptVersion: `${SEMANTIC_VERIFIER_VERSION}:${assetType}:semantic-source-bundle-v1`,
+      promptVersion: `${SEMANTIC_VERIFIER_VERSION}:${assetType}:semantic-source-bundle-v2-footnotes-ignored`,
       reportSchemaVersion: SEMANTIC_REPORT_SCHEMA_VERSION,
       maxRepairCycles: 2,
       verify: async (candidate) => ({
@@ -225,7 +225,7 @@ export async function runContentQualificationCli(argv = process.argv.slice(2)): 
     const candidate = execution.candidate as Gold | GeneratedQuerySet;
     const candidatePath = resolve(kindDir, 'candidate.json');
     writeJson(candidatePath, candidate);
-    const fingerprint = semanticVerifierFingerprint(assetType, 'semantic-source-bundle-v1');
+    const fingerprint = semanticVerifierFingerprint(assetType, 'semantic-source-bundle-v2-footnotes-ignored');
     const record = makeVerificationRecordV2({
       assetType,
       verifierKind: assetType,

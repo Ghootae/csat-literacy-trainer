@@ -65,15 +65,18 @@ LLM verifier의 의미 판단과 deterministic 검사는 역할이 다르다. de
 
 Repair는 verifier가 지적한 semantic path만 수정할 수 있다. paragraph/source identity, source hash, generation provenance, generator fingerprint, semantic verification metadata, revision history, verifier record, asset/verifier kind는 보호한다. issue ID는 모델이 낸 문자열을 신뢰하지 않고 category, location과 source evidence에서 안정적인 key를 계산한다. 적용된 repair에는 수정 JSON Pointer, before/after, cycle과 artifact 경로를 기록한다.
 
-## Source bundle과 각주
+## Source bundle과 각주 제외 정책
 
-tracked passage source에서 문단별 verifier 입력을 다음 세 hash로 결속한다.
+tracked passage source에서 문단별 원본과 qualification 입력을 다음 hash로 구분한다.
 
-- `sourceHash`: `normalizeGoldSource-v1`을 적용한 `primaryText` hash
-- `contextHash`: 해당 문단에 연결된 `contextOnlyFootnotes`를 역할과 함께 canonical serialization한 hash
-- `verifierInputHash`: `[PRIMARY_TEXT]`와 `[CONTEXT_ONLY_FOOTNOTES]` 역할 경계를 포함한 전체 verifier input hash
+- `rawSourceHash`: 각주 표식까지 보존한 원본 `primaryText` hash
+- `qualificationSourceHash`: 연결된 `targetTerm + marker`만 제거한 qualification 본문 hash
+- `ignoredFootnotesHash`: 제외된 각주 metadata와 본문의 provenance hash
+- `verifierInputHash`: 각주 표식과 각주 본문을 제외한 verifier input hash
 
-각주는 본문 용어 해석에 사용할 수 있지만 학생 요약의 기본 필수 명제가 아니다. 각주 내용이 gold에 없다는 이유만으로 blocker를 만들지 않는다. 각주는 `primaryText`에 합치지 않으며, 각주만 바뀌면 `contextHash`와 `verifierInputHash`가 바뀌고 본문만 바뀌면 `sourceHash`와 `verifierInputHash`가 바뀐다.
+각주는 학습 대상 명제와 semantic qualification에서 제외한다. tracked fixture의 원문, 각주, 원본 hash는 그대로 보존하지만 verifier에게 각주 본문을 전달하지 않고 gold·query에 각주 내용을 요구하지 않는다. source binding에서는 fixture가 명시한 `targetTerm + marker` 조합만 제거하므로 `정관*`과 `정관`은 같은 qualification 본문이다. 임의의 별표나 일반 본문 차이는 제거하지 않는다.
+
+각주 본문만 바뀌면 `ignoredFootnotesHash`만 바뀌며 qualification streak와 verifier input은 무효화하지 않는다. 본문 의미가 바뀌면 `qualificationSourceHash`와 `verifierInputHash`가 바뀌어 기존 qualification이 무효가 된다. promotion gate는 source set, 문단 ID, `qualificationSourceHash`와 `verifierInputHash`를 직접 확인한다.
 
 ## Candidate staging과 promotion
 
@@ -111,4 +114,4 @@ npm run content:qualify -- \
 
 `--dry-run`은 API key나 provider client를 읽지 않고 파일도 쓰지 않는다. 자산별 clean verifier 최소 2회, 최대 repair 2 cycle과 clean streak 재구축 경로를 구분해 verifier·repair·regression의 논리 호출 범위를 출력한다. HTTP 최대치는 각 논리 호출에 기존 retry 상한 4회를 더한 5 attempts로 별도 표시한다. prompt cache는 허용하지만 result replay는 clean pass로 인정하지 않는다.
 
-현재 `corporate-law-p1` dry-run은 연결 각주 1개, 제품 문자열의 각주 표식 누락에 따른 tracked source mismatch, gold/query/title-query의 v1 record, production regression 4프로브 pending을 보고해야 한다. source mismatch를 먼저 해소하는 정책 결정 없이는 실제 verifier를 호출하지 않는다.
+현재 `corporate-law-p1` dry-run은 제외된 연결 각주 1개를 보고하며, 제품 문자열의 각주 표식 누락은 source mismatch로 처리하지 않는다. 남은 blocker는 gold/query/title-query의 v1 record와 production regression 4프로브 pending이다. 실제 verifier와 regression은 별도 승인 전까지 실행하지 않는다.
