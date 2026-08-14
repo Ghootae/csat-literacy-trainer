@@ -53,6 +53,12 @@ export const SemanticVerificationRunV2Schema = z.object({
   issueCount: z.number().int().nonnegative(),
   blockingIssueCount: z.number().int().nonnegative(),
   repairArtifactPath: z.string().min(1).optional(),
+  passIndex: z.number().int().positive().optional(),
+  invalidReportPath: z.string().min(1).optional(),
+  invalidReportHash: Sha256Schema.optional(),
+  failureContract: z.literal('evidence_exact_substring').optional(),
+  failureIssueId: z.string().min(1).optional(),
+  failureIssueKey: Sha256Schema.optional(),
   failureReason: z.string().min(1).optional(),
 });
 
@@ -177,6 +183,22 @@ export interface QualificationRunConfig<T> {
     report: SemanticVerificationReport,
     pass: number,
     run: { readonly runId: string; readonly invocationId: string },
+  ) => string | undefined;
+  /**
+   * 파싱에는 성공했지만 evidence 계약을 위반한 report만 격리 저장한다.
+   * provider envelope이나 인증 정보가 아니라 검증된 structured report만 전달된다.
+   */
+  readonly persistInvalidReport?: (
+    report: SemanticVerificationReport,
+    pass: number,
+    run: {
+      readonly runId: string;
+      readonly invocationId: string;
+      readonly failureContract: 'evidence_exact_substring';
+      readonly failureIssueId: string;
+      readonly failureIssueKey: string;
+      readonly failureReason: string;
+    },
   ) => string | undefined;
 }
 
@@ -306,6 +328,84 @@ export async function runSemanticQualification<T>(
     }
 
     const report = parsed.data;
+    const evidenceViolation = report.issues.find((issue) => {
+      if (issue.sourceEvidence === '') return false;
+      const sources = config.evidenceSourceTexts ?? [config.sourceText];
+      return !sources.some((source) => source.includes(issue.sourceEvidence));
+    });
+    if (evidenceViolation !== undefined) {
+      const failureReason = config.evidenceSourceTexts === undefined
+        ? `${evidenceViolation.id}: sourceEvidence가 원문의 연속 부분 문자열이 아니다`
+        : `${evidenceViolation.id}: sourceEvidence가 primary/context 원문의 연속 부분 문자열이 아니다`;
+      const failureIssueKey = stableSemanticIssueKey(config.assetType, evidenceViolation);
+      let invalidReportPath: string | undefined;
+      try {
+        invalidReportPath = config.persistInvalidReport?.(report, pass, {
+          runId: workflowRunId,
+          invocationId,
+          failureContract: 'evidence_exact_substring',
+          failureIssueId: evidenceViolation.id,
+          failureIssueKey,
+          failureReason,
+        });
+      } catch (error) {
+        const persistenceReason = error instanceof Error ? error.message : 'invalid report 저장 실패';
+        runs.push({
+          runId: workflowRunId,
+          invocationId,
+          verifierKind: config.verifierKind,
+          provider: config.provider,
+          model: config.model,
+          effort: config.effort,
+          promptVersion: config.promptVersion,
+          schemaVersion: config.reportSchemaVersion,
+          startedAt,
+          completedAt: new Date().toISOString(),
+          resultReplay: false,
+          ...(result.promptCacheUsed === undefined ? {} : { promptCacheUsed: result.promptCacheUsed }),
+          verdict: 'incomplete',
+          passIndex: pass,
+          failureContract: 'evidence_exact_substring',
+          failureIssueId: evidenceViolation.id,
+          failureIssueKey,
+          issueCount: report.issues.length,
+          blockingIssueCount: reportBlockers(report).length,
+          failureReason: `${failureReason}; invalid report 저장 실패: ${persistenceReason}`,
+        });
+        cleanStreak = 0;
+        stateHistory.push('incomplete');
+        return finish('incomplete', runs.at(-1)?.failureReason);
+      }
+      runs.push({
+        runId: workflowRunId,
+        invocationId,
+        verifierKind: config.verifierKind,
+        provider: config.provider,
+        model: config.model,
+        effort: config.effort,
+        promptVersion: config.promptVersion,
+        schemaVersion: config.reportSchemaVersion,
+        startedAt,
+        completedAt: new Date().toISOString(),
+        resultReplay: false,
+        ...(result.promptCacheUsed === undefined ? {} : { promptCacheUsed: result.promptCacheUsed }),
+        verdict: 'incomplete',
+        passIndex: pass,
+        ...(invalidReportPath === undefined ? {} : {
+          invalidReportPath,
+          invalidReportHash: semanticReportHash(report),
+        }),
+        failureContract: 'evidence_exact_substring',
+        failureIssueId: evidenceViolation.id,
+        failureIssueKey,
+        issueCount: report.issues.length,
+        blockingIssueCount: reportBlockers(report).length,
+        failureReason,
+      });
+      cleanStreak = 0;
+      stateHistory.push('incomplete');
+      return finish('incomplete', failureReason);
+    }
     try {
       if (config.evidenceSourceTexts === undefined) {
         assertEvidenceContract(config.sourceText, report);
@@ -560,6 +660,29 @@ export function assertV2QualificationGate(args: {
   if (record.sourceHash !== semanticSourceHash(args.sourceText)) throw new Error('semantic qualification sourceHash 불일치');
   if (record.candidateHash !== semanticCandidateHash(args.candidate)) throw new Error('semantic qualification candidateHash 불일치');
   if (record.verifierFingerprint !== args.verifierFingerprint) throw new Error('semantic qualification verifier fingerprint 불일치');
+  for (const run of record.runs) {
+    if (run.invalidReportPath === undefined && run.invalidReportHash === undefined) continue;
+    if (run.verdict !== 'incomplete'
+      || run.invalidReportPath === undefined
+      || run.invalidReportHash === undefined
+      || run.failureContract !== 'evidence_exact_substring'
+      || run.failureIssueId === undefined
+      || run.failureIssueKey === undefined) {
+      throw new Error('invalid qualification report binding 불완전');
+    }
+    const invalidReport = SemanticVerificationReportSchema.parse(args.loadReport(run.invalidReportPath));
+    if (semanticReportHash(invalidReport) !== run.invalidReportHash) {
+      throw new Error('invalid qualification report hash 불일치');
+    }
+    const issue = invalidReport.issues.find((item) => item.id === run.failureIssueId);
+    if (issue === undefined || stableSemanticIssueKey(record.assetType, issue) !== run.failureIssueKey) {
+      throw new Error('invalid qualification issue binding 불일치');
+    }
+    const sources = args.evidenceSourceTexts ?? [args.sourceText];
+    if (issue.sourceEvidence === '' || sources.some((source) => source.includes(issue.sourceEvidence))) {
+      throw new Error('invalid qualification report가 evidence 위반을 재현하지 않는다');
+    }
+  }
   if (record.qualificationStatus !== 'qualified' || record.cleanStreak !== 2) {
     throw new Error('semantic qualification clean streak 미완료');
   }

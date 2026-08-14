@@ -47,7 +47,11 @@ interface TinyCandidate { readonly value: number }
 
 async function execute(
   outputs: readonly (QualificationVerifierResult | Error)[],
-  options: { readonly maxRepairCycles?: number } = {},
+  options: {
+    readonly maxRepairCycles?: number;
+    readonly persistReport?: (report: SemanticVerificationReport, pass: number) => string | undefined;
+    readonly persistInvalidReport?: (report: SemanticVerificationReport, pass: number) => string | undefined;
+  } = {},
 ) {
   const queue = [...outputs];
   return runSemanticQualification<TinyCandidate>({
@@ -74,6 +78,10 @@ async function execute(
       artifactPath: `repair-${repairCycle}.json`,
     }),
     validate: () => undefined,
+    ...(options.persistReport === undefined ? {} : { persistReport: options.persistReport }),
+    ...(options.persistInvalidReport === undefined ? {} : {
+      persistInvalidReport: options.persistInvalidReport,
+    }),
   });
 }
 
@@ -151,6 +159,52 @@ describe('semantic qualification 상태 기계', () => {
     expect((await execute([output(badEvidence)])).status).toBe('incomplete');
   });
 
+  it('evidence 위반 structured report를 격리 저장하고 clean streak에 포함하지 않는다', async () => {
+    const stored = new Map<string, SemanticVerificationReport>();
+    const badEvidence = {
+      summary: 'bad evidence',
+      issues: [{ ...WARNING.issues[0]!, sourceEvidence: '원문에 없는 재서술' }],
+      apiKey: 'must-not-be-persisted',
+      authorization: 'must-not-be-persisted',
+    };
+    const execution = await execute([output(badEvidence, 'invalid-1')], {
+      persistInvalidReport: (report, pass) => {
+        const path = `memory://invalid-pass-${pass}`;
+        stored.set(path, report);
+        return path;
+      },
+    });
+    const run = execution.runs[0]!;
+    expect(execution.status).toBe('incomplete');
+    expect(execution.cleanStreak).toBe(0);
+    expect(execution.reports).toEqual([]);
+    expect(run).toMatchObject({
+      verdict: 'incomplete',
+      passIndex: 1,
+      invalidReportPath: 'memory://invalid-pass-1',
+      invalidReportHash: semanticReportHash(stored.get('memory://invalid-pass-1')!),
+      failureContract: 'evidence_exact_substring',
+      failureIssueId: 'w1',
+    });
+    expect(run.failureIssueKey).toBe(stableSemanticIssueKey('gold', stored.get('memory://invalid-pass-1')!.issues[0]!));
+    expect(stored.get('memory://invalid-pass-1')?.issues[0]?.sourceEvidence).toBe('원문에 없는 재서술');
+    expect(JSON.stringify(stored.get('memory://invalid-pass-1'))).not.toMatch(/must-not-be-persisted|authorization|apiKey/);
+  });
+
+  it('clean 뒤 invalid report가 나오면 qualification을 완성하지 않는다', async () => {
+    const badEvidence: SemanticVerificationReport = {
+      summary: 'bad evidence',
+      issues: [{ ...WARNING.issues[0]!, sourceEvidence: '원문에 없는 재서술' }],
+    };
+    const execution = await execute([output(CLEAN, 'clean-1'), output(badEvidence, 'invalid-2')], {
+      persistReport: (_report, pass) => `memory://pass-${pass}`,
+      persistInvalidReport: (_report, pass) => `memory://invalid-pass-${pass}`,
+    });
+    expect(execution.status).toBe('incomplete');
+    expect(execution.cleanStreak).toBe(0);
+    expect(execution.runs.map((run) => run.verdict)).toEqual(['clean', 'incomplete']);
+  });
+
   it('repair cycle 상한을 넘으면 fail-closed quarantined다', async () => {
     const execution = await execute([output(BLOCKER), output(BLOCKER), output(BLOCKER)]);
     expect(execution.status).toBe('quarantined');
@@ -217,6 +271,46 @@ describe('semantic qualification v2 record와 gate', () => {
     };
     expect(() => assertV2QualificationGate({ ...base, sourceText: `${x.sourceText} 변경`, candidate: x.gold })).toThrow(/sourceHash/);
     expect(() => assertV2QualificationGate({ ...base, sourceText: x.sourceText, candidate: { ...x.gold, titleId: 'changed' } })).toThrow(/candidateHash/);
+  });
+
+  it('격리된 invalid report 뒤 clean 2회만 남으면 gate가 허용하고 invalid 변조는 차단한다', async () => {
+    const x = await qualifiedRecord();
+    const invalid: SemanticVerificationReport = {
+      summary: 'invalid evidence',
+      issues: [{ ...WARNING.issues[0]!, sourceEvidence: '원문에 없는 재서술' }],
+    };
+    const invalidPath = 'memory://invalid-pass-1';
+    x.reports.set(invalidPath, invalid);
+    const issue = invalid.issues[0]!;
+    const invalidRun = {
+      ...x.record.runs[0]!,
+      invocationId: 'invalid-before-clean-streak',
+      verdict: 'incomplete' as const,
+      passIndex: 1,
+      invalidReportPath: invalidPath,
+      invalidReportHash: semanticReportHash(invalid),
+      failureContract: 'evidence_exact_substring' as const,
+      failureIssueId: issue.id,
+      failureIssueKey: stableSemanticIssueKey('gold', issue),
+      failureReason: 'w1: sourceEvidence가 원문의 연속 부분 문자열이 아니다',
+      issueCount: 1,
+      blockingIssueCount: 0,
+      reportPath: undefined,
+      reportHash: undefined,
+    };
+    const withInvalidHistory = { ...x.record, runs: [invalidRun, ...x.record.runs] };
+    const gate = () => assertV2QualificationGate({
+      record: withInvalidHistory,
+      expectedAssetType: 'gold',
+      expectedVerifierKind: 'gold',
+      sourceText: x.sourceText,
+      candidate: x.gold,
+      verifierFingerprint: x.fingerprint,
+      loadReport: (path) => x.reports.get(path),
+    });
+    expect(gate).not.toThrow();
+    x.reports.set(invalidPath, CLEAN);
+    expect(gate).toThrow(/invalid qualification report hash/);
   });
 
   it('v1은 읽을 수 있지만 requalification 대상으로 반환한다', () => {

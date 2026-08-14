@@ -220,6 +220,11 @@ export async function runContentQualificationCli(argv = process.argv.slice(2)): 
         writeJson(path, report);
         return relative(ROOT, path);
       },
+      persistInvalidReport: (report, pass) => {
+        const path = resolve(kindDir, `invalid-pass-${pass}.json`);
+        writeJson(path, report);
+        return relative(ROOT, path);
+      },
     });
 
     const candidate = execution.candidate as Gold | GeneratedQuerySet;
