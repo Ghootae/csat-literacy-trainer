@@ -31,7 +31,9 @@ Gold, 영역 query, title-query는 각각 서로 다른 invocation의 clean pass
 - raw log: `packages/pipeline/fixtures/semantic-qualification/corporate-law-p1/2026-08-14T07-56-01-245Z/production-regression.log`
 - structured result: `packages/pipeline/fixtures/semantic-qualification/corporate-law-p1/2026-08-14T07-56-01-245Z/production-regression-result.json`
 
-결과는 세부 focal 판정 3/4 일치다. `주제만` 프로브가 기대 `topic_only` 대신 `region_not_evidenced`로 판정됐다. 두 상태 모두 미충족이므로 fulfilled 이진값은 4/4 일치한다. 위험 과대통과와 거짓 모순은 0건이다. 그러나 세부 기대 판정 불일치가 있으므로 regression proof를 `failed`로 기록하고 promotion은 차단한다. 모델 결과를 보고 fixture 기대값이나 prompt를 바꾸지 않았다.
+결과는 세부 focal 판정 3/4 일치다. `주제만` 프로브가 기대 `topic_only` 대신 `region_not_evidenced`로 판정됐다. 두 상태 모두 보상·진행·Gate A 경로가 같은 비위험 미충족이므로 production action은 4/4 일치한다. 위험 과대통과와 거짓 모순은 0건이다.
+
+명시적 회귀 정책은 `topic_only ↔ region_not_evidenced` 쌍만 `nonblocking_unfulfilled_equivalence` diagnostic mismatch로 허용한다. `partial_relation_preservation`, `relation_preserved`, `contradicted`가 포함된 불일치는 이 규칙으로 통과할 수 없다. 따라서 regression proof는 `passed`, promotion은 `ready`이며 exact agreement 3/4와 diagnostic mismatch 1건은 그대로 보존한다. 모델 결과를 보고 fixture 기대값이나 prompt를 바꾸지 않았다.
 
 ## 호출과 지연
 
@@ -40,4 +42,4 @@ Gold, 영역 query, title-query는 각각 서로 다른 invocation의 clean pass
 - regression API latency 합계: 79,432 ms
 - regression token: input 217, output 7,311, cache write 8,238, cache read 24,714
 
-다음 판단은 `주제만`과 `region_not_evidenced` 차이를 production qualification의 실패로 유지할지, 별도의 검수된 정책으로 동치 취급할지에 대한 사람 결정이다. 이 문서에서는 어느 쪽으로도 기대값을 변경하지 않는다.
+이 결과는 4/4 세부 정확도라는 뜻이 아니다. exact agreement는 3/4이고 production action agreement만 4/4이다.

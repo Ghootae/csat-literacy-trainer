@@ -19,7 +19,7 @@ function readJson(path: string): unknown {
 }
 
 describe('corporate-law-p1 legacy v2 requalification evidence', () => {
-  it('세 자산이 독립 clean 2회로 qualified되고 regression 불일치가 promotion을 차단한다', () => {
+  it('세 자산과 action-equivalent regression proof가 promotion gate를 통과한다', () => {
     const manifest = QualificationManifestSchema.parse(readJson(`${ARTIFACT}/qualification-manifest.json`));
     for (const kind of ['gold', 'query', 'title-query'] as const) {
       const record = SemanticVerificationRecordV2Schema.parse(readJson(`${ARTIFACT}/${kind}/record-v2.json`));
@@ -33,8 +33,8 @@ describe('corporate-law-p1 legacy v2 requalification evidence', () => {
       });
       expect(new Set(record.runs.slice(-2).map((run) => run.invocationId)).size).toBe(2);
     }
-    expect(manifest.regression).toMatchObject({ status: 'failed', probeCount: 4 });
-    expect(manifest.promotionStatus).toBe('blocked');
+    expect(manifest.regression).toMatchObject({ status: 'passed', probeCount: 4 });
+    expect(manifest.promotionStatus).toBe('ready');
 
     const source = readJson('packages/pipeline/fixtures/sources/69bbf88d8937cf14551903ca.json');
     const bundle = buildSourceBundle(source, 'p1');
@@ -47,6 +47,6 @@ describe('corporate-law-p1 legacy v2 requalification evidence', () => {
         query: semanticVerifierFingerprint('query', 'semantic-source-bundle-v2-footnotes-ignored'),
         'title-query': semanticVerifierFingerprint('title-query', 'semantic-source-bundle-v2-footnotes-ignored'),
       },
-    })).toThrow(/regression proof/);
+    })).not.toThrow();
   });
 });

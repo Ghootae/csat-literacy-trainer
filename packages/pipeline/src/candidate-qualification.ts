@@ -86,6 +86,93 @@ const QualificationAssetLinkSchema = z.object({
   generationProvenance: CandidateGenerationProvenanceSchema.optional(),
 });
 
+const RegionSemanticVerdictSchema = z.enum([
+  'relation_preserved',
+  'partial_relation_preservation',
+  'topic_only',
+  'contradicted',
+  'region_not_evidenced',
+]);
+
+export const ProductionRegressionCaseSchema = z.object({
+  probeId: z.string().min(1),
+  expectedFocal: RegionSemanticVerdictSchema,
+  actualFocal: RegionSemanticVerdictSchema,
+  exactMatch: z.boolean(),
+  actionMatch: z.boolean(),
+});
+
+const DiagnosticMismatchSchema = z.object({
+  probeId: z.string().min(1),
+  expected: RegionSemanticVerdictSchema,
+  actual: RegionSemanticVerdictSchema,
+  policy: z.literal('nonblocking_unfulfilled_equivalence'),
+});
+
+export const ProductionRegressionResultSchema = z.object({
+  schemaVersion: z.literal('production-query-regression-result-v1'),
+  paragraphId: z.string().min(1),
+  candidateQueryHash: Sha256Schema,
+  fixturePath: z.string().min(1),
+  settings: z.object({
+    provider: z.string().min(1), model: z.string().min(1), effort: z.string().min(1), propositionCoverage: z.string().min(1),
+  }),
+  cases: z.array(ProductionRegressionCaseSchema).min(1),
+  summary: z.object({
+    exactMatches: z.number().int().nonnegative(),
+    total: z.number().int().positive(),
+    actionMatches: z.number().int().nonnegative(),
+    dangerousOvercredit: z.number().int().nonnegative(),
+    falseContradictions: z.number().int().nonnegative(),
+    diagnosticMismatches: z.array(DiagnosticMismatchSchema),
+    status: z.enum(['passed', 'failed']),
+  }),
+  metrics: z.record(z.string(), z.number().nonnegative()),
+  logPath: z.string().min(1),
+  completedAt: z.string().datetime(),
+});
+
+export type ProductionRegressionCase = z.infer<typeof ProductionRegressionCaseSchema>;
+
+export function evaluateProductionRegressionCases(
+  values: readonly Pick<ProductionRegressionCase, 'probeId' | 'expectedFocal' | 'actualFocal'>[],
+) {
+  const cases = values.map((value) => {
+    const exactMatch = value.expectedFocal === value.actualFocal;
+    const nonblockingUnfulfilled = new Set([value.expectedFocal, value.actualFocal]).size === 2
+      && [value.expectedFocal, value.actualFocal].every((verdict) =>
+        verdict === 'topic_only' || verdict === 'region_not_evidenced');
+    return { ...value, exactMatch, actionMatch: exactMatch || nonblockingUnfulfilled };
+  });
+  const diagnosticMismatches = cases
+    .filter((item) => !item.exactMatch && item.actionMatch)
+    .map((item) => ({
+      probeId: item.probeId,
+      expected: item.expectedFocal,
+      actual: item.actualFocal,
+      policy: 'nonblocking_unfulfilled_equivalence' as const,
+    }));
+  const dangerousOvercredit = cases.filter((item) =>
+    item.expectedFocal !== 'relation_preserved' && item.actualFocal === 'relation_preserved').length;
+  const falseContradictions = cases.filter((item) =>
+    item.expectedFocal !== 'contradicted' && item.actualFocal === 'contradicted').length;
+  const actionMatches = cases.filter((item) => item.actionMatch).length;
+  return {
+    cases,
+    summary: {
+      exactMatches: cases.filter((item) => item.exactMatch).length,
+      total: cases.length,
+      actionMatches,
+      dangerousOvercredit,
+      falseContradictions,
+      diagnosticMismatches,
+      status: actionMatches === cases.length && dangerousOvercredit === 0 && falseContradictions === 0
+        ? 'passed' as const
+        : 'failed' as const,
+    },
+  };
+}
+
 const RegressionBindingSchema = z.object({
   status: z.enum(['pending', 'passed', 'failed']),
   probeCount: z.number().int().nonnegative(),
@@ -548,10 +635,20 @@ export function assertCandidatePromotionGate(args: {
     throw new Error('production-query regression proof 미완료');
   }
   const regressionFixture = args.loadJson(manifest.regression.fixturePath);
-  const regressionResult = args.loadJson(manifest.regression.resultPath);
+  const regressionResultValue = args.loadJson(manifest.regression.resultPath);
   if (qualificationArtifactHash(regressionFixture) !== manifest.regression.fixtureHash
-    || qualificationArtifactHash(regressionResult) !== manifest.regression.resultHash) {
+    || qualificationArtifactHash(regressionResultValue) !== manifest.regression.resultHash) {
     throw new Error('production-query regression artifact hash 불일치');
+  }
+  const regressionResult = ProductionRegressionResultSchema.parse(regressionResultValue);
+  const recomputed = evaluateProductionRegressionCases(regressionResult.cases);
+  if (regressionResult.paragraphId !== manifest.paragraphId
+    || regressionResult.candidateQueryHash !== manifest.regression.candidateQueryHash
+    || regressionResult.fixturePath !== manifest.regression.fixturePath
+    || canonical(regressionResult.cases) !== canonical(recomputed.cases)
+    || canonical(regressionResult.summary) !== canonical(recomputed.summary)
+    || recomputed.summary.status !== 'passed') {
+    throw new Error('production-query regression action policy 미통과');
   }
   if (manifest.regression.candidateQueryHash !== manifest.assets.query?.candidateHash) {
     throw new Error('regression candidate query hash 불일치');

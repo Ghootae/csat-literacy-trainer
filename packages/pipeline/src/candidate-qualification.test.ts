@@ -10,6 +10,7 @@ import {
   buildSourceBundle,
   candidateGeneratorFingerprint,
   createQualificationDryRunSummary,
+  evaluateProductionRegressionCases,
   planCandidateQualification,
   qualificationArtifactHash,
   verifierInputText,
@@ -274,12 +275,27 @@ describe('candidate promotion gate', () => {
       query: plan.candidates.query,
       'title-query': plan.candidates.titleQuery,
     } as const;
+    const regressionEvaluation = evaluateProductionRegressionCases([
+      { probeId: 'p1', expectedFocal: 'relation_preserved', actualFocal: 'relation_preserved' },
+      { probeId: 'p2', expectedFocal: 'topic_only', actualFocal: 'region_not_evidenced' },
+    ]);
+    const regressionResult = {
+      schemaVersion: 'production-query-regression-result-v1',
+      paragraphId: PARAGRAPH_ID,
+      candidateQueryHash: semanticCandidateHash(plan.candidates.query),
+      fixturePath: 'regression.json',
+      settings: { provider: 'anthropic', model: 'fake', effort: 'low', propositionCoverage: 'off' },
+      ...regressionEvaluation,
+      metrics: { apiCalls: 2 },
+      logPath: 'regression.log',
+      completedAt: '2026-08-14T00:00:00.000Z',
+    };
     const store = new Map<string, unknown>([
       [CANDIDATE_PATHS.gold, candidateByType.gold],
       [CANDIDATE_PATHS.query, candidateByType.query],
       [CANDIDATE_PATHS['title-query'], candidateByType['title-query']],
       ['regression.json', { probes: ['p1', 'p2', 'p3', 'p4'] }],
-      ['result.json', { passed: true }],
+      ['result.json', regressionResult],
     ]);
     const assets: Record<string, unknown> = {};
     const fingerprints = {
@@ -349,5 +365,33 @@ describe('candidate promotion gate', () => {
       manifest: { ...manifest, qualificationSourceHash: sha256('changed') },
       bundle: plan.bundle, loadJson: (path) => store.get(path), verifierFingerprints: fingerprints,
     })).toThrow(/source bundle hash/);
+  });
+});
+
+describe('production regression action policy', () => {
+  it('topic_only과 region_not_evidenced 사이만 non-blocking diagnostic mismatch로 허용한다', () => {
+    const result = evaluateProductionRegressionCases([
+      { probeId: 'exact', expectedFocal: 'relation_preserved', actualFocal: 'relation_preserved' },
+      { probeId: 'diagnostic', expectedFocal: 'topic_only', actualFocal: 'region_not_evidenced' },
+    ]);
+    expect(result.summary).toMatchObject({
+      exactMatches: 1, total: 2, actionMatches: 2, dangerousOvercredit: 0,
+      falseContradictions: 0, status: 'passed',
+    });
+    expect(result.summary.diagnosticMismatches).toEqual([{
+      probeId: 'diagnostic', expected: 'topic_only', actual: 'region_not_evidenced',
+      policy: 'nonblocking_unfulfilled_equivalence',
+    }]);
+  });
+
+  it('partial, 과대통과, 모순 경로가 달라지는 불일치는 계속 차단한다', () => {
+    const result = evaluateProductionRegressionCases([
+      { probeId: 'partial', expectedFocal: 'topic_only', actualFocal: 'partial_relation_preservation' },
+      { probeId: 'overcredit', expectedFocal: 'region_not_evidenced', actualFocal: 'relation_preserved' },
+      { probeId: 'false-contradiction', expectedFocal: 'topic_only', actualFocal: 'contradicted' },
+    ]);
+    expect(result.summary).toMatchObject({
+      actionMatches: 0, dangerousOvercredit: 1, falseContradictions: 1, status: 'failed',
+    });
   });
 });

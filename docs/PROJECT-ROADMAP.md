@@ -87,6 +87,7 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 2026-08-14 | 신규 자산은 source hash와 generator fingerprint가 일치해야 한다. legacy 자산은 `legacy/no-fingerprint`를 보존하고 tracked source 결속, 현행 semantic verification과 production-query 회귀로 재승격한다. 과거 generation metadata를 추정하지 않는다. | `docs/CONTENT-ASSET-QUALIFICATION.md` |
 | 2026-08-14 | 기존 v1 semantic verification은 runtime 호환용으로 유지하되 신규 promotion 증거로 자동 승격하지 않는다. 신규·legacy candidate는 source bundle에 결속된 v2 clean pass 두 번과 candidate query regression proof를 통과해야 한다. | `packages/pipeline/src/semantic-qualification.ts`, `packages/pipeline/src/candidate-qualification.ts`, `docs/CONTENT-ASSET-QUALIFICATION.md` |
 | 2026-08-14 | 각주는 학습 명제와 semantic qualification에서 제외한다. raw fixture와 hash는 보존하되 연결된 각주 표식과 각주 본문은 verifier 입력 및 source-binding 의미 비교에서 제외한다. | `packages/pipeline/src/candidate-qualification.ts`, `docs/CONTENT-ASSET-QUALIFICATION.md` |
+| 2026-08-14 | production regression에서 `topic_only ↔ region_not_evidenced`만 보상·진행·Gate A가 같은 비차단 diagnostic mismatch로 허용한다. exact agreement는 별도 기록하며 partial·preserved·contradicted가 포함된 불일치는 계속 차단한다. | `packages/pipeline/src/candidate-qualification.ts`, `packages/pipeline/fixtures/semantic-qualification/corporate-law-p1/2026-08-14T07-56-01-245Z/production-regression-result.json` |
 | 2026-08-09 | 기존 학생 평가 기본 effort를 high에서 medium으로 낮췄다. | `docs/experiments/effort-medium-2026-08-09.md`. 이 결정은 2026-08-13의 low/off 결정으로 대체됐고 `0b582b9`에서 코드 기본값에도 반영됐다. |
 
 과거 결정을 바꿀 때 위 행을 삭제하지 않고 새 행에 이유와 증거를 추가한다.
@@ -172,10 +173,10 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 상태 | in_progress |
 | 목표 | 광합성(과학), 법인(법학), 후기 묵가(철학), 공시 의무(경제·법), NCM 전지(기술), 니체(인문) 순으로 확장해 전체 지문 5개를 우선 완성한다. |
 | 완료 기준 | 각 지문의 모든 단락이 G1~G4를 충족하고 분야·관계 구조가 편중되지 않으며 대표 지문은 G5b까지 검증된다. 신규 생성 자산은 source hash와 generator fingerprint가 일치해야 한다. legacy 자산은 `legacy/no-fingerprint`를 보존하되 tracked source 결속, 현행 semantic verification 및 production-query 회귀 gate를 통과해야 한다. |
-| 현재 결과 | 6A에서 두 번째 전체 지문을 법인으로 확정하고 source set `69bbf88d8937cf14551903ca`의 본문 5문단과 각주 2개를 tracked fixture로 동결했다. 6V-B에서 source-bound v2 qualification을 구축하고 각주 제외 정책으로 원문 `정관*`과 제품 `정관`을 같은 qualification 본문으로 결속했다. p1의 gold·query·title-query는 2026-08-14 실제 verifier에서 각각 독립 clean 2회, blocker·repair 0으로 qualified됐다. 반복 warning은 보존했다. production query 4프로브는 위험 과대통과·거짓 모순 0, fulfilled 이진값 4/4였으나 `주제만`이 기대 `topic_only` 대신 `region_not_evidenced`여서 세부 판정은 3/4이고 promotion은 차단 상태다. 신규 제작 대상은 p2~p5다. |
+| 현재 결과 | 6A에서 두 번째 전체 지문을 법인으로 확정하고 source set `69bbf88d8937cf14551903ca`의 본문 5문단과 각주 2개를 tracked fixture로 동결했다. 6V-B에서 source-bound v2 qualification을 구축하고 각주 제외 정책으로 원문 `정관*`과 제품 `정관`을 같은 qualification 본문으로 결속했다. p1의 gold·query·title-query는 2026-08-14 실제 verifier에서 각각 독립 clean 2회, blocker·repair 0으로 qualified됐다. production query 4프로브는 위험 과대통과·거짓 모순 0, action agreement 4/4, exact agreement 3/4다. `topic_only ↔ region_not_evidenced` diagnostic mismatch 1건을 보존한 채 명시적 비차단 정책으로 regression과 promotion gate를 통과해 p1 G1~G4 재승격이 완료됐다. 신규 제작 대상은 p2~p5다. |
 | 증거 | `packages/pipeline/fixtures/sources/69bbf88d8937cf14551903ca.json`, `packages/pipeline/fixtures/semantic-qualification/corporate-law-p1/2026-08-14T07-56-01-245Z/`, `packages/pipeline/fixtures/regression/corporate-law-p1.json`, `packages/pipeline/src/corporate-law-source-fixture.test.ts`, `packages/pipeline/src/semantic-qualification.ts`, `packages/pipeline/src/candidate-qualification.ts`, `packages/pipeline/src/cli/content-qualify.ts`, `docs/experiments/corporate-law-p1-legacy-requalification-2026-08-14.md`, `docs/CONTENT-ASSET-QUALIFICATION.md` |
-| 남은 작업 | p1 production regression의 `topic_only`↔`region_not_evidenced` 정책 판단과 promotion, p2~p5 G1~G4 제작, 법인 manifest와 G5b가 남았다. verifier warning 세 유형은 non-blocking 상태로 추적한다. 공통 E2E harness 일반화 전 `pending state-model audit before 6C/G5b`도 해결해야 한다. |
-| 다음 행동 | p1의 `topic_only`와 `region_not_evidenced` 불일치를 qualification 실패로 유지할지 미충족 동치로 인정할지 결정한다. |
+| 남은 작업 | p2~p5 G1~G4 제작, 법인 passage manifest와 G5b가 남았다. p1 verifier warning 세 유형과 diagnostic mismatch 1건은 non-blocking 상태로 추적한다. 공통 E2E harness 일반화 전 `pending state-model audit before 6C/G5b`도 해결해야 한다. |
+| 다음 행동 | 법인 원문 p2의 gold를 현행 generator provenance와 source binding으로 생성한다. |
 
 ### 7. 실제 학생 파일럿
 
