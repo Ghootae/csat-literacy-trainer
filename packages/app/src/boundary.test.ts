@@ -101,4 +101,15 @@ describe('semantic-view runtime wiring은 제출 경로에만 있다', () => {
     expect(titleCall).not.toContain('propositionEvidenceEvaluator');
     expect(titleCall).toContain('queryEvaluation: TITLE_EVAL_CONFIG');
   });
+
+  it('지문 전체 표제는 저장·복원만 하며 평가기를 호출하지 않는다', () => {
+    const passageTitleRoute = server.slice(
+      server.indexOf("url.pathname.startsWith('/api/passage-title/')"),
+      server.indexOf("url.pathname.startsWith('/api/attempt/')"),
+    );
+    expect(passageTitleRoute).toContain('savePassageTitle');
+    expect(passageTitleRoute).not.toContain('runEvaluation');
+    expect(passageTitleRoute).not.toContain('TITLE_EVAL_CONFIG');
+    expect(passageTitleRoute).not.toContain('propositionEvidenceEvaluator');
+  });
 });

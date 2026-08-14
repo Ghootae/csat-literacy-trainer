@@ -8,7 +8,15 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { appendAttempt, appendTitleAttempt, judgedTitleCount, loadSession } from './session.js';
+import {
+  appendAttempt,
+  appendTitleAttempt,
+  judgedTitleCount,
+  loadPassageSession,
+  loadSession,
+  markParagraphComplete,
+  savePassageTitle,
+} from './session.js';
 
 const cwd = process.cwd();
 let dir: string;
@@ -47,5 +55,41 @@ describe('세션 — 영역과 타이틀이 한 파일에 남는다', () => {
     expect(judgedTitleCount(loadSession('o', 's3'))).toBe(0);
     appendTitleAttempt('o', 's3', 'p', { at: 'T1', text: '최종', judged: true, verdict: 'topic_only' });
     expect(judgedTitleCount(loadSession('o', 's3'))).toBe(1);
+  });
+});
+
+describe('지문 표제 세션', () => {
+  it('문단 세션과 분리해 저장하고 다시 불러온다', () => {
+    appendAttempt('o', 'paragraph-session', 'photosynthesis-p6', attempt);
+    markParagraphComplete('o', 'passage-session', 'photosynthesis', 'photosynthesis-p6', 'T1');
+    savePassageTitle('o', 'passage-session', 'photosynthesis', '광합성의 환경 적응 전략', 'T2');
+
+    expect(loadSession('o', 'paragraph-session')?.paragraphId).toBe('photosynthesis-p6');
+    expect(loadPassageSession('o', 'passage-session')).toEqual({
+      ownerId: 'o',
+      passageId: 'photosynthesis',
+      startedAt: 'T1',
+      completedParagraphIds: ['photosynthesis-p6'],
+      text: '광합성의 환경 적응 전략',
+      savedAt: 'T2',
+    });
+  });
+
+  it('수정 저장해도 최초 시작 시각은 유지한다', () => {
+    savePassageTitle('o', 'passage-revision', 'photosynthesis', '첫 표제', 'T0');
+    savePassageTitle('o', 'passage-revision', 'photosynthesis', '수정 표제', 'T1');
+    expect(loadPassageSession('o', 'passage-revision')).toEqual(
+      expect.objectContaining({ startedAt: 'T0', savedAt: 'T1', text: '수정 표제' }),
+    );
+  });
+
+  it('완료한 문단을 중복 없이 누적한다', () => {
+    markParagraphComplete('o', 'passage-progress', 'photosynthesis', 'photosynthesis-p1', 'T0');
+    markParagraphComplete('o', 'passage-progress', 'photosynthesis', 'photosynthesis-p1', 'T1');
+    markParagraphComplete('o', 'passage-progress', 'photosynthesis', 'photosynthesis-p2', 'T2');
+    expect(loadPassageSession('o', 'passage-progress')?.completedParagraphIds).toEqual([
+      'photosynthesis-p1',
+      'photosynthesis-p2',
+    ]);
   });
 });

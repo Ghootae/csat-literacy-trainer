@@ -65,13 +65,80 @@ export interface Session {
   readonly titleAttempts?: readonly TitleAttempt[];
 }
 
+export interface PassageSession {
+  readonly ownerId: string;
+  readonly passageId: string;
+  readonly startedAt: string;
+  readonly completedParagraphIds: readonly string[];
+  readonly text?: string;
+  readonly savedAt?: string;
+}
+
 function path(ownerId: string, sessionId: string): string {
   return resolve(root(), ownerId, `${sessionId}.json`);
+}
+
+function passageTitlePath(ownerId: string, sessionId: string): string {
+  return resolve(root(), ownerId, 'passages', `${sessionId}.json`);
 }
 
 export function loadSession(ownerId: string, sessionId: string): Session | undefined {
   const p = path(ownerId, sessionId);
   return existsSync(p) ? (JSON.parse(readFileSync(p, 'utf8')) as Session) : undefined;
+}
+
+export function loadPassageSession(
+  ownerId: string,
+  sessionId: string,
+): PassageSession | undefined {
+  const p = passageTitlePath(ownerId, sessionId);
+  return existsSync(p) ? (JSON.parse(readFileSync(p, 'utf8')) as PassageSession) : undefined;
+}
+
+export function markParagraphComplete(
+  ownerId: string,
+  sessionId: string,
+  passageId: string,
+  paragraphId: string,
+  at: string,
+): PassageSession {
+  const prev = loadPassageSession(ownerId, sessionId);
+  const completed = new Set(prev?.completedParagraphIds ?? []);
+  completed.add(paragraphId);
+  const next: PassageSession = {
+    ...prev,
+    ownerId,
+    passageId,
+    startedAt: prev?.startedAt ?? at,
+    completedParagraphIds: [...completed],
+  };
+  const target = passageTitlePath(ownerId, sessionId);
+  mkdirSync(resolve(target, '..'), { recursive: true });
+  writeFileSync(target, JSON.stringify(next, null, 2), 'utf8');
+  return next;
+}
+
+export function savePassageTitle(
+  ownerId: string,
+  sessionId: string,
+  passageId: string,
+  text: string,
+  at: string,
+): PassageSession {
+  const prev = loadPassageSession(ownerId, sessionId);
+  const next: PassageSession = {
+    ...prev,
+    ownerId,
+    passageId,
+    startedAt: prev?.startedAt ?? at,
+    completedParagraphIds: prev?.completedParagraphIds ?? [],
+    text,
+    savedAt: at,
+  };
+  const target = passageTitlePath(ownerId, sessionId);
+  mkdirSync(resolve(target, '..'), { recursive: true });
+  writeFileSync(target, JSON.stringify(next, null, 2), 'utf8');
+  return next;
 }
 
 export function appendAttempt(

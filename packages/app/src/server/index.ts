@@ -25,12 +25,29 @@ import {
 import type {
   AttemptRequest,
   AttemptResponse,
+  PassageTitleRequest,
+  PassageTitleResponse,
   RestoreResponse,
   TitleRequest,
   TitleResponse,
 } from '../shared/contract.js';
-import { listPassages, loadContent, toPassageView } from './content.js';
-import { appendAttempt, appendTitleAttempt, judgedTitleCount, loadSession, revisedRegions } from './session.js';
+import {
+  findPassageManifestForParagraph,
+  listPassages,
+  loadContent,
+  loadPassageManifest,
+  toPassageView,
+} from './content.js';
+import {
+  appendAttempt,
+  appendTitleAttempt,
+  judgedTitleCount,
+  loadPassageSession,
+  loadSession,
+  markParagraphComplete,
+  revisedRegions,
+  savePassageTitle,
+} from './session.js';
 import { bestOf, isBlocked, toRecord, toRegionViews, viewsFromRecords } from './view.js';
 import { restoreTitleView, toTitleView } from './title-view.js';
 
@@ -129,6 +146,45 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
         void warm(content.gold, content.queries);
       }
       return;
+    }
+
+    // 지문 전체 표제는 현재 비채점 reflection이다. N3 지문 골드가 생기기 전까지 저장·복원만 한다.
+    if (url.pathname.startsWith('/api/passage-title/')) {
+      const [passageId, sessionId] = url.pathname.slice('/api/passage-title/'.length).split('/');
+      if (passageId === undefined || sessionId === undefined) {
+        return json(res, 400, { error: 'passageId와 sessionId가 필요하다' });
+      }
+      loadPassageManifest(passageId); // 등록된 정본 지문만 저장할 수 있다.
+
+      if (req.method === 'GET') {
+        const saved = loadPassageSession(OWNER, sessionId);
+        if (saved !== undefined && saved.passageId !== passageId) {
+          return json(res, 409, { error: '세션의 지문이 요청과 다르다' });
+        }
+        return json(res, 200, {
+          ...(saved === undefined ? {} : { text: saved.text }),
+          completedParagraphIds: saved?.completedParagraphIds ?? [],
+        } satisfies PassageTitleResponse);
+      }
+
+      if (req.method === 'POST') {
+        const body = (await readBody(req)) as PassageTitleRequest;
+        const text = body.text.trim();
+        if (text === '') return json(res, 400, { error: '빈 표제' });
+        const existing = loadPassageSession(OWNER, sessionId);
+        if (existing !== undefined && existing.passageId !== passageId) {
+          return json(res, 409, { error: '세션의 지문이 요청과 다르다' });
+        }
+        const completed = new Set(existing?.completedParagraphIds ?? []);
+        if (!loadPassageManifest(passageId).paragraphIds.every((id) => completed.has(id))) {
+          return json(res, 409, { error: '모든 문단을 마친 뒤 지문 표제를 저장할 수 있다' });
+        }
+        const saved = savePassageTitle(OWNER, sessionId, passageId, text, new Date().toISOString());
+        return json(res, 200, {
+          ...(saved.text === undefined ? {} : { text: saved.text }),
+          completedParagraphIds: saved.completedParagraphIds,
+        } satisfies PassageTitleResponse);
+      }
     }
 
     // 최초 제출과 수정이 같은 경로다. 재평가는 항상 전체이므로 처리가 다르지 않고,
@@ -236,6 +292,18 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
         verdict: view.verdict,
         compressed: view.compressed,
       });
+      if (!view.canRevise && body.passageSessionId !== undefined) {
+        const manifest = findPassageManifestForParagraph(paragraphId);
+        if (manifest !== undefined) {
+          markParagraphComplete(
+            OWNER,
+            body.passageSessionId,
+            manifest.passageId,
+            paragraphId,
+            new Date().toISOString(),
+          );
+        }
+      }
       return json(res, 200, { title: view } satisfies TitleResponse);
     }
 

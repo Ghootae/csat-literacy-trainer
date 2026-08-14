@@ -8,6 +8,8 @@ import type {
   AttemptRequest,
   AttemptResponse,
   PassageSummary,
+  PassageTitleRequest,
+  PassageTitleResponse,
   PassageView,
   RestoreResponse,
   TitleRequest,
@@ -56,6 +58,22 @@ export function submitTitle(
   body: TitleRequest,
 ): Promise<TitleResponse> {
   return jsonFetch<TitleResponse>(`/api/title/${paragraphId}/${sessionId}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function fetchPassageTitle(passageId: string, sessionId: string): Promise<PassageTitleResponse> {
+  return jsonFetch<PassageTitleResponse>(`/api/passage-title/${passageId}/${sessionId}`);
+}
+
+export function submitPassageTitle(
+  passageId: string,
+  sessionId: string,
+  body: PassageTitleRequest,
+): Promise<PassageTitleResponse> {
+  return jsonFetch<PassageTitleResponse>(`/api/passage-title/${passageId}/${sessionId}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),

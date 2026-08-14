@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { PassageSummary, PassageView, RegionView, TitleView, Verdict } from '../shared/contract.js';
-import { fetchAttempt, fetchPassage, fetchPassages, submitAttempt, submitTitle } from './api.js';
+import {
+  fetchAttempt,
+  fetchPassage,
+  fetchPassages,
+  fetchPassageTitle,
+  submitAttempt,
+  submitPassageTitle,
+  submitTitle,
+} from './api.js';
 
 
 /**
@@ -37,7 +45,13 @@ export function App(): React.JSX.Element {
   }
 
   const i = list.findIndex((p) => p.paragraphId === current);
-  const next = i >= 0 ? list[i + 1] : undefined;
+  const active = i >= 0 ? list[i] : undefined;
+  const next = active?.passageId === undefined
+    ? (i >= 0 ? list[i + 1] : undefined)
+    : list.find((candidate) =>
+        candidate.passageId === active.passageId &&
+        candidate.passageIndex === (active.passageIndex ?? -1) + 1,
+      );
 
   function selectParagraph(paragraphId: string): void {
     setCurrent(paragraphId);
@@ -67,6 +81,7 @@ export function App(): React.JSX.Element {
         key={current}
         paragraphId={current}
         next={next}
+        passageSummary={active}
         onNext={() => next !== undefined && selectParagraph(next.paragraphId)}
       />
     </>
@@ -87,6 +102,19 @@ function sessionKey(paragraphId: string): string {
     return made;
   } catch {
     return `${paragraphId}-${Date.now().toString(36)}`;
+  }
+}
+
+function passageSessionKey(passageId: string): string {
+  const key = `csat.passageSession.${passageId}`;
+  try {
+    const found = sessionStorage.getItem(key);
+    if (found !== null) return found;
+    const made = `${passageId}-${Date.now().toString(36)}`;
+    sessionStorage.setItem(key, made);
+    return made;
+  } catch {
+    return `${passageId}-${Date.now().toString(36)}`;
   }
 }
 
@@ -123,10 +151,12 @@ function spanTitle(ids: readonly string[]): string {
 function Trainer({
   paragraphId,
   next,
+  passageSummary,
   onNext,
 }: {
   paragraphId: string;
   next: PassageSummary | undefined;
+  passageSummary: PassageSummary | undefined;
   onNext: () => void;
 }): React.JSX.Element {
   const [passage, setPassage] = useState<PassageView | null>(null);
@@ -146,6 +176,9 @@ function Trainer({
   const [titleDraft, setTitleDraft] = useState('');
   const [title, setTitle] = useState<TitleView | null>(null);
   const [finalTitle, setFinalTitle] = useState<string | null>(null);
+  const [passageTitleDraft, setPassageTitleDraft] = useState('');
+  const [passageTitle, setPassageTitle] = useState<string | null>(null);
+  const [completedParagraphIds, setCompletedParagraphIds] = useState<ReadonlySet<string>>(new Set());
 
   /**
    * 이번 패스에서 고친 영역. 섹션을 고칠 때 **그 순간 선택돼 있던 영역**에 귀속시킨다.
@@ -169,6 +202,13 @@ function Trainer({
   // **"다듬기는 영역당 1회"가 무력화된다** — 다른 문단을 들렀다 오면 기회가 되살아난다.
   // `sessionStorage`는 탭 단위라 새로고침에도 남고 탭을 닫으면 정리된다.
   const sessionId = useMemo(() => sessionKey(paragraphId), [paragraphId]);
+  const isFinalParagraph =
+    passageSummary?.passageId !== undefined &&
+    passageSummary.passageIndex === (passageSummary.passageLength ?? 0) - 1;
+  const passageSessionId = useMemo(
+    () => passageSummary?.passageId === undefined ? null : passageSessionKey(passageSummary.passageId),
+    [passageSummary?.passageId],
+  );
 
   useEffect(() => {
     fetchPassage(paragraphId).then(setPassage).catch((e: unknown) => setError(String(e)));
@@ -197,6 +237,23 @@ function Trainer({
       live = false;
     };
   }, [paragraphId, sessionId]);
+
+  useEffect(() => {
+    if (!isFinalParagraph || passageSummary?.passageId === undefined || passageSessionId === null) return;
+    let live = true;
+    fetchPassageTitle(passageSummary.passageId, passageSessionId)
+      .then((saved) => {
+        if (!live) return;
+        setCompletedParagraphIds(new Set(saved.completedParagraphIds));
+        if (saved.text !== undefined) setPassageTitle(saved.text);
+      })
+      .catch(() => {
+        /* 아직 저장된 지문 표제가 없으면 빈 입력으로 시작한다 */
+      });
+    return () => {
+      live = false;
+    };
+  }, [isFinalParagraph, passageSummary?.passageId, passageSessionId]);
 
   // 배타적 단일 선택 — 선택된 영역의 문장과 응답 조각만 켜진다 (§4.1.3).
   const lit = regions?.find((r) => r.regionId === selected);
@@ -264,9 +321,32 @@ function Trainer({
     setBusy(true);
     setError(null);
     try {
-      const res = await submitTitle(paragraphId, sessionId, { text });
+      const res = await submitTitle(paragraphId, sessionId, {
+        text,
+        ...(passageSessionId === null ? {} : { passageSessionId }),
+      });
       setFinalTitle(text);
       if (res.title !== undefined) setTitle(res.title);
+      if (isFinalParagraph && passageSummary?.passageId !== undefined && passageSessionId !== null) {
+        const progress = await fetchPassageTitle(passageSummary.passageId, passageSessionId);
+        setCompletedParagraphIds(new Set(progress.completedParagraphIds));
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitWholePassageTitle(): Promise<void> {
+    const text = passageTitleDraft.trim();
+    if (text === '' || passageSummary?.passageId === undefined || passageSessionId === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await submitPassageTitle(passageSummary.passageId, passageSessionId, { text });
+      setPassageTitle(saved.text ?? text);
+      setPassageTitleDraft('');
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -440,6 +520,16 @@ function Trainer({
                   allPreserved={allPreserved}
                   next={next}
                   onNext={onNext}
+                  passageTitle={passageTitle}
+                  passageTitleDraft={passageTitleDraft}
+                  passageName={isFinalParagraph ? passageSummary?.passageTitle : undefined}
+                  passageReady={
+                    isFinalParagraph &&
+                    (passageSummary?.passageLength ?? 0) > 0 &&
+                    completedParagraphIds.size === passageSummary?.passageLength
+                  }
+                  onPassageTitleDraft={setPassageTitleDraft}
+                  onPassageTitleSubmit={() => void submitWholePassageTitle()}
                 />
               )}
             </>
@@ -486,6 +576,12 @@ function TitlePanel({
   allPreserved,
   next,
   onNext,
+  passageTitle,
+  passageTitleDraft,
+  passageName,
+  passageReady,
+  onPassageTitleDraft,
+  onPassageTitleSubmit,
 }: {
   initialTitle: string | null;
   finalTitle: string | null;
@@ -497,6 +593,12 @@ function TitlePanel({
   allPreserved: boolean;
   next: PassageSummary | undefined;
   onNext: () => void;
+  passageTitle: string | null;
+  passageTitleDraft: string;
+  passageName: string | undefined;
+  passageReady: boolean;
+  onPassageTitleDraft: (value: string) => void;
+  onPassageTitleSubmit: () => void;
 }): React.JSX.Element {
   const reward = title === null ? 0 : title.verdict !== 'relation_preserved' ? 0 : title.compressed ? 2 : 1;
   const settled = title !== null && !title.canRevise;
@@ -546,7 +648,39 @@ function TitlePanel({
           {!allPreserved && (
             <p className="sub">일부 부분은 정답을 확인하고 넘어왔습니다.</p>
           )}
-          {next === undefined ? (
+          {passageName !== undefined && passageReady ? (
+            <div className="passage-title-step">
+              <h3>지문 전체를 한 문장으로</h3>
+              <p className="sub">{passageName}의 여섯 문단을 하나의 표제로 묶어 보세요. 이 표제는 아직 채점하지 않습니다.</p>
+              {passageTitle === null ? (
+                <>
+                  <textarea
+                    aria-label="지문 표제"
+                    value={passageTitleDraft}
+                    disabled={busy}
+                    placeholder="지문 전체의 중심 관계를 한 문장으로…"
+                    onChange={(event) => onPassageTitleDraft(event.target.value)}
+                  />
+                  <div className="row">
+                    <button
+                      className="primary"
+                      disabled={busy || passageTitleDraft.trim() === ''}
+                      onClick={onPassageTitleSubmit}
+                    >
+                      {busy ? '저장 중…' : '지문 표제 저장'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="done passage-done">
+                  <strong>이 지문을 끝냈습니다.</strong>
+                  <p className="mine">내가 쓴 표제: “{passageTitle}”</p>
+                </div>
+              )}
+            </div>
+          ) : passageName !== undefined ? (
+            <p className="sub">이 지문의 앞 문단을 모두 마치면 지문 전체 표제를 작성할 수 있습니다.</p>
+          ) : next === undefined ? (
             <p className="sub">마지막 문단입니다. 위에서 다른 문단을 골라 다시 해 볼 수 있습니다.</p>
           ) : (
             <button className="primary" onClick={onNext}>

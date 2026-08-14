@@ -1,13 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
-import { listPassages, loadContent } from './content.js';
+import { listPassages, loadContent, loadPassageManifest } from './content.js';
 
 describe('광합성 전체 지문 앱 등록', () => {
   it('p1~p6을 빠짐없이 원문 순서로 제공한다', () => {
-    const ids = listPassages()
-      .map((passage) => passage.paragraphId)
-      .filter((id) => id.startsWith('photosynthesis-p'));
-    expect(ids).toEqual([
+    const paragraphs = listPassages().filter((passage) => passage.passageId === 'photosynthesis');
+    expect(paragraphs.map((passage) => passage.paragraphId)).toEqual([
+      'photosynthesis-p1',
+      'photosynthesis-p2',
+      'photosynthesis-p3',
+      'photosynthesis-p4',
+      'photosynthesis-p5',
+      'photosynthesis-p6',
+    ]);
+    expect(paragraphs.map((passage) => passage.passageIndex)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(paragraphs.every((passage) => passage.passageLength === 6)).toBe(true);
+    expect(paragraphs.every((passage) => passage.passageTitle === '식물의 광합성 효율과 C3, C4 식물')).toBe(true);
+  });
+
+  it('manifest가 지문 ID와 정본 문단 순서를 제공한다', () => {
+    expect(loadPassageManifest('photosynthesis').paragraphIds).toEqual([
       'photosynthesis-p1',
       'photosynthesis-p2',
       'photosynthesis-p3',

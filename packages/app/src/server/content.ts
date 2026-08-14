@@ -31,6 +31,30 @@ export interface Content {
   readonly titleQueries?: GeneratedQuerySet;
 }
 
+export interface PassageManifest {
+  readonly passageId: string;
+  readonly title: string;
+  readonly paragraphIds: readonly string[];
+}
+
+function passageManifests(): PassageManifest[] {
+  const dir = resolve(ROOT, 'passages');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
+    .map((entry) => JSON.parse(readFileSync(resolve(dir, entry.name), 'utf8')) as PassageManifest);
+}
+
+export function loadPassageManifest(passageId: string): PassageManifest {
+  const manifest = passageManifests().find((candidate) => candidate.passageId === passageId);
+  if (manifest === undefined) throw new Error(`지문 manifest 없음: ${passageId}`);
+  return manifest;
+}
+
+export function findPassageManifestForParagraph(paragraphId: string): PassageManifest | undefined {
+  return passageManifests().find((manifest) => manifest.paragraphIds.includes(paragraphId));
+}
+
 function read<T>(paragraphId: string, file: string): T {
   const path = resolve(ROOT, paragraphId, file);
   if (!existsSync(path)) throw new Error(`콘텐츠 없음: ${paragraphId}/${file}`);
@@ -57,6 +81,23 @@ export function loadContent(paragraphId: string): Content {
  */
 export function listPassages(): PassageSummary[] {
   if (!existsSync(ROOT)) return [];
+  const membership = new Map<string, {
+    passageId: string;
+    passageTitle: string;
+    passageIndex: number;
+    passageLength: number;
+  }>();
+  for (const manifest of passageManifests()) {
+    manifest.paragraphIds.forEach((paragraphId, passageIndex) => {
+      if (membership.has(paragraphId)) throw new Error(`문단이 여러 지문 manifest에 등록됨: ${paragraphId}`);
+      membership.set(paragraphId, {
+        passageId: manifest.passageId,
+        passageTitle: manifest.title,
+        passageIndex,
+        passageLength: manifest.paragraphIds.length,
+      });
+    });
+  }
   const out: (PassageSummary & { order: number })[] = [];
   for (const dir of readdirSync(ROOT, { withFileTypes: true })) {
     if (!dir.isDirectory()) continue;
@@ -68,6 +109,7 @@ export function listPassages(): PassageSummary[] {
       title: p.title,
       tags: p.tags ?? [],
       sentenceCount: p.sentences.length,
+      ...membership.get(p.paragraphId),
       order: p.order ?? Number.MAX_SAFE_INTEGER,
     });
   }

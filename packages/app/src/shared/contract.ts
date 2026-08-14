@@ -26,6 +26,12 @@ export interface PassageSummary {
   readonly title: string;
   readonly tags: readonly string[];
   readonly sentenceCount: number;
+  /** 지문 manifest에 등록된 문단에만 존재한다. */
+  readonly passageId?: string;
+  readonly passageTitle?: string;
+  /** 지문 안의 0-based 순서와 전체 문단 수. */
+  readonly passageIndex?: number;
+  readonly passageLength?: number;
 }
 
 export interface PassageView {
@@ -95,11 +101,23 @@ export interface TitleRequest {
   readonly text: string;
   /** 참이면 저장만 하고 채점하지 않는다 (1단계 초기 가설). */
   readonly hypothesisOnly?: boolean;
+  /** 지문 진행 누적용 로컬 세션 ID. 모델 입력에는 전달하지 않는다. */
+  readonly passageSessionId?: string;
 }
 
 export interface TitleResponse {
   /** `hypothesisOnly`면 없다. */
   readonly title?: TitleView;
+}
+
+/** 지문 전체 표제는 아직 채점하지 않는다. 작성·저장·복원만 검증한다. */
+export interface PassageTitleRequest {
+  readonly text: string;
+}
+
+export interface PassageTitleResponse {
+  readonly text?: string;
+  readonly completedParagraphIds: readonly string[];
 }
 
 export interface AttemptRequest {
