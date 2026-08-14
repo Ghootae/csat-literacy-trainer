@@ -4,8 +4,8 @@
 
 - **목적:** 다음 작업자가 프로젝트의 확인된 현재 상태, 운영 결정, 완료 기준과 바로 이어서 할 한 가지를 빠르게 파악하기 위한 canonical 현황판이다. 상세 실험 결과는 `docs/experiments/`에 둔다.
 - **최종 갱신일:** 2026-08-14
-- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, semantic verification 파이프라인 커밋 `03cfc5f` 이후 migration
-- **현재 최우선 작업:** 5단계 — photosynthesis p1부터 p6 완료와 지문 표제 진입까지 전체 지문 E2E를 설계한다.
+- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, 전체 지문 완주 구현 커밋 `48068d7`
+- **현재 최우선 작업:** 6단계 — 광합성에서 검증한 전체 지문 생산·완주 구조를 다른 분야로 확장한다.
 - **현재 운영 결정:** 학생 영역 응답은 Anthropic `claude-opus-4-8`, effort `low`, proposition coverage `off`를 사용한다. 타이틀 평가는 기존 `medium/on`, 골드·질의 생성은 `medium`이며 학생 영역은 환경변수로 `medium/on` 롤백이 가능하다.
 - **상태 정의:** `pending`은 시작 전, `in_progress`는 일부 근거나 구현이 있으나 완료 기준 미충족, `blocked`는 외부 결정·자료 없이는 진행 불가, `completed`는 완료 기준과 재현 가능한 증거를 모두 충족한 상태다.
 
@@ -35,10 +35,10 @@ G 단계는 다음처럼 판정한다.
 | G3 질의 완료 | 11/11 제품 단락 | `content/` 아래 각 문단의 tracked `queries.json`과 `title-queries.json` |
 | G4 표준 회귀 완료 | 11/11 제품 단락 | `packages/pipeline/src/cli/assess.ts`, `packages/pipeline/fixtures/regression/` |
 | G5a 앱 연결 | 11/11 제품 단락 | `content/`, `packages/app/src/server/content.ts`, `packages/app/src/server/index.ts` |
-| G5b 엄격한 tracked E2E 완료 | 0/11 제품 단락 | 대표 단락 학습 루프 E2E는 있으나 전 지문 완주 E2E는 아직 없음: `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/src/server/session.test.ts` |
+| G5b 엄격한 tracked E2E 완료 | 6/11 제품 단락 | photosynthesis p1~p6 전체 완주와 지문 표제 저장·복원을 검증한다: `packages/app/e2e/full-passage-flow.spec.ts` |
 | 현재 표준 회귀 | 58프로브, 11단락 | 기존 42프로브에 photosynthesis p1 4, p2 6, p6 6 production-query guard 추가 |
 | G1~G4를 모두 충족한 전체 지문 | 1 | `photosynthesis`: `content/passages/photosynthesis.json`, `content/photosynthesis-p1/`~`content/photosynthesis-p6/` |
-| 엄격한 의미의 완성된 전체 지문 | 0 | 모든 단락 G1~G4와 대표 G5b를 함께 충족한 지문이 없음 |
+| 엄격한 의미의 완성된 전체 지문 | 1 | `photosynthesis`의 p1~p6이 G1~G4·G5a를 충족하고 전체 지문 G5b가 통과함 |
 
 세부 상태:
 
@@ -48,6 +48,7 @@ G 단계는 다음처럼 판정한다.
 - 광합성 원 지문 6단락은 모두 G1~G4와 G5a를 충족한다. p1·p2·p6의 과거 `reviewed/human_edit` 표시는 Codex agent 작업 이력이며 실제 인간 검수 증거가 아니다. 현재 11개 제품 단락은 별도 semantic verification gate를 통과했다.
 - `sessions/local/` 실행 기록은 ignored 증거다. 문단별 사용 흔적은 보여 주지만 tracked·재현 가능한 G5b 증거로 세지 않는다.
 - `photosynthesis-p4`의 제출→피드백→수정→타이틀→저장·복원→다음 문단 이동은 고정 평가 fixture를 쓰는 tracked Playwright E2E로 검증한다. 이는 대표 단락 안전망이며 전체 지문 완주 G5b로 세지 않는다: `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/e2e/fixtures/photosynthesis-p4-flow.json`.
+- `photosynthesis` p1~p6은 manifest 순서로 완주하고, 서버에 누적된 여섯 문단 완료 기록이 모두 있어야 비채점 지문 표제를 저장할 수 있다. 전체 흐름과 새로고침 복원은 `packages/app/e2e/full-passage-flow.spec.ts`와 `packages/app/e2e/fixtures/photosynthesis-full-passage-flow.json`이 검증한다.
 - `packages/app/dist-client/`는 빌드 산출물이므로 자산 수에 포함하지 않는다.
 
 ### 평가 기준선
@@ -80,6 +81,7 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 2026-08-13 | Luna, Terra, Gemini는 운영 응답 평가기로 채택하지 않고 다른 worktree의 코드를 현재 브랜치에 병합하지 않는다. | 현재 worktree에는 세 모델의 탈락 성능을 설명하는 tracked 실험 문서나 로그가 없다. 따라서 상세 탈락 근거 경로는 확인되지 않은 상태이며 이 문서가 결과를 추정하지 않는다. 해당 근거를 보존하려면 원본 결과를 별도 검증 후 현재 저장소의 `docs/experiments/`에 tracked 문서로 옮겨야 한다. |
 | 2026-08-13 | curve-road `s1_p2`는 제품으로 승격하지 않고 legacy experiment asset으로 유지한다. 완전한 원문 지문과 출처를 확보하고 인접 단락까지 제품화할 수 있을 때만 재검토한다. | 현재 자산은 `.omc/agreement/s1_p2.gold-{1,2,3}.json`, `.omc/agreement/s1_p2.agreement.json`, `.omc/agreement/s1_p2.responses.json`뿐이며 `content/` 등록, 사람 검수, 질의, 표준 회귀 및 앱 E2E가 없다. 생성 골드 간 의미 판정은 일치하지만 일부 응답에서 granularity 차이가 남아 있다. |
 | 2026-08-14 | 콘텐츠 품질 gate에서 사람 검수를 필수 규칙으로 두지 않는다. 원문과 gold·영역 질의·타이틀 질의를 독립 AI verifier가 검증하고, repair 뒤 같은 후보의 두 연속 pass에 blocker가 없어야 production 편입한다. | 파이프라인 `03cfc5f`, `2d29013`, `57dc9ba`, `1fa3858`, `45262f4`; baseline `packages/pipeline/fixtures/gold-migration/baseline-2026-08-14.json`; raw 결과 `packages/pipeline/fixtures/semantic-verification/`. 기존 `reviewed/human_edit`는 삭제하지 않고 legacy agent 기록으로 교정한다. |
+| 2026-08-14 | 지문 전체 표제는 지문 층위 의미 골드(N3)가 생기기 전까지 채점하지 않는다. p1~p6 완료 뒤 작성·저장·복원하는 reflection으로만 제공하며 문단 타이틀 evaluator를 재사용하지 않는다. | `48068d7`; `packages/app/src/server/index.ts`, `packages/app/src/server/session.ts`, `packages/app/e2e/full-passage-flow.spec.ts` |
 | 2026-08-09 | 기존 학생 평가 기본 effort를 high에서 medium으로 낮췄다. | `docs/experiments/effort-medium-2026-08-09.md`. 이 결정은 2026-08-13의 low/off 결정으로 대체됐고 `0b582b9`에서 코드 기본값에도 반영됐다. |
 
 과거 결정을 바꿀 때 위 행을 삭제하지 않고 새 행에 이유와 증거를 추가한다.
@@ -150,13 +152,13 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 
 | 항목 | 내용 |
 | --- | --- |
-| 상태 | pending |
+| 상태 | completed |
 | 목표 | p1 제출 → 피드백 → 수정 → 타이틀 → 저장 → 재접속·복원 → 다음 단락 이동 → p6 완료 → 지문 표제 흐름을 검증한다. |
 | 완료 기준 | 전체 흐름의 tracked E2E가 존재하고 세션 저장·복원과 상태 누적, 마지막 단락 이후 지문 표제 진입을 확인하며 API 의존성을 통제한 반복 실행이 가능하다. |
-| 현재 결과 | `content/passages/photosynthesis.json`과 앱 순서로 p1~p6이 연속 로드된다. 단일 p4 제출·복원·p5 이동 E2E는 통과하지만, p1~p6 상태 누적과 마지막 지문 표제 단계는 아직 구현·검증되지 않았다. |
-| 증거 | 커밋 `48ff00d`, `content/passages/photosynthesis.json`, `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/src/server/session.test.ts`, `packages/app/src/server/view.test.ts` |
-| 남은 작업 | 결정론적 evaluator 대역을 사용한 전체 브라우저 E2E와 마지막 지문 표제 전환이 필요하다. |
-| 다음 행동 | p1~p6 E2E 시나리오의 상태 전이 표를 작성한다. |
+| 현재 결과 | manifest 메타데이터로 p1~p6 내부 이동을 제한하고, 문단 완료를 별도 지문 세션에 중복 없이 누적한다. 여섯 문단 완료 전 지문 표제 저장은 409로 거부한다. 고정 evaluator E2E가 p1 미달→수정, 각 문단 타이틀, p1~p6 이동, 문단별 저장, 지문 표제 저장과 새로고침 복원을 재현한다. 지문 표제는 N3 골드가 없어 비채점 reflection으로 유지한다. |
+| 증거 | 구현 커밋 `48068d7`; `content/passages/photosynthesis.json`, `packages/app/e2e/full-passage-flow.spec.ts`, `packages/app/e2e/fixtures/photosynthesis-full-passage-flow.json`, `packages/app/src/server/content.ts`, `packages/app/src/server/session.ts`, `packages/app/src/server/index.ts` |
+| 남은 작업 | 없음. 지문 전체 표제 의미 채점은 N3 골드 설계 없이는 이 단계에 포함하지 않는다. |
+| 다음 행동 | 6단계 후보 지문 각각의 원 지문 ID와 전체 단락 수를 manifest 후보 표로 정리한다. |
 
 ### 6. 분야별 전체 지문 확장
 
@@ -165,7 +167,7 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 상태 | pending |
 | 목표 | 광합성(과학), 법인(법학), 후기 묵가(철학), 공시 의무(경제·법), NCM 전지(기술), 니체(인문) 순으로 확장해 전체 지문 5개를 우선 완성한다. |
 | 완료 기준 | 각 지문의 모든 단락이 G1~G4를 충족하고 분야·관계 구조가 편중되지 않으며 대표 지문은 G5b까지 검증된다. |
-| 현재 결과 | 광합성은 전체 6단락이 G1~G4를 충족하고 tracked manifest가 있다. 나머지 분야는 대표 단락만 있으며 전체 지문과 manifest가 없다. |
+| 현재 결과 | 광합성은 전체 6단락이 G1~G5b를 충족하고 tracked manifest와 전체 완주 E2E가 있다. 나머지 분야는 대표 단락만 있으며 전체 지문과 manifest가 없다. |
 | 증거 | `content/`, `packages/pipeline/src/cli/content-import.ts`, `docs/PROJECT-BRIEFING.md` |
 | 남은 작업 | 광합성 외 전체 지문 4개를 더 완성하려면 지문 단위 source manifest와 완성 순서, 분야·관계 구조 표본 기준을 정하고 누락 단락을 생산해야 한다. |
 | 다음 행동 | 6개 후보 각각의 원 지문 ID와 전체 단락 수를 tracked manifest 후보 표로 정리한다. |
@@ -189,7 +191,7 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 상태 | pending |
 | 목표 | 전체 지문 5개 → 학생 파일럿 → 전체 지문 10개 → 품질 재검토 → 전체 지문 30개 순으로 확장한다. |
 | 완료 기준 | 각 관문에서 앞 단계의 품질·UX 문제를 반영하고 승인된 생성·검수·회귀·E2E 계약으로 다음 배치를 진행한다. |
-| 현재 결과 | 엄격히 완성된 전체 지문은 0개다. 대량 생성에 앞서 골드 metadata, 첫 전체 지문, E2E와 학생 파일럿이 필요하다. |
+| 현재 결과 | 엄격히 완성된 전체 지문은 광합성 1개다. 대량 생성에 앞서 전체 지문 4개 추가 완성과 학생 파일럿이 필요하다. |
 | 증거 | `docs/PROJECT-BRIEFING.md`, 이 문서의 3~7단계 |
 | 남은 작업 | 첫 5개 지문과 파일럿 근거가 없다. 처음부터 30개를 만들면 생성·검수 규칙 변경 시 대량 재작업이 발생하고, 골드 품질·학생 UX·분야별 실패를 늦게 발견한다. |
 | 다음 행동 | 7단계 파일럿 결과가 나온 뒤 10지문 확장 여부를 한 번 결정한다. |
