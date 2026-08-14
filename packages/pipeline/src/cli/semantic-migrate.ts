@@ -13,23 +13,27 @@ import { relative, resolve } from 'node:path';
 
 import type { Gold } from '../gold.js';
 import { GoldGenerationMetadataSchema } from '../gold-generation-metadata.js';
+import { MODEL } from '../llm/client.js';
 import { GeneratedQuerySetSchema, type GeneratedQuerySet } from '../llm/query-gen.js';
 import { generateTitleQuerySet, validateTitleQuerySet } from '../llm/title-gen.js';
 import {
-  applyRepairPlan,
   assertVerificationGate,
-  evidenceContractViolations,
   makeVerificationRecord,
   planSemanticRepair,
-  reportBlockers,
+  SEMANTIC_REPORT_SCHEMA_VERSION,
+  SEMANTIC_VERIFICATION_EFFORT,
+  SEMANTIC_VERIFIER_VERSION,
   validateGoldStructure,
   validateQueryStructure,
-  verifyGoldSemantic,
-  verifyQuerySemantic,
-  verifyTitleQuerySemantic,
-  type RepairPlan,
   type SemanticVerificationReport,
 } from '../semantic-verification.js';
+import {
+  applyGuardedRepairPlan,
+  runSemanticQualification,
+  type GuardedRepairResult,
+  type QualificationExecution,
+} from '../semantic-qualification.js';
+import { runSelectedSemanticVerifier } from '../semantic-verification-routing.js';
 
 const ROOT = process.cwd();
 const CONTENT = resolve(ROOT, 'content');
@@ -87,50 +91,55 @@ async function verifyWithRepair<T extends Gold | GeneratedQuerySet>(args: {
   readonly artifactDir: string;
   readonly verify: (candidate: T) => Promise<SemanticVerificationReport>;
   readonly validate: (candidate: T) => void;
-}): Promise<{ candidate: T; reports: SemanticVerificationReport[]; repairs: RepairPlan[]; reportPaths: string[] }> {
-  let candidate = structuredClone(args.initial);
-  const reports: SemanticVerificationReport[] = [];
-  const repairs: RepairPlan[] = [];
-  const reportPaths: string[] = [];
-  let repairCycles = 0;
-  let consecutiveCleanPasses = 0;
-
-  for (let pass = 1; ; pass++) {
-    // 이 호출에는 앞선 pass의 issue나 repair rationale가 들어가지 않는다.
-    const report = await args.verify(candidate);
-    reports.push(report);
-    const relativePath = relative(ROOT, resolve(args.artifactDir, `${args.kind}-pass-${pass}.json`));
-    writeJson(resolve(ROOT, relativePath), report);
-    const evidencePath = resolve(args.artifactDir, `${args.kind}-pass-${pass}-evidence.json`);
-    const violations = evidenceContractViolations(args.sourceText, report);
-    writeJson(evidencePath, {
-      compliant: violations.length === 0,
-      issueCount: report.issues.length,
-      violationCount: violations.length,
-      violations,
-    });
-    reportPaths.push(relativePath);
-    const blockers = reportBlockers(report);
-    console.log(`    ${args.kind} pass ${pass}: blocker ${blockers.length}, warning ${report.issues.length - blockers.length}`);
-
-    consecutiveCleanPasses = blockers.length === 0 ? consecutiveCleanPasses + 1 : 0;
-    if (consecutiveCleanPasses >= 2) {
-      return { candidate, reports, repairs, reportPaths };
-    }
-    if (blockers.length === 0) continue;
-    if (repairCycles >= 2) {
-      return { candidate, reports, repairs, reportPaths };
-    }
-
-    const plan = await planSemanticRepair(args.kind, args.sourceText, candidate, blockers, args.paragraphId);
-    repairCycles++;
-    repairs.push(plan);
-    writeJson(resolve(args.artifactDir, `${args.kind}-repair-${repairCycles}.json`), plan);
-    candidate = applyRepairPlan(candidate, plan);
-    consecutiveCleanPasses = 0;
-    args.validate(candidate);
-    writeJson(resolve(args.artifactDir, `${args.kind}-candidate-${repairCycles + 1}.json`), candidate);
-  }
+}): Promise<QualificationExecution<T>> {
+  return runSemanticQualification({
+    assetType: args.kind,
+    verifierKind: args.kind,
+    sourceText: args.sourceText,
+    initial: args.initial,
+    provider: 'anthropic',
+    model: MODEL,
+    effort: SEMANTIC_VERIFICATION_EFFORT,
+    promptVersion: `${SEMANTIC_VERIFIER_VERSION}:${args.kind}`,
+    reportSchemaVersion: SEMANTIC_REPORT_SCHEMA_VERSION,
+    maxRepairCycles: 2,
+    verify: async (candidate) => ({ output: await args.verify(candidate), resultReplay: false }),
+    repair: async (candidate, blockers, repairCycle): Promise<GuardedRepairResult<T>> => {
+      const plan = await planSemanticRepair(args.kind, args.sourceText, candidate, blockers, args.paragraphId);
+      const repairPath = resolve(args.artifactDir, `${args.kind}-repair-${repairCycle}.json`);
+      const diffPath = resolve(args.artifactDir, `${args.kind}-repair-${repairCycle}-diff.json`);
+      const artifactPath = relative(ROOT, repairPath);
+      writeJson(repairPath, plan);
+      const repaired = applyGuardedRepairPlan({
+        assetType: args.kind,
+        candidate,
+        issues: blockers,
+        plan,
+        repairCycle,
+        artifactPath,
+      });
+      writeJson(diffPath, {
+        repairCycle,
+        repairArtifactPath: artifactPath,
+        diffs: repaired.diffs,
+      });
+      writeJson(resolve(args.artifactDir, `${args.kind}-candidate-${repairCycle + 1}.json`), repaired.candidate);
+      return repaired;
+    },
+    validate: args.validate,
+    persistReport: (report, pass) => {
+      const path = resolve(args.artifactDir, `${args.kind}-pass-${pass}.json`);
+      const relativePath = relative(ROOT, path);
+      writeJson(path, report);
+      writeJson(resolve(args.artifactDir, `${args.kind}-pass-${pass}-evidence.json`), {
+        compliant: true,
+        issueCount: report.issues.length,
+        violationCount: 0,
+        violations: [],
+      });
+      return relativePath;
+    },
+  });
 }
 
 function correctedGenerationMetadata(gold: Gold, repaired: boolean, at: string): Gold['generationMetadata'] {
@@ -184,9 +193,13 @@ async function migrate(id: string): Promise<void> {
 
   const goldResult = await verifyWithRepair({
     kind: 'gold', paragraphId: id, sourceText: passage.text, initial: existingGold, artifactDir,
-    verify: (candidate) => verifyGoldSemantic(passage.text, candidate, id),
+    verify: (candidate) => runSelectedSemanticVerifier({ kind: 'gold', sourceText: passage.text, candidate, paragraphId: id }),
     validate: validateGoldStructure,
   });
+  if (goldResult.status !== 'qualified') {
+    writeJson(resolve(artifactDir, 'summary.json'), { id, status: goldResult.status, failureReason: goldResult.failureReason });
+    throw new Error(`${id}: gold semantic qualification ${goldResult.status}`);
+  }
   const goldRecord = makeVerificationRecord({
     sourceText: passage.text,
     candidate: goldResult.candidate,
@@ -209,9 +222,13 @@ async function migrate(id: string): Promise<void> {
 
   const queryResult = await verifyWithRepair({
     kind: 'query', paragraphId: id, sourceText: passage.text, initial: existingQueries, artifactDir,
-    verify: (candidate) => verifyTitleQuerySemantic(passage.text, verifiedGold, candidate, id),
+    verify: (candidate) => runSelectedSemanticVerifier({ kind: 'query', sourceText: passage.text, gold: verifiedGold, candidate, paragraphId: id }),
     validate: (candidate) => { GeneratedQuerySetSchema.parse(candidate); validateQueryStructure(verifiedGold, candidate); },
   });
+  if (queryResult.status !== 'qualified') {
+    writeJson(resolve(artifactDir, 'summary.json'), { id, gold: goldRecord, status: queryResult.status, failureReason: queryResult.failureReason });
+    throw new Error(`${id}: query semantic qualification ${queryResult.status}`);
+  }
   const queryRecord = makeVerificationRecord({
     sourceText: passage.text,
     candidate: queryResult.candidate,
@@ -228,13 +245,17 @@ async function migrate(id: string): Promise<void> {
 
   const titleResult = await verifyWithRepair({
     kind: 'title-query', paragraphId: id, sourceText: passage.text, initial: existingTitleQueries, artifactDir,
-    verify: (candidate) => verifyQuerySemantic(passage.text, verifiedGold, candidate, id),
+    verify: (candidate) => runSelectedSemanticVerifier({ kind: 'title-query', sourceText: passage.text, gold: verifiedGold, candidate, paragraphId: id }),
     validate: (candidate) => {
       GeneratedQuerySetSchema.parse(candidate);
       validateQueryStructure(verifiedGold, candidate);
       validateMigratedTitleQuerySet(candidate);
     },
   });
+  if (titleResult.status !== 'qualified') {
+    writeJson(resolve(artifactDir, 'summary.json'), { id, gold: goldRecord, query: queryRecord, status: titleResult.status, failureReason: titleResult.failureReason });
+    throw new Error(`${id}: title query semantic qualification ${titleResult.status}`);
+  }
   const titleRecord = makeVerificationRecord({
     sourceText: passage.text,
     candidate: titleResult.candidate,
@@ -292,13 +313,17 @@ async function migrateTitleOnly(id: string): Promise<void> {
   let legacyRecord: ReturnType<typeof makeVerificationRecord> | undefined;
   let result = await verifyWithRepair({
     kind: 'title-query', paragraphId: id, sourceText: passage.text, initial: existing, artifactDir,
-    verify: (candidate) => verifyTitleQuerySemantic(passage.text, gold, candidate, id),
+    verify: (candidate) => runSelectedSemanticVerifier({ kind: 'title-query', sourceText: passage.text, gold, candidate, paragraphId: id }),
     validate: (candidate) => {
       GeneratedQuerySetSchema.parse(candidate);
       validateQueryStructure(gold, candidate);
       validateMigratedTitleQuerySet(candidate);
     },
   });
+  if (result.status === 'incomplete') {
+    writeJson(resolve(artifactDir, 'legacy-summary.json'), { id, status: result.status, failureReason: result.failureReason });
+    throw new Error(`${id}: title query semantic qualification ${result.status}`);
+  }
   let record = makeVerificationRecord({
     sourceText: passage.text,
     candidate: result.candidate,
@@ -324,7 +349,7 @@ async function migrateTitleOnly(id: string): Promise<void> {
     mkdirSync(regeneratedDir, { recursive: true });
     result = await verifyWithRepair({
       kind: 'title-query', paragraphId: id, sourceText: passage.text, initial: candidate, artifactDir: regeneratedDir,
-      verify: (next) => verifyTitleQuerySemantic(passage.text, gold, next, id),
+      verify: (next) => runSelectedSemanticVerifier({ kind: 'title-query', sourceText: passage.text, gold, candidate: next, paragraphId: id }),
       validate: (next) => {
         GeneratedQuerySetSchema.parse(next);
         validateQueryStructure(gold, next);
@@ -332,6 +357,10 @@ async function migrateTitleOnly(id: string): Promise<void> {
         if (problems.length > 0) throw new Error(`${id}: regenerated title 구조 오류: ${problems.join(', ')}`);
       },
     });
+    if (result.status === 'incomplete') {
+      writeJson(resolve(artifactDir, 'summary.json'), { id, legacyTitleQuery: legacyRecord, status: result.status, failureReason: result.failureReason });
+      throw new Error(`${id}: regenerated title query semantic qualification ${result.status}`);
+    }
     record = makeVerificationRecord({
       sourceText: passage.text,
       candidate: result.candidate,

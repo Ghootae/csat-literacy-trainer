@@ -15,6 +15,8 @@ import {
   queryVerifierInput,
   semanticCandidateHash,
   semanticSourceHash,
+  validateGoldStructure,
+  validateQueryStructure,
   verifierFingerprint,
 } from './semantic-verification.js';
 
@@ -70,6 +72,20 @@ describe('독립 semantic verification 계약', () => {
     expect(applyRepairPlan({ a: { b: 1 }, keep: true }, { repairs: [{
       issueId: 'i1', operation: 'replace', path: '/a/b', replacementJson: '2', explanation: 'fix',
     }] })).toEqual({ a: { b: 2 }, keep: true });
+  });
+
+  it('deterministic preflight가 중복 ID와 source/node 참조 오류를 차단한다', () => {
+    const { gold, queries } = fixture();
+    expect(() => validateGoldStructure(gold)).not.toThrow();
+    expect(() => validateQueryStructure(gold, queries)).not.toThrow();
+    expect(() => validateGoldStructure({
+      ...gold,
+      nodes: [...gold.nodes, gold.nodes[0]!],
+    })).toThrow(/중복 node ID/);
+    expect(() => validateQueryStructure(gold, {
+      ...queries,
+      paragraphId: '다른-문단',
+    })).toThrow(/paragraphId 불일치/);
   });
 
   it('passed/current hash/fingerprint/zero blockers를 모두 만족해야 gate를 통과한다', () => {

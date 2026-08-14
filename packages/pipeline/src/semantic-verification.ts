@@ -12,6 +12,7 @@ export const SEMANTIC_VERIFIER_VERSION = 'semantic-verifier-2026-08-14-v1';
 export const SEMANTIC_REPAIR_VERSION = 'semantic-repair-2026-08-14-v1';
 export const SEMANTIC_WORKFLOW_VERSION = 'semantic-workflow-2026-08-14-v2';
 export const SEMANTIC_VERIFICATION_EFFORT = 'medium' as const;
+export const SEMANTIC_REPORT_SCHEMA_VERSION = 'semantic-verification-report-v1';
 
 const Sha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 
@@ -164,6 +165,19 @@ export function verifierFingerprint(): string {
     effort: SEMANTIC_VERIFICATION_EFFORT,
     verifierVersion: SEMANTIC_VERIFIER_VERSION,
     repairVersion: SEMANTIC_REPAIR_VERSION,
+    workflowVersion: SEMANTIC_WORKFLOW_VERSION,
+  }));
+}
+
+/** v2 qualification은 verifier 종류까지 fingerprint에 넣어 prompt 교차 연결을 차단한다. */
+export function semanticVerifierFingerprint(kind: 'gold' | 'query' | 'title-query'): string {
+  return sha256(stable({
+    provider: 'anthropic',
+    model: MODEL,
+    effort: SEMANTIC_VERIFICATION_EFFORT,
+    verifierKind: kind,
+    verifierVersion: SEMANTIC_VERIFIER_VERSION,
+    reportSchemaVersion: SEMANTIC_REPORT_SCHEMA_VERSION,
     workflowVersion: SEMANTIC_WORKFLOW_VERSION,
   }));
 }
@@ -360,20 +374,56 @@ export function validateGoldStructure(gold: Gold): void {
   if (gold.titleId.length === 0 || gold.nodes.length === 0 || gold.sentences.length === 0) {
     throw new Error(`${gold.paragraphId}: 빈 title/nodes/sentences`);
   }
+  const assertUnique = (label: string, ids: readonly string[]): void => {
+    if (new Set(ids).size !== ids.length) throw new Error(`${gold.paragraphId}: 중복 ${label} ID`);
+  };
+  assertUnique('sentence', gold.sentences.map((sentence) => sentence.id));
+  assertUnique('proposition', gold.propositions.map((proposition) => proposition.id));
+  assertUnique('node', gold.nodes.map((node) => node.id));
+  assertUnique('slot', gold.slots.map((slot) => slot.slotId));
   for (const proposition of gold.propositions) PropositionSchema.parse(proposition);
   const sentenceIds = new Set(gold.sentences.map((sentence) => sentence.id));
+  const propositionIds = new Set(gold.propositions.map((proposition) => proposition.id));
+  const nodeIds = new Set(gold.nodes.map((node) => node.id));
+  if (!nodeIds.has(gold.titleId)) throw new Error(`${gold.paragraphId}: 없는 title node ${gold.titleId}`);
+  for (const node of gold.nodes) {
+    for (const childId of node.childIds) {
+      if (!nodeIds.has(childId)) throw new Error(`${gold.paragraphId}/${node.id}: 없는 child node ${childId}`);
+    }
+  }
   for (const proposition of gold.propositions) {
     for (const sentenceId of proposition.sourceSentences) {
       if (!sentenceIds.has(sentenceId)) throw new Error(`${gold.paragraphId}/${proposition.id}: 없는 문장 ${sentenceId}`);
+    }
+  }
+  for (const slot of gold.slots) {
+    if (!nodeIds.has(slot.slotId)) throw new Error(`${gold.paragraphId}: 없는 slot node ${slot.slotId}`);
+    for (const propositionId of slot.traceabilityPropositions) {
+      if (!propositionIds.has(propositionId)) throw new Error(`${gold.paragraphId}/${slot.slotId}: 없는 명제 ${propositionId}`);
+    }
+    for (const sentenceId of slot.sentences) {
+      if (!sentenceIds.has(sentenceId)) throw new Error(`${gold.paragraphId}/${slot.slotId}: 없는 문장 ${sentenceId}`);
+    }
+  }
+  for (const edge of [...gold.evaluationLinks, ...gold.discourseLinks]) {
+    if (!nodeIds.has(edge.source) || !nodeIds.has(edge.target)) {
+      throw new Error(`${gold.paragraphId}: 없는 node를 가리키는 edge ${edge.source}→${edge.target}`);
     }
   }
 }
 
 export function validateQueryStructure(gold: Gold, queries: GeneratedQuerySet): void {
   GeneratedQuerySetSchema.parse(queries);
+  if (queries.paragraphId !== gold.paragraphId) {
+    throw new Error(`paragraphId 불일치: ${queries.paragraphId} != ${gold.paragraphId}`);
+  }
   const sentenceIds = new Set(gold.sentences.map((sentence) => sentence.id));
   const propositionIds = new Set(gold.propositions.map((proposition) => proposition.id));
   const edgeIds = new Set(relationEdgeIndex(gold).map((edge) => edge.id));
+  const regionIds = queries.regions.map((region) => region.regionId);
+  if (new Set(regionIds).size !== regionIds.length) throw new Error(`${queries.paragraphId}: 중복 region ID`);
+  const queryIds = queries.regions.flatMap((region) => region.queries.map((query) => query.id));
+  if (new Set(queryIds).size !== queryIds.length) throw new Error(`${queries.paragraphId}: 중복 query ID`);
   for (const region of queries.regions) {
     for (const id of region.sourceSentenceIds) if (!sentenceIds.has(id)) throw new Error(`${queries.paragraphId}/${region.regionId}: 없는 문장 ${id}`);
     for (const id of region.propositionIds) if (!propositionIds.has(id)) throw new Error(`${queries.paragraphId}/${region.regionId}: 없는 명제 ${id}`);
