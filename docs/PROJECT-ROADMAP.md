@@ -4,7 +4,7 @@
 
 - **목적:** 다음 작업자가 프로젝트의 확인된 현재 상태, 운영 결정, 완료 기준과 바로 이어서 할 한 가지를 빠르게 파악하기 위한 canonical 현황판이다. 상세 실험 결과는 `docs/experiments/`에 둔다.
 - **최종 갱신일:** 2026-08-14
-- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, 전체 지문 완주 구현 커밋 `48068d7`
+- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, Roadmap 6A 작업 시작 HEAD `f456c1d2225cc087476734e1b4a878ce46ebbd0a`
 - **현재 최우선 작업:** 6단계 — 광합성에서 검증한 전체 지문 생산·완주 구조를 다른 분야로 확장한다.
 - **현재 운영 결정:** 학생 영역 응답은 Anthropic `claude-opus-4-8`, effort `low`, proposition coverage `off`를 사용한다. 타이틀 평가는 기존 `medium/on`, 골드·질의 생성은 `medium`이며 학생 영역은 환경변수로 `medium/on` 롤백이 가능하다.
 - **상태 정의:** `pending`은 시작 전, `in_progress`는 일부 근거나 구현이 있으나 완료 기준 미충족, `blocked`는 외부 결정·자료 없이는 진행 불가, `completed`는 완료 기준과 재현 가능한 증거를 모두 충족한 상태다.
@@ -31,9 +31,9 @@ G 단계는 다음처럼 판정한다.
 | 제품 대상 단락 | 11 | `content/`의 실제 `gold.json` 보유 디렉터리; `content/passages/` manifest와 curve-road legacy asset은 제외 |
 | 앱 `content/` 등록 단락 | 11 | `content/`, `packages/app/src/server/content.ts` |
 | G1 골드 생성 | 12/12 | 위 tracked 골드 |
-| G2 의미 검증 | 11/11 제품 단락 | `content/*/semanticVerification`, `packages/pipeline/fixtures/semantic-verification/`, `packages/pipeline/src/semantic-migration.test.ts` |
+| G2 의미 검증 | 11/11 제품 단락은 기존 gate를 통과했다. 단, `corporate-law-p1`은 새 legacy 재승격 정의에 따른 source 결속과 검증 기록 감사가 필요하다. | `content/*/semanticVerification`, `packages/pipeline/fixtures/semantic-verification/`, `packages/pipeline/src/semantic-migration.test.ts`, `docs/CONTENT-ASSET-QUALIFICATION.md` |
 | G3 질의 완료 | 11/11 제품 단락 | `content/` 아래 각 문단의 tracked `queries.json`과 `title-queries.json` |
-| G4 표준 회귀 완료 | 11/11 제품 단락 | `packages/pipeline/src/cli/assess.ts`, `packages/pipeline/fixtures/regression/` |
+| G4 표준 회귀 완료 | 11/11 제품 단락에 legacy/production guard가 있다. 단, `corporate-law-p1`은 비교용 legacy 회귀만 있어 production-query 표준 회귀가 필요하다. | `packages/pipeline/src/cli/assess.ts`, `packages/pipeline/fixtures/regression/`, `docs/CONTENT-ASSET-QUALIFICATION.md` |
 | G5a 앱 연결 | 11/11 제품 단락 | `content/`, `packages/app/src/server/content.ts`, `packages/app/src/server/index.ts` |
 | G5b 엄격한 tracked E2E 완료 | 6/11 제품 단락 | photosynthesis p1~p6 전체 완주와 지문 표제 저장·복원을 검증한다: `packages/app/e2e/full-passage-flow.spec.ts` |
 | 현재 표준 회귀 | 58프로브, 11단락 | 기존 42프로브에 photosynthesis p1 4, p2 6, p6 6 production-query guard 추가 |
@@ -46,6 +46,7 @@ G 단계는 다음처럼 판정한다.
 - `nietzsche-p1`은 기존 attribution eval-case의 검수된 3프로브를 production 질의셋 guard로 승격했다: `packages/pipeline/fixtures/regression/nietzsche-p1.json`, `docs/experiments/nietzsche-low-off-standard-2026-08-13.log`.
 - curve-road `s1_p2`는 제품으로 승격하지 않고 legacy experiment asset으로 유지한다. G1 생성·합의 실험 증거는 보존하되 G2~G5 대상이나 제품 콘텐츠 수에는 포함하지 않는다: `.omc/agreement/s1_p2.gold-1.json`, `.omc/agreement/s1_p2.gold-2.json`, `.omc/agreement/s1_p2.gold-3.json`, `.omc/agreement/s1_p2.agreement.json`.
 - 광합성 원 지문 6단락은 모두 G1~G4와 G5a를 충족한다. p1·p2·p6의 과거 `reviewed/human_edit` 표시는 Codex agent 작업 이력이며 실제 인간 검수 증거가 아니다. 현재 11개 제품 단락은 별도 semantic verification gate를 통과했다.
+- `corporate-law-p1`은 G1·G3과 legacy 검증·회귀 자산을 보유하며, G2와 신규 G4 및 tracked source 결속에 대한 재승격이 필요하다. provenance는 `legacy/no-fingerprint`다.
 - `sessions/local/` 실행 기록은 ignored 증거다. 문단별 사용 흔적은 보여 주지만 tracked·재현 가능한 G5b 증거로 세지 않는다.
 - `photosynthesis-p4`의 제출→피드백→수정→타이틀→저장·복원→다음 문단 이동은 고정 평가 fixture를 쓰는 tracked Playwright E2E로 검증한다. 이는 대표 단락 안전망이며 전체 지문 완주 G5b로 세지 않는다: `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/e2e/fixtures/photosynthesis-p4-flow.json`.
 - `photosynthesis` p1~p6은 manifest 순서로 완주하고, 서버에 누적된 여섯 문단 완료 기록이 모두 있어야 비채점 지문 표제를 저장할 수 있다. 전체 흐름과 새로고침 복원은 `packages/app/e2e/full-passage-flow.spec.ts`와 `packages/app/e2e/fixtures/photosynthesis-full-passage-flow.json`이 검증한다.
@@ -82,6 +83,8 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 2026-08-13 | curve-road `s1_p2`는 제품으로 승격하지 않고 legacy experiment asset으로 유지한다. 완전한 원문 지문과 출처를 확보하고 인접 단락까지 제품화할 수 있을 때만 재검토한다. | 현재 자산은 `.omc/agreement/s1_p2.gold-{1,2,3}.json`, `.omc/agreement/s1_p2.agreement.json`, `.omc/agreement/s1_p2.responses.json`뿐이며 `content/` 등록, 사람 검수, 질의, 표준 회귀 및 앱 E2E가 없다. 생성 골드 간 의미 판정은 일치하지만 일부 응답에서 granularity 차이가 남아 있다. |
 | 2026-08-14 | 콘텐츠 품질 gate에서 사람 검수를 필수 규칙으로 두지 않는다. 원문과 gold·영역 질의·타이틀 질의를 독립 AI verifier가 검증하고, repair 뒤 같은 후보의 두 연속 pass에 blocker가 없어야 production 편입한다. | 파이프라인 `03cfc5f`, `2d29013`, `57dc9ba`, `1fa3858`, `45262f4`; baseline `packages/pipeline/fixtures/gold-migration/baseline-2026-08-14.json`; raw 결과 `packages/pipeline/fixtures/semantic-verification/`. 기존 `reviewed/human_edit`는 삭제하지 않고 legacy agent 기록으로 교정한다. |
 | 2026-08-14 | 지문 전체 표제는 지문 층위 의미 골드(N3)가 생기기 전까지 채점하지 않는다. p1~p6 완료 뒤 작성·저장·복원하는 reflection으로만 제공하며 문단 타이틀 evaluator를 재사용하지 않는다. | `48068d7`; `packages/app/src/server/index.ts`, `packages/app/src/server/session.ts`, `packages/app/e2e/full-passage-flow.spec.ts` |
+| 2026-08-14 | 두 번째 전체 지문은 법학 분야의 `법인의 종류와 자산 운용의 법적 통제`로 확정한다. 공시 의무는 차선, 후기 묵가는 이후 철학 후보로 유지하고 NCM은 p2 삽화 문제 해결 전 후순위로 둔다. | `docs/experiments/roadmap-6a-passage-selection-2026-08-14.md`, `packages/pipeline/fixtures/sources/69bbf88d8937cf14551903ca.json` |
+| 2026-08-14 | 신규 자산은 source hash와 generator fingerprint가 일치해야 한다. legacy 자산은 `legacy/no-fingerprint`를 보존하고 tracked source 결속, 현행 semantic verification과 production-query 회귀로 재승격한다. 과거 generation metadata를 추정하지 않는다. | `docs/CONTENT-ASSET-QUALIFICATION.md` |
 | 2026-08-09 | 기존 학생 평가 기본 effort를 high에서 medium으로 낮췄다. | `docs/experiments/effort-medium-2026-08-09.md`. 이 결정은 2026-08-13의 low/off 결정으로 대체됐고 `0b582b9`에서 코드 기본값에도 반영됐다. |
 
 과거 결정을 바꿀 때 위 행을 삭제하지 않고 새 행에 이유와 증거를 추가한다.
@@ -118,7 +121,7 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | --- | --- |
 | 상태 | completed |
 | 목표 | 새 골드에 provider/model, effort, 프롬프트·스키마 버전, 생성 시각, source hash, generator fingerprint, 검수 상태와 수정 이력을 보존한다. |
-| 완료 기준 | 새 골드에서 메타데이터가 자동 기록·검증되고 기존 골드는 재생성 없이 `legacy/no-fingerprint`로 식별되며 기존 로더와 앱 호환성이 유지된다. |
+| 완료 기준 | 새 골드에서 메타데이터가 자동 기록·검증되고 기존 골드는 재생성 없이 `legacy/no-fingerprint`로 식별되며 기존 로더와 앱 호환성이 유지된다. 신규 생성 자산은 source hash와 generator fingerprint가 일치해야 한다. 기존 legacy 자산은 `legacy/no-fingerprint`를 보존하되 tracked source 결속과 현행 semantic verification 및 production regression gate를 통과해야 한다. |
 | 현재 결과 | `buildGold()`가 새 골드에 provider/model/effort, prompt/schema version, 생성 시각, 정규화 원문 SHA-256, 생성기 fingerprint, 미검수 상태와 빈 수정 이력을 자동 기록하고 runtime schema로 검증한다. metadata가 없는 기존 content 골드 8개는 정상 `legacy/no-fingerprint`, 새 광합성 골드 3개는 `recorded`·`reviewed`로 식별된다. 전체 Vitest 302개, build와 대표 앱 E2E가 통과했다. |
 | 증거 | 커밋 `1f26300`; `docs/GOLD-GENERATION-METADATA.md`, `packages/pipeline/src/gold-generation-metadata.ts`, `packages/pipeline/src/gold-generation-metadata.test.ts`, `packages/pipeline/src/gold.ts`, `packages/pipeline/src/cli/content-import.ts` |
 | 남은 작업 | 없음. 향후 프롬프트나 의미 스키마 변경 시 version 상수를 함께 올리고, 실제 사람 검수와 AI 검증 이력을 혼동하지 않는다. |
@@ -155,7 +158,7 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 상태 | completed |
 | 목표 | p1 제출 → 피드백 → 수정 → 타이틀 → 저장 → 재접속·복원 → 다음 단락 이동 → p6 완료 → 지문 표제 흐름을 검증한다. |
 | 완료 기준 | 전체 흐름의 tracked E2E가 존재하고 세션 저장·복원과 상태 누적, 마지막 단락 이후 지문 표제 진입을 확인하며 API 의존성을 통제한 반복 실행이 가능하다. |
-| 현재 결과 | manifest 메타데이터로 p1~p6 내부 이동을 제한하고, 문단 완료를 별도 지문 세션에 중복 없이 누적한다. 여섯 문단 완료 전 지문 표제 저장은 409로 거부한다. 고정 evaluator E2E가 p1 미달→수정, 각 문단 타이틀, p1~p6 이동, 문단별 저장, 지문 표제 저장과 새로고침 복원을 재현한다. 지문 표제는 N3 골드가 없어 비채점 reflection으로 유지한다. |
+| 현재 결과 | manifest 메타데이터로 p1~p6 내부 이동을 제한하고 passage session의 `completedParagraphIds`에 완료를 누적한다. 여섯 문단 완료 전 지문 표제 저장은 409로 거부한다. 고정 evaluator E2E가 p1 미달→수정, 각 문단 타이틀, p1~p6 이동, 문단별 저장, 지문 표제 저장과 새로고침 복원을 재현한다. 지문 표제는 N3 골드가 없어 비채점 reflection으로 유지한다. 문단 세션과 passage session 사이 상태 정본 문제는 다른 지문으로 일반화하기 전에 별도 감사한다. |
 | 증거 | 구현 커밋 `48068d7`; `content/passages/photosynthesis.json`, `packages/app/e2e/full-passage-flow.spec.ts`, `packages/app/e2e/fixtures/photosynthesis-full-passage-flow.json`, `packages/app/src/server/content.ts`, `packages/app/src/server/session.ts`, `packages/app/src/server/index.ts` |
 | 남은 작업 | 없음. 지문 전체 표제 의미 채점은 N3 골드 설계 없이는 이 단계에 포함하지 않는다. |
 | 다음 행동 | 6단계 후보 지문 각각의 원 지문 ID와 전체 단락 수를 manifest 후보 표로 정리한다. |
@@ -164,13 +167,13 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 
 | 항목 | 내용 |
 | --- | --- |
-| 상태 | pending |
+| 상태 | in_progress |
 | 목표 | 광합성(과학), 법인(법학), 후기 묵가(철학), 공시 의무(경제·법), NCM 전지(기술), 니체(인문) 순으로 확장해 전체 지문 5개를 우선 완성한다. |
-| 완료 기준 | 각 지문의 모든 단락이 G1~G4를 충족하고 분야·관계 구조가 편중되지 않으며 대표 지문은 G5b까지 검증된다. |
-| 현재 결과 | 광합성은 전체 6단락이 G1~G5b를 충족하고 tracked manifest와 전체 완주 E2E가 있다. 나머지 분야는 대표 단락만 있으며 전체 지문과 manifest가 없다. |
-| 증거 | `content/`, `packages/pipeline/src/cli/content-import.ts`, `docs/PROJECT-BRIEFING.md` |
-| 남은 작업 | 광합성 외 전체 지문 4개를 더 완성하려면 지문 단위 source manifest와 완성 순서, 분야·관계 구조 표본 기준을 정하고 누락 단락을 생산해야 한다. |
-| 다음 행동 | 6개 후보 각각의 원 지문 ID와 전체 단락 수를 tracked manifest 후보 표로 정리한다. |
+| 완료 기준 | 각 지문의 모든 단락이 G1~G4를 충족하고 분야·관계 구조가 편중되지 않으며 대표 지문은 G5b까지 검증된다. 신규 생성 자산은 source hash와 generator fingerprint가 일치해야 한다. legacy 자산은 `legacy/no-fingerprint`를 보존하되 tracked source 결속, 현행 semantic verification 및 production-query 회귀 gate를 통과해야 한다. |
+| 현재 결과 | 6A에서 두 번째 전체 지문을 법인으로 확정하고 source set `69bbf88d8937cf14551903ca`의 본문 5문단과 각주 2개를 tracked fixture로 동결했다. 기존 원문 p1은 `corporate-law-p1`에 대응하지만 제품 문자열에는 각주 표식 `*`가 없어 hash가 다르다. p1은 G1·G3과 legacy 검증·회귀 자산을 보유하며 G2, 신규 G4와 source 결속 재승격이 필요하다. 신규 제작 대상은 p2~p5다. |
+| 증거 | `packages/pipeline/fixtures/sources/69bbf88d8937cf14551903ca.json`, `packages/pipeline/src/corporate-law-source-fixture.test.ts`, `docs/experiments/roadmap-6a-passage-selection-2026-08-14.md`, `docs/CONTENT-ASSET-QUALIFICATION.md` |
+| 남은 작업 | p1 legacy 재승격, p2~p5 G1~G4 제작, 법인 manifest와 G5b가 남았다. 공통 E2E harness 일반화 전 `pending state-model audit before 6C/G5b`를 해결해 문단 세션을 완료 상태의 정본으로 삼고 passage 진행률을 계산하는지 확인해야 한다. |
+| 다음 행동 | API 실행 전에 `corporate-law-p1`의 tracked source 결속 차이와 기존 연속 두 번 blocker 0 기록을 감사해 재승격 실행 manifest를 확정한다. |
 
 ### 7. 실제 학생 파일럿
 
