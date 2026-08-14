@@ -3,8 +3,8 @@
 ## 문서 정보
 
 - **목적:** 다음 작업자가 프로젝트의 확인된 현재 상태, 운영 결정, 완료 기준과 바로 이어서 할 한 가지를 빠르게 파악하기 위한 canonical 현황판이다. 상세 실험 결과는 `docs/experiments/`에 둔다.
-- **최종 갱신일:** 2026-08-13
-- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, 광합성 G1~G4 완성 커밋 `48ff00d`
+- **최종 갱신일:** 2026-08-14
+- **확인 기준:** 브랜치 `experiment/no-proposition-glyph`, semantic verification 파이프라인 커밋 `03cfc5f` 이후 migration
 - **현재 최우선 작업:** 5단계 — photosynthesis p1부터 p6 완료와 지문 표제 진입까지 전체 지문 E2E를 설계한다.
 - **현재 운영 결정:** 학생 영역 응답은 Anthropic `claude-opus-4-8`, effort `low`, proposition coverage `off`를 사용한다. 타이틀 평가는 기존 `medium/on`, 골드·질의 생성은 `medium`이며 학생 영역은 환경변수로 `medium/on` 롤백이 가능하다.
 - **상태 정의:** `pending`은 시작 전, `in_progress`는 일부 근거나 구현이 있으나 완료 기준 미충족, `blocked`는 외부 결정·자료 없이는 진행 불가, `completed`는 완료 기준과 재현 가능한 증거를 모두 충족한 상태다.
@@ -18,7 +18,7 @@
 G 단계는 다음처럼 판정한다.
 
 - **G1 골드 생성:** 명제·합성 노드·타이틀이 있는 tracked 골드가 존재한다.
-- **G2 사람 검수:** 내용과 관계 방향을 사람이 검수했다는 손 오라클·검수 문서·실행 기록이 있다.
+- **G2 의미 검증:** 원문과 골드·질의를 독립 AI verifier가 대조하고, 필요한 repair 뒤 두 번 연속 blocker 0을 확인한 tracked 기록이 있다. 실제 인간 검수와 구분한다.
 - **G3 질의 완료:** 영역 질의와 타이틀 질의가 tracked fixture로 준비되어 있다.
 - **G4 표준 회귀 완료:** `packages/pipeline/src/cli/assess.ts`의 표준 프로브와 기대 판정에 포함된다.
 - **G5a 앱 연결:** 로딩·제출·피드백 코드가 해당 `content/` 문단을 사용할 수 있다.
@@ -31,7 +31,7 @@ G 단계는 다음처럼 판정한다.
 | 제품 대상 단락 | 11 | `content/`의 실제 `gold.json` 보유 디렉터리; `content/passages/` manifest와 curve-road legacy asset은 제외 |
 | 앱 `content/` 등록 단락 | 11 | `content/`, `packages/app/src/server/content.ts` |
 | G1 골드 생성 | 12/12 | 위 tracked 골드 |
-| G2 사람 검수 | 11/11 제품 단락 | `packages/pipeline/fixtures/query-oracles/`, 검수된 생성 질의, `docs/experiments/photosynthesis-full-passage-2026-08-13.md` |
+| G2 의미 검증 | 11/11 제품 단락 | `content/*/semanticVerification`, `packages/pipeline/fixtures/semantic-verification/`, `packages/pipeline/src/semantic-migration.test.ts` |
 | G3 질의 완료 | 11/11 제품 단락 | `content/` 아래 각 문단의 tracked `queries.json`과 `title-queries.json` |
 | G4 표준 회귀 완료 | 11/11 제품 단락 | `packages/pipeline/src/cli/assess.ts`, `packages/pipeline/fixtures/regression/` |
 | G5a 앱 연결 | 11/11 제품 단락 | `content/`, `packages/app/src/server/content.ts`, `packages/app/src/server/index.ts` |
@@ -45,7 +45,7 @@ G 단계는 다음처럼 판정한다.
 - 표준 회귀 밖의 골드 단락은 curve-road `s1_p2` 하나다.
 - `nietzsche-p1`은 기존 attribution eval-case의 검수된 3프로브를 production 질의셋 guard로 승격했다: `packages/pipeline/fixtures/regression/nietzsche-p1.json`, `docs/experiments/nietzsche-low-off-standard-2026-08-13.log`.
 - curve-road `s1_p2`는 제품으로 승격하지 않고 legacy experiment asset으로 유지한다. G1 생성·합의 실험 증거는 보존하되 G2~G5 대상이나 제품 콘텐츠 수에는 포함하지 않는다: `.omc/agreement/s1_p2.gold-1.json`, `.omc/agreement/s1_p2.gold-2.json`, `.omc/agreement/s1_p2.gold-3.json`, `.omc/agreement/s1_p2.agreement.json`.
-- 광합성 원 지문 6단락은 모두 G1~G4와 G5a를 충족한다. p1·p2·p6은 provenance가 기록된 medium 생성 골드를 사람이 검수했고, 새 16프로브 `low/off` 실행은 16/16 기대 일치·위험 과대통과 0이었다: 커밋 `48ff00d`, `docs/experiments/photosynthesis-full-passage-2026-08-13.md`.
+- 광합성 원 지문 6단락은 모두 G1~G4와 G5a를 충족한다. p1·p2·p6의 과거 `reviewed/human_edit` 표시는 Codex agent 작업 이력이며 실제 인간 검수 증거가 아니다. 현재 11개 제품 단락은 별도 semantic verification gate를 통과했다.
 - `sessions/local/` 실행 기록은 ignored 증거다. 문단별 사용 흔적은 보여 주지만 tracked·재현 가능한 G5b 증거로 세지 않는다.
 - `photosynthesis-p4`의 제출→피드백→수정→타이틀→저장·복원→다음 문단 이동은 고정 평가 fixture를 쓰는 tracked Playwright E2E로 검증한다. 이는 대표 단락 안전망이며 전체 지문 완주 G5b로 세지 않는다: `packages/app/e2e/paragraph-flow.spec.ts`, `packages/app/e2e/fixtures/photosynthesis-p4-flow.json`.
 - `packages/app/dist-client/`는 빌드 산출물이므로 자산 수에 포함하지 않는다.
@@ -79,6 +79,7 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 2026-08-13 | 타이틀 평가는 이번 학생 영역 모델 변경 범위 밖이며 기존 설정을 유지한다. 별도 검증 없이 low로 내리지 않는다. | `0b582b9`: 앱과 title probe가 명시적 `TITLE_EVAL_CONFIG`(`medium/on`)를 전달하며 학생 영역 환경변수와 분리된다. 타이틀 근거는 `docs/experiments/title-compression-2026-08-10.md`다. |
 | 2026-08-13 | Luna, Terra, Gemini는 운영 응답 평가기로 채택하지 않고 다른 worktree의 코드를 현재 브랜치에 병합하지 않는다. | 현재 worktree에는 세 모델의 탈락 성능을 설명하는 tracked 실험 문서나 로그가 없다. 따라서 상세 탈락 근거 경로는 확인되지 않은 상태이며 이 문서가 결과를 추정하지 않는다. 해당 근거를 보존하려면 원본 결과를 별도 검증 후 현재 저장소의 `docs/experiments/`에 tracked 문서로 옮겨야 한다. |
 | 2026-08-13 | curve-road `s1_p2`는 제품으로 승격하지 않고 legacy experiment asset으로 유지한다. 완전한 원문 지문과 출처를 확보하고 인접 단락까지 제품화할 수 있을 때만 재검토한다. | 현재 자산은 `.omc/agreement/s1_p2.gold-{1,2,3}.json`, `.omc/agreement/s1_p2.agreement.json`, `.omc/agreement/s1_p2.responses.json`뿐이며 `content/` 등록, 사람 검수, 질의, 표준 회귀 및 앱 E2E가 없다. 생성 골드 간 의미 판정은 일치하지만 일부 응답에서 granularity 차이가 남아 있다. |
+| 2026-08-14 | 콘텐츠 품질 gate에서 사람 검수를 필수 규칙으로 두지 않는다. 원문과 gold·영역 질의·타이틀 질의를 독립 AI verifier가 검증하고, repair 뒤 같은 후보의 두 연속 pass에 blocker가 없어야 production 편입한다. | 파이프라인 `03cfc5f`, `2d29013`, `57dc9ba`, `1fa3858`, `45262f4`; baseline `packages/pipeline/fixtures/gold-migration/baseline-2026-08-14.json`; raw 결과 `packages/pipeline/fixtures/semantic-verification/`. 기존 `reviewed/human_edit`는 삭제하지 않고 legacy agent 기록으로 교정한다. |
 | 2026-08-09 | 기존 학생 평가 기본 effort를 high에서 medium으로 낮췄다. | `docs/experiments/effort-medium-2026-08-09.md`. 이 결정은 2026-08-13의 low/off 결정으로 대체됐고 `0b582b9`에서 코드 기본값에도 반영됐다. |
 
 과거 결정을 바꿀 때 위 행을 삭제하지 않고 새 행에 이유와 증거를 추가한다.
@@ -114,11 +115,11 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 항목 | 내용 |
 | --- | --- |
 | 상태 | completed |
-| 목표 | 새 골드에 provider/model, effort, 프롬프트·스키마 버전, 생성 시각, source hash, generator fingerprint, 사람 검수 여부와 수정 이력을 보존한다. |
+| 목표 | 새 골드에 provider/model, effort, 프롬프트·스키마 버전, 생성 시각, source hash, generator fingerprint, 검수 상태와 수정 이력을 보존한다. |
 | 완료 기준 | 새 골드에서 메타데이터가 자동 기록·검증되고 기존 골드는 재생성 없이 `legacy/no-fingerprint`로 식별되며 기존 로더와 앱 호환성이 유지된다. |
 | 현재 결과 | `buildGold()`가 새 골드에 provider/model/effort, prompt/schema version, 생성 시각, 정규화 원문 SHA-256, 생성기 fingerprint, 미검수 상태와 빈 수정 이력을 자동 기록하고 runtime schema로 검증한다. metadata가 없는 기존 content 골드 8개는 정상 `legacy/no-fingerprint`, 새 광합성 골드 3개는 `recorded`·`reviewed`로 식별된다. 전체 Vitest 302개, build와 대표 앱 E2E가 통과했다. |
 | 증거 | 커밋 `1f26300`; `docs/GOLD-GENERATION-METADATA.md`, `packages/pipeline/src/gold-generation-metadata.ts`, `packages/pipeline/src/gold-generation-metadata.test.ts`, `packages/pipeline/src/gold.ts`, `packages/pipeline/src/cli/content-import.ts` |
-| 남은 작업 | 없음. 향후 프롬프트나 의미 스키마 변경 시 version 상수를 함께 올리고, 실제 사람 검수 후에만 review 상태와 수정 이력을 기록한다. |
+| 남은 작업 | 없음. 향후 프롬프트나 의미 스키마 변경 시 version 상수를 함께 올리고, 실제 사람 검수와 AI 검증 이력을 혼동하지 않는다. |
 | 다음 행동 | 5단계의 p1~p6 전체 지문 E2E 상태 전이를 설계한다. |
 
 ### 4. 첫 번째 전체 지문 완성
@@ -126,12 +127,24 @@ Nietzsche guard 3개와 photosynthesis p1·p2·p6 guard 16개를 추가해 58프
 | 항목 | 내용 |
 | --- | --- |
 | 상태 | completed |
-| 목표 | photosynthesis 전체 6단락 중 미완인 p1·p2·p6의 골드, 사람 검수, 영역·타이틀 질의와 회귀 프로브를 만든다. |
+| 목표 | photosynthesis 전체 6단락 중 미완인 p1·p2·p6의 골드, 의미 검증, 영역·타이틀 질의와 회귀 프로브를 만든다. |
 | 완료 기준 | 6단락 모두 G1~G4를 충족하고 앱에서 p1부터 p6까지 일관된 순서로 로드된다. 일반 단락은 핵심 프로브 3~4개, 새 관계 구조·경계는 6~8개를 둔다. |
-| 현재 결과 | p1·p2·p6을 원본 세트의 정확한 문장 경계로 생성하고 사람 검수했다. 세 문단 모두 영역·타이틀 질의와 표준 회귀 fixture가 있으며 새 16프로브는 `low/off`에서 16/16 기대 일치, 위험 과대통과 0이었다. tracked manifest와 앱 `order`가 p1~p6의 연속 순서를 고정하고, 전체 6단락이 G1~G4와 G5a를 충족한다. |
+| 현재 결과 | p1·p2·p6을 원본 세트의 정확한 문장 경계로 생성했다. 세 문단 모두 영역·타이틀 질의와 표준 회귀 fixture가 있으며 새 16프로브는 `low/off`에서 16/16 기대 일치, 위험 과대통과 0이었다. 이후 정식 AI semantic verifier로 다시 검증했다. |
 | 증거 | 구현 커밋 `48ff00d`; `content/passages/photosynthesis.json`, `content/photosynthesis-p1/`~`content/photosynthesis-p6/`, `packages/pipeline/fixtures/regression/photosynthesis-p1.json`, `packages/pipeline/fixtures/regression/photosynthesis-p2.json`, `packages/pipeline/fixtures/regression/photosynthesis-p6.json`, `packages/pipeline/src/photosynthesis-completion.test.ts`, `packages/app/src/server/content.test.ts`, `docs/experiments/photosynthesis-full-passage-2026-08-13.md` |
 | 남은 작업 | 없음. p1~p6 전체 완주와 마지막 지문 표제 전환은 5단계 범위다. |
 | 다음 행동 | p1 제출부터 p6 완료와 지문 표제 진입까지 결정론적 E2E 상태 전이 표를 작성한다. |
+
+### 4.5. AI semantic verification 및 legacy migration
+
+| 항목 | 내용 |
+| --- | --- |
+| 상태 | completed |
+| 목표 | 원문과 gold·영역 질의·타이틀 질의를 독립 검증하고, 오류가 있으면 최소 repair 후 새 pass로 재검증하며, 통과 전 production 편입을 차단한다. |
+| 완료 기준 | verifier 입력이 생성 review와 분리되고, 원시 issue·repair·evidence 준수 결과가 보존되며, 같은 후보가 두 번 연속 blocker 0이어야 한다. source/candidate hash와 현재 fingerprint가 맞고 unresolved critical/error가 0인 자산만 import·title promotion할 수 있다. 기존 11개 production 단락을 모두 마이그레이션한다. |
+| 현재 결과 | 11개 단락의 gold·영역 질의·타이틀 질의 총 33개가 현재 gate를 통과했다. gold repair는 photosynthesis-p6의 역접 대조 링크와 science-p5의 근거 없는 교차 원소 링크 2건, title repair는 corporate-law-p1과 disclosure-p3 2건이었다. 영역 질의 repair는 최종 채택본에서 0건이다. p6 회귀는 6/6, 위험 과대평가 0이었다. science-p5는 위험 과대평가 0이며 low/off 기존 경계 변이 1/4가 재현됐다. |
+| 증거 | `packages/pipeline/src/semantic-verification.ts`, `packages/pipeline/src/cli/semantic-migrate.ts`, `packages/pipeline/src/semantic-migration.test.ts`, `packages/pipeline/fixtures/gold-migration/baseline-2026-08-14.json`, `packages/pipeline/fixtures/semantic-verification/`, `docs/experiments/photosynthesis-p6-semantic-migration-regression-2026-08-14.log`, `docs/experiments/science-p5-semantic-migration-regression-2026-08-14-rerun.log` |
+| 남은 작업 | 없음. 기존 review 필드는 역사 기록일 뿐 production 품질 gate가 아니다. |
+| 다음 행동 | 5단계의 p1~p6 전체 지문 E2E 상태 전이 표를 작성한다. |
 
 ### 5. 광합성 전체 지문 E2E
 
