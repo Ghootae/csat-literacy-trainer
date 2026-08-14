@@ -27,6 +27,7 @@ interface SourceEvalCase {
 
 const ROOT = process.cwd();
 const FIXTURE_PATH = 'packages/pipeline/fixtures/regression/nietzsche-p1.json';
+const CORPORATE_FIXTURE_PATH = 'packages/pipeline/fixtures/regression/corporate-law-p1.json';
 const SOURCE_PATH = 'packages/pipeline/fixtures/eval-cases/nietzsche-p1-attribution-swap.json';
 const fixture = JSON.parse(readFileSync(resolve(ROOT, FIXTURE_PATH), 'utf8')) as NietzscheRegressionFixture;
 const source = JSON.parse(readFileSync(resolve(ROOT, SOURCE_PATH), 'utf8')) as SourceEvalCase;
@@ -62,5 +63,28 @@ describe('Nietzsche 표준 회귀 fixture', () => {
   it('base 회귀가 fixture를 실제로 로드한다', () => {
     const sourceText = readFileSync(resolve(ROOT, 'packages/pipeline/src/cli/assess.ts'), 'utf8');
     expect(sourceText).toContain(`readJson<Config>(resolve(process.cwd(), '${FIXTURE_PATH}'))`);
+  });
+});
+
+describe('법인 production-query 표준 회귀 fixture', () => {
+  it('현재 production query와 역할 분리 focal에 4프로브를 결속한다', () => {
+    const fixture = JSON.parse(readFileSync(resolve(process.cwd(), CORPORATE_FIXTURE_PATH), 'utf8')) as {
+      gold: string;
+      querySet: string;
+      focal: string;
+      probes: { id: string; expectFocal: string }[];
+    };
+    expect(fixture).toMatchObject({
+      gold: 'content/corporate-law-p1/gold.json',
+      querySet: 'content/corporate-law-p1/queries.json',
+      focal: 'r3',
+    });
+    expect(fixture.probes).toHaveLength(4);
+    expect(fixture.probes.map(({ expectFocal }) => expectFocal)).toEqual([
+      'relation_preserved', 'topic_only', 'contradicted', 'topic_only',
+    ]);
+    const sourceText = readFileSync(resolve(ROOT, 'packages/pipeline/src/cli/assess.ts'), 'utf8');
+    expect(sourceText).toContain(`readJson<Config>(resolve(process.cwd(), '${CORPORATE_FIXTURE_PATH}'))`);
+    expect(sourceText).toContain("'legacy-corporate': [CORPORATE_LEGACY_CONFIG]");
   });
 });

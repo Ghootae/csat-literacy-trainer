@@ -69,8 +69,7 @@ interface Config {
   readonly probes: readonly Probe[];
 }
 
-const CONFIGS: readonly Config[] = [
-  {
+const CORPORATE_LEGACY_CONFIG: Config = {
     name: '법인(역할 분리)',
     gold: '.omc/agreement/s1_p1.gold-1.json',
     oracle: 'packages/pipeline/fixtures/queries-corporate-law-p0.json',
@@ -82,7 +81,10 @@ const CONFIGS: readonly Config[] = [
       { id: 'D(관계오류)', expectFocal: 'contradicted', text: '영리성에 따라 재단법인과 사단법인으로 나뉨\n출자자가 법인의 자산을 소유함\n법인이 직접 자산을 운용함' },
       { id: 'E3(경계)', expectFocal: 'topic_only', text: '법인의 정의와 종류\n법인의 자산 소유와 운영 주체\n법적 통제의 목적' },
     ],
-  },
+  };
+
+const CONFIGS: readonly Config[] = [
+  readJson<Config>(resolve(process.cwd(), 'packages/pipeline/fixtures/regression/corporate-law-p1.json')),
   {
     name: '과학(인과·트레이드오프)',
     gold: '.omc/agreement/69bffacbfa5063deffe19cc6_s1_p5.gold-1.json',
@@ -274,6 +276,7 @@ const SUITES: Readonly<Record<string, readonly Config[]>> = {
   base: CONFIGS,
   new: NEW_CONFIGS,
   all: [...CONFIGS, ...NEW_CONFIGS, ...N2_CONFIGS],
+  'legacy-corporate': [CORPORATE_LEGACY_CONFIG],
 };
 
 const SUITE_NAME = process.argv[2] ?? 'n2';

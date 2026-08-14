@@ -114,4 +114,4 @@ npm run content:qualify -- \
 
 `--dry-run`은 API key나 provider client를 읽지 않고 파일도 쓰지 않는다. 자산별 clean verifier 최소 2회, 최대 repair 2 cycle과 clean streak 재구축 경로를 구분해 verifier·repair·regression의 논리 호출 범위를 출력한다. HTTP 최대치는 각 논리 호출에 기존 retry 상한 4회를 더한 5 attempts로 별도 표시한다. prompt cache는 허용하지만 result replay는 clean pass로 인정하지 않는다.
 
-현재 `corporate-law-p1` dry-run은 제외된 연결 각주 1개를 보고하며, 제품 문자열의 각주 표식 누락은 source mismatch로 처리하지 않는다. 남은 blocker는 gold/query/title-query의 v1 record와 production regression 4프로브 pending이다. 실제 verifier와 regression은 별도 승인 전까지 실행하지 않는다.
+`corporate-law-p1`은 제외된 연결 각주 1개를 보고하며, 제품 문자열의 각주 표식 누락은 source mismatch로 처리하지 않는다. 2026-08-14 실제 legacy v2 qualification에서 gold/query/title-query는 각각 독립 clean 2회, blocker·repair 0으로 qualified됐다. production query 4프로브는 fulfilled 기준 4/4이나 세부 focal 판정은 3/4이다. `주제만` 기대가 `region_not_evidenced`로 판정된 불일치를 모델 결과에 맞춰 수정하지 않았으므로 regression은 failed이고 promotion은 계속 차단된다. 상세 근거는 `docs/experiments/corporate-law-p1-legacy-requalification-2026-08-14.md`에 있다.
