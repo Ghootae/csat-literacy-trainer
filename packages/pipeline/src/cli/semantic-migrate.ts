@@ -9,11 +9,12 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 
 import type { Gold } from '../gold.js';
 import { GoldGenerationMetadataSchema } from '../gold-generation-metadata.js';
 import { GeneratedQuerySetSchema, type GeneratedQuerySet } from '../llm/query-gen.js';
+import { generateTitleQuerySet, validateTitleQuerySet } from '../llm/title-gen.js';
 import {
   applyRepairPlan,
   assertVerificationGate,
@@ -56,6 +57,13 @@ function validateMigratedTitleQuerySet(set: GeneratedQuerySet): void {
   for (const id of ['qT1', 'qT2', 'qT3']) {
     if (!queries.some((query) => query.id === id)) throw new Error(`${set.paragraphId}: ${id} 없음`);
   }
+  const byId = new Map(queries.map((query) => [query.id, query]));
+  if (byId.get('qT1')?.level !== 'scope') throw new Error(`${set.paragraphId}: qT1은 scope여야 한다`);
+  if (!['relation', 'argument'].includes(byId.get('qT2')?.level ?? '')) throw new Error(`${set.paragraphId}: qT2 level 오류`);
+  if (byId.get('qT2')?.criticalForRelation !== true) throw new Error(`${set.paragraphId}: qT2는 critical이어야 한다`);
+  if (byId.get('qT3')?.level !== 'argument' || byId.get('qT3')?.criticalForRelation === true) {
+    throw new Error(`${set.paragraphId}: qT3는 비필수 argument여야 한다`);
+  }
 }
 
 function readJson<T>(path: string): T {
@@ -91,8 +99,8 @@ async function verifyWithRepair<T extends Gold | GeneratedQuerySet>(args: {
     // 이 호출에는 앞선 pass의 issue나 repair rationale가 들어가지 않는다.
     const report = await args.verify(candidate);
     reports.push(report);
-    const relative = `packages/pipeline/fixtures/semantic-verification/${args.paragraphId}/${args.artifactDir.split('/').at(-1)}/${args.kind}-pass-${pass}.json`;
-    writeJson(resolve(ROOT, relative), report);
+    const relativePath = relative(ROOT, resolve(args.artifactDir, `${args.kind}-pass-${pass}.json`));
+    writeJson(resolve(ROOT, relativePath), report);
     const evidencePath = resolve(args.artifactDir, `${args.kind}-pass-${pass}-evidence.json`);
     const violations = evidenceContractViolations(args.sourceText, report);
     writeJson(evidencePath, {
@@ -101,7 +109,7 @@ async function verifyWithRepair<T extends Gold | GeneratedQuerySet>(args: {
       violationCount: violations.length,
       violations,
     });
-    reportPaths.push(relative);
+    reportPaths.push(relativePath);
     const blockers = reportBlockers(report);
     console.log(`    ${args.kind} pass ${pass}: blocker ${blockers.length}, warning ${report.issues.length - blockers.length}`);
 
@@ -280,7 +288,9 @@ async function migrateTitleOnly(id: string): Promise<void> {
   mkdirSync(artifactDir, { recursive: true });
   writeJson(resolve(artifactDir, 'title-query-candidate-1.json'), existing);
   console.log(`  ${id} (title query)`);
-  const result = await verifyWithRepair({
+  let candidate = existing;
+  let legacyRecord: ReturnType<typeof makeVerificationRecord> | undefined;
+  let result = await verifyWithRepair({
     kind: 'title-query', paragraphId: id, sourceText: passage.text, initial: existing, artifactDir,
     verify: (candidate) => verifyTitleQuerySemantic(passage.text, gold, candidate, id),
     validate: (candidate) => {
@@ -289,7 +299,7 @@ async function migrateTitleOnly(id: string): Promise<void> {
       validateMigratedTitleQuerySet(candidate);
     },
   });
-  const record = makeVerificationRecord({
+  let record = makeVerificationRecord({
     sourceText: passage.text,
     candidate: result.candidate,
     reports: result.reports,
@@ -297,14 +307,49 @@ async function migrateTitleOnly(id: string): Promise<void> {
     reportPaths: result.reportPaths,
   });
   if (record.status !== 'passed') {
-    writeJson(resolve(artifactDir, 'summary.json'), { id, titleQuery: record, status: 'blocked' });
-    throw new Error(`${id}: title query semantic verification 실패`);
+    legacyRecord = record;
+    writeJson(resolve(artifactDir, 'legacy-summary.json'), { id, titleQuery: record, status: 'failed' });
+    console.log(`    legacy title 실패 — 현재 v2 generator로 새 후보 생성`);
+    const titleNode = gold.nodes.find((node) => node.id === gold.titleId);
+    candidate = await generateTitleQuerySet({
+      paragraphId: id,
+      titleShortForm: titleNode?.shortForm ?? titleNode?.text ?? '',
+      sentences: gold.sentences,
+      slots: gold.slots.map((slot) => ({ id: slot.slotId, shortForm: slot.shortForm })),
+    });
+    const generatedProblems = validateTitleQuerySet(candidate);
+    if (generatedProblems.length > 0) throw new Error(`${id}: regenerated title 구조 오류: ${generatedProblems.join(', ')}`);
+    writeJson(resolve(artifactDir, 'title-query-regenerated-candidate-1.json'), candidate);
+    const regeneratedDir = resolve(artifactDir, 'regenerated');
+    mkdirSync(regeneratedDir, { recursive: true });
+    result = await verifyWithRepair({
+      kind: 'title-query', paragraphId: id, sourceText: passage.text, initial: candidate, artifactDir: regeneratedDir,
+      verify: (next) => verifyTitleQuerySemantic(passage.text, gold, next, id),
+      validate: (next) => {
+        GeneratedQuerySetSchema.parse(next);
+        validateQueryStructure(gold, next);
+        const problems = validateTitleQuerySet(next);
+        if (problems.length > 0) throw new Error(`${id}: regenerated title 구조 오류: ${problems.join(', ')}`);
+      },
+    });
+    record = makeVerificationRecord({
+      sourceText: passage.text,
+      candidate: result.candidate,
+      reports: result.reports,
+      repairCycles: result.repairs.length,
+      reportPaths: result.reportPaths,
+    });
+    if (record.status !== 'passed') {
+      writeJson(resolve(artifactDir, 'summary.json'), { id, legacyTitleQuery: legacyRecord, regeneratedTitleQuery: record, status: 'blocked' });
+      throw new Error(`${id}: regenerated title query semantic verification 실패`);
+    }
   }
   const verified: GeneratedQuerySet = { ...result.candidate, semanticVerification: record };
   assertVerificationGate(passage.text, verified, verified.semanticVerification);
   writeJson(resolve(artifactDir, 'summary.json'), {
     id,
     status: 'passed',
+    ...(legacyRecord === undefined ? {} : { legacyTitleQuery: legacyRecord }),
     titleQuery: record,
     semanticChanges: { titleQuery: result.repairs.length > 0 },
   });
