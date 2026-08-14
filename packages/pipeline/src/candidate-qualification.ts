@@ -24,7 +24,13 @@ import {
   validateQueryStructure,
 } from './semantic-verification.js';
 import type { PassageSourceFixture } from './source-fixture.js';
-import { assertPassageSourceFixtureIntegrity, PassageSourceFixtureSchema, sourceTextHash } from './source-fixture.js';
+import {
+  assertCanonicalSourceSegmentation,
+  assertPassageSourceFixtureIntegrity,
+  PassageSourceFixtureSchema,
+  sourceTextHash,
+  type CanonicalSourceSegment,
+} from './source-fixture.js';
 
 const Sha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 
@@ -35,14 +41,24 @@ const IgnoredFootnoteSchema = z.object({
   text: z.string().min(1),
 });
 
+const SourceBundleSegmentSchema = z.object({
+  sourceSegmentId: z.string().regex(/^S[1-9][0-9]*$/),
+  startOffset: z.number().int().nonnegative(),
+  endOffset: z.number().int().positive(),
+  hash: Sha256Schema,
+  text: z.string().min(1),
+});
+
 export const SourceBundleSchema = z.object({
-  schemaVersion: z.literal('semantic-source-bundle-v2'),
-  canonicalizationVersion: z.literal('semantic-source-bundle-canonical-v2-footnotes-ignored'),
+  schemaVersion: z.literal('semantic-source-bundle-v3'),
+  canonicalizationVersion: z.literal('semantic-source-bundle-canonical-v3-segmented-footnotes-ignored'),
+  segmentationVersion: z.literal('canonical-source-segments-v1'),
   sourceSetId: z.string().min(1),
   sourceParagraphId: z.string().min(1),
   primaryText: z.string().min(1),
   qualificationPrimaryText: z.string().min(1),
   ignoredFootnotes: z.array(IgnoredFootnoteSchema),
+  segments: z.array(SourceBundleSegmentSchema).min(1),
   rawSourceHash: Sha256Schema,
   qualificationSourceHash: Sha256Schema,
   ignoredFootnotesHash: Sha256Schema,
@@ -246,7 +262,17 @@ export function qualificationPrimaryText(
   return normalizeGoldSource(normalized);
 }
 
-export function verifierInputText(bundle: Pick<SourceBundle, 'qualificationPrimaryText' | 'ignoredFootnotes'>): string {
+export function verifierInputText(bundle: Pick<SourceBundle, 'qualificationPrimaryText' | 'segments'>): string {
+  return [
+    '[PRIMARY_TEXT_SEGMENTS — 각주 표식과 각주 본문을 제외한 의미 검수 대상]',
+    ...bundle.segments.map((segment) => `[${segment.sourceSegmentId}] ${segment.text.trimEnd()}`),
+  ].join('\n');
+}
+
+/** 기존 v2 qualification artifact 검증 전용. 신규 호출에는 사용하지 않는다. */
+export function legacyVerifierInputText(
+  bundle: Pick<SourceBundle, 'qualificationPrimaryText'>,
+): string {
   return [
     '[PRIMARY_TEXT — 각주 표식과 각주 본문을 제외한 의미 검수 대상]',
     bundle.qualificationPrimaryText,
@@ -262,16 +288,27 @@ export function buildSourceBundle(fixtureValue: unknown, sourceParagraphId: stri
   const ignoredFootnotes = fixture.footnotes
     .filter((footnote) => footnote.targetParagraphId === sourceParagraphId)
     .map(({ id, marker, targetTerm, text }) => ({ id, marker, targetTerm, text }));
+  const semanticText = qualificationPrimaryText(paragraph.text, ignoredFootnotes);
+  if (paragraph.semanticSegmentation === undefined) {
+    throw new Error(`${sourceParagraphId}: tracked canonical source segmentation 없음`);
+  }
+  const segmentation = assertCanonicalSourceSegmentation(semanticText, paragraph.semanticSegmentation);
+  const segments = segmentation.segments.map((segment: CanonicalSourceSegment) => ({
+    ...segment,
+    text: semanticText.slice(segment.startOffset, segment.endOffset),
+  }));
   const partial = {
-    schemaVersion: 'semantic-source-bundle-v2' as const,
-    canonicalizationVersion: 'semantic-source-bundle-canonical-v2-footnotes-ignored' as const,
+    schemaVersion: 'semantic-source-bundle-v3' as const,
+    canonicalizationVersion: 'semantic-source-bundle-canonical-v3-segmented-footnotes-ignored' as const,
+    segmentationVersion: segmentation.segmentationVersion,
     sourceSetId: fixture.sourceSetId,
     sourceParagraphId,
     primaryText: paragraph.text,
-    qualificationPrimaryText: qualificationPrimaryText(paragraph.text, ignoredFootnotes),
+    qualificationPrimaryText: semanticText,
     ignoredFootnotes,
+    segments,
     rawSourceHash: sourceTextHash(paragraph.text),
-    qualificationSourceHash: sourceTextHash(qualificationPrimaryText(paragraph.text, ignoredFootnotes)),
+    qualificationSourceHash: sourceTextHash(semanticText),
     ignoredFootnotesHash: sha256(canonicalIgnoredFootnotes(ignoredFootnotes)),
   };
   return SourceBundleSchema.parse({
@@ -580,10 +617,14 @@ export function assertCandidatePromotionGate(args: {
   readonly verifierFingerprints: Readonly<Record<SemanticAssetType, string>>;
 }): void {
   const manifest = QualificationManifestSchema.parse(args.manifest);
+  const currentVerifierInputHash = args.bundle.verifierInputHash;
+  const legacyInput = legacyVerifierInputText(args.bundle);
+  const legacyVerifierInputHash = semanticSourceHash(legacyInput);
+  const usesLegacyInput = manifest.verifierInputHash === legacyVerifierInputHash;
   if (manifest.sourceSetId !== args.bundle.sourceSetId
     || manifest.sourceParagraphId !== args.bundle.sourceParagraphId
     || manifest.qualificationSourceHash !== args.bundle.qualificationSourceHash
-    || manifest.verifierInputHash !== args.bundle.verifierInputHash) {
+    || (manifest.verifierInputHash !== currentVerifierInputHash && !usesLegacyInput)) {
     throw new Error('qualification source bundle hash 불일치');
   }
   if (manifest.preflight.status !== 'passed' || manifest.preflight.reasons.length !== 0) {
@@ -591,7 +632,7 @@ export function assertCandidatePromotionGate(args: {
   }
   const links = [manifest.assets.gold, manifest.assets.query, manifest.assets.titleQuery];
   if (links.some((link) => link === undefined)) throw new Error('qualification asset link 누락');
-  const sourceInput = verifierInputText(args.bundle);
+  const sourceInput = usesLegacyInput ? legacyInput : verifierInputText(args.bundle);
   for (const link of links) {
     if (link === undefined || link.qualificationRecordPath === undefined || link.qualificationRecordHash === undefined) {
       throw new Error('qualification v2 record binding 없음');
@@ -610,6 +651,7 @@ export function assertCandidatePromotionGate(args: {
       expectedVerifierKind: link.verifierKind,
       sourceText: sourceInput,
       evidenceSourceTexts: [args.bundle.qualificationPrimaryText],
+      ...(usesLegacyInput ? {} : { evidenceSegments: args.bundle.segments }),
       candidate,
       verifierFingerprint: args.verifierFingerprints[link.assetType],
       loadReport: args.loadJson,

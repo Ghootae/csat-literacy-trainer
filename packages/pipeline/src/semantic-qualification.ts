@@ -7,17 +7,23 @@ import type { GeneratedQuerySet } from './llm/query-gen.js';
 import {
   RepairPlanSchema,
   SemanticVerificationRecordSchema,
-  SemanticVerificationReportSchema,
+  CompatibleSemanticVerificationReportSchema,
   applyRepairPlan,
   assertEvidenceContract,
+  assertSegmentEvidenceContract,
+  isSegmentEvidenceReport,
+  normalizedSemanticIssues,
   reportBlockers,
+  segmentEvidenceContractViolations,
   semanticCandidateHash,
   semanticSourceHash,
   sha256,
   type RepairPlan,
   type SemanticIssue,
   type SemanticVerificationRecord,
-  type SemanticVerificationReport,
+  type CompatibleSemanticVerificationReport,
+  type EvidenceSourceSegment,
+  type SegmentEvidenceVerificationReport,
 } from './semantic-verification.js';
 
 export type SemanticAssetType = 'gold' | 'query' | 'title-query';
@@ -56,10 +62,11 @@ export const SemanticVerificationRunV2Schema = z.object({
   passIndex: z.number().int().positive().optional(),
   invalidReportPath: z.string().min(1).optional(),
   invalidReportHash: Sha256Schema.optional(),
-  failureContract: z.literal('evidence_exact_substring').optional(),
+  failureContract: z.enum(['evidence_exact_substring', 'evidence_segment_reference']).optional(),
   failureIssueId: z.string().min(1).optional(),
   failureIssueKey: Sha256Schema.optional(),
   failureReason: z.string().min(1).optional(),
+  evidenceCorrectionInvocationId: z.string().min(1).optional(),
 });
 
 export type SemanticVerificationRunV2 = z.infer<typeof SemanticVerificationRunV2Schema>;
@@ -106,7 +113,7 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 
-export function semanticReportHash(report: SemanticVerificationReport): string {
+export function semanticReportHash(report: CompatibleSemanticVerificationReport): string {
   return sha256(canonical(report));
 }
 
@@ -151,7 +158,7 @@ export interface QualificationExecution<T> {
   readonly status: 'qualified' | 'incomplete' | 'quarantined';
   readonly cleanStreak: number;
   readonly repairCycles: number;
-  readonly reports: readonly SemanticVerificationReport[];
+  readonly reports: readonly CompatibleSemanticVerificationReport[];
   readonly reportPaths: readonly string[];
   readonly runs: readonly SemanticVerificationRunV2[];
   readonly repairs: readonly GuardedRepairResult<T>[];
@@ -165,6 +172,8 @@ export interface QualificationRunConfig<T> {
   readonly sourceText: string;
   /** 역할 라벨이 포함된 verifier input과 별개로 evidence가 실제로 속해야 하는 원문 조각. */
   readonly evidenceSourceTexts?: readonly string[];
+  /** canonical tracked source segment registry. 신규 v2 report의 evidence ID를 검증한다. */
+  readonly evidenceSegments?: readonly EvidenceSourceSegment[];
   readonly initial: T;
   readonly provider: string;
   readonly model: string;
@@ -179,8 +188,12 @@ export interface QualificationRunConfig<T> {
     repairCycle: number,
   ) => Promise<GuardedRepairResult<T>>;
   readonly validate: (candidate: T) => void;
+  /** ID 형식 오류에만 허용되는 단 한 번의 제한 교정. 의미 필드는 callback 입력 report에서 고정한다. */
+  readonly correctEvidenceRefs?: (
+    report: SegmentEvidenceVerificationReport,
+  ) => Promise<{ readonly report: SegmentEvidenceVerificationReport; readonly invocationId: string }>;
   readonly persistReport?: (
-    report: SemanticVerificationReport,
+    report: CompatibleSemanticVerificationReport,
     pass: number,
     run: { readonly runId: string; readonly invocationId: string },
   ) => string | undefined;
@@ -189,12 +202,12 @@ export interface QualificationRunConfig<T> {
    * provider envelope이나 인증 정보가 아니라 검증된 structured report만 전달된다.
    */
   readonly persistInvalidReport?: (
-    report: SemanticVerificationReport,
+    report: CompatibleSemanticVerificationReport,
     pass: number,
     run: {
       readonly runId: string;
       readonly invocationId: string;
-      readonly failureContract: 'evidence_exact_substring';
+      readonly failureContract: 'evidence_exact_substring' | 'evidence_segment_reference';
       readonly failureIssueId: string;
       readonly failureIssueKey: string;
       readonly failureReason: string;
@@ -214,7 +227,7 @@ export async function runSemanticQualification<T>(
   let candidate = structuredClone(config.initial);
   let cleanStreak = 0;
   let repairCycles = 0;
-  const reports: SemanticVerificationReport[] = [];
+  const reports: CompatibleSemanticVerificationReport[] = [];
   const reportPaths: string[] = [];
   const runs: SemanticVerificationRunV2[] = [];
   const repairs: GuardedRepairResult<T>[] = [];
@@ -299,7 +312,7 @@ export async function runSemanticQualification<T>(
       stateHistory.push('incomplete');
       return finish('incomplete', failureReason);
     }
-    const parsed = SemanticVerificationReportSchema.safeParse(result.output);
+    const parsed = CompatibleSemanticVerificationReportSchema.safeParse(result.output);
     if (!parsed.success || result.resultReplay === true) {
       const failureReason = result.resultReplay === true
         ? 'result replay는 독립 verifier pass가 아니다'
@@ -327,24 +340,61 @@ export async function runSemanticQualification<T>(
       return finish('incomplete', failureReason);
     }
 
-    const report = parsed.data;
-    const evidenceViolation = report.issues.find((issue) => {
+    let report = parsed.data;
+    let evidenceCorrectionInvocationId: string | undefined;
+    let segmentViolation = isSegmentEvidenceReport(report)
+      ? config.evidenceSegments === undefined
+        ? { issueId: report.issues[0]?.id ?? 'report', reason: 'canonical source segment registry 없음' }
+        : segmentEvidenceContractViolations(config.evidenceSegments, report)[0]
+      : undefined;
+    if (segmentViolation !== undefined
+      && isSegmentEvidenceReport(report)
+      && config.evidenceSegments !== undefined
+      && config.correctEvidenceRefs !== undefined) {
+      const correctionIssueId = segmentViolation.issueId;
+      try {
+        const corrected = await config.correctEvidenceRefs(report);
+        if (corrected.invocationId === invocationId
+          || runs.some((run) => run.invocationId === corrected.invocationId)) {
+          throw new Error('evidence correction invocation은 verifier invocation과 달라야 한다');
+        }
+        report = corrected.report;
+        evidenceCorrectionInvocationId = corrected.invocationId;
+        segmentViolation = segmentEvidenceContractViolations(config.evidenceSegments, report)[0];
+      } catch (error) {
+        segmentViolation = {
+          issueId: correctionIssueId,
+          reason: `evidence ID 제한 교정 실패: ${error instanceof Error ? error.message : 'unknown error'}`,
+        };
+      }
+    }
+    const normalizedIssues = normalizedSemanticIssues(report);
+    const legacyEvidenceViolation = isSegmentEvidenceReport(report) ? undefined : report.issues.find((issue) => {
       if (issue.sourceEvidence === '') return false;
       const sources = config.evidenceSourceTexts ?? [config.sourceText];
       return !sources.some((source) => source.includes(issue.sourceEvidence));
     });
-    if (evidenceViolation !== undefined) {
-      const failureReason = config.evidenceSourceTexts === undefined
-        ? `${evidenceViolation.id}: sourceEvidence가 원문의 연속 부분 문자열이 아니다`
-        : `${evidenceViolation.id}: sourceEvidence가 primary/context 원문의 연속 부분 문자열이 아니다`;
-      const failureIssueKey = stableSemanticIssueKey(config.assetType, evidenceViolation);
+    if (segmentViolation !== undefined || legacyEvidenceViolation !== undefined) {
+      const failureIssueId = segmentViolation?.issueId ?? legacyEvidenceViolation!.id;
+      const failureContract = segmentViolation === undefined
+        ? 'evidence_exact_substring' as const
+        : 'evidence_segment_reference' as const;
+      const failureReason = segmentViolation === undefined
+        ? config.evidenceSourceTexts === undefined
+          ? `${failureIssueId}: sourceEvidence가 원문의 연속 부분 문자열이 아니다`
+          : `${failureIssueId}: sourceEvidence가 primary/context 원문의 연속 부분 문자열이 아니다`
+        : `${failureIssueId}: ${segmentViolation.reason}${segmentViolation.sourceSegmentId === undefined ? '' : ` (${segmentViolation.sourceSegmentId})`}`;
+      const normalizedIssue = normalizedIssues.find((issue) => issue.id === failureIssueId)
+        ?? normalizedIssues[0];
+      if (normalizedIssue === undefined) throw new Error(failureReason);
+      const failureIssueKey = stableSemanticIssueKey(config.assetType, normalizedIssue);
       let invalidReportPath: string | undefined;
       try {
         invalidReportPath = config.persistInvalidReport?.(report, pass, {
           runId: workflowRunId,
           invocationId,
-          failureContract: 'evidence_exact_substring',
-          failureIssueId: evidenceViolation.id,
+          failureContract,
+          failureIssueId,
           failureIssueKey,
           failureReason,
         });
@@ -365,12 +415,13 @@ export async function runSemanticQualification<T>(
           ...(result.promptCacheUsed === undefined ? {} : { promptCacheUsed: result.promptCacheUsed }),
           verdict: 'incomplete',
           passIndex: pass,
-          failureContract: 'evidence_exact_substring',
-          failureIssueId: evidenceViolation.id,
+          failureContract,
+          failureIssueId,
           failureIssueKey,
           issueCount: report.issues.length,
           blockingIssueCount: reportBlockers(report).length,
           failureReason: `${failureReason}; invalid report 저장 실패: ${persistenceReason}`,
+          ...(evidenceCorrectionInvocationId === undefined ? {} : { evidenceCorrectionInvocationId }),
         });
         cleanStreak = 0;
         stateHistory.push('incomplete');
@@ -395,19 +446,23 @@ export async function runSemanticQualification<T>(
           invalidReportPath,
           invalidReportHash: semanticReportHash(report),
         }),
-        failureContract: 'evidence_exact_substring',
-        failureIssueId: evidenceViolation.id,
+        failureContract,
+        failureIssueId,
         failureIssueKey,
         issueCount: report.issues.length,
         blockingIssueCount: reportBlockers(report).length,
         failureReason,
+        ...(evidenceCorrectionInvocationId === undefined ? {} : { evidenceCorrectionInvocationId }),
       });
       cleanStreak = 0;
       stateHistory.push('incomplete');
       return finish('incomplete', failureReason);
     }
     try {
-      if (config.evidenceSourceTexts === undefined) {
+      if (isSegmentEvidenceReport(report)) {
+        if (config.evidenceSegments === undefined) throw new Error('canonical source segment registry 없음');
+        assertSegmentEvidenceContract(config.evidenceSegments, report);
+      } else if (config.evidenceSourceTexts === undefined) {
         assertEvidenceContract(config.sourceText, report);
       } else {
         for (const issue of report.issues) {
@@ -466,6 +521,7 @@ export async function runSemanticQualification<T>(
       reportHash: semanticReportHash(report),
       issueCount: report.issues.length,
       blockingIssueCount: blockers.length,
+      ...(evidenceCorrectionInvocationId === undefined ? {} : { evidenceCorrectionInvocationId }),
     };
     runs.push(run);
 
@@ -650,6 +706,7 @@ export function assertV2QualificationGate(args: {
   readonly expectedVerifierKind: SemanticVerifierKind;
   readonly sourceText: string;
   readonly evidenceSourceTexts?: readonly string[];
+  readonly evidenceSegments?: readonly EvidenceSourceSegment[];
   readonly candidate: Gold | GeneratedQuerySet;
   readonly verifierFingerprint: string;
   readonly loadReport: (path: string) => unknown;
@@ -665,22 +722,32 @@ export function assertV2QualificationGate(args: {
     if (run.verdict !== 'incomplete'
       || run.invalidReportPath === undefined
       || run.invalidReportHash === undefined
-      || run.failureContract !== 'evidence_exact_substring'
+      || run.failureContract === undefined
       || run.failureIssueId === undefined
       || run.failureIssueKey === undefined) {
       throw new Error('invalid qualification report binding 불완전');
     }
-    const invalidReport = SemanticVerificationReportSchema.parse(args.loadReport(run.invalidReportPath));
+    const invalidReport = CompatibleSemanticVerificationReportSchema.parse(args.loadReport(run.invalidReportPath));
     if (semanticReportHash(invalidReport) !== run.invalidReportHash) {
       throw new Error('invalid qualification report hash 불일치');
     }
-    const issue = invalidReport.issues.find((item) => item.id === run.failureIssueId);
+    const issue = normalizedSemanticIssues(invalidReport).find((item) => item.id === run.failureIssueId);
     if (issue === undefined || stableSemanticIssueKey(record.assetType, issue) !== run.failureIssueKey) {
       throw new Error('invalid qualification issue binding 불일치');
     }
-    const sources = args.evidenceSourceTexts ?? [args.sourceText];
-    if (issue.sourceEvidence === '' || sources.some((source) => source.includes(issue.sourceEvidence))) {
-      throw new Error('invalid qualification report가 evidence 위반을 재현하지 않는다');
+    if (isSegmentEvidenceReport(invalidReport)) {
+      if (run.failureContract !== 'evidence_segment_reference'
+        || args.evidenceSegments === undefined
+        || segmentEvidenceContractViolations(args.evidenceSegments, invalidReport).length === 0) {
+        throw new Error('invalid qualification report가 segment evidence 위반을 재현하지 않는다');
+      }
+    } else {
+      const sources = args.evidenceSourceTexts ?? [args.sourceText];
+      if (run.failureContract !== 'evidence_exact_substring'
+        || issue.sourceEvidence === ''
+        || sources.some((source) => source.includes(issue.sourceEvidence))) {
+        throw new Error('invalid qualification report가 evidence 위반을 재현하지 않는다');
+      }
     }
   }
   if (record.qualificationStatus !== 'qualified' || record.cleanStreak !== 2) {
@@ -697,9 +764,12 @@ export function assertV2QualificationGate(args: {
     if (run.verifierKind !== args.expectedVerifierKind) throw new Error('run verifier kind 불일치');
     if (run.resultReplay) throw new Error('result replay는 qualification pass가 아니다');
     if (run.reportPath === undefined || run.reportHash === undefined) throw new Error('qualification report binding 없음');
-    const report = SemanticVerificationReportSchema.parse(args.loadReport(run.reportPath));
+    const report = CompatibleSemanticVerificationReportSchema.parse(args.loadReport(run.reportPath));
     if (semanticReportHash(report) !== run.reportHash) throw new Error('qualification report hash 불일치');
-    if (args.evidenceSourceTexts === undefined) {
+    if (isSegmentEvidenceReport(report)) {
+      if (args.evidenceSegments === undefined) throw new Error('canonical source segment registry 없음');
+      assertSegmentEvidenceContract(args.evidenceSegments, report);
+    } else if (args.evidenceSourceTexts === undefined) {
       assertEvidenceContract(args.sourceText, report);
     } else {
       for (const issue of report.issues) {

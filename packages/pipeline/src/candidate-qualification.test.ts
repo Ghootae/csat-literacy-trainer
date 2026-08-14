@@ -32,7 +32,7 @@ import {
   sha256,
   type SemanticVerificationReport,
 } from './semantic-verification.js';
-import { assemblePassageSource, sourceTextHash, type PassageSourceFixture } from './source-fixture.js';
+import { assemblePassageSource, exactSourceTextHash, sourceTextHash, type PassageSourceFixture } from './source-fixture.js';
 
 const ROOT = process.cwd();
 const PARAGRAPH_ID = 'photosynthesis-p4';
@@ -52,6 +52,7 @@ function candidates() {
 
 function sourceFixture(primaryText?: string, footnoteText = '광호흡은 빛이 있을 때 일어난다.'): PassageSourceFixture {
   const text = primaryText ?? readJson<{ text: string }>(`content/${PARAGRAPH_ID}/passage.json`).text;
+  const semanticText = text.split('광호흡*').join('광호흡');
   const fixture = {
     schemaVersion: 'passage-source-v1' as const,
     sourceSetId: 'test-source-set',
@@ -68,7 +69,17 @@ function sourceFixture(primaryText?: string, footnoteText = '광호흡은 빛이
       fullSourceAssembly: 'paragraphs-then-footnotes-joined-with-LF' as const,
     },
     fullSourceHash: sourceTextHash('placeholder'),
-    paragraphs: [{ id: 'p4', order: 1, text, hash: sourceTextHash(text) }],
+    paragraphs: [{
+      id: 'p4', order: 1, text, hash: sourceTextHash(text),
+      semanticSegmentation: {
+        segmentationVersion: 'canonical-source-segments-v1' as const,
+        primaryTextHash: exactSourceTextHash(semanticText),
+        segments: [{
+          sourceSegmentId: 'S1', startOffset: 0, endOffset: semanticText.length,
+          hash: exactSourceTextHash(semanticText),
+        }],
+      },
+    }],
     footnotes: [{
       id: 'fn1', order: 1, marker: '*', targetParagraphId: 'p4', targetTerm: '광호흡',
       text: footnoteText,
@@ -132,7 +143,8 @@ describe('source-bound candidate qualification', () => {
     expect(contextChanged.verifierInputHash).toBe(base.verifierInputHash);
     expect(base.primaryText).not.toContain('광호흡은 빛이 있을 때 일어난다.');
     expect(verifierInputText(base)).not.toContain('광호흡은 빛이 있을 때 일어난다.');
-    expect(verifierInputText(base)).toContain('[FOOTNOTES_IGNORED');
+    expect(verifierInputText(base)).toContain('[PRIMARY_TEXT_SEGMENTS');
+    expect(verifierInputText(base)).toContain('[S1]');
   });
 
   it('tracked source fixture의 저장 hash가 실제 문자열과 다르면 fail-closed한다', () => {

@@ -29,14 +29,17 @@ import {
 } from '../semantic-qualification.js';
 import {
   planSemanticRepair,
-  SEMANTIC_REPORT_SCHEMA_VERSION,
+  correctSegmentEvidenceRefs,
+  SEGMENT_EVIDENCE_REPORT_SCHEMA_VERSION,
   SEMANTIC_VERIFICATION_EFFORT,
-  SEMANTIC_VERIFIER_VERSION,
+  SEGMENT_EVIDENCE_VERIFIER_VERSION,
   semanticVerifierFingerprint,
   validateGoldStructure,
   validateQueryStructure,
+  verifyGoldSemanticWithSegments,
+  verifyQuerySemanticWithSegments,
+  verifyTitleQuerySemanticWithSegments,
 } from '../semantic-verification.js';
-import { runSelectedSemanticVerifier } from '../semantic-verification-routing.js';
 
 const ROOT = process.cwd();
 const ARTIFACT_ROOT = resolve(ROOT, 'packages/pipeline/fixtures/semantic-qualification');
@@ -181,17 +184,20 @@ export async function runContentQualificationCli(argv = process.argv.slice(2)): 
       verifierKind: assetType,
       sourceText: sourceInput,
       evidenceSourceTexts: [plan.bundle.qualificationPrimaryText],
+      evidenceSegments: plan.bundle.segments,
       initial,
       provider: 'anthropic',
       model: MODEL,
       effort: SEMANTIC_VERIFICATION_EFFORT,
-      promptVersion: `${SEMANTIC_VERIFIER_VERSION}:${assetType}:semantic-source-bundle-v2-footnotes-ignored`,
-      reportSchemaVersion: SEMANTIC_REPORT_SCHEMA_VERSION,
+      promptVersion: `${SEGMENT_EVIDENCE_VERIFIER_VERSION}:${assetType}:canonical-source-segments-v1`,
+      reportSchemaVersion: SEGMENT_EVIDENCE_REPORT_SCHEMA_VERSION,
       maxRepairCycles: 2,
       verify: async (candidate) => ({
         output: assetType === 'gold'
-          ? await runSelectedSemanticVerifier({ kind: 'gold', sourceText: sourceInput, candidate: candidate as Gold, paragraphId })
-          : await runSelectedSemanticVerifier({ kind: assetType, sourceText: sourceInput, gold, candidate: candidate as GeneratedQuerySet, paragraphId }),
+          ? await verifyGoldSemanticWithSegments(sourceInput, candidate as Gold, paragraphId)
+          : assetType === 'query'
+            ? await verifyQuerySemanticWithSegments(sourceInput, gold, candidate as GeneratedQuerySet, paragraphId)
+            : await verifyTitleQuerySemanticWithSegments(sourceInput, gold, candidate as GeneratedQuerySet, paragraphId),
         resultReplay: false,
       }),
       repair: async (candidate, blockers, repairCycle) => {
@@ -215,6 +221,7 @@ export async function runContentQualificationCli(argv = process.argv.slice(2)): 
         else if (assetType === 'query') validateQueryStructure(gold, candidate as GeneratedQuerySet);
         else validateTitleCandidate(gold, candidate as GeneratedQuerySet);
       },
+      correctEvidenceRefs: (report) => correctSegmentEvidenceRefs(sourceInput, report, paragraphId),
       persistReport: (report, pass) => {
         const path = resolve(kindDir, `pass-${pass}.json`);
         writeJson(path, report);
@@ -230,7 +237,7 @@ export async function runContentQualificationCli(argv = process.argv.slice(2)): 
     const candidate = execution.candidate as Gold | GeneratedQuerySet;
     const candidatePath = resolve(kindDir, 'candidate.json');
     writeJson(candidatePath, candidate);
-    const fingerprint = semanticVerifierFingerprint(assetType, 'semantic-source-bundle-v2-footnotes-ignored');
+    const fingerprint = semanticVerifierFingerprint(assetType, 'canonical-source-segments-v1');
     const record = makeVerificationRecordV2({
       assetType,
       verifierKind: assetType,

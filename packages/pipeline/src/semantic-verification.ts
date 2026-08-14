@@ -9,10 +9,12 @@ import { MODEL, getClient, instrumented } from './llm/client.js';
 import { PropositionSchema } from './llm/schemas.js';
 
 export const SEMANTIC_VERIFIER_VERSION = 'semantic-verifier-2026-08-14-v1';
+export const SEGMENT_EVIDENCE_VERIFIER_VERSION = 'semantic-verifier-2026-08-14-v2-segment-evidence';
 export const SEMANTIC_REPAIR_VERSION = 'semantic-repair-2026-08-14-v1';
 export const SEMANTIC_WORKFLOW_VERSION = 'semantic-workflow-2026-08-14-v2';
 export const SEMANTIC_VERIFICATION_EFFORT = 'medium' as const;
 export const SEMANTIC_REPORT_SCHEMA_VERSION = 'semantic-verification-report-v1';
+export const SEGMENT_EVIDENCE_REPORT_SCHEMA_VERSION = 'semantic-verification-report-v2-segment-evidence';
 
 const Sha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 
@@ -51,8 +53,41 @@ export const SemanticVerificationReportSchema = z.object({
   summary: z.string(),
 });
 
+export const SourceEvidenceRefSchema = z.object({
+  sourceSegmentId: z.string().regex(/^S[1-9][0-9]*$/),
+});
+
+export const SegmentEvidenceSemanticIssueSchema = SemanticIssueSchema.omit({
+  sourceSentenceIds: true,
+  sourceEvidence: true,
+}).extend({
+  sourceEvidenceRefs: z.array(SourceEvidenceRefSchema),
+});
+
+export const SegmentEvidenceVerificationReportSchema = z.object({
+  schemaVersion: z.literal(SEGMENT_EVIDENCE_REPORT_SCHEMA_VERSION),
+  issues: z.array(SegmentEvidenceSemanticIssueSchema),
+  summary: z.string(),
+});
+
+export const SegmentEvidenceCorrectionSchema = z.object({
+  corrections: z.array(z.object({
+    issueId: z.string().min(1),
+    sourceEvidenceRefs: z.array(SourceEvidenceRefSchema),
+  })),
+});
+
+export const CompatibleSemanticVerificationReportSchema = z.union([
+  SegmentEvidenceVerificationReportSchema,
+  SemanticVerificationReportSchema,
+]);
+
 export type SemanticIssue = z.infer<typeof SemanticIssueSchema>;
 export type SemanticVerificationReport = z.infer<typeof SemanticVerificationReportSchema>;
+export type SegmentEvidenceSemanticIssue = z.infer<typeof SegmentEvidenceSemanticIssueSchema>;
+export type SegmentEvidenceVerificationReport = z.infer<typeof SegmentEvidenceVerificationReportSchema>;
+export type SegmentEvidenceCorrection = z.infer<typeof SegmentEvidenceCorrectionSchema>;
+export type CompatibleSemanticVerificationReport = z.infer<typeof CompatibleSemanticVerificationReportSchema>;
 
 export const SemanticVerificationRecordSchema = z.object({
   status: z.enum(['unverified', 'passed', 'failed', 'blocked']),
@@ -96,6 +131,12 @@ critical은 학생 판정이나 문단의 핵심 의미를 뒤집는 오류, err
 warning은 의미 계약을 바꾸지 않는 개선점이다. 스타일 선호나 표현 중복만으로 issue를 만들지 마라.
 sourceEvidence는 반드시 원문에서 그대로 복사한 연속 부분 문자열이어야 한다. 원문에 없는 추가 내용을 지적할 때만 빈 문자열을 쓴다.
 goldPath는 후보 JSON의 정확한 RFC 6901 JSON Pointer로 쓴다.`;
+
+const SEGMENT_EVIDENCE_RULES = `\n근거 계약 변경:
+- sourceEvidence를 작성하지 않는다.
+- sourceEvidenceRefs에는 제공된 PRIMARY_TEXT_SEGMENTS의 sourceSegmentId만 쓴다.
+- 비연속 근거는 여러 ID로 표현하고 원문을 직접 베끼거나 재서술하지 않는다.
+- 원문에 없는 추가 내용을 지적하는 unsupported_content issue만 빈 배열을 쓸 수 있다.`;
 
 const QUERY_SYSTEM = `당신은 수능 국어 비문학 보존 질의의 독립 의미 검증자다.
 원문, 확정 골드, 후보 질의만 대조한다. 기존 검수 상태나 기대 판정은 주어지지 않으며 추정하지 않는다.
@@ -174,20 +215,37 @@ export function semanticVerifierFingerprint(
   kind: 'gold' | 'query' | 'title-query',
   inputContractVersion = 'plain-source-v1',
 ): string {
+  const segmentEvidence = inputContractVersion === 'canonical-source-segments-v1';
   return sha256(stable({
     provider: 'anthropic',
     model: MODEL,
     effort: SEMANTIC_VERIFICATION_EFFORT,
     verifierKind: kind,
     inputContractVersion,
-    verifierVersion: SEMANTIC_VERIFIER_VERSION,
-    reportSchemaVersion: SEMANTIC_REPORT_SCHEMA_VERSION,
+    verifierVersion: segmentEvidence ? SEGMENT_EVIDENCE_VERIFIER_VERSION : SEMANTIC_VERIFIER_VERSION,
+    reportSchemaVersion: segmentEvidence ? SEGMENT_EVIDENCE_REPORT_SCHEMA_VERSION : SEMANTIC_REPORT_SCHEMA_VERSION,
     workflowVersion: SEMANTIC_WORKFLOW_VERSION,
   }));
 }
 
-export function reportBlockers(report: SemanticVerificationReport): SemanticIssue[] {
-  return report.issues.filter((issue) => issue.severity === 'critical' || issue.severity === 'error');
+export function isSegmentEvidenceReport(
+  report: CompatibleSemanticVerificationReport,
+): report is SegmentEvidenceVerificationReport {
+  return 'schemaVersion' in report && report.schemaVersion === SEGMENT_EVIDENCE_REPORT_SCHEMA_VERSION;
+}
+
+export function normalizedSemanticIssues(report: CompatibleSemanticVerificationReport): SemanticIssue[] {
+  if (!isSegmentEvidenceReport(report)) return report.issues;
+  return report.issues.map((issue) => ({
+    ...issue,
+    sourceSentenceIds: issue.sourceEvidenceRefs.map((ref) => ref.sourceSegmentId),
+    sourceEvidence: '',
+  }));
+}
+
+export function reportBlockers(report: CompatibleSemanticVerificationReport): SemanticIssue[] {
+  return normalizedSemanticIssues(report)
+    .filter((issue) => issue.severity === 'critical' || issue.severity === 'error');
 }
 
 export function assertEvidenceContract(sourceText: string, report: SemanticVerificationReport): void {
@@ -205,6 +263,111 @@ export function evidenceContractViolations(
   return report.issues
     .filter((issue) => issue.sourceEvidence !== '' && !sourceText.includes(issue.sourceEvidence))
     .map((issue) => ({ issueId: issue.id, evidence: issue.sourceEvidence }));
+}
+
+export interface EvidenceSourceSegment {
+  readonly sourceSegmentId: string;
+  readonly text: string;
+}
+
+export function segmentEvidenceContractViolations(
+  segments: readonly EvidenceSourceSegment[],
+  report: SegmentEvidenceVerificationReport,
+): readonly { issueId: string; sourceSegmentId?: string; reason: string }[] {
+  const segmentIds = new Set(segments.map((segment) => segment.sourceSegmentId));
+  return report.issues.flatMap((issue) => {
+    const refs = issue.sourceEvidenceRefs;
+    if (refs.length === 0 && issue.category !== 'unsupported_content') {
+      return [{ issueId: issue.id, reason: '원문 근거가 필요한 issue에 sourceEvidenceRefs가 없다' }];
+    }
+    const duplicate = refs.find((ref, index) =>
+      refs.findIndex((candidate) => candidate.sourceSegmentId === ref.sourceSegmentId) !== index);
+    if (duplicate !== undefined) {
+      return [{ issueId: issue.id, sourceSegmentId: duplicate.sourceSegmentId, reason: '중복 source segment ID' }];
+    }
+    return refs
+      .filter((ref) => !segmentIds.has(ref.sourceSegmentId))
+      .map((ref) => ({
+        issueId: issue.id,
+        sourceSegmentId: ref.sourceSegmentId,
+        reason: '존재하지 않는 source segment ID',
+      }));
+  });
+}
+
+export function assertSegmentEvidenceContract(
+  segments: readonly EvidenceSourceSegment[],
+  report: SegmentEvidenceVerificationReport,
+): void {
+  const violation = segmentEvidenceContractViolations(segments, report)[0];
+  if (violation !== undefined) {
+    throw new Error(`${violation.issueId}: ${violation.reason}${violation.sourceSegmentId === undefined ? '' : ` (${violation.sourceSegmentId})`}`);
+  }
+}
+
+export function resolveSegmentEvidence(
+  segments: readonly EvidenceSourceSegment[],
+  issue: SegmentEvidenceSemanticIssue,
+): readonly { sourceSegmentId: string; text: string }[] {
+  const byId = new Map(segments.map((segment) => [segment.sourceSegmentId, segment.text]));
+  return issue.sourceEvidenceRefs.map((ref) => ({
+    sourceSegmentId: ref.sourceSegmentId,
+    text: byId.get(ref.sourceSegmentId) ?? (() => { throw new Error(`없는 source segment ID: ${ref.sourceSegmentId}`); })(),
+  }));
+}
+
+export function applySegmentEvidenceCorrection(
+  report: SegmentEvidenceVerificationReport,
+  correctionValue: unknown,
+  segments: readonly EvidenceSourceSegment[],
+): SegmentEvidenceVerificationReport {
+  const correction = SegmentEvidenceCorrectionSchema.parse(correctionValue);
+  const reportIds = report.issues.map((issue) => issue.id).sort();
+  const correctionIds = correction.corrections.map((item) => item.issueId).sort();
+  if (JSON.stringify(reportIds) !== JSON.stringify(correctionIds)) {
+    throw new Error('evidence correction issue ID 집합이 원 report와 다르다');
+  }
+  const byId = new Map(correction.corrections.map((item) => [item.issueId, item.sourceEvidenceRefs]));
+  const corrected = SegmentEvidenceVerificationReportSchema.parse({
+    ...report,
+    issues: report.issues.map((issue) => ({
+      ...issue,
+      sourceEvidenceRefs: byId.get(issue.id),
+    })),
+  });
+  assertSegmentEvidenceContract(segments, corrected);
+  return corrected;
+}
+
+export async function correctSegmentEvidenceRefs(
+  sourceText: string,
+  report: SegmentEvidenceVerificationReport,
+  paragraphId: string,
+): Promise<{ report: SegmentEvidenceVerificationReport; invocationId: string }> {
+  const response = await instrumented('semantic-evidence-ref-correct', SEMANTIC_VERIFICATION_EFFORT, paragraphId, () =>
+    getClient().messages.parse({
+      model: MODEL,
+      max_tokens: 3000,
+      thinking: { type: 'disabled' },
+      output_config: { effort: SEMANTIC_VERIFICATION_EFFORT, format: zodOutputFormat(SegmentEvidenceCorrectionSchema) },
+      system: `원 report의 의미 판단은 절대 수정하지 않는다. 각 issue의 issueId를 그대로 유지하고 sourceEvidenceRefs만 교정한다.
+제공된 PRIMARY_TEXT_SEGMENTS에 실제로 존재하는 ID만 사용한다. 비연속 근거는 여러 ID로 쓴다.
+issue를 추가·삭제하거나 severity, category, goldPath, problem, suggestedAction, summary를 수정하지 않는다.`,
+      messages: [{ role: 'user', content: `원문 segment:\n${sourceText}\n\n교정할 report:\n${JSON.stringify(report)}` }],
+    }),
+  );
+  if (response.parsed_output === null) throw new Error('evidence ref correction 구조화 출력 파싱 실패');
+  return {
+    report: applySegmentEvidenceCorrection(report, response.parsed_output, sourceTextSegments(sourceText)),
+    invocationId: response.id,
+  };
+}
+
+function sourceTextSegments(sourceText: string): EvidenceSourceSegment[] {
+  return sourceText.split('\n').flatMap((line) => {
+    const match = /^\[(S[1-9][0-9]*)\] (.*)$/u.exec(line);
+    return match === null ? [] : [{ sourceSegmentId: match[1]!, text: match[2]! }];
+  });
 }
 
 export function goldVerifierInput(sourceText: string, candidate: Gold): {
@@ -313,6 +476,62 @@ export async function verifyTitleQuerySemantic(
     }),
   );
   if (response.parsed_output === null) throw new Error('title semantic verifier 구조화 출력 파싱 실패');
+  return response.parsed_output;
+}
+
+export async function verifyGoldSemanticWithSegments(
+  sourceText: string,
+  candidate: Gold,
+  paragraphId: string,
+): Promise<SegmentEvidenceVerificationReport> {
+  const input = goldVerifierInput(sourceText, candidate);
+  const response = await instrumented('gold-semantic-verify', SEMANTIC_VERIFICATION_EFFORT, paragraphId, () =>
+    getClient().messages.parse({
+      model: MODEL, max_tokens: 10000, thinking: { type: 'adaptive' },
+      output_config: { effort: SEMANTIC_VERIFICATION_EFFORT, format: zodOutputFormat(SegmentEvidenceVerificationReportSchema) },
+      system: `${GOLD_SYSTEM}${SEGMENT_EVIDENCE_RULES}`,
+      messages: [{ role: 'user', content: `원문:\n${input.sourceText}\n\n후보 골드 JSON:\n${JSON.stringify(input.candidateGold)}` }],
+    }),
+  );
+  if (response.parsed_output === null) throw new Error('gold segment evidence verifier 구조화 출력 파싱 실패');
+  return response.parsed_output;
+}
+
+export async function verifyQuerySemanticWithSegments(
+  sourceText: string,
+  gold: Gold,
+  candidate: GeneratedQuerySet,
+  paragraphId: string,
+): Promise<SegmentEvidenceVerificationReport> {
+  const input = queryVerifierInput(sourceText, gold, candidate);
+  const response = await instrumented('query-semantic-verify', SEMANTIC_VERIFICATION_EFFORT, paragraphId, () =>
+    getClient().messages.parse({
+      model: MODEL, max_tokens: 10000, thinking: { type: 'adaptive' },
+      output_config: { effort: SEMANTIC_VERIFICATION_EFFORT, format: zodOutputFormat(SegmentEvidenceVerificationReportSchema) },
+      system: `${QUERY_SYSTEM}${SEGMENT_EVIDENCE_RULES}`,
+      messages: [{ role: 'user', content: `원문:\n${input.sourceText}\n\n확정 골드 JSON:\n${JSON.stringify(input.gold)}\n\n관계 ID 색인:\n${JSON.stringify(input.relationEdgeIndex)}\n\n후보 질의 JSON:\n${JSON.stringify(input.candidateQueries)}` }],
+    }),
+  );
+  if (response.parsed_output === null) throw new Error('query segment evidence verifier 구조화 출력 파싱 실패');
+  return response.parsed_output;
+}
+
+export async function verifyTitleQuerySemanticWithSegments(
+  sourceText: string,
+  gold: Gold,
+  candidate: GeneratedQuerySet,
+  paragraphId: string,
+): Promise<SegmentEvidenceVerificationReport> {
+  const input = queryVerifierInput(sourceText, gold, candidate);
+  const response = await instrumented('title-semantic-verify', SEMANTIC_VERIFICATION_EFFORT, paragraphId, () =>
+    getClient().messages.parse({
+      model: MODEL, max_tokens: 10000, thinking: { type: 'adaptive' },
+      output_config: { effort: SEMANTIC_VERIFICATION_EFFORT, format: zodOutputFormat(SegmentEvidenceVerificationReportSchema) },
+      system: `${TITLE_QUERY_SYSTEM}${SEGMENT_EVIDENCE_RULES}`,
+      messages: [{ role: 'user', content: `원문:\n${input.sourceText}\n\n확정 골드 JSON:\n${JSON.stringify(input.gold)}\n\n후보 타이틀 질의 JSON:\n${JSON.stringify(input.candidateQueries)}` }],
+    }),
+  );
+  if (response.parsed_output === null) throw new Error('title segment evidence verifier 구조화 출력 파싱 실패');
   return response.parsed_output;
 }
 
@@ -443,7 +662,7 @@ export function validateQueryStructure(gold: Gold, queries: GeneratedQuerySet): 
 export function makeVerificationRecord(args: {
   sourceText: string;
   candidate: Gold | GeneratedQuerySet;
-  reports: readonly SemanticVerificationReport[];
+  reports: readonly CompatibleSemanticVerificationReport[];
   repairCycles: number;
   reportPaths: readonly string[];
   verifiedAt?: string;

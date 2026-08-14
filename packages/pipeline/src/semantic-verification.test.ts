@@ -7,17 +7,21 @@ import type { Gold } from './gold.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
 import {
   applyRepairPlan,
+  applySegmentEvidenceCorrection,
   assertEvidenceContract,
+  assertSegmentEvidenceContract,
   assertVerificationGate,
   evidenceContractViolations,
   goldVerifierInput,
   makeVerificationRecord,
   queryVerifierInput,
+  resolveSegmentEvidence,
   semanticCandidateHash,
   semanticSourceHash,
   validateGoldStructure,
   validateQueryStructure,
   verifierFingerprint,
+  type SegmentEvidenceVerificationReport,
 } from './semantic-verification.js';
 
 const root = process.cwd();
@@ -66,6 +70,44 @@ describe('독립 semantic verification 계약', () => {
       summary: '',
       issues: [{ id: 'i1', severity: 'warning', category: 'title_scope', goldPath: '/nodes/0', sourceSentenceIds: [], sourceEvidence: '바꾼 근거', problem: 'x', suggestedAction: 'narrow' }],
     })).toEqual([{ issueId: 'i1', evidence: '바꾼 근거' }]);
+  });
+
+  it('segment evidence는 비연속 ID를 허용하고 원문 인용은 코드가 복원한다', () => {
+    const segments = [
+      { sourceSegmentId: 'S3', text: '세 번째 문장' },
+      { sourceSegmentId: 'S6', text: '여섯 번째 문장' },
+    ];
+    const report: SegmentEvidenceVerificationReport = {
+      schemaVersion: 'semantic-verification-report-v2-segment-evidence', summary: 'issue',
+      issues: [{
+        id: 'i1', severity: 'warning', category: 'query_scope', goldPath: '/regions/0',
+        sourceEvidenceRefs: [{ sourceSegmentId: 'S3' }, { sourceSegmentId: 'S6' }],
+        problem: '두 근거 필요', suggestedAction: 'narrow',
+      }],
+    };
+    expect(() => assertSegmentEvidenceContract(segments, report)).not.toThrow();
+    expect(resolveSegmentEvidence(segments, report.issues[0]!)).toEqual(segments);
+    expect(() => assertSegmentEvidenceContract(segments, {
+      ...report,
+      issues: [{ ...report.issues[0]!, sourceEvidenceRefs: [{ sourceSegmentId: 'S99' }] }],
+    })).toThrow(/존재하지 않는 source segment ID/);
+  });
+
+  it('evidence ID 제한 교정은 issue 의미 필드를 고정하고 ID만 교체한다', () => {
+    const report: SegmentEvidenceVerificationReport = {
+      schemaVersion: 'semantic-verification-report-v2-segment-evidence', summary: '고정 summary',
+      issues: [{
+        id: 'i1', severity: 'error', category: 'query_scope', goldPath: '/regions/0',
+        sourceEvidenceRefs: [{ sourceSegmentId: 'S99' }], problem: '고정 문제', suggestedAction: 'narrow',
+      }],
+    };
+    const corrected = applySegmentEvidenceCorrection(report, {
+      corrections: [{ issueId: 'i1', sourceEvidenceRefs: [{ sourceSegmentId: 'S3' }] }],
+    }, [{ sourceSegmentId: 'S3', text: '원문' }]);
+    expect(corrected.issues[0]).toEqual({ ...report.issues[0], sourceEvidenceRefs: [{ sourceSegmentId: 'S3' }] });
+    expect(() => applySegmentEvidenceCorrection(report, { corrections: [] }, [
+      { sourceSegmentId: 'S3', text: '원문' },
+    ])).toThrow(/issue ID 집합/);
   });
 
   it('repair는 지정된 JSON Pointer만 결정론적으로 바꾼다', () => {

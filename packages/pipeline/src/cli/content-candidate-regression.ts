@@ -226,9 +226,9 @@ export async function runCandidateRegressionCli(argv = process.argv.slice(2)): P
       bundle: buildSourceBundle(fixtureValue, updated.sourceParagraphId),
       loadJson: (path) => readJson<unknown>(resolve(ROOT, path)),
       verifierFingerprints: {
-        gold: semanticVerifierFingerprint('gold', 'semantic-source-bundle-v2-footnotes-ignored'),
-        query: semanticVerifierFingerprint('query', 'semantic-source-bundle-v2-footnotes-ignored'),
-        'title-query': semanticVerifierFingerprint('title-query', 'semantic-source-bundle-v2-footnotes-ignored'),
+        gold: semanticVerifierFingerprint('gold', 'canonical-source-segments-v1'),
+        query: semanticVerifierFingerprint('query', 'canonical-source-segments-v1'),
+        'title-query': semanticVerifierFingerprint('title-query', 'canonical-source-segments-v1'),
       },
     });
   }

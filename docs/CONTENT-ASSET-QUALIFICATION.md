@@ -61,7 +61,7 @@
 
 상태 전이는 `pending → verifying → clean_streak_1 → verifying → qualified`가 기본 경로다. blocker가 있으면 streak를 0으로 초기화하고 repair가 가능할 때만 `repair_required → repairing`으로 이동한다. repair 이후에도 처음부터 clean 두 번을 다시 쌓는다. 기본 repair 상한은 두 cycle이며 초과하면 fail-closed `quarantined`다.
 
-LLM verifier의 의미 판단과 deterministic 검사는 역할이 다르다. deterministic preflight/postflight는 schema, 중복 ID, node/edge 참조, source evidence의 연속 부분문자열 여부를 검사한다. 이 계약을 어긴 verifier report는 의미상 clean처럼 보여도 qualification에 포함하지 않는다.
+LLM verifier의 의미 판단과 deterministic 검사는 역할이 다르다. deterministic preflight/postflight는 schema, 중복 ID, node/edge 참조와 source evidence ID가 canonical source segment에 실제로 존재하는지를 검사한다. 기존 v1 report의 문자열 evidence는 호환 읽기 시 정확한 연속 부분문자열 계약을 유지한다. 이 계약을 어긴 verifier report는 의미상 clean처럼 보여도 qualification에 포함하지 않는다.
 
 Repair는 verifier가 지적한 semantic path만 수정할 수 있다. paragraph/source identity, source hash, generation provenance, generator fingerprint, semantic verification metadata, revision history, verifier record, asset/verifier kind는 보호한다. issue ID는 모델이 낸 문자열을 신뢰하지 않고 category, location과 source evidence에서 안정적인 key를 계산한다. 적용된 repair에는 수정 JSON Pointer, before/after, cycle과 artifact 경로를 기록한다.
 
@@ -77,6 +77,22 @@ tracked passage source에서 문단별 원본과 qualification 입력을 다음 
 각주는 학습 대상 명제와 semantic qualification에서 제외한다. tracked fixture의 원문, 각주, 원본 hash는 그대로 보존하지만 verifier에게 각주 본문을 전달하지 않고 gold·query에 각주 내용을 요구하지 않는다. source binding에서는 fixture가 명시한 `targetTerm + marker` 조합만 제거하므로 `정관*`과 `정관`은 같은 qualification 본문이다. 임의의 별표나 일반 본문 차이는 제거하지 않는다.
 
 각주 본문만 바뀌면 `ignoredFootnotesHash`만 바뀌며 qualification streak와 verifier input은 무효화하지 않는다. 본문 의미가 바뀌면 `qualificationSourceHash`와 `verifierInputHash`가 바뀌어 기존 qualification이 무효가 된다. promotion gate는 source set, 문단 ID, `qualificationSourceHash`와 `verifierInputHash`를 직접 확인한다.
+
+### Canonical source evidence (6Q-1)
+
+신규 qualification 입력은 `canonical-source-segments-v1`을 사용한다. 각주 표식과 각주 본문을 제거한 `qualificationPrimaryText`를 최초 한 번 결정론적으로 분할하고, 그 결과를 tracked source fixture에 offset·hash와 함께 고정한다. 실행 때 tokenizer로 다시 분할하지 않는다.
+
+- offset은 UTF-16 string index 기준의 `startOffset` 포함, `endOffset` 제외 범위다.
+- segment는 `S1`부터 연속하며 gap·overlap 없이 `qualificationPrimaryText` 전체를 덮어야 한다.
+- 각 segment hash는 offset으로 얻은 정확한 문자열의 UTF-8 SHA-256이다.
+- 모든 segment를 순서대로 재결합한 결과와 primary text가 정확히 같아야 한다.
+- verifier는 원문을 복사하지 않고 `sourceEvidenceRefs: [{ sourceSegmentId }]`만 반환한다.
+- 비연속 근거는 여러 ID로 표현하며 코드는 ID에서 정확한 원문을 복원한다.
+- 존재하지 않거나 중복된 ID는 clean pass가 될 수 없다.
+
+ID 오류에는 의미 report 전체를 다시 생성하지 않고 source evidence ID만 반환하는 제한 교정을 한 번 허용한다. 교정 schema에는 issue ID와 evidence refs만 존재하므로 severity, category, 대상 경로, 문제 설명과 수정 방향은 바뀔 수 없다. issue 집합이 달라지거나 교정 ID가 여전히 유효하지 않으면 `incomplete`로 격리한다. correction invocation은 원 verifier invocation과 달라야 한다. prompt cache는 허용하지만 result replay는 독립 pass가 아니다.
+
+이 변경은 verifier input/report fingerprint를 바꾼다. 기존 v1 문자열 evidence artifact와 기존 runtime 콘텐츠는 그대로 읽을 수 있지만, 신규 promotion proof로 자동 승격하지 않는다. 기존 production 자산은 일괄 무효화하지 않고 candidate 승격 시 점진적으로 새 계약으로 재검증한다.
 
 ## Candidate staging과 promotion
 

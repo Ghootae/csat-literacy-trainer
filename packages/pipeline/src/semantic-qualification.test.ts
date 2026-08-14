@@ -23,6 +23,7 @@ import {
   semanticVerifierFingerprint,
   type SemanticIssue,
   type SemanticVerificationReport,
+  type SegmentEvidenceVerificationReport,
 } from './semantic-verification.js';
 import { runSelectedSemanticVerifier, type SemanticVerifierDependencies } from './semantic-verification-routing.js';
 
@@ -157,6 +158,45 @@ describe('semantic qualification 상태 기계', () => {
       issues: [{ ...WARNING.issues[0]!, sourceEvidence: '원문에 없는 재서술' }],
     };
     expect((await execute([output(badEvidence)])).status).toBe('incomplete');
+  });
+
+  it('잘못된 segment ID는 의미 필드를 고정한 1회 교정 뒤에만 clean으로 인정한다', async () => {
+    const invalid: SegmentEvidenceVerificationReport = {
+      schemaVersion: 'semantic-verification-report-v2-segment-evidence', summary: 'warning',
+      issues: [{
+        id: 'w1', severity: 'warning', category: 'query_scope', goldPath: '/regions/0',
+        sourceEvidenceRefs: [{ sourceSegmentId: 'S99' }], problem: '범위 경고', suggestedAction: 'narrow',
+      }],
+    };
+    const clean: SegmentEvidenceVerificationReport = {
+      schemaVersion: 'semantic-verification-report-v2-segment-evidence', summary: 'clean', issues: [],
+    };
+    const queue = [output(invalid, 'verify-1'), output(clean, 'verify-2')];
+    const execution = await runSemanticQualification<TinyCandidate>({
+      assetType: 'query', verifierKind: 'query', sourceText: '[S1] 원문',
+      evidenceSegments: [{ sourceSegmentId: 'S1', text: '원문' }], initial: { value: 1 },
+      provider: 'anthropic', model: 'fake', effort: 'medium', promptVersion: 'segment-v1',
+      reportSchemaVersion: 'semantic-verification-report-v2-segment-evidence',
+      verify: async () => queue.shift()!,
+      correctEvidenceRefs: async (report) => ({
+        report: {
+          ...report,
+          issues: report.issues.map((issue) => ({
+            ...issue, sourceEvidenceRefs: [{ sourceSegmentId: 'S1' }],
+          })),
+        },
+        invocationId: 'correction-1',
+      }),
+      repair: async () => { throw new Error('repair 불필요'); },
+      validate: () => undefined,
+    });
+    expect(execution.status).toBe('qualified');
+    expect(execution.runs[0]).toMatchObject({
+      verdict: 'clean', evidenceCorrectionInvocationId: 'correction-1',
+    });
+    expect(execution.reports[0]).toMatchObject({
+      issues: [{ sourceEvidenceRefs: [{ sourceSegmentId: 'S1' }] }],
+    });
   });
 
   it('evidence 위반 structured report를 격리 저장하고 clean streak에 포함하지 않는다', async () => {
