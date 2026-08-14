@@ -50,7 +50,9 @@ export type Op =
   | 'title-semantic-verify'
   | 'title-semantic-repair'
   /** verifier 의미 판단을 고정한 채 잘못된 canonical evidence ID만 한 번 교정한다. */
-  | 'semantic-evidence-ref-correct';
+  | 'semantic-evidence-ref-correct'
+  | 'regression-probe-verify'
+  | 'regression-arbitrate';
 
 export interface CallMetric {
   readonly ts: string;
