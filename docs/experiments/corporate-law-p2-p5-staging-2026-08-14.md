@@ -41,6 +41,14 @@ p2의 기존 `기본재산-논항누락` 기대는 독립 감사에서 fixture �
 
 후속 경계 감사 뒤의 세 번째 p2 회귀는 별도 artifact `2026-08-14T11-34-30-000Z`에 6회 독립 호출로 저장했다. 이 실행이 수정된 fixture의 현재 proof이며 과거 결과를 덮어쓰지 않았다. p4 관측 재실행은 `2026-08-14T11-37-37-553Z`에 query verifier 1회만 저장했다. 두 실행 모두 transport retry와 transport 오류는 0이었다.
 
+## 6Q-1 canonical evidence canary
+
+문자열 복사 evidence를 없애고 tracked source의 `canonical-source-segments-v1` ID를 사용하는 새 계약을 구현한 뒤, p4 query만 `2026-08-14T12-43-32-295Z`에서 canary로 실행했다. p4의 각주 표식과 각주 본문은 segment와 verifier 입력에서 제외됐다. verifier는 모든 issue의 근거를 `sourceEvidenceRefs`로 반환했고 존재하지 않는 ID, 중복 ID, 문자열 재서술과 비연속 문자열 합성 실패는 0건이었다. evidence ID 제한 교정 호출도 필요하지 않았다.
+
+실행은 `clean(warning 2) → blocker 1 → 제한 repair → clean(warning 3) → clean(warning 3)`이었다. blocker는 r5q3가 예외 관계 e1의 끝점 p5를 propositionIds에 포함하지 않은 문제였고, 기존 repair allowlist가 `/regions/4/queries/2/propositionIds`만 `["p5", "p13"]`으로 바꿨다. repair 뒤 clean streak는 0부터 다시 시작했으며 마지막 두 pass는 서로 다른 invocation이다. 최종 query record는 `qualified`, repair cycle 1, unresolved blocker 0이다.
+
+남은 warning은 r3q3·r4q3의 대조 relationEdge 앵커와 r5q3의 sourceSentenceIds 정합성이다. warning은 기존 severity 정책상 non-blocking이며 자동 수정하지 않았다. 이번 canary는 query semantic qualification만 확인했다. p4용 tracked 8-probe regression fixture는 아직 존재하지 않으므로 regression과 production promotion은 실행하지 않았다.
+
 ## 호출 계측
 
 `.omc/metrics/llm.jsonl`의 해당 시간대·paragraph ID 기준이다. 이 파일은 untracked 계측이며 qualification artifact가 정본이다.
@@ -58,7 +66,7 @@ API transport 실패는 0이었다. p4의 incomplete는 API 실패가 아니라 
 
 - p3와 p5는 source-bound semantic qualification과 candidate-query regression을 통과해 promotion-ready다.
 - p2는 semantic qualification과 수정된 production-query 회귀 6/6을 통과해 candidate 상태에서 G4 proof를 갖췄다.
-- p4는 query evidence contract를 만족하는 연속 clean 2회가 없고 새 실행도 첫 pass invalid여서 promotion하지 않는다. p4 regression은 실행하지 않았다.
+- p4 query는 새 canonical segment evidence 계약에서 제한 repair 1회 후 clean 2회로 qualified됐다. 다만 새 fingerprint는 query에만 적용됐고 p4 tracked regression fixture가 아직 없으므로 promotion하지 않는다.
 - 법인 지문은 p4가 막혀 있으므로 아직 전체 G1~G4 완료가 아니다.
 - 일부 문단만 먼저 `content/`로 승격하지 않았고 passage manifest도 만들지 않았다.
 
@@ -68,6 +76,7 @@ API transport 실패는 0이었다. p4의 incomplete는 API 실패가 아니라 
 - qualification: `packages/pipeline/fixtures/semantic-qualification/corporate-law-p2/` ~ `corporate-law-p5/`
 - current p2 regression proof: `packages/pipeline/fixtures/semantic-qualification/corporate-law-p2/2026-08-14T11-34-30-000Z/`
 - current p4 invalid evidence: `packages/pipeline/fixtures/semantic-qualification/corporate-law-p4/2026-08-14T11-37-37-553Z/query/invalid-pass-1.json`
+- p4 canonical evidence canary: `packages/pipeline/fixtures/semantic-qualification/corporate-law-p4/2026-08-14T12-43-32-295Z/`
 - regression fixtures: `packages/pipeline/fixtures/regression/corporate-law-p2.json`, `corporate-law-p3.json`, `corporate-law-p5.json`
 - generator CLI: `packages/pipeline/src/cli/content-generate-candidate.ts`
 - regression CLI: `packages/pipeline/src/cli/content-candidate-regression.ts`
