@@ -9,6 +9,7 @@ import { buildSourceBundle, qualificationArtifactHash } from '../candidate-quali
 import { GeneratedQuerySetSchema, type GeneratedQuerySet } from '../llm/query-gen.js';
 import {
   ProbeQualificationRecordSchema,
+  ProbeCandidateSchema,
   QualifiedProbeSchema,
   probeVerifierFingerprint,
   qualifyProbeFromPasses,
@@ -23,7 +24,7 @@ const FixtureSchema = z.object({
   gold: z.string().min(1),
   querySet: z.string().min(1),
   focal: z.string().min(1),
-  probes: z.array(QualifiedProbeSchema).min(1),
+  probes: z.array(z.union([QualifiedProbeSchema, ProbeCandidateSchema])).min(1),
 });
 
 function readJson<T>(path: string): T {

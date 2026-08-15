@@ -21,7 +21,7 @@ const VerdictSchema = z.enum([
   'region_not_evidenced',
 ]);
 
-export const ProbeMutationSchema = z.object({
+export const ProbeMutationIntentSchema = z.object({
   targetQueryIds: z.array(z.string().min(1)).min(1),
   mutation: z.enum([
     'none',
@@ -35,15 +35,18 @@ export const ProbeMutationSchema = z.object({
   preservedElements: z.array(z.string()),
   omittedElements: z.array(z.string()),
   contradictedElements: z.array(z.string()),
-  expectedCeiling: VerdictSchema,
   rationale: z.string().min(1),
 });
 
-export const QualifiedProbeSchema = z.object({
-  id: z.string().min(1),
-  focal: z.string().min(1).optional(),
+export const ProbeMutationSchema = ProbeMutationIntentSchema.extend({ expectedCeiling: VerdictSchema });
+
+export const ProbeCandidateSchema = z.object({
+  id: z.string().min(1), focal: z.string().min(1).optional(), text: z.string().min(1),
+  mutationSpec: ProbeMutationIntentSchema,
+});
+
+export const QualifiedProbeSchema = ProbeCandidateSchema.extend({
   expectFocal: VerdictSchema,
-  text: z.string().min(1),
   mutationSpec: ProbeMutationSchema,
 });
 
@@ -96,7 +99,7 @@ export const ProbeQualificationRecordSchema = z.object({
   executionStatus: z.enum(['pending', 'running', 'incomplete', 'failed', 'completed']),
   qualificationOutcome: z.enum(['auto_qualified', 'auto_repaired_qualified', 'quarantined']),
   derivedExpectedVerdict: VerdictSchema.optional(),
-  fixtureExpectedVerdict: VerdictSchema,
+  fixtureExpectedVerdict: VerdictSchema.optional(),
   fixtureAgreement: z.boolean().optional(),
   passes: z.array(z.object({
     invocationId: z.string().min(1),
@@ -267,7 +270,7 @@ function normalizedJudgments(report: ProbeVerifierReport): unknown {
 
 export function qualifyProbeFromPasses(args: {
   paragraphId: string;
-  probe: z.infer<typeof QualifiedProbeSchema>;
+  probe: z.infer<typeof ProbeCandidateSchema> & { readonly expectFocal?: z.infer<typeof VerdictSchema> };
   defaultFocal: string;
   querySet: GeneratedQuerySet;
   queryCandidateHash: string;
@@ -295,8 +298,11 @@ export function qualifyProbeFromPasses(args: {
     queryCandidateHash: args.queryCandidateHash, sourceBundleHash: args.sourceBundleHash,
     executionStatus: 'completed',
     qualificationOutcome: reasons.length === 0 ? 'auto_qualified' : 'quarantined',
-    ...(derived === undefined ? {} : { derivedExpectedVerdict: derived, fixtureAgreement: derived === args.probe.expectFocal }),
-    fixtureExpectedVerdict: args.probe.expectFocal,
+    ...(derived === undefined ? {} : { derivedExpectedVerdict: derived }),
+    ...(args.probe.expectFocal === undefined ? {} : {
+      fixtureExpectedVerdict: args.probe.expectFocal,
+      ...(derived === undefined ? {} : { fixtureAgreement: derived === args.probe.expectFocal }),
+    }),
     passes: args.passes,
     disagreementReasons: reasons,
     completedAt: args.now ?? new Date().toISOString(),

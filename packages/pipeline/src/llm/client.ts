@@ -52,6 +52,7 @@ export type Op =
   /** verifier 의미 판단을 고정한 채 잘못된 canonical evidence ID만 한 번 교정한다. */
   | 'semantic-evidence-ref-correct'
   | 'regression-probe-verify'
+  | 'regression-probe-generate'
   | 'regression-arbitrate';
 
 export interface CallMetric {
