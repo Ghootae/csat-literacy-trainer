@@ -108,6 +108,34 @@ export const ProbeQualificationRecordSchema = z.object({
 });
 export type ProbeQualificationRecord = z.infer<typeof ProbeQualificationRecordSchema>;
 
+const LegacyProbeVerifierReportV2Schema = z.object({
+  schemaVersion: z.literal('regression-probe-verifier-report-v2-state-consistency'),
+  judgments: z.array(z.object({
+    queryId: z.string().min(1), semanticState: z.enum(['preserved', 'not_evidenced', 'contradicted']),
+    expressionMode: z.enum(['explicit', 'implicit', 'none']),
+    evidenceRole: z.enum(['relation', 'entity_identification', 'scope', 'none']),
+    studentEvidence: z.string(), sourceEvidenceRefs: z.array(ProbeSourceEvidenceRefSchema), rationale: z.string().min(1),
+  })),
+});
+
+export const LegacyProbeQualificationRecordV3Schema = z.object({
+  schemaVersion: z.literal('regression-probe-qualification-v3-state-evidence-agreement'),
+  runId: z.string().min(1), paragraphId: z.string().min(1), probeId: z.string().min(1), focalRegionId: z.string().min(1),
+  verifierFingerprint: Sha256Schema, queryCandidateHash: Sha256Schema, sourceBundleHash: Sha256Schema,
+  executionStatus: z.enum(['pending', 'running', 'incomplete', 'failed', 'completed']),
+  qualificationOutcome: z.enum(['auto_qualified', 'auto_repaired_qualified', 'quarantined']),
+  derivedExpectedVerdict: VerdictSchema.optional(), fixtureExpectedVerdict: VerdictSchema,
+  fixtureAgreement: z.boolean().optional(),
+  passes: z.array(z.object({ invocationId: z.string().min(1), resultReplay: z.literal(false), report: LegacyProbeVerifierReportV2Schema })),
+  disagreementReasons: z.array(z.string()), completedAt: z.string().datetime(),
+});
+
+export function parseCompatibleProbeQualificationRecord(value: unknown) {
+  const current = ProbeQualificationRecordSchema.safeParse(value);
+  if (current.success) return { version: 'v4' as const, record: current.data };
+  return { version: 'v3' as const, record: LegacyProbeQualificationRecordV3Schema.parse(value) };
+}
+
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object') {
