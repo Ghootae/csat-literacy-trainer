@@ -49,3 +49,35 @@ retry 정책으로 복구됐다. 성공 호출 합계는 input 75,572 tokens, ou
 다음 행동은 contradiction 판정에서 source evidence refs가 빈 배열이어도 허용할지, 아니면
 원문에 근거가 있는 contradiction은 반드시 source segment를 요구할지 evidence 정책을 하나로
 결정하는 것이다. 정책 결정 전에는 같은 probe를 반복 호출하지 않는다.
+
+## 2026-08-15 contradiction evidence 계약 및 재개
+
+`contradicted`는 단순 미언급보다 강한 판정이므로 다음 계약을 채택했다.
+
+- `studentEvidence`: 학생 응답의 정확한 연속 부분 문자열, 최소 1자
+- `sourceEvidenceRefs`: tracked canonical source segment ID, 최소 1개
+- `not_evidenced`: 학생 근거는 빈 문자열, source refs는 빈 배열
+- refs는 비교 전에 중복 제거·정렬
+- schema가 상태 조합을 제한하고 postflight가 실제 substring과 source registry 존재를 재검사
+- semanticState 정의와 production aggregation은 변경하지 않음
+
+새 fingerprint `sha256:77302fc069ca30b36521cc951c8a0cb5faf138178c08e1e356978bb1b890fb90`으로
+`이사회-관계오류`만 처음부터 두 번 실행했다. 두 pass 모두 `r3-scope`와
+`r3-rel-approval=contradicted`, `r3-rel-delegation=not_evidenced`에 합의했고 정규화된 source
+refs도 일치하여 focal `contradicted`를 자동 확정했다.
+
+그 뒤 남은 세 probe만 실행했다.
+
+| Probe | 자동 oracle | Fixture | 결과 |
+| --- | --- | --- | --- |
+| 기본재산-관계보존 | `relation_preserved` | `relation_preserved` | 일치 |
+| 기본재산-논항누락 | `topic_only` | `topic_only` | 일치 |
+| 수익자산-관계보존 | `relation_preserved` | `relation_preserved` | 일치 |
+
+앞서 v3에서 확정된 `이사회-관계보존`, `이사회-주제만`을 포함하면 p2 6개 모두 독립
+query-level oracle과 fixture가 일치한다. 2026-08-15 실행은 8 logical/HTTP calls, retry 0,
+input 52,624 tokens, output 17,808 tokens, 합산 호출 latency 187,497ms였다. 결과는
+`packages/pipeline/fixtures/probe-qualification/corporate-law-p2/2026-08-15-v4/`에 보존한다.
+
+6Q-2 p2 canary는 완료했다. 이번 승인 범위에 따라 6Q-3 자동 중재와 6Q-4 passage canary는
+시작하지 않았다.
