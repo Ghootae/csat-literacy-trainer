@@ -131,3 +131,25 @@ npm run content:qualify -- \
 `--dry-run`은 API key나 provider client를 읽지 않고 파일도 쓰지 않는다. 자산별 clean verifier 최소 2회, 최대 repair 2 cycle과 clean streak 재구축 경로를 구분해 verifier·repair·regression의 논리 호출 범위를 출력한다. HTTP 최대치는 각 논리 호출에 기존 retry 상한 4회를 더한 5 attempts로 별도 표시한다. prompt cache는 허용하지만 result replay는 clean pass로 인정하지 않는다.
 
 `corporate-law-p1`은 제외된 연결 각주 1개를 보고하며, 제품 문자열의 각주 표식 누락은 source mismatch로 처리하지 않는다. 2026-08-14 실제 legacy v2 qualification에서 gold/query/title-query는 각각 독립 clean 2회, blocker·repair 0으로 qualified됐다. production query 4프로브는 production action 4/4이나 세부 focal 판정은 3/4이다. `topic_only ↔ region_not_evidenced`만 비차단 미충족 diagnostic mismatch로 허용하는 명시적 정책을 적용해 regression과 promotion gate를 통과했다. 기대값과 prompt는 바꾸지 않았으며 exact mismatch는 proof에 남아 있다. 상세 근거는 `docs/experiments/corporate-law-p1-legacy-requalification-2026-08-14.md`에 있다.
+
+## Regression mismatch arbitration
+
+Qualified probe oracle과 production evaluator의 결과가 다를 때 fixture를 즉시 고치지 않는다.
+먼저 source/query/candidate hash, query ID, 학생 evidence substring, canonical source evidence,
+저장된 focal aggregation을 결정론적으로 검사한다. 여기서 실패하면 API를 호출하지 않고
+`contract_error`로 격리한다.
+
+정확히 일치하거나 `topic_only ↔ region_not_evidenced`처럼 기존 정책상 action이 같은 비차단
+diagnostic mismatch는 중재하지 않는다. action mismatch, 위험 과대통과 또는 거짓 모순만 독립
+arbiter 두 호출의 대상이다. Arbiter는 기존 oracle·fixture 기대값·production 결과를 입력받지 않고
+source, query 계약과 학생 응답만 보고 query별 판정을 다시 만든다. 두 호출의 semantic state와
+정규화된 canonical source refs가 일치해야 한다.
+
+권고 query states가 qualified oracle과 일치하면 `evaluator_error`, production states와 일치하면
+`oracle_error_candidate`, 어느 쪽에도 일치하지 않거나 두 호출이 불일치하면 `inconclusive`다.
+`oracle_error_candidate`는 적용되지 않은 repair candidate만 만들며 fixture 수정에는 독립 probe
+검증 두 번과 deterministic aggregation이 다시 필요하다. 모든 실제 action mismatch는 중재 결과와
+무관하게 promotion을 차단하고 별도 재검증을 요구한다.
+
+Dry-run은 `packages/pipeline/src/cli/content-arbitrate-regression.ts`에서 정확한 중재 필요 여부와
+예상 logical API calls(0 또는 2)를 출력한다.
