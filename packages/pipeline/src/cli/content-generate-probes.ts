@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { buildSourceBundle } from '../candidate-qualification.js';
@@ -31,6 +31,7 @@ export async function runProbeGenerationCli(argv = process.argv.slice(2)) {
   const querySet = GeneratedQuerySetSchema.parse(read(plan.querySetPath)) as GeneratedQuerySet;
   const generated = await generateProbeCandidates({ paragraphId: plan.paragraphId, bundle, querySet, count: plan.count });
   const fixture = { name: required(argv, '--name'), gold: required(argv, '--gold'), querySet: plan.querySetPath, focal: required(argv, '--default-focal'), probes: generated.probes };
+  mkdirSync(dirname(plan.outputPath), { recursive: true });
   writeFileSync(plan.outputPath, `${JSON.stringify(fixture, null, 2)}\n`, 'utf8');
   return fixture;
 }
