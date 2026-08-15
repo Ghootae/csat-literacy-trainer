@@ -4,16 +4,32 @@ import { z } from 'zod/v4';
 import type { SourceBundle } from './candidate-qualification.js';
 import { MODEL, getClient, instrumented } from './llm/client.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
-import { ProbeCandidateSchema } from './regression-probe-qualification.js';
+import { ProbeCandidateSchema, ProbeMutationIntentSchema } from './regression-probe-qualification.js';
 
-export const PROBE_GENERATOR_VERSION = 'regression-probe-generator-v2-required-focal';
+export const PROBE_GENERATOR_VERSION = 'regression-probe-generator-v3-bound-reference-ids';
 export const GeneratedProbeCandidateSchema = ProbeCandidateSchema.extend({
   focal: z.string().min(1),
 });
-export const GeneratedProbeCandidatesSchema = z.object({
-  schemaVersion: z.literal('regression-probe-candidates-v2-required-focal'),
-  probes: z.array(GeneratedProbeCandidateSchema).min(1),
-});
+
+function nonEmptyTuple(values: readonly string[], label: string): [string, ...string[]] {
+  const [first, ...rest] = values;
+  if (first === undefined) throw new Error(`${label} 없음`);
+  return [first, ...rest];
+}
+
+export function generatedProbeCandidatesSchema(querySet: GeneratedQuerySet) {
+  const regionIds = nonEmptyTuple(querySet.regions.map((region) => region.regionId), 'region');
+  const queryIds = nonEmptyTuple(querySet.regions.flatMap((region) => region.queries.map((query) => query.id)), 'query');
+  return z.object({
+    schemaVersion: z.literal('regression-probe-candidates-v3-bound-reference-ids'),
+    probes: z.array(GeneratedProbeCandidateSchema.extend({
+      focal: z.enum(regionIds),
+      mutationSpec: ProbeMutationIntentSchema.extend({
+        targetQueryIds: z.array(z.enum(queryIds)).min(1),
+      }),
+    })).min(1),
+  });
+}
 
 export function probeGeneratorModelInput(bundle: SourceBundle, querySet: GeneratedQuerySet, count: number) {
   return {
@@ -34,9 +50,10 @@ export async function generateProbeCandidates(args: {
   paragraphId: string; bundle: SourceBundle; querySet: GeneratedQuerySet; count: number;
 }) {
   const input = probeGeneratorModelInput(args.bundle, args.querySet, args.count);
+  const outputSchema = generatedProbeCandidatesSchema(args.querySet);
   const response = await instrumented('regression-probe-generate', 'medium', args.paragraphId, () => getClient().messages.parse({
     model: MODEL, max_tokens: 10000, thinking: { type: 'adaptive' },
-    output_config: { effort: 'medium', format: zodOutputFormat(GeneratedProbeCandidatesSchema) },
+    output_config: { effort: 'medium', format: zodOutputFormat(outputSchema) },
     system: SYSTEM,
     messages: [{ role: 'user', content: JSON.stringify(input) }],
   }));

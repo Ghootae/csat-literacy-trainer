@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { materializeQualifiedProbeFixture } from './cli/content-materialize-probes.js';
 import type { SourceBundle } from './candidate-qualification.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
-import { GeneratedProbeCandidatesSchema, probeGeneratorModelInput } from './regression-probe-generation.js';
+import { generatedProbeCandidatesSchema, probeGeneratorModelInput } from './regression-probe-generation.js';
 
 const bundle = { segments: [{ sourceSegmentId: 'S1', text: '원문' }] } as unknown as SourceBundle;
 const querySet = { paragraphId: 'p', regions: [{ regionId: 'r', label: '영역', sourceSentenceIds: ['S1'], propositionIds: ['p1'], relationEdgeIds: [], queries: [{ id: 'q', level: 'relation', question: '관계?', expectedAnswer: '답', sourceSentenceIds: ['S1'], propositionIds: ['p1'], relationEdgeIds: [], criticalForRelation: true, requiredForFullArgumentCoverage: false, acceptanceCriteria: ['기준'], contradictionCriteria: [] }] }] } as GeneratedQuerySet;
@@ -17,18 +17,33 @@ describe('regression probe generation', () => {
   });
 
   it('생성 structured output에서 focal region을 필수로 요구한다', () => {
+    const schema = generatedProbeCandidatesSchema(querySet);
     const withoutFocal = {
-      schemaVersion: 'regression-probe-candidates-v2-required-focal',
+      schemaVersion: 'regression-probe-candidates-v3-bound-reference-ids',
       probes: [{
         id: 'probe', text: '응답',
         mutationSpec: { targetQueryIds: ['q'], mutation: 'omit_relation', preservedElements: [], omittedElements: ['관계'], contradictedElements: [], rationale: '관계 누락' },
       }],
     };
-    expect(GeneratedProbeCandidatesSchema.safeParse(withoutFocal).success).toBe(false);
-    expect(GeneratedProbeCandidatesSchema.parse({
+    expect(schema.safeParse(withoutFocal).success).toBe(false);
+    expect(schema.parse({
       ...withoutFocal,
       probes: [{ ...withoutFocal.probes[0], focal: 'r' }],
     }).probes[0]?.focal).toBe('r');
+  });
+
+  it('생성 structured output의 focal과 target query ID를 현재 query set에 제한한다', () => {
+    const schema = generatedProbeCandidatesSchema(querySet);
+    const candidate = {
+      schemaVersion: 'regression-probe-candidates-v3-bound-reference-ids',
+      probes: [{
+        id: 'probe', focal: 'r', text: '응답',
+        mutationSpec: { targetQueryIds: ['q'], mutation: 'none', preservedElements: [], omittedElements: [], contradictedElements: [], rationale: '완전 보존' },
+      }],
+    };
+    expect(schema.safeParse(candidate).success).toBe(true);
+    expect(schema.safeParse({ ...candidate, probes: [{ ...candidate.probes[0], focal: 'invented' }] }).success).toBe(false);
+    expect(schema.safeParse({ ...candidate, probes: [{ ...candidate.probes[0], mutationSpec: { ...candidate.probes[0].mutationSpec, targetQueryIds: ['invented'] } }] }).success).toBe(false);
   });
 
   it('독립 qualification 결과로만 expected verdict를 materialize한다', () => {
