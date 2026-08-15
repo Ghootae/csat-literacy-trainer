@@ -6,10 +6,13 @@ import { MODEL, getClient, instrumented } from './llm/client.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
 import { ProbeCandidateSchema } from './regression-probe-qualification.js';
 
-export const PROBE_GENERATOR_VERSION = 'regression-probe-generator-v1-no-expected-verdict';
+export const PROBE_GENERATOR_VERSION = 'regression-probe-generator-v2-required-focal';
+export const GeneratedProbeCandidateSchema = ProbeCandidateSchema.extend({
+  focal: z.string().min(1),
+});
 export const GeneratedProbeCandidatesSchema = z.object({
-  schemaVersion: z.literal('regression-probe-candidates-v1'),
-  probes: z.array(ProbeCandidateSchema).min(1),
+  schemaVersion: z.literal('regression-probe-candidates-v2-required-focal'),
+  probes: z.array(GeneratedProbeCandidateSchema).min(1),
 });
 
 export function probeGeneratorModelInput(bundle: SourceBundle, querySet: GeneratedQuerySet, count: number) {
@@ -43,7 +46,7 @@ export async function generateProbeCandidates(args: {
   const queryIds = new Set(args.querySet.regions.flatMap((region) => region.queries.map((query) => query.id)));
   if (new Set(response.parsed_output.probes.map((probe) => probe.id)).size !== args.count) throw new Error('probe ID 중복');
   for (const probe of response.parsed_output.probes) {
-    if (probe.focal === undefined || !regionIds.has(probe.focal)) throw new Error(`${probe.id}: focal region 없음`);
+    if (!regionIds.has(probe.focal)) throw new Error(`${probe.id}: focal region 없음`);
     if (probe.mutationSpec.targetQueryIds.some((id) => !queryIds.has(id))) throw new Error(`${probe.id}: target query ID 없음`);
   }
   return response.parsed_output;
