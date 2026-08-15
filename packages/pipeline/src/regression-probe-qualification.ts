@@ -9,8 +9,8 @@ import { MODEL, getClient, instrumented } from './llm/client.js';
 import type { GeneratedQuerySet } from './llm/query-gen.js';
 import type { SourceBundle } from './candidate-qualification.js';
 
-export const PROBE_VERIFIER_VERSION = 'regression-probe-verifier-v2-state-consistency';
-export const PROBE_QUALIFICATION_VERSION = 'regression-probe-qualification-v3-state-evidence-agreement';
+export const PROBE_VERIFIER_VERSION = 'regression-probe-verifier-v3-contradiction-evidence';
+export const PROBE_QUALIFICATION_VERSION = 'regression-probe-qualification-v4-contradiction-evidence';
 
 const Sha256Schema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 const VerdictSchema = z.enum([
@@ -47,10 +47,12 @@ export const QualifiedProbeSchema = z.object({
   mutationSpec: ProbeMutationSchema,
 });
 
+const ProbeSourceEvidenceRefSchema = z.object({ sourceSegmentId: z.string().regex(/^S[1-9][0-9]*$/) });
+
 const ProbeQueryJudgmentBaseSchema = z.object({
   queryId: z.string().min(1),
   studentEvidence: z.string(),
-  sourceEvidenceRefs: z.array(z.object({ sourceSegmentId: z.string().regex(/^S[1-9][0-9]*$/) })),
+  sourceEvidenceRefs: z.array(ProbeSourceEvidenceRefSchema),
   rationale: z.string().min(1),
 });
 
@@ -61,14 +63,23 @@ export const ProbeQueryJudgmentSchema = z.discriminatedUnion('semanticState', [
     evidenceRole: z.enum(['relation', 'entity_identification', 'scope']),
   }),
   ProbeQueryJudgmentBaseSchema.extend({
-    semanticState: z.enum(['not_evidenced', 'contradicted']),
+    semanticState: z.literal('not_evidenced'),
     expressionMode: z.literal('none'),
     evidenceRole: z.literal('none'),
+    studentEvidence: z.literal(''),
+    sourceEvidenceRefs: z.array(ProbeSourceEvidenceRefSchema).max(0),
+  }),
+  ProbeQueryJudgmentBaseSchema.extend({
+    semanticState: z.literal('contradicted'),
+    expressionMode: z.literal('none'),
+    evidenceRole: z.literal('none'),
+    studentEvidence: z.string().min(1),
+    sourceEvidenceRefs: z.array(ProbeSourceEvidenceRefSchema).min(1),
   }),
 ]);
 
 export const ProbeVerifierReportSchema = z.object({
-  schemaVersion: z.literal('regression-probe-verifier-report-v2-state-consistency'),
+  schemaVersion: z.literal('regression-probe-verifier-report-v3-contradiction-evidence'),
   judgments: z.array(ProbeQueryJudgmentSchema),
 });
 export type ProbeVerifierReport = z.infer<typeof ProbeVerifierReportSchema>;
@@ -115,7 +126,7 @@ export function probeVerifierFingerprint(): string {
   return probeQualificationHash({
     provider: 'anthropic', model: MODEL, effort: 'medium',
     promptVersion: PROBE_VERIFIER_VERSION,
-    schemaVersion: 'regression-probe-verifier-report-v2-state-consistency',
+    schemaVersion: 'regression-probe-verifier-report-v3-contradiction-evidence',
     qualificationVersion: PROBE_QUALIFICATION_VERSION,
   });
 }
@@ -128,6 +139,8 @@ semanticState는 preserved/not_evidenced/contradicted 중 하나다. 생략은 �
 expressionMode와 evidenceRole은 학생 응답에 실제로 표현된 방식만 기록한다.
 학생 근거는 studentEvidence에 응답의 정확한 연속 부분 문자열로 인용한다. 근거가 없으면 빈 문자열이다.
 원문 근거는 제공된 canonical source segment ID만 sourceEvidenceRefs로 반환한다. 비연속 근거는 ID를 여러 개 쓴다.
+contradicted는 학생의 모순 표현과 그것이 뒤집는 원문을 함께 증명해야 하므로 studentEvidence와
+sourceEvidenceRefs가 모두 필수다. not_evidenced는 둘 다 비워야 한다.
 관련 단어만 등장했거나 목표 관계와 다른 관계를 표현하면 해당 relation query는 not_evidenced다.
 모든 query를 정확히 한 번씩 반환하고, 다른 ID를 만들지 마라.`;
 
@@ -219,7 +232,7 @@ function normalizedJudgments(report: ProbeVerifierReport): unknown {
     .map((item) => ({
       queryId: item.queryId,
       semanticState: item.semanticState,
-      sourceEvidenceRefs: item.sourceEvidenceRefs.map((ref) => ref.sourceSegmentId).sort(),
+      sourceEvidenceRefs: [...new Set(item.sourceEvidenceRefs.map((ref) => ref.sourceSegmentId))].sort(),
     }))
     .sort((a, b) => a.queryId.localeCompare(b.queryId));
 }

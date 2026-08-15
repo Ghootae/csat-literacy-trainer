@@ -47,10 +47,22 @@ export function planProbeQualification(argv: readonly string[]) {
   const sourceParagraphId = required(argv, '--source-paragraph-id');
   const outputDir = resolve(ROOT, required(argv, '--output-dir'));
   const fixture = FixtureSchema.parse(readJson<unknown>(fixturePath));
+  const requested = option(argv, '--probe-ids')?.split(',').map((id) => id.trim()).filter(Boolean);
+  const probes = requested === undefined
+    ? fixture.probes
+    : requested.map((id) => {
+      const probe = fixture.probes.find((item) => item.id === id);
+      if (probe === undefined) throw new Error(`--probe-ids에 없는 probe: ${id}`);
+      return probe;
+    });
+  if (new Set(probes.map((probe) => probe.id)).size !== probes.length) throw new Error('--probe-ids 중복');
   const sourceFixture = assertPassageSourceFixtureIntegrity(readJson<unknown>(sourceFixturePath));
   const bundle = buildSourceBundle(sourceFixture, sourceParagraphId);
   const querySet = GeneratedQuerySetSchema.parse(readJson<unknown>(resolve(ROOT, fixture.querySet))) as GeneratedQuerySet;
-  const completed = fixture.probes.filter((probe) => existsSync(resolve(outputDir, `${probe.id}.json`))).length;
+  const completed = probes.filter((probe) => existsSync(resolve(outputDir, `${probe.id}.json`))).length;
+  const summaryName = probes.length === fixture.probes.length
+    ? 'summary.json'
+    : `summary-${qualificationArtifactHash(probes.map((probe) => probe.id)).slice(7, 19)}.json`;
   return {
     dryRun: argv.includes('--dry-run'),
     paragraphId: querySet.paragraphId,
@@ -58,13 +70,14 @@ export function planProbeQualification(argv: readonly string[]) {
     sourceFixturePath,
     sourceParagraphId,
     outputDir,
-    probeIds: fixture.probes.map((probe) => probe.id),
+    probeIds: probes.map((probe) => probe.id),
     verifierPassesPerProbe: 2,
-    expectedLogicalApiCalls: (fixture.probes.length - completed) * 2,
+    expectedLogicalApiCalls: (probes.length - completed) * 2,
     completedProbeRecords: completed,
     verifierFingerprint: probeVerifierFingerprint(),
     queryCandidateHash: semanticCandidateHash(querySet),
     sourceBundleHash: qualificationArtifactHash(bundle),
+    summaryPath: resolve(outputDir, summaryName),
   };
 }
 
@@ -82,7 +95,8 @@ export async function runProbeQualificationCli(argv = process.argv.slice(2)): Pr
   const bundle = buildSourceBundle(sourceFixture, plan.sourceParagraphId);
   const querySet = GeneratedQuerySetSchema.parse(readJson<unknown>(resolve(ROOT, fixture.querySet))) as GeneratedQuerySet;
   const records = [];
-  for (const probe of fixture.probes) {
+  for (const probeId of plan.probeIds) {
+    const probe = fixture.probes.find((item) => item.id === probeId)!;
     const path = resolve(plan.outputDir, `${probe.id}.json`);
     if (existsSync(path)) {
       const record = ProbeQualificationRecordSchema.parse(readJson<unknown>(path));
@@ -129,7 +143,7 @@ export async function runProbeQualificationCli(argv = process.argv.slice(2)): Pr
     })),
     completedAt: new Date().toISOString(),
   };
-  writeFileSync(resolve(plan.outputDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
+  writeFileSync(plan.summaryPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
   return summary;
 }
 
