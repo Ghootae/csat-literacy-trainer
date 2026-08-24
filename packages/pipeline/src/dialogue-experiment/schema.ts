@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 
 export const DIALOGUE_SCHEMA_VERSION = 'dialogue-evaluation-openai-v4';
-export const DIALOGUE_PROMPT_VERSION = 'dialogue-prompt-v5';
+export const DIALOGUE_PROMPT_VERSION = 'dialogue-prompt-v6';
 export const DIALOGUE_GOLD_VERSION = 'paragraph-diagnostic-gold-v1';
 
 export const ParagraphDiagnosticGoldSchema = z.object({

@@ -79,7 +79,7 @@ export interface OpenAIDialogueEvaluatorOptions {
 
 const PROMPT_PATH = resolve(
   process.cwd(),
-  'packages/pipeline/experiments/dialogue/prompt-v5.md',
+  'packages/pipeline/experiments/dialogue/prompt-v6.md',
 );
 
 export function loadDialoguePrompt(): string {
