@@ -53,7 +53,9 @@ export type Op =
   | 'semantic-evidence-ref-correct'
   | 'regression-probe-verify'
   | 'regression-probe-generate'
-  | 'regression-arbitrate';
+  | 'regression-arbitrate'
+  /** 자유 응답 기반 문단 이해 진단 실험. 운영 evaluator 계측과 분리한다. */
+  | 'dialogue-experiment';
 
 export interface CallMetric {
   readonly ts: string;
@@ -123,7 +125,10 @@ export async function instrumented<T extends { usage: Anthropic.Usage }>(
   call: () => Promise<T>,
   /** 호출이 실제로 쓴 모델. 채점만 다른 모델로 재는 실험이 있으므로 기본값에 기대지 않는다. */
   model: string = MODEL,
+  /** 실험처럼 호출 횟수 자체가 계약인 경로는 재시도를 끌 수 있다. 기존 호출은 4회를 유지한다. */
+  options: { readonly maxRetries?: number } = {},
 ): Promise<T> {
+  const maxRetries = options.maxRetries ?? MAX_RETRIES;
   const base = {
     op,
     model,
@@ -157,11 +162,11 @@ export async function instrumented<T extends { usage: Anthropic.Usage }>(
         error: info,
       });
 
-      if (!info.retryable || attempt >= MAX_RETRIES) throw error;
+      if (!info.retryable || attempt >= maxRetries) throw error;
 
       const wait = backoffMs(attempt);
       console.error(
-        `  ↻ ${op} ${info.type} 재시도 ${attempt + 1}/${MAX_RETRIES} (${wait}ms 후)`,
+        `  ↻ ${op} ${info.type} 재시도 ${attempt + 1}/${maxRetries} (${wait}ms 후)`,
       );
       await new Promise((r) => setTimeout(r, wait));
     }
