@@ -587,11 +587,15 @@ describe('dialogue experiment orchestration', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
-  it('OpenAI evaluator는 같은 턴에서 SDK 호출을 재시도하지 않는다', async () => {
+  it('OpenAI evaluator는 SDK 재시도를 끄고 호출별 timeout을 전달한다', async () => {
     const error = Object.create(OpenAI.APIConnectionError.prototype) as Error;
     const parse = vi.fn(async () => Promise.reject(error));
     const client = { responses: { parse } } as unknown as OpenAI;
-    const evaluator = new OpenAIDialogueEvaluator({ client });
+    const evaluator = new OpenAIDialogueEvaluator({
+      client,
+      timeoutMs: 60_000,
+      maxTransportRetries: 0,
+    });
 
     await expect(evaluator.evaluate({
       gold: loaded.gold,
@@ -604,7 +608,48 @@ describe('dialogue experiment orchestration', () => {
       maxQuestions: 3,
     })).rejects.toBe(error);
     expect(parse).toHaveBeenCalledTimes(1);
+    expect(parse.mock.calls[0]?.[1]).toEqual({ timeout: 60_000, maxRetries: 0 });
     expect(evaluator.model).toBe(DEFAULT_DIALOGUE_OPENAI_MODEL);
+  });
+
+  it('재시도 가능한 전송 실패를 한 번 기록한 뒤 성공 결과를 반환한다', async () => {
+    const error = Object.create(OpenAI.APIConnectionError.prototype) as Error;
+    const pass = evaluation('PASS', 1);
+    const { explicitErrors: _ignored, ...snapshotWithoutErrors } = pass.snapshot;
+    const parse = vi.fn()
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce({
+        output_parsed: { ...pass, snapshot: snapshotWithoutErrors },
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+        },
+      });
+    const client = { responses: { parse } } as unknown as OpenAI;
+    const evaluator = new OpenAIDialogueEvaluator({
+      client,
+      maxTransportRetries: 1,
+      retryDelayMs: 0,
+    });
+
+    const evaluated = await evaluator.evaluate({
+      gold: loaded.gold,
+      goldVersion: loaded.version,
+      goldHash: loaded.hash,
+      initialResponse: '학생 응답',
+      history: [],
+      turn: 1,
+      questionsAsked: 0,
+      maxQuestions: 3,
+    });
+
+    expect(parse).toHaveBeenCalledTimes(2);
+    expect(evaluated.result.status).toBe('PASS');
+    expect(evaluated.call.attempts).toMatchObject([
+      { attempt: 1, outcome: 'error', error: { type: 'connection', retryable: true } },
+      { attempt: 2, outcome: 'success' },
+    ]);
   });
 
   it('OpenAI 출력에는 오류 목록을 요구하지 않고 contradicted 관계에서 파생한다', async () => {

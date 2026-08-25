@@ -53,11 +53,24 @@ export interface DialogueCallMetadata {
   readonly goldHash: string;
   readonly calledAt: string;
   readonly durationMs: number;
+  readonly attempts?: readonly DialogueCallAttemptMetadata[];
   readonly usage?: {
     readonly inputTokens: number;
     readonly outputTokens: number;
     readonly cacheWriteTokens?: number;
     readonly cacheReadTokens?: number;
+  };
+}
+
+export interface DialogueCallAttemptMetadata {
+  readonly attempt: number;
+  readonly calledAt: string;
+  readonly durationMs: number;
+  readonly outcome: 'success' | 'error';
+  readonly error?: {
+    readonly status?: number;
+    readonly type: string;
+    readonly retryable: boolean;
   };
 }
 
@@ -74,6 +87,9 @@ export interface OpenAIDialogueEvaluatorOptions {
   readonly model?: string;
   readonly effort?: DialogueEffort;
   readonly promptVersion?: DialoguePromptVersion;
+  readonly timeoutMs?: number;
+  readonly maxTransportRetries?: number;
+  readonly retryDelayMs?: number;
   readonly now?: () => Date;
   /** 테스트에서만 사용한다. 실제 클라이언트는 OPENAI_API_KEY를 읽어 지연 생성한다. */
   readonly client?: OpenAI;
@@ -152,7 +168,7 @@ export class DialogueEvaluationContractError extends Error {
 let openAIClient: OpenAI | undefined;
 
 function getOpenAIClient(): OpenAI {
-  // 한 학생 입력당 실제 HTTP 요청도 정확히 한 번이어야 하므로 SDK 재시도를 끈다.
+  // 시도별 실패를 직접 기록하기 위해 SDK 내부 재시도는 끈다.
   openAIClient ??= new OpenAI({ maxRetries: 0 });
   return openAIClient;
 }
@@ -253,6 +269,9 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
   readonly promptVersion: DialoguePromptVersion;
   private readonly now: () => Date;
   private readonly providedClient: OpenAI | undefined;
+  private readonly timeoutMs: number;
+  private readonly maxTransportRetries: number;
+  private readonly retryDelayMs: number;
 
   constructor(options: OpenAIDialogueEvaluatorOptions = {}) {
     this.model =
@@ -262,6 +281,9 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
     this.effort =
       options.effort ?? parseEffort(process.env['DIALOGUE_EXPERIMENT_EFFORT']) ?? 'medium';
     this.promptVersion = options.promptVersion ?? DIALOGUE_PROMPT_VERSION;
+    this.timeoutMs = options.timeoutMs ?? 60_000;
+    this.maxTransportRetries = options.maxTransportRetries ?? 1;
+    this.retryDelayMs = options.retryDelayMs ?? 500;
     this.now = options.now ?? (() => new Date());
     this.providedClient = options.client;
   }
@@ -269,109 +291,135 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
   async evaluate(input: DialogueEvaluationInput): Promise<DialogueEvaluationCall> {
     const calledAt = this.now().toISOString();
     const started = performance.now();
-    let measuredUsage:
-      | {
-          readonly inputTokens: number;
-          readonly outputTokens: number;
-          readonly cacheWriteTokens: number;
-          readonly cacheReadTokens: number;
-        }
-      | undefined;
-    try {
-      const response = await (this.providedClient ?? getOpenAIClient()).responses.parse({
-        model: this.model,
-        instructions: loadDialoguePrompt(this.promptVersion),
-        input: evaluatorPayload(input),
-        reasoning: { effort: this.effort },
-        max_output_tokens: 6000,
-        store: false,
-        text: {
-          format: zodTextFormat(
-            OpenAIEvaluationResultOutputSchema,
-            'dialogue_evaluation_result',
-          ),
-        },
-      });
+    const attempts: DialogueCallAttemptMetadata[] = [];
 
-      if (response.output_parsed === null) {
-        throw new Error('dialogue evaluation: structured output parsing failed');
-      }
-      const usage = response.usage;
-      const cacheWriteTokens = usage?.input_tokens_details.cache_write_tokens ?? 0;
-      const cacheReadTokens = usage?.input_tokens_details.cached_tokens ?? 0;
-      measuredUsage = {
-        inputTokens: usage?.input_tokens ?? 0,
-        outputTokens: usage?.output_tokens ?? 0,
-        cacheWriteTokens,
-        cacheReadTokens,
-      };
-      let result: EvaluationResult;
+    for (let attempt = 1; attempt <= this.maxTransportRetries + 1; attempt += 1) {
+      const attemptCalledAt = this.now().toISOString();
+      const attemptStarted = performance.now();
+      let measuredUsage:
+        | {
+            readonly inputTokens: number;
+            readonly outputTokens: number;
+            readonly cacheWriteTokens: number;
+            readonly cacheReadTokens: number;
+          }
+        | undefined;
       try {
-        result = validateEvaluationResult(normalizeOpenAIOutput(response.output_parsed), {
-          canAskQuestion: input.questionsAsked < input.maxQuestions,
-          expectedTurn: input.turn,
-          gold: input.gold,
-          enforceDiagnosticRoles: this.promptVersion === 'dialogue-prompt-v7',
+        const response = await (this.providedClient ?? getOpenAIClient()).responses.parse({
+          model: this.model,
+          instructions: loadDialoguePrompt(this.promptVersion),
+          input: evaluatorPayload(input),
+          reasoning: { effort: this.effort },
+          max_output_tokens: 6000,
+          store: false,
+          text: {
+            format: zodTextFormat(
+              OpenAIEvaluationResultOutputSchema,
+              'dialogue_evaluation_result',
+            ),
+          },
+        }, { timeout: this.timeoutMs, maxRetries: 0 });
+
+        if (response.output_parsed === null) {
+          throw new Error('dialogue evaluation: structured output parsing failed');
+        }
+        const usage = response.usage;
+        const cacheWriteTokens = usage?.input_tokens_details.cache_write_tokens ?? 0;
+        const cacheReadTokens = usage?.input_tokens_details.cached_tokens ?? 0;
+        measuredUsage = {
+          inputTokens: usage?.input_tokens ?? 0,
+          outputTokens: usage?.output_tokens ?? 0,
+          cacheWriteTokens,
+          cacheReadTokens,
+        };
+        let result: EvaluationResult;
+        try {
+          result = validateEvaluationResult(normalizeOpenAIOutput(response.output_parsed), {
+            canAskQuestion: input.questionsAsked < input.maxQuestions,
+            expectedTurn: input.turn,
+            gold: input.gold,
+            enforceDiagnosticRoles: this.promptVersion === 'dialogue-prompt-v7',
+          });
+          assertRelationIds(result, input.gold);
+        } catch (error) {
+          throw new DialogueEvaluationContractError(error, response.output_parsed);
+        }
+
+        const attemptDurationMs = Math.round(performance.now() - attemptStarted);
+        attempts.push({
+          attempt,
+          calledAt: attemptCalledAt,
+          durationMs: attemptDurationMs,
+          outcome: 'success',
         });
-        assertRelationIds(result, input.gold);
-      } catch (error) {
-        throw new DialogueEvaluationContractError(error, response.output_parsed);
-      }
-
-      const durationMs = Math.round(performance.now() - started);
-      recordMetric({
-        ts: calledAt,
-        op: 'dialogue-experiment',
-        model: this.model,
-        effort: this.effort,
-        paragraphId: input.gold.paragraphId,
-        inputTokens: measuredUsage.inputTokens,
-        outputTokens: measuredUsage.outputTokens,
-        ...(cacheWriteTokens === 0 ? {} : { cacheWriteTokens }),
-        ...(cacheReadTokens === 0 ? {} : { cacheReadTokens }),
-        ms: durationMs,
-      });
-
-      return {
-        result,
-        call: {
-          provider: 'openai',
+        recordMetric({
+          ts: attemptCalledAt,
+          op: 'dialogue-experiment',
           model: this.model,
           effort: this.effort,
-          promptVersion: this.promptVersion,
-          schemaVersion: DIALOGUE_SCHEMA_VERSION,
-          goldVersion: input.goldVersion,
-          goldHash: input.goldHash,
-          calledAt,
-          durationMs,
-          usage: {
-            inputTokens: usage?.input_tokens ?? 0,
-            outputTokens: usage?.output_tokens ?? 0,
-            ...(cacheWriteTokens === 0 ? {} : { cacheWriteTokens }),
-            ...(cacheReadTokens === 0 ? {} : { cacheReadTokens }),
+          paragraphId: input.gold.paragraphId,
+          inputTokens: measuredUsage.inputTokens,
+          outputTokens: measuredUsage.outputTokens,
+          ...(cacheWriteTokens === 0 ? {} : { cacheWriteTokens }),
+          ...(cacheReadTokens === 0 ? {} : { cacheReadTokens }),
+          ms: attemptDurationMs,
+          attempt,
+        });
+
+        return {
+          result,
+          call: {
+            provider: 'openai',
+            model: this.model,
+            effort: this.effort,
+            promptVersion: this.promptVersion,
+            schemaVersion: DIALOGUE_SCHEMA_VERSION,
+            goldVersion: input.goldVersion,
+            goldHash: input.goldHash,
+            calledAt,
+            durationMs: Math.round(performance.now() - started),
+            attempts,
+            usage: {
+              inputTokens: usage?.input_tokens ?? 0,
+              outputTokens: usage?.output_tokens ?? 0,
+              ...(cacheWriteTokens === 0 ? {} : { cacheWriteTokens }),
+              ...(cacheReadTokens === 0 ? {} : { cacheReadTokens }),
+            },
           },
-        },
-      };
-    } catch (error) {
-      recordMetric({
-        ts: calledAt,
-        op: 'dialogue-experiment',
-        model: this.model,
-        effort: this.effort,
-        paragraphId: input.gold.paragraphId,
-        inputTokens: measuredUsage?.inputTokens ?? 0,
-        outputTokens: measuredUsage?.outputTokens ?? 0,
-        ...(measuredUsage === undefined || measuredUsage.cacheWriteTokens === 0
-          ? {}
-          : { cacheWriteTokens: measuredUsage.cacheWriteTokens }),
-        ...(measuredUsage === undefined || measuredUsage.cacheReadTokens === 0
-          ? {}
-          : { cacheReadTokens: measuredUsage.cacheReadTokens }),
-        ms: Math.round(performance.now() - started),
-        error: openAIErrorMetric(error),
-      });
-      throw error;
+        };
+      } catch (error) {
+        const errorMetadata = openAIErrorMetric(error);
+        const attemptDurationMs = Math.round(performance.now() - attemptStarted);
+        attempts.push({
+          attempt,
+          calledAt: attemptCalledAt,
+          durationMs: attemptDurationMs,
+          outcome: 'error',
+          error: errorMetadata,
+        });
+        recordMetric({
+          ts: attemptCalledAt,
+          op: 'dialogue-experiment',
+          model: this.model,
+          effort: this.effort,
+          paragraphId: input.gold.paragraphId,
+          inputTokens: measuredUsage?.inputTokens ?? 0,
+          outputTokens: measuredUsage?.outputTokens ?? 0,
+          ...(measuredUsage === undefined || measuredUsage.cacheWriteTokens === 0
+            ? {}
+            : { cacheWriteTokens: measuredUsage.cacheWriteTokens }),
+          ...(measuredUsage === undefined || measuredUsage.cacheReadTokens === 0
+            ? {}
+            : { cacheReadTokens: measuredUsage.cacheReadTokens }),
+          ms: attemptDurationMs,
+          attempt,
+          error: errorMetadata,
+        });
+        if (!errorMetadata.retryable || attempt > this.maxTransportRetries) throw error;
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, this.retryDelayMs));
+      }
     }
+    throw new Error('dialogue evaluation: retry loop exhausted');
   }
 }
 

@@ -72,6 +72,8 @@ export interface CallMetric {
   readonly cacheWriteTokens?: number;
   readonly cacheReadTokens?: number;
   readonly ms: number;
+  /** 동일 학생 입력에서 수동 재시도가 발생한 경우의 1부터 시작하는 시도 번호. */
+  readonly attempt?: number;
   /** 문단 식별자. 배치 재개와 문단별 비용 집계에 쓴다. */
   readonly paragraphId?: string;
   /** 실패 분류. 성공 호출에는 없다. */
