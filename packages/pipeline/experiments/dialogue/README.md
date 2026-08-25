@@ -1,5 +1,14 @@
 # Dialogue experiment API policy
 
+## Gold baseline
+
+- `paragraph-analysis-prompt-v2`와 `dialogue-prompt-v7`은 사람 검토형 골드 생성·판정의 기준선이다.
+- v2 분석 결과는 사람이 core 관계와 `required/error_only` 역할을 검토한 뒤 확정한다.
+- v2는 검토 없는 자동 확정 골드 생성기가 아니다.
+- `paragraph-analysis-prompt-v1`과 `dialogue-prompt-v6`은 비교·회귀 기준선으로 유지한다.
+
+## API policy
+
 - 문단 분석과 학생 자유 응답 평가는 OpenAI Responses API를 사용한다.
 - 별도 지시가 없으면 신규 실험용 API 경로의 provider는 OpenAI로 고정한다.
 - 기본 모델은 `gpt-5.6-terra`, 기본 reasoning effort는 `medium`이다.

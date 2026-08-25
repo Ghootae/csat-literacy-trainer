@@ -14,6 +14,7 @@ import {
   QuestionTypeSchema,
   RelationStateSchema,
   type EvaluationResult,
+  type DialoguePromptVersion,
   type ParagraphDiagnosticGold,
   type QuestionType,
   validateEvaluationResult,
@@ -72,18 +73,27 @@ export interface DialogueEvaluator {
 export interface OpenAIDialogueEvaluatorOptions {
   readonly model?: string;
   readonly effort?: DialogueEffort;
+  readonly promptVersion?: DialoguePromptVersion;
   readonly now?: () => Date;
   /** 테스트에서만 사용한다. 실제 클라이언트는 OPENAI_API_KEY를 읽어 지연 생성한다. */
   readonly client?: OpenAI;
 }
 
-const PROMPT_PATH = resolve(
-  process.cwd(),
-  'packages/pipeline/experiments/dialogue/prompt-v6.md',
-);
+const PROMPT_PATHS: Readonly<Record<DialoguePromptVersion, string>> = {
+  'dialogue-prompt-v6': resolve(
+    process.cwd(),
+    'packages/pipeline/experiments/dialogue/prompt-v6.md',
+  ),
+  'dialogue-prompt-v7': resolve(
+    process.cwd(),
+    'packages/pipeline/experiments/dialogue/prompt-v7.md',
+  ),
+};
 
-export function loadDialoguePrompt(): string {
-  return readFileSync(PROMPT_PATH, 'utf8').trim();
+export function loadDialoguePrompt(
+  version: DialoguePromptVersion = DIALOGUE_PROMPT_VERSION,
+): string {
+  return readFileSync(PROMPT_PATHS[version], 'utf8').trim();
 }
 
 /* OpenAI strict Structured Outputs는 모든 필드를 required로 요구한다. 저장 시 제거할
@@ -240,6 +250,7 @@ function evaluatorPayload(input: DialogueEvaluationInput): string {
 export class OpenAIDialogueEvaluator implements DialogueEvaluator {
   readonly model: string;
   readonly effort: DialogueEffort;
+  readonly promptVersion: DialoguePromptVersion;
   private readonly now: () => Date;
   private readonly providedClient: OpenAI | undefined;
 
@@ -250,6 +261,7 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
       DEFAULT_DIALOGUE_OPENAI_MODEL;
     this.effort =
       options.effort ?? parseEffort(process.env['DIALOGUE_EXPERIMENT_EFFORT']) ?? 'medium';
+    this.promptVersion = options.promptVersion ?? DIALOGUE_PROMPT_VERSION;
     this.now = options.now ?? (() => new Date());
     this.providedClient = options.client;
   }
@@ -261,13 +273,14 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
       | {
           readonly inputTokens: number;
           readonly outputTokens: number;
+          readonly cacheWriteTokens: number;
           readonly cacheReadTokens: number;
         }
       | undefined;
     try {
       const response = await (this.providedClient ?? getOpenAIClient()).responses.parse({
         model: this.model,
-        instructions: loadDialoguePrompt(),
+        instructions: loadDialoguePrompt(this.promptVersion),
         input: evaluatorPayload(input),
         reasoning: { effort: this.effort },
         max_output_tokens: 6000,
@@ -284,10 +297,12 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
         throw new Error('dialogue evaluation: structured output parsing failed');
       }
       const usage = response.usage;
+      const cacheWriteTokens = usage?.input_tokens_details.cache_write_tokens ?? 0;
       const cacheReadTokens = usage?.input_tokens_details.cached_tokens ?? 0;
       measuredUsage = {
         inputTokens: usage?.input_tokens ?? 0,
         outputTokens: usage?.output_tokens ?? 0,
+        cacheWriteTokens,
         cacheReadTokens,
       };
       let result: EvaluationResult;
@@ -296,6 +311,7 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
           canAskQuestion: input.questionsAsked < input.maxQuestions,
           expectedTurn: input.turn,
           gold: input.gold,
+          enforceDiagnosticRoles: this.promptVersion === 'dialogue-prompt-v7',
         });
         assertRelationIds(result, input.gold);
       } catch (error) {
@@ -311,6 +327,7 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
         paragraphId: input.gold.paragraphId,
         inputTokens: measuredUsage.inputTokens,
         outputTokens: measuredUsage.outputTokens,
+        ...(cacheWriteTokens === 0 ? {} : { cacheWriteTokens }),
         ...(cacheReadTokens === 0 ? {} : { cacheReadTokens }),
         ms: durationMs,
       });
@@ -321,7 +338,7 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
           provider: 'openai',
           model: this.model,
           effort: this.effort,
-          promptVersion: DIALOGUE_PROMPT_VERSION,
+          promptVersion: this.promptVersion,
           schemaVersion: DIALOGUE_SCHEMA_VERSION,
           goldVersion: input.goldVersion,
           goldHash: input.goldHash,
@@ -330,6 +347,7 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
           usage: {
             inputTokens: usage?.input_tokens ?? 0,
             outputTokens: usage?.output_tokens ?? 0,
+            ...(cacheWriteTokens === 0 ? {} : { cacheWriteTokens }),
             ...(cacheReadTokens === 0 ? {} : { cacheReadTokens }),
           },
         },
@@ -343,6 +361,9 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
         paragraphId: input.gold.paragraphId,
         inputTokens: measuredUsage?.inputTokens ?? 0,
         outputTokens: measuredUsage?.outputTokens ?? 0,
+        ...(measuredUsage === undefined || measuredUsage.cacheWriteTokens === 0
+          ? {}
+          : { cacheWriteTokens: measuredUsage.cacheWriteTokens }),
         ...(measuredUsage === undefined || measuredUsage.cacheReadTokens === 0
           ? {}
           : { cacheReadTokens: measuredUsage.cacheReadTokens }),

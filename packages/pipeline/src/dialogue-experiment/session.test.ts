@@ -16,6 +16,7 @@ import {
   DEFAULT_DIALOGUE_OPENAI_MODEL,
   DialogueEvaluationContractError,
   OpenAIDialogueEvaluator,
+  loadDialoguePrompt,
 } from './evaluator.js';
 import {
   DOPAMINE_PARAGRAPH_IDS,
@@ -414,6 +415,80 @@ describe('dialogue experiment orchestration', () => {
     ).toThrow(/select contradicted relations/);
   });
 
+  it('v7은 error_only 미언급을 질문하지 않고 PASS로 허용한다', () => {
+    const gold = {
+      ...loaded.gold,
+      coreRelations: loaded.gold.coreRelations.map((relation, index) => ({
+        ...relation,
+        diagnosticRole: index === 0 ? 'required' as const : 'error_only' as const,
+      })),
+    };
+
+    const result = validateEvaluationResult(evaluation('PASS', 1), {
+      canAskQuestion: true,
+      expectedTurn: 1,
+      gold,
+      enforceDiagnosticRoles: true,
+    });
+
+    expect(result.status).toBe('PASS');
+    expect(result.snapshot.relationStates[1]?.state).toBe('unknown');
+  });
+
+  it('v7은 required 미언급만 UNCLEAR 대상으로 허용한다', () => {
+    const gold = {
+      ...loaded.gold,
+      coreRelations: loaded.gold.coreRelations.map((relation, index) => ({
+        ...relation,
+        diagnosticRole: index === 0 ? 'required' as const : 'error_only' as const,
+      })),
+    };
+
+    expect(() => validateEvaluationResult(evaluation('UNCLEAR', 1), {
+      canAskQuestion: true,
+      expectedTurn: 1,
+      gold,
+      enforceDiagnosticRoles: true,
+    })).toThrow(/must select a required relation/);
+
+    const requiredUnknown = evaluation('UNCLEAR', 1);
+    requiredUnknown.snapshot.relationStates = [
+      { relationId: 'R1', state: 'unknown' },
+      { relationId: 'R2', state: 'explicit', source: 'initial', evidence: 'R2 설명' },
+    ];
+    requiredUnknown.targetIssue = { description: 'R1 확인', relatedRelationIds: ['R1'] };
+    expect(validateEvaluationResult(requiredUnknown, {
+      canAskQuestion: true,
+      expectedTurn: 1,
+      gold,
+      enforceDiagnosticRoles: true,
+    }).status).toBe('UNCLEAR');
+  });
+
+  it('v7은 error_only의 명시적 모순을 ERROR로 유지한다', () => {
+    const gold = {
+      ...loaded.gold,
+      coreRelations: loaded.gold.coreRelations.map((relation, index) => ({
+        ...relation,
+        diagnosticRole: index === 0 ? 'required' as const : 'error_only' as const,
+      })),
+    };
+
+    expect(validateEvaluationResult(evaluation('ERROR', 1, {
+      questionType: 'CORRECTIVE',
+    }), {
+      canAskQuestion: true,
+      expectedTurn: 1,
+      gold,
+      enforceDiagnosticRoles: true,
+    }).status).toBe('ERROR');
+  });
+
+  it('v6을 기본으로 유지하면서 v7 프롬프트를 별도로 로드한다', () => {
+    expect(loadDialoguePrompt()).toBe(loadDialoguePrompt('dialogue-prompt-v6'));
+    expect(loadDialoguePrompt('dialogue-prompt-v7')).toContain('error_only');
+  });
+
   it('PASS 화면에는 개선 제안 없이 고정된 통과 피드백만 표시한다', () => {
     const result = evaluation('PASS', 1);
     result.studentFeedback = '잘했습니다. 더 완전하게 쓰려면 세부를 보완하세요.';
@@ -565,7 +640,7 @@ describe('dialogue experiment orchestration', () => {
       usage: {
         input_tokens: 100,
         output_tokens: 50,
-        input_tokens_details: { cached_tokens: 0 },
+        input_tokens_details: { cached_tokens: 20, cache_write_tokens: 30 },
       },
     }));
     const client = { responses: { parse } } as unknown as OpenAI;
@@ -588,6 +663,12 @@ describe('dialogue experiment orchestration', () => {
         evidence: '종합 방향을 반대로 표현',
       }),
     ]);
+    expect(evaluated.call.usage).toEqual({
+      inputTokens: 100,
+      outputTokens: 50,
+      cacheWriteTokens: 30,
+      cacheReadTokens: 20,
+    });
     expect(parse).toHaveBeenCalledTimes(1);
   });
 

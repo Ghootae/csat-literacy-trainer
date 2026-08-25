@@ -2,7 +2,10 @@ import { z } from 'zod/v4';
 
 export const DIALOGUE_SCHEMA_VERSION = 'dialogue-evaluation-openai-v4';
 export const DIALOGUE_PROMPT_VERSION = 'dialogue-prompt-v6';
+export const DIALOGUE_PROMPT_VERSIONS = ['dialogue-prompt-v6', 'dialogue-prompt-v7'] as const;
+export type DialoguePromptVersion = (typeof DIALOGUE_PROMPT_VERSIONS)[number];
 export const DIALOGUE_GOLD_VERSION = 'paragraph-diagnostic-gold-v1';
+export const DiagnosticRoleSchema = z.enum(['required', 'error_only']);
 
 export const ParagraphDiagnosticGoldSchema = z.object({
   paragraphId: z.string().min(1),
@@ -13,6 +16,7 @@ export const ParagraphDiagnosticGoldSchema = z.object({
     z.object({
       id: z.string().min(1),
       description: z.string().min(1),
+      diagnosticRole: DiagnosticRoleSchema.optional(),
     }),
   ).min(1),
   keyMappings: z.array(
@@ -148,6 +152,7 @@ export function validateEvaluationResult(
     readonly canAskQuestion: boolean;
     readonly expectedTurn: number;
     readonly gold: ParagraphDiagnosticGold;
+    readonly enforceDiagnosticRoles?: boolean;
   },
 ): EvaluationResult {
   let result = normalizeEvaluationResult(value, options.gold);
@@ -181,6 +186,18 @@ export function validateEvaluationResult(
       .filter((relation) => relation.state === 'unknown')
       .map((relation) => relation.relationId),
   );
+  const requiredIds = new Set(
+    options.gold.coreRelations
+      .filter((relation) => relation.diagnosticRole === 'required')
+      .map((relation) => relation.id),
+  );
+
+  if (
+    options.enforceDiagnosticRoles === true &&
+    options.gold.coreRelations.some((relation) => relation.diagnosticRole === undefined)
+  ) {
+    throw new Error('dialogue evaluation: diagnostic-role contract requires every core relation role');
+  }
 
   if (result.status === 'PASS') {
     if (contradictedIds.size > 0) {
@@ -188,6 +205,12 @@ export function validateEvaluationResult(
     }
     if (result.targetIssue !== null || result.nextQuestion !== null) {
       throw new Error('dialogue evaluation: PASS must not include targetIssue or nextQuestion');
+    }
+    if (
+      options.enforceDiagnosticRoles === true &&
+      [...unknownIds].some((id) => requiredIds.has(id))
+    ) {
+      throw new Error('dialogue evaluation: PASS must not include unknown required relations');
     }
     return result;
   }
@@ -214,6 +237,12 @@ export function validateEvaluationResult(
       !unknownIds.has(result.targetIssue.relatedRelationIds[0]!)
     ) {
       throw new Error('dialogue evaluation: UNCLEAR targetIssue must select exactly one unknown relation');
+    }
+    if (
+      options.enforceDiagnosticRoles === true &&
+      !requiredIds.has(result.targetIssue.relatedRelationIds[0]!)
+    ) {
+      throw new Error('dialogue evaluation: UNCLEAR targetIssue must select a required relation');
     }
   }
 

@@ -7,7 +7,9 @@ import { zodTextFormat } from 'openai/helpers/zod';
 import {
   PARAGRAPH_ANALYSIS_PROMPT_VERSION,
   ParagraphAnalysisResultSchema,
-  type ParagraphAnalysisResult,
+  ParagraphAnalysisResultV2Schema,
+  type AnyParagraphAnalysisResult,
+  type ParagraphAnalysisPromptVersion,
 } from './schema.js';
 
 export type ParagraphAnalysisEffort = 'medium' | 'high';
@@ -24,7 +26,7 @@ export interface ParagraphAnalysisInput {
 }
 
 export interface ParagraphAnalysisCallResult {
-  readonly result: ParagraphAnalysisResult;
+  readonly result: AnyParagraphAnalysisResult;
   readonly metadata: {
     readonly provider: 'openai';
     readonly model: string;
@@ -37,23 +39,32 @@ export interface ParagraphAnalysisCallResult {
       readonly outputTokens: number;
       readonly reasoningTokens: number;
       readonly cachedInputTokens: number;
+      readonly cacheWriteTokens: number;
     };
   };
 }
 
-const PROMPT_PATH = resolve(
-  process.cwd(),
-  'packages/pipeline/experiments/dialogue/paragraph-analysis-prompt-v1.md',
-);
+const PROMPT_PATHS: Readonly<Record<ParagraphAnalysisPromptVersion, string>> = {
+  'paragraph-analysis-prompt-v1': resolve(
+    process.cwd(),
+    'packages/pipeline/experiments/dialogue/paragraph-analysis-prompt-v1.md',
+  ),
+  'paragraph-analysis-prompt-v2': resolve(
+    process.cwd(),
+    'packages/pipeline/experiments/dialogue/paragraph-analysis-prompt-v2.md',
+  ),
+};
 
-export function loadParagraphAnalysisPrompt(): string {
-  return readFileSync(PROMPT_PATH, 'utf8').trim();
+export function loadParagraphAnalysisPrompt(
+  version: ParagraphAnalysisPromptVersion = PARAGRAPH_ANALYSIS_PROMPT_VERSION,
+): string {
+  return readFileSync(PROMPT_PATHS[version], 'utf8').trim();
 }
 
 export function validateParagraphAnalysisResult(
-  value: ParagraphAnalysisResult,
+  value: AnyParagraphAnalysisResult,
   input: ParagraphAnalysisInput,
-): ParagraphAnalysisResult {
+): AnyParagraphAnalysisResult {
   if (value.paragraphId !== input.paragraphId) {
     throw new Error(`paragraph analysis: paragraphId changed to ${value.paragraphId}`);
   }
@@ -97,6 +108,16 @@ export function validateParagraphAnalysisResult(
     if (relation.classification === 'supporting' && relation.essentialReason !== null) {
       throw new Error(`paragraph analysis: supporting relation ${relation.id} must use null essentialReason`);
     }
+    if ('diagnosticRole' in relation) {
+      if (relation.classification === 'core' && relation.diagnosticRole === null) {
+        throw new Error(`paragraph analysis: core relation ${relation.id} needs diagnosticRole`);
+      }
+      if (relation.classification === 'supporting' && relation.diagnosticRole !== null) {
+        throw new Error(
+          `paragraph analysis: supporting relation ${relation.id} must use null diagnosticRole`,
+        );
+      }
+    }
   }
   for (const boundary of value.conceptBoundaries) {
     if (
@@ -123,6 +144,20 @@ export function validateParagraphAnalysisResult(
   if (new Set(diagnosticIds).size !== coreRelationIds.size) {
     throw new Error('paragraph analysis: diagnosticGold must include every core relation once');
   }
+  if (value.schemaVersion === 'paragraph-analysis-openai-v2') {
+    const roles = new Map(
+      value.majorRelations
+        .filter((relation) => relation.classification === 'core')
+        .map((relation) => [relation.id, relation.diagnosticRole]),
+    );
+    for (const relation of value.diagnosticGold.coreRelations) {
+      if (roles.get(relation.id) !== relation.diagnosticRole) {
+        throw new Error(
+          `paragraph analysis: diagnosticRole mismatch for core relation ${relation.id}`,
+        );
+      }
+    }
+  }
   return value;
 }
 
@@ -131,20 +166,25 @@ export async function analyzeParagraphWithOpenAI(
   config: {
     readonly model: string;
     readonly effort: ParagraphAnalysisEffort;
+    readonly promptVersion?: ParagraphAnalysisPromptVersion;
     readonly client?: OpenAI;
   },
 ): Promise<ParagraphAnalysisCallResult> {
   const client = config.client ?? new OpenAI({ maxRetries: 0 });
+  const promptVersion = config.promptVersion ?? PARAGRAPH_ANALYSIS_PROMPT_VERSION;
+  const resultSchema = promptVersion === 'paragraph-analysis-prompt-v2'
+    ? ParagraphAnalysisResultV2Schema
+    : ParagraphAnalysisResultSchema;
   const started = performance.now();
   const response = await client.responses.parse({
     model: config.model,
-    instructions: loadParagraphAnalysisPrompt(),
+    instructions: loadParagraphAnalysisPrompt(promptVersion),
     input: JSON.stringify(input, null, 2),
     reasoning: { effort: config.effort },
     max_output_tokens: 20_000,
     store: false,
     text: {
-      format: zodTextFormat(ParagraphAnalysisResultSchema, 'paragraph_analysis_result'),
+      format: zodTextFormat(resultSchema, 'paragraph_analysis_result'),
     },
   });
 
@@ -159,7 +199,7 @@ export async function analyzeParagraphWithOpenAI(
       provider: 'openai',
       model: config.model,
       effort: config.effort,
-      promptVersion: PARAGRAPH_ANALYSIS_PROMPT_VERSION,
+      promptVersion,
       responseId: response.id,
       durationMs: Math.round(performance.now() - started),
       usage: {
@@ -167,6 +207,7 @@ export async function analyzeParagraphWithOpenAI(
         outputTokens: usage?.output_tokens ?? 0,
         reasoningTokens: usage?.output_tokens_details.reasoning_tokens ?? 0,
         cachedInputTokens: usage?.input_tokens_details.cached_tokens ?? 0,
+        cacheWriteTokens: usage?.input_tokens_details.cache_write_tokens ?? 0,
       },
     },
   };
