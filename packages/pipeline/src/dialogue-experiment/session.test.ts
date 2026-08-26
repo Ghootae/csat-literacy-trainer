@@ -17,6 +17,7 @@ import {
   DialogueEvaluationContractError,
   OpenAIDialogueEvaluator,
   loadDialoguePrompt,
+  preserveCumulativeRelationEvidence,
 } from './evaluator.js';
 import {
   DOPAMINE_PARAGRAPH_IDS,
@@ -236,6 +237,7 @@ describe('dialogue experiment orchestration', () => {
         { question: { text: 'question-1' }, answer: '첫 답변' },
         { question: { text: 'question-2' }, answer: '둘째 답변' },
       ],
+      previousSnapshot: { turn: 2 },
     });
     expect(evaluator.inputs).toHaveLength(3);
   });
@@ -435,6 +437,81 @@ describe('dialogue experiment orchestration', () => {
     expect(result.snapshot.relationStates[1]?.state).toBe('unknown');
   });
 
+  it('v8은 centralStory가 충분하면 required가 unknown이어도 PASS를 허용한다', () => {
+    const gold = {
+      ...loaded.gold,
+      coreRelations: loaded.gold.coreRelations.map((relation, index) => ({
+        ...relation,
+        diagnosticRole: index === 0 ? 'required' as const : 'error_only' as const,
+      })),
+    };
+    const pass = evaluation('PASS', 1);
+    pass.snapshot.relationStates = [
+      { relationId: 'R1', state: 'unknown' },
+      { relationId: 'R2', state: 'unknown' },
+    ];
+
+    expect(validateEvaluationResult(pass, {
+      canAskQuestion: true,
+      expectedTurn: 1,
+      gold,
+      enforceDiagnosticRoles: true,
+      requiredRelationsAreQuestionOnly: true,
+    }).status).toBe('PASS');
+  });
+
+  it('v8에서도 UNCLEAR 질문은 unknown required 관계만 대상으로 한다', () => {
+    const gold = {
+      ...loaded.gold,
+      coreRelations: loaded.gold.coreRelations.map((relation, index) => ({
+        ...relation,
+        diagnosticRole: index === 0 ? 'required' as const : 'error_only' as const,
+      })),
+    };
+    expect(() => validateEvaluationResult(evaluation('UNCLEAR', 1), {
+      canAskQuestion: true,
+      expectedTurn: 1,
+      gold,
+      enforceDiagnosticRoles: true,
+      requiredRelationsAreQuestionOnly: true,
+    })).toThrow(/must select a required relation/);
+  });
+
+  it('누적 증거로 확인된 관계는 다음 턴의 unknown 출력에서 보존한다', () => {
+    const current = evaluation('UNCLEAR', 2, { source: 'diagnostic' });
+    current.snapshot.relationStates[0] = { relationId: 'R1', state: 'unknown' };
+    const previous = snapshot(1);
+
+    const cumulative = preserveCumulativeRelationEvidence(current, previous);
+
+    expect(cumulative.snapshot.relationStates[0]).toEqual(
+      expect.objectContaining({ relationId: 'R1', state: 'explicit', evidence: 'evidence-1' }),
+    );
+  });
+
+  it('마지막 답변에서 새로 확인하거나 수정한 관계는 이전 상태보다 우선해 병합한다', () => {
+    const previous = snapshot(1);
+    previous.relationStates[1] = {
+      relationId: 'R2',
+      state: 'contradicted',
+      source: 'initial',
+      evidence: '처음의 잘못된 설명',
+    };
+    const current = evaluation('PASS', 2, { source: 'corrective', noQuestion: true });
+    current.snapshot.relationStates[0] = { relationId: 'R1', state: 'unknown' };
+    current.snapshot.relationStates[1] = {
+      relationId: 'R2',
+      state: 'explicit',
+      source: 'corrective',
+      evidence: '마지막 답변의 수정된 설명',
+    };
+
+    const cumulative = preserveCumulativeRelationEvidence(current, previous);
+
+    expect(cumulative.snapshot.relationStates[0]).toEqual(previous.relationStates[0]);
+    expect(cumulative.snapshot.relationStates[1]).toEqual(current.snapshot.relationStates[1]);
+  });
+
   it('v7은 required 미언급만 UNCLEAR 대상으로 허용한다', () => {
     const gold = {
       ...loaded.gold,
@@ -484,9 +561,10 @@ describe('dialogue experiment orchestration', () => {
     }).status).toBe('ERROR');
   });
 
-  it('v6을 기본으로 유지하면서 v7 프롬프트를 별도로 로드한다', () => {
+  it('v6을 기본으로 유지하면서 v7·v8 프롬프트를 별도로 로드한다', () => {
     expect(loadDialoguePrompt()).toBe(loadDialoguePrompt('dialogue-prompt-v6'));
     expect(loadDialoguePrompt('dialogue-prompt-v7')).toContain('error_only');
+    expect(loadDialoguePrompt('dialogue-prompt-v8')).toContain('centralStory 비교가 언제나 판정의 선행 기준');
   });
 
   it('PASS 화면에는 개선 제안 없이 고정된 통과 피드백만 표시한다', () => {
@@ -532,6 +610,7 @@ describe('dialogue experiment orchestration', () => {
 
   it('최소 진단 골드에는 상세 명제·간선·영역을 포함하지 않는다', () => {
     expect(Object.keys(loaded.gold).sort()).toEqual([
+      'centralAxes',
       'centralObject',
       'centralStory',
       'coreRelations',
@@ -610,6 +689,38 @@ describe('dialogue experiment orchestration', () => {
     expect(parse).toHaveBeenCalledTimes(1);
     expect(parse.mock.calls[0]?.[1]).toEqual({ timeout: 60_000, maxRetries: 0 });
     expect(evaluator.model).toBe(DEFAULT_DIALOGUE_OPENAI_MODEL);
+  });
+
+  it('축 기반 진단 경로는 기존 골드의 diagnosticRole을 모델 입력에서 제거한다', async () => {
+    const error = Object.create(OpenAI.APIConnectionError.prototype) as Error;
+    const parse = vi.fn(async () => Promise.reject(error));
+    const evaluator = new OpenAIDialogueEvaluator({
+      client: { responses: { parse } } as unknown as OpenAI,
+      promptVersion: 'dialogue-axis-diagnostic-prompt-v1',
+      maxTransportRetries: 0,
+    });
+    const gold = {
+      ...loaded.gold,
+      coreRelations: loaded.gold.coreRelations.map((relation) => ({
+        ...relation,
+        diagnosticRole: 'required' as const,
+      })),
+    };
+
+    await expect(evaluator.evaluate({
+      gold,
+      goldVersion: loaded.version,
+      goldHash: loaded.hash,
+      initialResponse: '학생 응답',
+      history: [],
+      turn: 1,
+      questionsAsked: 0,
+      maxQuestions: 3,
+    })).rejects.toBe(error);
+
+    const request = parse.mock.calls[0]?.[0] as { input: string };
+    expect(request.input).toContain('coreRelations');
+    expect(request.input).not.toContain('diagnosticRole');
   });
 
   it('재시도 가능한 전송 실패를 한 번 기록한 뒤 성공 결과를 반환한다', async () => {

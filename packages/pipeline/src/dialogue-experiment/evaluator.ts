@@ -17,6 +17,7 @@ import {
   type DialoguePromptVersion,
   type ParagraphDiagnosticGold,
   type QuestionType,
+  type StudentRepresentationSnapshot,
   validateEvaluationResult,
 } from './schema.js';
 
@@ -41,6 +42,19 @@ export interface DialogueEvaluationInput {
   readonly turn: number;
   readonly questionsAsked: number;
   readonly maxQuestions: number;
+  readonly previousSnapshot?: StudentRepresentationSnapshot;
+  /** 2단계 관계 진단기는 1단계 게이트 판정을 변경하지 않고 원인만 찾는다. */
+  readonly gateDecision?: {
+    readonly status: 'CAPTURED' | 'UNCLEAR' | 'DISTORTED';
+    readonly decisionSummary: string;
+    readonly effectiveResponse: string;
+    readonly expressedClaims: StudentRepresentationSnapshot['expressedClaims'];
+    readonly targetAxisId: string | null;
+    readonly axisStates: readonly {
+      readonly axisId: string;
+      readonly state: 'captured' | 'partial' | 'unknown' | 'distorted';
+    }[];
+  };
 }
 
 export interface DialogueCallMetadata {
@@ -60,6 +74,18 @@ export interface DialogueCallMetadata {
     readonly cacheWriteTokens?: number;
     readonly cacheReadTokens?: number;
   };
+  readonly stages?: readonly {
+    readonly stage: 'central_story_gate' | 'relation_diagnostic';
+    readonly promptVersion: string;
+    readonly schemaVersion: string;
+    readonly durationMs: number;
+    readonly usage?: {
+      readonly inputTokens: number;
+      readonly outputTokens: number;
+      readonly cacheWriteTokens?: number;
+      readonly cacheReadTokens?: number;
+    };
+  }[];
 }
 
 export interface DialogueCallAttemptMetadata {
@@ -103,6 +129,18 @@ const PROMPT_PATHS: Readonly<Record<DialoguePromptVersion, string>> = {
   'dialogue-prompt-v7': resolve(
     process.cwd(),
     'packages/pipeline/experiments/dialogue/prompt-v7.md',
+  ),
+  'dialogue-prompt-v8': resolve(
+    process.cwd(),
+    'packages/pipeline/experiments/dialogue/prompt-v8.md',
+  ),
+  'dialogue-diagnostic-prompt-v1': resolve(
+    process.cwd(),
+    'packages/pipeline/experiments/dialogue/diagnostic-prompt-v1.md',
+  ),
+  'dialogue-axis-diagnostic-prompt-v1': resolve(
+    process.cwd(),
+    'packages/pipeline/experiments/dialogue/axis-diagnostic-prompt-v1.md',
   ),
 };
 
@@ -234,7 +272,13 @@ function assertRelationIds(result: EvaluationResult, gold: ParagraphDiagnosticGo
   }
 }
 
-function evaluatorPayload(input: DialogueEvaluationInput): string {
+function evaluatorPayload(
+  input: DialogueEvaluationInput,
+  promptVersion: DialoguePromptVersion,
+): string {
+  const coreRelations = promptVersion === 'dialogue-axis-diagnostic-prompt-v1'
+    ? input.gold.coreRelations.map(({ id, description }) => ({ id, description }))
+    : input.gold.coreRelations;
   return JSON.stringify(
     {
       paragraphText: input.gold.paragraphText,
@@ -242,13 +286,15 @@ function evaluatorPayload(input: DialogueEvaluationInput): string {
         paragraphId: input.gold.paragraphId,
         centralObject: input.gold.centralObject,
         centralStory: input.gold.centralStory,
-        coreRelations: input.gold.coreRelations,
+        centralAxes: input.gold.centralAxes,
+        coreRelations,
         keyMappings: input.gold.keyMappings ?? [],
         supportingConcepts: input.gold.supportingConcepts ?? [],
       },
       evidence: {
         initialResponse: input.initialResponse,
         followUpExchanges: input.history,
+        previousSnapshot: input.previousSnapshot ?? null,
       },
       session: {
         turn: input.turn,
@@ -256,11 +302,38 @@ function evaluatorPayload(input: DialogueEvaluationInput): string {
         maxQuestions: input.maxQuestions,
         canAskQuestion: input.questionsAsked < input.maxQuestions,
       },
+      gateDecision: input.gateDecision ?? null,
       outputSchemaVersion: DIALOGUE_SCHEMA_VERSION,
     },
     null,
     2,
   );
+}
+
+/**
+ * 누적 증거로 이미 판정한 관계를 모델이 다음 턴에서 근거 없이 unknown으로 되돌리지 못하게 한다.
+ * 새 답변이 명시적으로 수정하거나 반박한 경우의 known 상태는 그대로 존중한다.
+ */
+export function preserveCumulativeRelationEvidence(
+  result: EvaluationResult,
+  previousSnapshot: StudentRepresentationSnapshot | undefined,
+): EvaluationResult {
+  if (previousSnapshot === undefined) return result;
+  const previous = new Map(
+    previousSnapshot.relationStates
+      .filter((relation) => relation.state !== 'unknown')
+      .map((relation) => [relation.relationId, relation]),
+  );
+  return {
+    ...result,
+    snapshot: {
+      ...result.snapshot,
+      relationStates: result.snapshot.relationStates.map((relation) => {
+        if (relation.state !== 'unknown') return relation;
+        return previous.get(relation.relationId) ?? relation;
+      }),
+    },
+  };
 }
 
 export class OpenAIDialogueEvaluator implements DialogueEvaluator {
@@ -308,7 +381,7 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
         const response = await (this.providedClient ?? getOpenAIClient()).responses.parse({
           model: this.model,
           instructions: loadDialoguePrompt(this.promptVersion),
-          input: evaluatorPayload(input),
+          input: evaluatorPayload(input, this.promptVersion),
           reasoning: { effort: this.effort },
           max_output_tokens: 6000,
           store: false,
@@ -334,11 +407,25 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
         };
         let result: EvaluationResult;
         try {
-          result = validateEvaluationResult(normalizeOpenAIOutput(response.output_parsed), {
+          const normalized = normalizeOpenAIOutput(response.output_parsed);
+          const cumulative = preserveCumulativeRelationEvidence(
+            normalized,
+            input.previousSnapshot,
+          );
+          result = validateEvaluationResult(cumulative, {
             canAskQuestion: input.questionsAsked < input.maxQuestions,
             expectedTurn: input.turn,
             gold: input.gold,
-            enforceDiagnosticRoles: this.promptVersion === 'dialogue-prompt-v7',
+            enforceDiagnosticRoles:
+              this.promptVersion === 'dialogue-prompt-v7' ||
+              this.promptVersion === 'dialogue-prompt-v8' ||
+              this.promptVersion === 'dialogue-diagnostic-prompt-v1',
+            axisTargeting:
+              this.promptVersion === 'dialogue-axis-diagnostic-prompt-v1',
+            requiredRelationsAreQuestionOnly:
+              this.promptVersion === 'dialogue-prompt-v8' ||
+              this.promptVersion === 'dialogue-diagnostic-prompt-v1' ||
+              this.promptVersion === 'dialogue-axis-diagnostic-prompt-v1',
           });
           assertRelationIds(result, input.gold);
         } catch (error) {

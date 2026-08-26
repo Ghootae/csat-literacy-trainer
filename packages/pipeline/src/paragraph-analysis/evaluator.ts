@@ -8,6 +8,7 @@ import {
   PARAGRAPH_ANALYSIS_PROMPT_VERSION,
   ParagraphAnalysisResultSchema,
   ParagraphAnalysisResultV2Schema,
+  ParagraphAnalysisResultV3Schema,
   type AnyParagraphAnalysisResult,
   type ParagraphAnalysisPromptVersion,
 } from './schema.js';
@@ -52,6 +53,14 @@ const PROMPT_PATHS: Readonly<Record<ParagraphAnalysisPromptVersion, string>> = {
   'paragraph-analysis-prompt-v2': resolve(
     process.cwd(),
     'packages/pipeline/experiments/dialogue/paragraph-analysis-prompt-v2.md',
+  ),
+  'paragraph-analysis-prompt-v3': resolve(
+    process.cwd(),
+    'packages/pipeline/experiments/dialogue/paragraph-analysis-prompt-v3.md',
+  ),
+  'paragraph-analysis-prompt-v3.1': resolve(
+    process.cwd(),
+    'packages/pipeline/experiments/dialogue/paragraph-analysis-prompt-v3.1.md',
   ),
 };
 
@@ -172,9 +181,12 @@ export async function analyzeParagraphWithOpenAI(
 ): Promise<ParagraphAnalysisCallResult> {
   const client = config.client ?? new OpenAI({ maxRetries: 0 });
   const promptVersion = config.promptVersion ?? PARAGRAPH_ANALYSIS_PROMPT_VERSION;
-  const resultSchema = promptVersion === 'paragraph-analysis-prompt-v2'
-    ? ParagraphAnalysisResultV2Schema
-    : ParagraphAnalysisResultSchema;
+  const resultSchema = promptVersion === 'paragraph-analysis-prompt-v3.1'
+    ? ParagraphAnalysisResultV3Schema
+    : promptVersion === 'paragraph-analysis-prompt-v2' ||
+        promptVersion === 'paragraph-analysis-prompt-v3'
+      ? ParagraphAnalysisResultV2Schema
+      : ParagraphAnalysisResultSchema;
   const started = performance.now();
   const response = await client.responses.parse({
     model: config.model,

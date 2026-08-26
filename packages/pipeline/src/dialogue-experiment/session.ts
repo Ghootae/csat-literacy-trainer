@@ -181,6 +181,9 @@ export class DialogueSessionEngine {
       turn,
       questionsAsked: history.length,
       maxQuestions: this.maxQuestions,
+      ...(this.finalSnapshot === undefined
+        ? {}
+        : { previousSnapshot: cloneSnapshot(this.finalSnapshot) }),
     };
     const evaluated = await this.evaluator.evaluate(input);
     const result = evaluated.result;

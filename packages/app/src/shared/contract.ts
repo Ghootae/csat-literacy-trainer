@@ -158,3 +158,57 @@ export interface AttemptResponse {
   /** 모순 영역이 남아 있는가. 남아 있으면 진행 전에 1회 시도가 강제된다. */
   readonly blocked: boolean;
 }
+
+export type DialogueStatus = 'ACTIVE' | 'AWAITING_NEXT' | 'COMPLETED' | 'UNRESOLVED';
+export type DialogueEvaluationStatus = 'PASS' | 'UNCLEAR' | 'ERROR';
+export type DialogueQuestionType = 'DIAGNOSTIC' | 'CORRECTIVE';
+
+export interface DialoguePassageSummary {
+  readonly passageId: string;
+  readonly title: string;
+  readonly exam: string;
+  readonly paragraphCount: number;
+  readonly available: boolean;
+  readonly limitation?: string;
+}
+
+export interface DialogueParagraphView {
+  readonly paragraphId: string;
+  readonly position: number;
+  readonly text: string;
+  readonly state: 'COMPLETED' | 'CURRENT';
+}
+
+export interface DialogueStepView {
+  readonly status: DialogueEvaluationStatus;
+  readonly feedback: string;
+  readonly question: string | null;
+  readonly questionType: DialogueQuestionType | null;
+  readonly questionsAnswered: number;
+  readonly maxQuestions: number;
+  readonly durationMs: number;
+}
+
+export interface DialogueSessionView {
+  readonly sessionId: string;
+  readonly passageId: string;
+  readonly title: string;
+  readonly exam: string;
+  readonly status: DialogueStatus;
+  readonly currentParagraphIndex: number;
+  readonly paragraphCount: number;
+  readonly visibleParagraphs: readonly DialogueParagraphView[];
+  readonly step: DialogueStepView | null;
+}
+
+export interface StartDialogueRequest {
+  readonly passageId: string;
+}
+
+export interface DialogueResponseRequest {
+  readonly text: string;
+}
+
+export interface DialogueNavigationRequest {
+  readonly paragraphIndex: number;
+}

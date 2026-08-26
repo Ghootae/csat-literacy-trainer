@@ -7,6 +7,9 @@
 import type {
   AttemptRequest,
   AttemptResponse,
+  DialoguePassageSummary,
+  DialogueResponseRequest,
+  DialogueSessionView,
   PassageSummary,
   PassageTitleRequest,
   PassageTitleResponse,
@@ -77,5 +80,45 @@ export function submitPassageTitle(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+  });
+}
+
+export function fetchDialoguePassages(): Promise<DialoguePassageSummary[]> {
+  return jsonFetch<DialoguePassageSummary[]>('/api/dialogue/passages');
+}
+
+export function startDialogueSession(passageId: string): Promise<DialogueSessionView> {
+  return jsonFetch<DialogueSessionView>('/api/dialogue/session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ passageId }),
+  });
+}
+
+export function submitDialogueResponse(
+  sessionId: string,
+  body: DialogueResponseRequest,
+): Promise<DialogueSessionView> {
+  return jsonFetch<DialogueSessionView>(`/api/dialogue/session/${sessionId}/respond`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function advanceDialogueSession(sessionId: string): Promise<DialogueSessionView> {
+  return jsonFetch<DialogueSessionView>(`/api/dialogue/session/${sessionId}/advance`, {
+    method: 'POST',
+  });
+}
+
+export function navigateDialogueSession(
+  sessionId: string,
+  paragraphIndex: number,
+): Promise<DialogueSessionView> {
+  return jsonFetch<DialogueSessionView>(`/api/dialogue/session/${sessionId}/navigate`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ paragraphIndex }),
   });
 }

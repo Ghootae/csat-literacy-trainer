@@ -17,6 +17,7 @@ import {
   type GeneratedQuerySet,
   type Gold,
   type EvaluateResponseOptions,
+  type DialogueEvaluator,
   evaluateResponse,
   propositionEvidenceEvaluator,
   warmResponsePrefix,
@@ -25,12 +26,15 @@ import {
 import type {
   AttemptRequest,
   AttemptResponse,
+  DialogueResponseRequest,
   PassageTitleRequest,
   PassageTitleResponse,
   RestoreResponse,
+  StartDialogueRequest,
   TitleRequest,
   TitleResponse,
 } from '../shared/contract.js';
+import { DialogueController } from './dialogue.js';
 import {
   findPassageManifestForParagraph,
   listPassages,
@@ -102,6 +106,7 @@ export interface LearningServerOptions {
   /** E2E가 실제 API 대신 결정론적 결과를 주입하는 유일한 경계다. */
   readonly responseEvaluator?: ResponseEvaluator;
   readonly warmer?: typeof warmResponsePrefix;
+  readonly dialogueEvaluator?: DialogueEvaluator;
 }
 
 /**
@@ -118,6 +123,9 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
   );
   const runEvaluation = options.responseEvaluator ?? evaluateResponse;
   const warm = options.warmer ?? warmResponsePrefix;
+  const dialogue = new DialogueController(
+    options.dialogueEvaluator === undefined ? {} : { evaluator: options.dialogueEvaluator },
+  );
   let spent = 0;
   const lastWarm = new Map<string, number>();
 
@@ -126,6 +134,42 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
     const url = new URL(req.url ?? '/', `http://localhost:${port}`);
 
     if (req.method === 'OPTIONS') return json(res, 204, {});
+
+    if (req.method === 'GET' && url.pathname === '/api/dialogue/passages') {
+      return json(res, 200, dialogue.listPassages());
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/dialogue/session') {
+      const body = (await readBody(req)) as StartDialogueRequest;
+      return json(res, 200, dialogue.start(body.passageId));
+    }
+
+    if (url.pathname.startsWith('/api/dialogue/session/')) {
+      const rest = url.pathname.slice('/api/dialogue/session/'.length);
+      const [sessionId, action] = rest.split('/');
+      if (sessionId === undefined || sessionId === '') {
+        return json(res, 400, { error: 'sessionId가 필요합니다.' });
+      }
+      if (req.method === 'GET' && action === undefined) {
+        return json(res, 200, dialogue.get(sessionId));
+      }
+      if (req.method === 'POST' && action === 'respond') {
+        if (spent >= budget) {
+          return json(res, 429, { error: `채점 예산을 다 썼습니다 (${budget}회). 서버를 다시 시작하세요.` });
+        }
+        const body = (await readBody(req)) as DialogueResponseRequest;
+        spent += 1;
+        console.log(`[${new Date().toISOString()}] 대화 채점 ${spent}/${budget} session=${sessionId}`);
+        return json(res, 200, await dialogue.respond(sessionId, body.text));
+      }
+      if (req.method === 'POST' && action === 'advance') {
+        return json(res, 200, dialogue.advance(sessionId));
+      }
+      if (req.method === 'POST' && action === 'navigate') {
+        const body = (await readBody(req)) as { paragraphIndex: number };
+        return json(res, 200, dialogue.navigate(sessionId, body.paragraphIndex));
+      }
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/passages') {
       return json(res, 200, listPassages());

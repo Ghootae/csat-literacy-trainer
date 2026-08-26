@@ -5,13 +5,59 @@
  * 여기만 교체하면 되도록, 호출부는 경로를 모른다.
  */
 
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import type { Gold, GeneratedQuerySet } from '@csat/pipeline';
+import {
+  ParagraphDiagnosticGoldSchema,
+  type Gold,
+  type GeneratedQuerySet,
+  type ParagraphDiagnosticGold,
+} from '@csat/pipeline';
 import type { PassageSummary, PassageView, Sentence } from '../shared/contract.js';
 
 const ROOT = resolve(process.cwd(), 'content');
+const DIALOGUE_ROOT = resolve(
+  process.cwd(),
+  'packages/pipeline/fixtures/experiments/dialogue/passages',
+);
+
+export interface DialoguePassageParagraph {
+  readonly paragraphId: string;
+  readonly position: number;
+  readonly text: string;
+  readonly goldPath: string | null;
+}
+
+export interface DialoguePassageContent {
+  readonly passageId: string;
+  readonly title: string;
+  readonly exam: string;
+  readonly source: {
+    readonly status: 'exact-local-source' | 'incomplete-local-excerpt';
+    readonly note?: string;
+  };
+  readonly paragraphs: readonly DialoguePassageParagraph[];
+}
+
+export function loadDialoguePassages(root = DIALOGUE_ROOT): readonly DialoguePassageContent[] {
+  return readdirSync(root)
+    .filter((name) => name.endsWith('.json'))
+    .map((name) => JSON.parse(readFileSync(resolve(root, name), 'utf8')) as DialoguePassageContent)
+    .sort((a, b) => a.title.localeCompare(b.title, 'ko'));
+}
+
+export function loadDialogueGold(goldPath: string): {
+  readonly gold: ParagraphDiagnosticGold;
+  readonly goldHash: string;
+} {
+  const raw = readFileSync(resolve(process.cwd(), goldPath), 'utf8');
+  return {
+    gold: ParagraphDiagnosticGoldSchema.parse(JSON.parse(raw)),
+    goldHash: `sha256:${createHash('sha256').update(raw).digest('hex')}`,
+  };
+}
 
 export interface Passage extends PassageView {
   readonly text: string;

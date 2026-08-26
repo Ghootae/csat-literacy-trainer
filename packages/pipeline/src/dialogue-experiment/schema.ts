@@ -2,16 +2,29 @@ import { z } from 'zod/v4';
 
 export const DIALOGUE_SCHEMA_VERSION = 'dialogue-evaluation-openai-v4';
 export const DIALOGUE_PROMPT_VERSION = 'dialogue-prompt-v6';
-export const DIALOGUE_PROMPT_VERSIONS = ['dialogue-prompt-v6', 'dialogue-prompt-v7'] as const;
+export const DIALOGUE_PROMPT_VERSIONS = [
+  'dialogue-prompt-v6',
+  'dialogue-prompt-v7',
+  'dialogue-prompt-v8',
+  'dialogue-diagnostic-prompt-v1',
+  'dialogue-axis-diagnostic-prompt-v1',
+] as const;
 export type DialoguePromptVersion = (typeof DIALOGUE_PROMPT_VERSIONS)[number];
 export const DIALOGUE_GOLD_VERSION = 'paragraph-diagnostic-gold-v1';
 export const DiagnosticRoleSchema = z.enum(['required', 'error_only']);
+export const CentralAxisStateSchema = z.enum(['captured', 'partial', 'unknown', 'distorted']);
+export const CentralAxisSchema = z.object({
+  id: z.string().min(1),
+  description: z.string().min(1),
+  relationIds: z.array(z.string().min(1)).min(1),
+});
 
 export const ParagraphDiagnosticGoldSchema = z.object({
   paragraphId: z.string().min(1),
   paragraphText: z.string().min(1),
   centralObject: z.string().min(1),
   centralStory: z.string().min(1),
+  centralAxes: z.array(CentralAxisSchema).min(1),
   coreRelations: z.array(
     z.object({
       id: z.string().min(1),
@@ -26,6 +39,23 @@ export const ParagraphDiagnosticGoldSchema = z.object({
     }),
   ).optional(),
   supportingConcepts: z.array(z.string().min(1)).optional(),
+}).superRefine((gold, context) => {
+  const relationIds = new Set(gold.coreRelations.map((relation) => relation.id));
+  const axisIds = gold.centralAxes.map((axis) => axis.id);
+  if (new Set(axisIds).size !== axisIds.length) {
+    context.addIssue({ code: 'custom', path: ['centralAxes'], message: 'central axis ID 중복' });
+  }
+  for (const [index, axis] of gold.centralAxes.entries()) {
+    for (const relationId of axis.relationIds) {
+      if (!relationIds.has(relationId)) {
+        context.addIssue({
+          code: 'custom',
+          path: ['centralAxes', index, 'relationIds'],
+          message: `존재하지 않는 relationId: ${relationId}`,
+        });
+      }
+    }
+  }
 });
 
 export type ParagraphDiagnosticGold = z.infer<typeof ParagraphDiagnosticGoldSchema>;
@@ -43,6 +73,7 @@ export type RelationState = z.infer<typeof RelationStateSchema>;
 
 export const StudentRepresentationSnapshotSchema = z.object({
   turn: z.number().int().nonnegative(),
+  effectiveResponse: z.string().min(1).optional(),
   centralObjectRepresentation: z.string().nullable(),
   centralStoryRepresentation: z.string().nullable(),
   expressedClaims: z.array(
@@ -52,6 +83,14 @@ export const StudentRepresentationSnapshotSchema = z.object({
       evidence: z.string().min(1),
     }),
   ),
+  axisStates: z.array(z.object({
+    axisId: z.string().min(1),
+    state: CentralAxisStateSchema,
+    evidence: z.array(z.object({
+      source: EvidenceSourceSchema,
+      evidence: z.string().min(1),
+    })),
+  })).optional(),
   relationStates: z.array(
     z.object({
       relationId: z.string().min(1),
@@ -153,6 +192,10 @@ export function validateEvaluationResult(
     readonly expectedTurn: number;
     readonly gold: ParagraphDiagnosticGold;
     readonly enforceDiagnosticRoles?: boolean;
+    /** v8: required는 PASS 게이트가 아니라 UNCLEAR 질문 후보만 제한한다. */
+    readonly requiredRelationsAreQuestionOnly?: boolean;
+    /** 중심 축 질문은 한 축 안의 unknown 관계 여러 개를 함께 겨냥할 수 있다. */
+    readonly axisTargeting?: boolean;
   },
 ): EvaluationResult {
   let result = normalizeEvaluationResult(value, options.gold);
@@ -208,6 +251,7 @@ export function validateEvaluationResult(
     }
     if (
       options.enforceDiagnosticRoles === true &&
+      options.requiredRelationsAreQuestionOnly !== true &&
       [...unknownIds].some((id) => requiredIds.has(id))
     ) {
       throw new Error('dialogue evaluation: PASS must not include unknown required relations');
@@ -232,17 +276,26 @@ export function validateEvaluationResult(
     if (contradictedIds.size > 0) {
       throw new Error('dialogue evaluation: UNCLEAR must not include contradicted relations');
     }
-    if (
-      result.targetIssue.relatedRelationIds.length !== 1 ||
-      !unknownIds.has(result.targetIssue.relatedRelationIds[0]!)
-    ) {
-      throw new Error('dialogue evaluation: UNCLEAR targetIssue must select exactly one unknown relation');
-    }
-    if (
-      options.enforceDiagnosticRoles === true &&
-      !requiredIds.has(result.targetIssue.relatedRelationIds[0]!)
-    ) {
-      throw new Error('dialogue evaluation: UNCLEAR targetIssue must select a required relation');
+    if (options.axisTargeting === true) {
+      if (
+        result.targetIssue.relatedRelationIds.length === 0 ||
+        result.targetIssue.relatedRelationIds.some((id) => !unknownIds.has(id))
+      ) {
+        throw new Error('dialogue evaluation: axis target must select unknown relations');
+      }
+    } else {
+      if (
+        result.targetIssue.relatedRelationIds.length !== 1 ||
+        !unknownIds.has(result.targetIssue.relatedRelationIds[0]!)
+      ) {
+        throw new Error('dialogue evaluation: UNCLEAR targetIssue must select exactly one unknown relation');
+      }
+      if (
+        options.enforceDiagnosticRoles === true &&
+        !requiredIds.has(result.targetIssue.relatedRelationIds[0]!)
+      ) {
+        throw new Error('dialogue evaluation: UNCLEAR targetIssue must select a required relation');
+      }
     }
   }
 

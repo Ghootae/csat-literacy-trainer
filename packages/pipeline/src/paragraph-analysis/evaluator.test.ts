@@ -22,6 +22,26 @@ describe('paragraph analysis prompt versions', () => {
     expect(v2).toContain('진단 행동 단위');
   });
 
+  it('loads the central-story-focused v3 prompt without changing v2', () => {
+    const v2 = loadParagraphAnalysisPrompt('paragraph-analysis-prompt-v2');
+    const v3 = loadParagraphAnalysisPrompt('paragraph-analysis-prompt-v3');
+
+    expect(v3).not.toBe(v2);
+    expect(v3).toContain('중요한 정보를 최대한 많이 담는 압축 요약');
+    expect(v3).toContain('핵심 분류·대조·인과 연결');
+    expect(v3).toContain('최소 구조에 일방적으로 맞추지 않는다');
+    expect(v2).not.toContain('중요한 정보를 최대한 많이 담는 압축 요약');
+  });
+
+  it('loads v3.1 as a separate role-free analysis stage', () => {
+    const v3 = loadParagraphAnalysisPrompt('paragraph-analysis-prompt-v3');
+    const v31 = loadParagraphAnalysisPrompt('paragraph-analysis-prompt-v3.1');
+
+    expect(v31).not.toBe(v3);
+    expect(v31).toContain('diagnosticRole을 생성하지 않는다');
+    expect(v31).toContain('원리 → 적용 사례');
+  });
+
   it('tracks eight reviewed v2 golds and four response levels per paragraph', () => {
     const fixture = JSON.parse(readFileSync(resolve(
       process.cwd(),
@@ -39,6 +59,8 @@ describe('paragraph analysis prompt versions', () => {
         JSON.parse(readFileSync(resolve(process.cwd(), paragraph.goldPath), 'utf8')),
       );
       expect(gold.coreRelations.every((relation) => relation.diagnosticRole !== undefined)).toBe(true);
+      expect(gold.centralAxes.length).toBeGreaterThan(0);
+      expect(gold.centralAxes.length).toBeLessThanOrEqual(3);
       expect(paragraph.cases.map((item) => [item.level, item.expectedStatus])).toEqual([
         ['최상', 'PASS'],
         ['중상', 'PASS'],

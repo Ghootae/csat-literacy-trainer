@@ -2,10 +2,13 @@ import { z } from 'zod/v4';
 
 export const PARAGRAPH_ANALYSIS_SCHEMA_VERSION = 'paragraph-analysis-openai-v1';
 export const PARAGRAPH_ANALYSIS_SCHEMA_V2_VERSION = 'paragraph-analysis-openai-v2';
+export const PARAGRAPH_ANALYSIS_SCHEMA_V3_VERSION = 'paragraph-analysis-openai-v3';
 export const PARAGRAPH_ANALYSIS_PROMPT_VERSION = 'paragraph-analysis-prompt-v1';
 export const PARAGRAPH_ANALYSIS_PROMPT_VERSIONS = [
   'paragraph-analysis-prompt-v1',
   'paragraph-analysis-prompt-v2',
+  'paragraph-analysis-prompt-v3',
+  'paragraph-analysis-prompt-v3.1',
 ] as const;
 export type ParagraphAnalysisPromptVersion =
   (typeof PARAGRAPH_ANALYSIS_PROMPT_VERSIONS)[number];
@@ -134,4 +137,13 @@ export const ParagraphAnalysisResultV2Schema = ParagraphAnalysisResultSchema.ext
 });
 
 export type ParagraphAnalysisResultV2 = z.infer<typeof ParagraphAnalysisResultV2Schema>;
-export type AnyParagraphAnalysisResult = ParagraphAnalysisResult | ParagraphAnalysisResultV2;
+
+export const ParagraphAnalysisResultV3Schema = ParagraphAnalysisResultSchema.extend({
+  schemaVersion: z.literal(PARAGRAPH_ANALYSIS_SCHEMA_V3_VERSION),
+});
+
+export type ParagraphAnalysisResultV3 = z.infer<typeof ParagraphAnalysisResultV3Schema>;
+export type AnyParagraphAnalysisResult =
+  | ParagraphAnalysisResult
+  | ParagraphAnalysisResultV2
+  | ParagraphAnalysisResultV3;
