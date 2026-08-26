@@ -31,13 +31,14 @@
 - `dialogue-prompt-v7`은 required 관계 충족형 판정의 회귀 기준선으로 보존한다.
 - `dialogue-prompt-v8`은 한 호출 안에서 centralStory 판정과 관계 진단을 분리하려 한
   비교 기준선으로 보존한다.
-- 현재 UI는 `central-story-gate-prompt-v1`과 `dialogue-axis-diagnostic-prompt-v1`을
-  순차 사용하는 `axis-dialogue-v1` 기준선이다. 게이트에는 `centralStory`, 사람이 검토한
+- 현재 UI는 `central-story-gate-prompt-v1`과 `dialogue-axis-diagnostic-prompt-v2`를
+  순차 사용하는 `axis-dialogue-v2` 기준선이다. 게이트에는 `centralStory`, 사람이 검토한
   소수의 `centralAxes`, 누적 응답만 제공하며 모든 독립 축이 포착되어야 CAPTURED다.
 - 축 판정 우선순위는 왜곡된 축 → 완전히 빠진 축 → 부분적인 축이다. 한 질문은 선택된
   중심 축 하나를 확인하며, 축 안의 관계 여러 개를 함께 다룰 수 있다.
-- 관계 단계는 게이트의 PASS 여부를 뒤집지 않는다. 매 턴 호출되어 마지막 답변으로 새로
-  확인·수정된 관계 상태를 갱신하고, 새 판단이 unknown인 관계만 이전 상태로 보완한다.
+- 관계 단계는 매 턴 호출되어 마지막 답변으로 새로 확인·수정된 관계 상태를 갱신하고,
+  새 판단이 unknown인 관계만 이전 상태로 보완한다. 명시적 `contradicted` 관계가 발견되면
+  게이트의 CAPTURED 또는 UNCLEAR보다 ERROR가 우선하며, 그 밖에는 게이트 판정을 따른다.
 - 게이트는 최초 응답과 모든 질문–응답을 `effectiveResponse` 하나로 합성한다. 질문은 학생
   지식의 근거가 아니라 생략된 답변의 지시 대상과 의미 슬롯을 해석하는 담화 문맥으로만
   사용하며, 관계 단계도 원시 문답을 별도로 재해석하지 않고 같은 합성 응답을 사용한다.
@@ -49,6 +50,9 @@
 - v2 분석 결과는 사람이 core 관계와 `required/error_only` 역할을 검토한 뒤 확정한다.
 - v2는 검토 없는 자동 확정 골드 생성기가 아니다.
 - `paragraph-analysis-prompt-v1`과 `dialogue-prompt-v6`은 비교·회귀 기준선으로 유지한다.
+
+현재까지의 결정 경과와 합의된 전체 작동 방식은
+`docs/DIALOGUE-PARAGRAPH-BASELINE-2026-08-26.md`에 정리한다.
 
 ## API policy
 
