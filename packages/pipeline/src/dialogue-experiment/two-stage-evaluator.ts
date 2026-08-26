@@ -10,7 +10,8 @@ import {
   type CentralStoryGateCall,
   type CentralStoryGateEvaluator,
 } from './gate.js';
-export const TWO_STAGE_DIALOGUE_PROMPT_VERSION = 'axis-dialogue-v1';
+import type { EvaluationResult, RelationState } from './schema.js';
+export const TWO_STAGE_DIALOGUE_PROMPT_VERSION = 'axis-dialogue-v2';
 export const TWO_STAGE_DIALOGUE_SCHEMA_VERSION = 'axis-dialogue-openai-v1';
 
 export interface TwoStageDialogueEvaluatorOptions {
@@ -53,6 +54,30 @@ function metadata(
   };
 }
 
+function contradictedRelationIds(result: EvaluationResult): Set<string> {
+  return new Set(
+    result.snapshot.relationStates
+      .filter((relation) => relation.state === 'contradicted')
+      .map((relation) => relation.relationId),
+  );
+}
+
+/**
+ * 최종 상태의 우선순위는 코드가 소유한다.
+ *
+ * 관계 진단에서 명시적 오류가 발견되면 중심축 게이트의 충분성 판정보다
+ * ERROR가 우선한다. 오류가 없을 때만 게이트가 PASS/UNCLEAR를 결정한다.
+ */
+function expectedFinalStatus(
+  gateStatus: CentralStoryGateCall['result']['status'],
+  relationStates: readonly { readonly state: RelationState }[],
+): EvaluationResult['status'] {
+  if (relationStates.some((relation) => relation.state === 'contradicted')) return 'ERROR';
+  if (gateStatus === 'CAPTURED') return 'PASS';
+  if (gateStatus === 'UNCLEAR') return 'UNCLEAR';
+  return 'ERROR';
+}
+
 export class TwoStageDialogueEvaluator implements DialogueEvaluator {
   private readonly gateEvaluator: CentralStoryGateEvaluator;
   private readonly diagnosticEvaluator: DialogueEvaluator;
@@ -60,7 +85,7 @@ export class TwoStageDialogueEvaluator implements DialogueEvaluator {
   constructor(options: TwoStageDialogueEvaluatorOptions = {}) {
     this.gateEvaluator = options.gateEvaluator ?? new OpenAICentralStoryGateEvaluator();
     this.diagnosticEvaluator = options.diagnosticEvaluator ?? new OpenAIDialogueEvaluator({
-      promptVersion: 'dialogue-axis-diagnostic-prompt-v1',
+      promptVersion: 'dialogue-axis-diagnostic-prompt-v2',
       timeoutMs: 60_000,
       maxTransportRetries: 1,
     });
@@ -79,17 +104,20 @@ export class TwoStageDialogueEvaluator implements DialogueEvaluator {
         axisStates: gate.result.axisStates.map(({ axisId, state }) => ({ axisId, state })),
       },
     });
-    const expected = gate.result.status === 'CAPTURED'
-      ? 'PASS'
-      : gate.result.status === 'UNCLEAR'
-        ? 'UNCLEAR'
-        : 'ERROR';
+    const contradicted = contradictedRelationIds(diagnostic.result);
+    const expected = expectedFinalStatus(
+      gate.result.status,
+      diagnostic.result.snapshot.relationStates,
+    );
     if (diagnostic.result.status !== expected) {
       throw new Error(
         `two-stage dialogue: diagnostic status ${diagnostic.result.status}, expected ${expected}`,
       );
     }
-    if (gate.result.targetAxisId !== null) {
+    // 게이트가 고른 미포착 축보다 명시적 오류가 우선한다. ERROR 승격 시에는
+    // 교정 대상이 원래 targetAxis가 아닌 다른 축에 속할 수 있다.
+    const escalatedToError = contradicted.size > 0 && gate.result.status !== 'DISTORTED';
+    if (gate.result.targetAxisId !== null && !escalatedToError) {
       const axis = input.gold.centralAxes.find((item) => item.id === gate.result.targetAxisId);
       if (axis === undefined) {
         throw new Error(`two-stage dialogue: unknown target axis ${gate.result.targetAxisId}`);

@@ -129,7 +129,7 @@ function diagnosticResult(status: 'PASS' | 'UNCLEAR' | 'ERROR'): EvaluationResul
 describe('two-stage dialogue evaluator', () => {
   it('질문은 증거가 아니라 생략 답변 해석 문맥으로 쓰고 합성 응답을 두 단계가 공유한다', () => {
     const gatePrompt = loadCentralStoryGatePrompt();
-    const diagnosticPrompt = loadDialoguePrompt('dialogue-axis-diagnostic-prompt-v1');
+    const diagnosticPrompt = loadDialoguePrompt('dialogue-axis-diagnostic-prompt-v2');
 
     expect(gatePrompt).toContain('effectiveResponse');
     expect(gatePrompt).toContain('담화 문맥');
@@ -187,13 +187,37 @@ describe('two-stage dialogue evaluator', () => {
     ]);
   });
 
-  it('관계 진단기가 1단계 판정을 변경하면 거부한다', async () => {
+  it('명시적 오류가 없는데 관계 진단기가 게이트 판정을 변경하면 거부한다', async () => {
     const evaluator = new TwoStageDialogueEvaluator({
       gateEvaluator: new FixedGate(gateResult('DISTORTED')),
       diagnosticEvaluator: new RecordingDiagnostic(diagnosticResult('UNCLEAR')),
     });
 
     await expect(evaluator.evaluate(input)).rejects.toThrow(/expected ERROR/);
+  });
+
+  it('게이트가 UNCLEAR여도 관계 진단에서 명시적 오류가 발견되면 ERROR가 우선한다', async () => {
+    const evaluator = new TwoStageDialogueEvaluator({
+      gateEvaluator: new FixedGate(gateResult('UNCLEAR')),
+      diagnosticEvaluator: new RecordingDiagnostic(diagnosticResult('ERROR')),
+    });
+
+    const evaluated = await evaluator.evaluate(input);
+
+    expect(evaluated.result.status).toBe('ERROR');
+    expect(evaluated.result.snapshot.relationStates[0]?.state).toBe('contradicted');
+    expect(evaluated.result.nextQuestion?.type).toBe('CORRECTIVE');
+  });
+
+  it('게이트가 CAPTURED여도 명시적 오류가 발견되면 PASS하지 않는다', async () => {
+    const evaluator = new TwoStageDialogueEvaluator({
+      gateEvaluator: new FixedGate(gateResult('CAPTURED')),
+      diagnosticEvaluator: new RecordingDiagnostic(diagnosticResult('ERROR')),
+    });
+
+    const evaluated = await evaluator.evaluate(input);
+
+    expect(evaluated.result.status).toBe('ERROR');
   });
 
   it('중심 이야기 게이트 API 입력에는 centralAxes만 있고 coreRelations는 포함되지 않는다', async () => {

@@ -43,7 +43,10 @@ export interface DialogueEvaluationInput {
   readonly questionsAsked: number;
   readonly maxQuestions: number;
   readonly previousSnapshot?: StudentRepresentationSnapshot;
-  /** 2단계 관계 진단기는 1단계 게이트 판정을 변경하지 않고 원인만 찾는다. */
+  /**
+   * 1단계 게이트는 중심축의 충분성을 판정한다. 2단계에서 명시적 관계 오류가
+   * 발견되면 최종 판정은 ERROR로 승격될 수 있다.
+   */
   readonly gateDecision?: {
     readonly status: 'CAPTURED' | 'UNCLEAR' | 'DISTORTED';
     readonly decisionSummary: string;
@@ -141,6 +144,10 @@ const PROMPT_PATHS: Readonly<Record<DialoguePromptVersion, string>> = {
   'dialogue-axis-diagnostic-prompt-v1': resolve(
     process.cwd(),
     'packages/pipeline/experiments/dialogue/axis-diagnostic-prompt-v1.md',
+  ),
+  'dialogue-axis-diagnostic-prompt-v2': resolve(
+    process.cwd(),
+    'packages/pipeline/experiments/dialogue/axis-diagnostic-prompt-v2.md',
   ),
 };
 
@@ -276,7 +283,8 @@ function evaluatorPayload(
   input: DialogueEvaluationInput,
   promptVersion: DialoguePromptVersion,
 ): string {
-  const coreRelations = promptVersion === 'dialogue-axis-diagnostic-prompt-v1'
+  const coreRelations = promptVersion === 'dialogue-axis-diagnostic-prompt-v1' ||
+      promptVersion === 'dialogue-axis-diagnostic-prompt-v2'
     ? input.gold.coreRelations.map(({ id, description }) => ({ id, description }))
     : input.gold.coreRelations;
   return JSON.stringify(
@@ -421,11 +429,13 @@ export class OpenAIDialogueEvaluator implements DialogueEvaluator {
               this.promptVersion === 'dialogue-prompt-v8' ||
               this.promptVersion === 'dialogue-diagnostic-prompt-v1',
             axisTargeting:
-              this.promptVersion === 'dialogue-axis-diagnostic-prompt-v1',
+              this.promptVersion === 'dialogue-axis-diagnostic-prompt-v1' ||
+              this.promptVersion === 'dialogue-axis-diagnostic-prompt-v2',
             requiredRelationsAreQuestionOnly:
               this.promptVersion === 'dialogue-prompt-v8' ||
               this.promptVersion === 'dialogue-diagnostic-prompt-v1' ||
-              this.promptVersion === 'dialogue-axis-diagnostic-prompt-v1',
+              this.promptVersion === 'dialogue-axis-diagnostic-prompt-v1' ||
+              this.promptVersion === 'dialogue-axis-diagnostic-prompt-v2',
           });
           assertRelationIds(result, input.gold);
         } catch (error) {

@@ -8,6 +8,7 @@ export const DIALOGUE_PROMPT_VERSIONS = [
   'dialogue-prompt-v8',
   'dialogue-diagnostic-prompt-v1',
   'dialogue-axis-diagnostic-prompt-v1',
+  'dialogue-axis-diagnostic-prompt-v2',
 ] as const;
 export type DialoguePromptVersion = (typeof DIALOGUE_PROMPT_VERSIONS)[number];
 export const DIALOGUE_GOLD_VERSION = 'paragraph-diagnostic-gold-v1';
