@@ -404,6 +404,27 @@ describe('dialogue experiment orchestration', () => {
     ).toThrow(/exactly one unknown relation/);
   });
 
+  it('축 기반 partial 판정은 unknown 관계가 없어도 거시 연결의 관련 관계를 지정할 수 있다', () => {
+    const partial = evaluation('UNCLEAR', 1);
+    partial.snapshot.relationStates = partial.snapshot.relationStates.map((relation) => ({
+      ...relation,
+      state: 'entailed' as const,
+      source: 'initial' as const,
+      evidence: '각 원자 관계는 표현했지만 축의 거시 연결은 불분명함',
+    }));
+    partial.targetIssue = {
+      description: '확인된 관계들을 잇는 중심 대조가 불분명함',
+      relatedRelationIds: ['R1', 'R2'],
+    };
+
+    expect(validateEvaluationResult(partial, {
+      canAskQuestion: true,
+      expectedTurn: 1,
+      gold: loaded.gold,
+      axisTargeting: true,
+    }).status).toBe('UNCLEAR');
+  });
+
   it('ERROR targetIssue는 contradicted 관계만 선택해야 한다', () => {
     const raw = evaluation('ERROR', 1, { questionType: 'CORRECTIVE' });
     raw.targetIssue = { description: '오류가 아닌 관계', relatedRelationIds: ['R1'] };

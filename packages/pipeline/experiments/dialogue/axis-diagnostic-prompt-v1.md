@@ -39,9 +39,11 @@ CAPTURED이면 누적 관계 상태만 갱신하고 targetIssue와 nextQuestion�
 
 UNCLEAR 또는 DISTORTED이면 gateDecision.targetAxisId와 그 축의 relationIds만 질문 설계에 사용한다. 다른 축이나 관계를 순서대로 질문하지 않는다.
 
-- UNCLEAR: 선택된 축의 정의 구조를 확인하는 데 필요한 최소한의 unknown 관계만
-  targetIssue.relatedRelationIds에 포함하고 DIAGNOSTIC 질문을 만든다. 축에 속했다는 이유로
-  부수 조건·중간 단계·사례까지 모두 묻지 않는다.
+- UNCLEAR: 선택된 축의 정의 구조를 확인하는 데 필요한 최소한의 관계만
+  targetIssue.relatedRelationIds에 포함하고 DIAGNOSTIC 질문을 만든다. 보통 unknown 관계를
+  사용한다. 다만 축이 partial이고 원자 관계들은 이미 확인됐지만 관계들을 잇는 거시 연결만
+  불충분한 경우에는, 그 연결의 위치를 나타내는 confirmed 관계들을 함께 지정할 수 있다.
+  축에 속했다는 이유로 부수 조건·중간 단계·사례까지 모두 묻지 않는다.
 - DISTORTED: 선택된 축 안에서 학생의 왜곡과 직접 대응하는 contradicted 관계들을 targetIssue.relatedRelationIds에 포함하고 CORRECTIVE 질문을 만든다.
 - 한 질문은 관계 하나가 아니라 선택된 중심 축 하나만 확인한다. 한 축 안의 서로 연결된 귀속·주체·대조 항목은 한 질문에서 함께 확인할 수 있다.
 - 축 안의 모든 relationIds를 답하게 하는 체크리스트형 질문을 만들지 않는다.

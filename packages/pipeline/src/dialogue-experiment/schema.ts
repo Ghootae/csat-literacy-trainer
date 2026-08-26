@@ -278,10 +278,9 @@ export function validateEvaluationResult(
     }
     if (options.axisTargeting === true) {
       if (
-        result.targetIssue.relatedRelationIds.length === 0 ||
-        result.targetIssue.relatedRelationIds.some((id) => !unknownIds.has(id))
+        result.targetIssue.relatedRelationIds.length === 0
       ) {
-        throw new Error('dialogue evaluation: axis target must select unknown relations');
+        throw new Error('dialogue evaluation: axis target must select related relations');
       }
     } else {
       if (

@@ -48,17 +48,28 @@ describe('paragraph analysis prompt versions', () => {
       'packages/pipeline/fixtures/experiments/dialogue/eight-paragraph-four-level-v2-2026-08-25.json',
     ), 'utf8')) as {
       readonly paragraphs: readonly {
+        readonly paragraphId: string;
         readonly goldPath: string;
         readonly cases: readonly { readonly level: string; readonly expectedStatus: string }[];
       }[];
     };
 
     expect(fixture.paragraphs).toHaveLength(8);
+    const roleFreeApproved = new Set([
+      'corporate-law-p2',
+      'dopamine-motor-control-p4',
+      'hegel-aesthetics-absolute-spirit-p1',
+      'information-asymmetry-free-marketplace-p2',
+    ]);
     for (const paragraph of fixture.paragraphs) {
       const gold = ParagraphDiagnosticGoldSchema.parse(
         JSON.parse(readFileSync(resolve(process.cwd(), paragraph.goldPath), 'utf8')),
       );
-      expect(gold.coreRelations.every((relation) => relation.diagnosticRole !== undefined)).toBe(true);
+      expect(gold.coreRelations.every((relation) =>
+        roleFreeApproved.has(paragraph.paragraphId)
+          ? relation.diagnosticRole === undefined
+          : relation.diagnosticRole !== undefined,
+      )).toBe(true);
       expect(gold.centralAxes.length).toBeGreaterThan(0);
       expect(gold.centralAxes.length).toBeLessThanOrEqual(3);
       expect(paragraph.cases.map((item) => [item.level, item.expectedStatus])).toEqual([
