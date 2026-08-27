@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { listPassages, loadContent, loadPassageManifest } from './content.js';
+import {
+  listPassages,
+  loadContent,
+  loadPassageManifest,
+  loadProblemSolvingBundle,
+} from './content.js';
 
 describe('광합성 전체 지문 앱 등록', () => {
   it('p1~p6을 빠짐없이 원문 순서로 제공한다', () => {
@@ -36,5 +41,20 @@ describe('광합성 전체 지문 앱 등록', () => {
       expect(content.queries.regions.length).toBeGreaterThan(0);
       expect(content.titleQueries?.regions).toHaveLength(1);
     }
+  });
+});
+
+describe('mRNA 19번 공개 문제 콘텐츠', () => {
+  it('공개 원문·선지와 승인 골드의 식별자가 일치하고 판정 정보는 공개 콘텐츠에 없다', () => {
+    const { content, gold } = loadProblemSolvingBundle('mrna-vaccine-lipid-nanoparticle-q19');
+    expect(content.questionId).toBe(gold.questionId);
+    expect(content.passageId).toBe(gold.passageId);
+    expect(content.choices.map((choice) => choice.choiceId)).toEqual(
+      gold.choices.map((choice) => choice.choiceId),
+    );
+    const serialized = JSON.stringify(content);
+    expect(serialized).not.toContain('answerChoiceId');
+    expect(serialized).not.toContain('judgment');
+    expect(serialized).not.toContain('optionClaims');
   });
 });

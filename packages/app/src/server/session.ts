@@ -10,10 +10,26 @@
  * 파일시스템 접근은 여기 안에만 있다(`D4` 규칙 1). `ownerId`는 처음부터 받되 로컬은 "local".
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 import type { RegionRecord } from './view.js';
+import type {
+  CompletedProblemSessionRecord,
+  ProblemSessionLogger,
+} from './problem-solving.js';
+
+export class JsonlProblemSessionLogger implements ProblemSessionLogger {
+  constructor(readonly path = resolve(
+    process.env['CSAT_PROBLEM_SESSION_LOG'] ??
+    resolve(process.cwd(), '.omc/logs/problem-solving/sessions.jsonl'),
+  )) {}
+
+  save(record: CompletedProblemSessionRecord): void {
+    mkdirSync(dirname(this.path), { recursive: true });
+    appendFileSync(this.path, `${JSON.stringify(record)}\n`, 'utf8');
+  }
+}
 
 /**
  * 호출 시점에 푼다. 운영은 cwd의 `sessions/`를 쓰고, E2E는 `CSAT_SESSION_ROOT`로

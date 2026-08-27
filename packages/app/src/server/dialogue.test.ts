@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import type {
@@ -8,6 +12,12 @@ import type {
 } from '@csat/pipeline';
 
 import { DialogueController } from './dialogue.js';
+import { ProblemSolvingController } from './problem-solving.js';
+import type {
+  ProblemPathEvaluator,
+  ProblemPathEvaluatorCall,
+  ProblemPathEvaluatorInput,
+} from '@csat/pipeline';
 
 class FixedEvaluator implements DialogueEvaluator {
   constructor(private readonly status: 'PASS' | 'UNCLEAR') {}
@@ -77,13 +87,15 @@ class FixedEvaluator implements DialogueEvaluator {
 }
 
 describe('개발자용 순차 대화 세션', () => {
-  it('전체 원문과 골드가 있는 네 지문만 시작할 수 있다', () => {
+  it('전체 원문과 승인 골드가 있는 다섯 지문만 시작할 수 있다', () => {
     const controller = new DialogueController({ evaluator: new FixedEvaluator('PASS') });
     const passages = controller.listPassages();
-    expect(passages.filter((passage) => passage.available)).toHaveLength(4);
+    expect(passages.filter((passage) => passage.available)).toHaveLength(5);
     const hegel = passages.find((passage) => passage.passageId === 'hegel-aesthetics-absolute-spirit');
     expect(hegel).toMatchObject({ available: false, paragraphCount: 1 });
     expect(() => controller.start('hegel-aesthetics-absolute-spirit')).toThrow(/전체 원문|완전한 지문/);
+    const mrna = passages.find((passage) => passage.passageId === 'mrna-vaccine-lipid-nanoparticle');
+    expect(mrna).toMatchObject({ available: true, paragraphCount: 5 });
   });
 
   it('응답 없이도 앞뒤 문단을 이동하고 방문한 문단을 계속 보여 준다', () => {
@@ -129,5 +141,68 @@ describe('개발자용 순차 대화 세션', () => {
     }
     expect(view.status).toBe('UNRESOLVED');
     expect(view.step).toMatchObject({ question: null, questionsAnswered: 3, maxQuestions: 3 });
+  });
+
+  it('전 문단 PASS 뒤의 이해 기록만 문제 판정기 handoff로 전달한다', async () => {
+    const root = mkdtempSync(resolve(tmpdir(), 'mrna-dialogue-handoff-'));
+    const paragraphs = Array.from({ length: 5 }, (_, index) => {
+      const position = index + 1;
+      const paragraphId = `mrna-vaccine-lipid-nanoparticle-p${position}`;
+      return {
+        paragraphId,
+        position,
+        text: `테스트 ${position}문단`,
+        goldPath: `packages/pipeline/fixtures/experiments/dialogue/gold-v2/${paragraphId}.json`,
+        goldReviewStatus: 'human_reviewed',
+      };
+    });
+    writeFileSync(resolve(root, 'mrna.json'), JSON.stringify({
+      passageId: 'mrna-vaccine-lipid-nanoparticle',
+      title: 'mRNA 백신과 지질 나노 입자',
+      exam: '고2 2023년 3월 - 교육청 모의평가',
+      problemQuestionId: 'mrna-vaccine-lipid-nanoparticle-q19',
+      source: { status: 'exact-local-source' },
+      paragraphs,
+    }));
+
+    try {
+      const dialogue = new DialogueController({
+        evaluator: new FixedEvaluator('PASS'),
+        passageRoot: root,
+      });
+      let view = dialogue.start('mrna-vaccine-lipid-nanoparticle');
+      expect(() => dialogue.createProblemHandoff(view.sessionId)).toThrow(/전체 문단/);
+      for (let index = 0; index < paragraphs.length; index += 1) {
+        view = await dialogue.respond(view.sessionId, `${index + 1}문단 이해 응답`);
+        if (index < paragraphs.length - 1) view = dialogue.navigate(view.sessionId, index + 1);
+      }
+      expect(view).toMatchObject({
+        status: 'COMPLETED',
+        nextProblemQuestionId: 'mrna-vaccine-lipid-nanoparticle-q19',
+      });
+
+      const linked = dialogue.createProblemHandoff(view.sessionId);
+      expect(linked.handoff.paragraphs).toHaveLength(5);
+      expect(linked.handoff.paragraphs.every((paragraph) => paragraph.dialogue.outcome === 'PASS')).toBe(true);
+
+      const evaluator: ProblemPathEvaluator & { calls: ProblemPathEvaluatorInput[] } = {
+        calls: [],
+        async evaluate(input: ProblemPathEvaluatorInput): Promise<ProblemPathEvaluatorCall> {
+          this.calls.push(structuredClone(input));
+          throw new Error('handoff 입력 확인 뒤 중단');
+        },
+      };
+      const problem = new ProblemSolvingController({ evaluator });
+      const started = problem.start(linked.questionId, linked.handoff, view.sessionId);
+      expect(started.learningSessionId).toBe(view.sessionId);
+      await expect(problem.submitInitial(started.sessionId, {
+        choiceId: 'C2',
+        rationale: '②의 속도 조절이 불균일하게 만든다고 생각했다.',
+      })).rejects.toThrow(/handoff 입력 확인 뒤 중단/);
+      expect(evaluator.calls[0]?.paragraphHandoff?.paragraphs).toHaveLength(5);
+      expect(evaluator.calls[0]?.paragraphHandoff?.passageId).toBe('mrna-vaccine-lipid-nanoparticle');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

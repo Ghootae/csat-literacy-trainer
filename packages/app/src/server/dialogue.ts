@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  CENTRAL_STORY_GATE_PROMPT_VERSION,
+  DIALOGUE_EXPERIMENT_ID,
   DialogueSessionEngine,
+  TWO_STAGE_DIALOGUE_PROMPT_VERSION,
   TwoStageDialogueEvaluator,
+  createParagraphUnderstandingHandoff,
   type DialogueEvaluator,
+  type ParagraphUnderstandingHandoff,
   type DialogueStep,
 } from '@csat/pipeline';
 
@@ -20,6 +25,7 @@ import {
 
 interface ParagraphRuntime {
   engine: DialogueSessionEngine;
+  readonly goldRef: { readonly version: string; readonly hash: string };
   initialSubmitted: boolean;
   followUpAnswers: number;
   step: DialogueStep | null;
@@ -53,7 +59,8 @@ export class DialogueController {
 
   listPassages(): readonly DialoguePassageSummary[] {
     return this.passages.map((passage) => {
-      const missingGold = passage.paragraphs.some((paragraph) => paragraph.goldPath === null);
+      const missingGold = passage.paragraphs.some((paragraph) =>
+        paragraph.goldPath === null || paragraph.goldReviewStatus === 'awaiting_human_review');
       const available = passage.source.status === 'exact-local-source' && !missingGold;
       return {
         passageId: passage.passageId,
@@ -87,6 +94,43 @@ export class DialogueController {
 
   get(sessionId: string): DialogueSessionView {
     return this.view(this.requireSession(sessionId));
+  }
+
+  createProblemHandoff(sessionId: string): {
+    readonly questionId: string;
+    readonly handoff: ParagraphUnderstandingHandoff;
+  } {
+    const runtime = this.requireSession(sessionId);
+    const view = this.view(runtime);
+    if (view.status !== 'COMPLETED') {
+      throw new Error('전체 문단을 PASS한 뒤 문제 풀이로 이동할 수 있습니다.');
+    }
+    const questionId = runtime.passage.problemQuestionId;
+    if (questionId === undefined) throw new Error('이 지문에 연결된 문제가 없습니다.');
+    return {
+      questionId,
+      handoff: createParagraphUnderstandingHandoff({
+        passageId: runtime.passage.passageId,
+        generatedAt: new Date().toISOString(),
+        paragraphs: runtime.passage.paragraphs.map((paragraph, index) => {
+          const paragraphRuntime = runtime.paragraphs.get(index);
+          if (paragraphRuntime === undefined) throw new Error(`${paragraph.paragraphId}: 문단 세션이 없습니다.`);
+          const completed = paragraphRuntime.engine.completedSessionSnapshot;
+          if (completed?.finalStatus !== 'PASS') throw new Error(`${paragraph.paragraphId}: PASS 기록이 없습니다.`);
+          return {
+            paragraphId: paragraph.paragraphId,
+            paragraphPosition: paragraph.position,
+            goldRef: paragraphRuntime.goldRef,
+            evaluatorRef: {
+              runtimeVersion: DIALOGUE_EXPERIMENT_ID,
+              gatePromptVersion: CENTRAL_STORY_GATE_PROMPT_VERSION,
+              diagnosticPromptVersion: TWO_STAGE_DIALOGUE_PROMPT_VERSION,
+            },
+            session: completed,
+          };
+        }),
+      }),
+    };
   }
 
   async respond(sessionId: string, text: string): Promise<DialogueSessionView> {
@@ -140,21 +184,19 @@ export class DialogueController {
     return runtime;
   }
 
-  private createEngine(paragraph: DialoguePassageParagraph): DialogueSessionEngine {
+  private createParagraphRuntime(paragraph: DialoguePassageParagraph): ParagraphRuntime {
     if (paragraph.goldPath === null) throw new Error(`${paragraph.paragraphId}: 골드가 없습니다.`);
     const { gold, goldHash } = loadDialogueGold(paragraph.goldPath);
-    return new DialogueSessionEngine({
+    const goldVersion = 'paragraph-diagnostic-gold-v2-reviewed-candidate';
+    return {
+      engine: new DialogueSessionEngine({
       evaluator: this.evaluator,
       gold,
-      goldVersion: 'paragraph-diagnostic-gold-v2-reviewed-candidate',
+      goldVersion,
       goldHash,
       maxQuestions: 3,
-    });
-  }
-
-  private createParagraphRuntime(paragraph: DialoguePassageParagraph): ParagraphRuntime {
-    return {
-      engine: this.createEngine(paragraph),
+      }),
+      goldRef: { version: goldVersion, hash: goldHash },
       initialSubmitted: false,
       followUpAnswers: 0,
       step: null,
@@ -205,6 +247,7 @@ export class DialogueController {
         maxQuestions: paragraphRuntime.engine.maxQuestions,
         durationMs: step.call.durationMs,
       },
+      nextProblemQuestionId: allPassed ? runtime.passage.problemQuestionId ?? null : null,
     };
   }
 }

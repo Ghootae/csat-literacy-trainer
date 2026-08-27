@@ -14,6 +14,10 @@ import type {
   PassageTitleRequest,
   PassageTitleResponse,
   PassageView,
+  ProblemActionResponseRequest,
+  ProblemInitialSubmissionRequest,
+  ProblemRationaleRequest,
+  ProblemSessionView,
   RestoreResponse,
   TitleRequest,
   TitleResponse,
@@ -95,6 +99,10 @@ export function startDialogueSession(passageId: string): Promise<DialogueSession
   });
 }
 
+export function fetchDialogueSession(sessionId: string): Promise<DialogueSessionView> {
+  return jsonFetch<DialogueSessionView>(`/api/dialogue/session/${sessionId}`);
+}
+
 export function submitDialogueResponse(
   sessionId: string,
   body: DialogueResponseRequest,
@@ -120,5 +128,56 @@ export function navigateDialogueSession(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ paragraphIndex }),
+  });
+}
+
+export function startProblemSession(questionId: string): Promise<ProblemSessionView> {
+  return jsonFetch<ProblemSessionView>('/api/problem/session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ questionId }),
+  });
+}
+
+export function startLinkedProblemSession(dialogueSessionId: string): Promise<ProblemSessionView> {
+  return jsonFetch<ProblemSessionView>(`/api/dialogue/session/${dialogueSessionId}/problem`, {
+    method: 'POST',
+  });
+}
+
+export function fetchProblemSession(sessionId: string): Promise<ProblemSessionView> {
+  return jsonFetch<ProblemSessionView>(`/api/problem/session/${sessionId}`);
+}
+
+export function submitProblemInitial(
+  sessionId: string,
+  body: ProblemInitialSubmissionRequest,
+): Promise<ProblemSessionView> {
+  return jsonFetch<ProblemSessionView>(`/api/problem/session/${sessionId}/initial`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function submitProblemRationale(
+  sessionId: string,
+  body: ProblemRationaleRequest,
+): Promise<ProblemSessionView> {
+  return jsonFetch<ProblemSessionView>(`/api/problem/session/${sessionId}/rationale`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function submitProblemAction(
+  sessionId: string,
+  body: ProblemActionResponseRequest,
+): Promise<ProblemSessionView> {
+  return jsonFetch<ProblemSessionView>(`/api/problem/session/${sessionId}/respond`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
   });
 }

@@ -21,6 +21,22 @@ export * from './dialogue-experiment/gate.js';
 export * from './dialogue-experiment/schema.js';
 export * from './dialogue-experiment/session.js';
 export * from './dialogue-experiment/two-stage-evaluator.js';
+// 문단 대화와 문제 풀이가 공유하는 상위 학습 세션 전달 계약.
+export * from './learning-session/handoff.js';
+// 문항 상세 골드와 기준 경로. 문단 PASS 계약과 분리한다.
+export * from './problem-solving/gold.js';
+// 오답 선택 이후 관찰·가설·타깃별 충분성·단일 행동을 분리하는 진단 기록 계약.
+export * from './problem-solving/episode.js';
+// 모델과 UI 없이 정답·진단·질문·재선택 상태를 결정하는 순수 세션 엔진.
+export * from './problem-solving/session.js';
+// LLM 문제 풀이 진단기의 제안 계약과 보충 해설을 차단하는 입력 projection.
+export * from './problem-solving/path-evaluator.js';
+export * from './problem-solving/path-evaluator-input.js';
+export * from './problem-solving/path-evaluator-runtime.js';
+export * from './problem-solving/diagnostic-turn-v2.js';
+export * from './problem-solving/path-probe.js';
+export * from './problem-solving/vertical-slice.js';
+export * from './problem-solving/quality-evaluation.js';
 // 확정된 centralStory를 무손실 중심축으로 분해하는 별도 API 단계.
 export * from './central-axes/evaluator.js';
 export * from './central-axes/schema.js';

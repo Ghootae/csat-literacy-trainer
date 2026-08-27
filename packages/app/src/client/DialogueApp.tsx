@@ -7,7 +7,9 @@ import type {
 } from '../shared/contract.js';
 import {
   fetchDialoguePassages,
+  fetchDialogueSession,
   navigateDialogueSession,
+  startLinkedProblemSession,
   startDialogueSession,
   submitDialogueResponse,
 } from './api.js';
@@ -27,6 +29,8 @@ export function DialogueApp(): React.JSX.Element {
 
   useEffect(() => {
     fetchDialoguePassages().then(setPassages).catch(showError);
+    const sessionId = new URLSearchParams(window.location.search).get('sessionId');
+    if (sessionId !== null) fetchDialogueSession(sessionId).then(setSession).catch(showError);
   }, []);
 
   function showError(reason: unknown): void {
@@ -93,6 +97,22 @@ export function DialogueApp(): React.JSX.Element {
     setError(null);
   }
 
+  async function continueToProblem(): Promise<void> {
+    if (session === null || session.nextProblemQuestionId === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const problem = await startLinkedProblemSession(session.sessionId);
+      sessionStorage.setItem(`csat.problem.${problem.content.questionId}`, problem.sessionId);
+      window.location.assign(
+        `/problem?sessionId=${encodeURIComponent(problem.sessionId)}&dialogueSessionId=${encodeURIComponent(session.sessionId)}`,
+      );
+    } catch (reason) {
+      showError(reason);
+      setBusy(false);
+    }
+  }
+
   if (passages === null) return <main className="dialogue-shell">불러오는 중…</main>;
 
   if (session === null) {
@@ -102,6 +122,7 @@ export function DialogueApp(): React.JSX.Element {
           <p className="dialogue-kicker">자유 응답 판정기 · 개발자용</p>
           <h1>순차 지문 테스트</h1>
           <p>문단을 자유롭게 이동하며 응답과 피드백을 테스트할 수 있습니다.</p>
+          <p><a className="problem-link" href="/problem">mRNA 19번 문제 풀이 진단 열기</a></p>
         </header>
         <section className="dialogue-passage-list" aria-label="테스트할 지문">
           {passages.map((passage) => (
@@ -230,6 +251,11 @@ export function DialogueApp(): React.JSX.Element {
         {session.status === 'COMPLETED' && (
           <div className="dialogue-terminal pass">
             <strong>전체 지문을 완료했습니다.</strong>
+            {session.nextProblemQuestionId !== null && (
+              <button className="primary" disabled={busy} onClick={() => void continueToProblem()}>
+                {busy ? '문제 준비 중…' : '이 이해 기록으로 19번 풀기'}
+              </button>
+            )}
             <button onClick={returnToPassages}>지문 목록</button>
           </div>
         )}

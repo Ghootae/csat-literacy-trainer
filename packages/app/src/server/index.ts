@@ -18,6 +18,7 @@ import {
   type Gold,
   type EvaluateResponseOptions,
   type DialogueEvaluator,
+  type ProblemPathEvaluator,
   evaluateResponse,
   propositionEvidenceEvaluator,
   warmResponsePrefix,
@@ -27,6 +28,10 @@ import type {
   AttemptRequest,
   AttemptResponse,
   DialogueResponseRequest,
+  ProblemActionResponseRequest,
+  ProblemInitialSubmissionRequest,
+  ProblemRationaleRequest,
+  StartProblemRequest,
   PassageTitleRequest,
   PassageTitleResponse,
   RestoreResponse,
@@ -35,6 +40,7 @@ import type {
   TitleResponse,
 } from '../shared/contract.js';
 import { DialogueController } from './dialogue.js';
+import { ProblemSolvingController } from './problem-solving.js';
 import {
   findPassageManifestForParagraph,
   listPassages,
@@ -51,6 +57,7 @@ import {
   markParagraphComplete,
   revisedRegions,
   savePassageTitle,
+  JsonlProblemSessionLogger,
 } from './session.js';
 import { bestOf, isBlocked, toRecord, toRegionViews, viewsFromRecords } from './view.js';
 import { restoreTitleView, toTitleView } from './title-view.js';
@@ -107,6 +114,8 @@ export interface LearningServerOptions {
   readonly responseEvaluator?: ResponseEvaluator;
   readonly warmer?: typeof warmResponsePrefix;
   readonly dialogueEvaluator?: DialogueEvaluator;
+  readonly dialoguePassageRoot?: string;
+  readonly problemPathEvaluator?: ProblemPathEvaluator;
 }
 
 /**
@@ -123,9 +132,14 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
   );
   const runEvaluation = options.responseEvaluator ?? evaluateResponse;
   const warm = options.warmer ?? warmResponsePrefix;
-  const dialogue = new DialogueController(
-    options.dialogueEvaluator === undefined ? {} : { evaluator: options.dialogueEvaluator },
-  );
+  const dialogue = new DialogueController({
+    ...(options.dialogueEvaluator === undefined ? {} : { evaluator: options.dialogueEvaluator }),
+    ...(options.dialoguePassageRoot === undefined ? {} : { passageRoot: options.dialoguePassageRoot }),
+  });
+  const problemSolving = new ProblemSolvingController({
+    ...(options.problemPathEvaluator === undefined ? {} : { evaluator: options.problemPathEvaluator }),
+    logger: new JsonlProblemSessionLogger(),
+  });
   let spent = 0;
   const lastWarm = new Map<string, number>();
 
@@ -137,6 +151,34 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
 
     if (req.method === 'GET' && url.pathname === '/api/dialogue/passages') {
       return json(res, 200, dialogue.listPassages());
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/problem/session') {
+      const body = (await readBody(req)) as StartProblemRequest;
+      return json(res, 200, problemSolving.start(body.questionId));
+    }
+
+    if (url.pathname.startsWith('/api/problem/session/')) {
+      const rest = url.pathname.slice('/api/problem/session/'.length);
+      const [sessionId, action] = rest.split('/');
+      if (sessionId === undefined || sessionId === '') {
+        return json(res, 400, { error: 'sessionId가 필요합니다.' });
+      }
+      if (req.method === 'GET' && action === undefined) {
+        return json(res, 200, problemSolving.get(sessionId));
+      }
+      if (req.method === 'POST' && action === 'initial') {
+        const body = (await readBody(req)) as ProblemInitialSubmissionRequest;
+        return json(res, 200, await problemSolving.submitInitial(sessionId, body));
+      }
+      if (req.method === 'POST' && action === 'rationale') {
+        const body = (await readBody(req)) as ProblemRationaleRequest;
+        return json(res, 200, await problemSolving.submitRationale(sessionId, body.rationale));
+      }
+      if (req.method === 'POST' && action === 'respond') {
+        const body = (await readBody(req)) as ProblemActionResponseRequest;
+        return json(res, 200, await problemSolving.respond(sessionId, body));
+      }
     }
 
     if (req.method === 'POST' && url.pathname === '/api/dialogue/session') {
@@ -168,6 +210,10 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
       if (req.method === 'POST' && action === 'navigate') {
         const body = (await readBody(req)) as { paragraphIndex: number };
         return json(res, 200, dialogue.navigate(sessionId, body.paragraphIndex));
+      }
+      if (req.method === 'POST' && action === 'problem') {
+        const linked = dialogue.createProblemHandoff(sessionId);
+        return json(res, 200, problemSolving.start(linked.questionId, linked.handoff, sessionId));
       }
     }
 

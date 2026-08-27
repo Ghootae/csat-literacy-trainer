@@ -55,7 +55,9 @@ export type Op =
   | 'regression-probe-generate'
   | 'regression-arbitrate'
   /** 자유 응답 기반 문단 이해 진단 실험. 운영 evaluator 계측과 분리한다. */
-  | 'dialogue-experiment';
+  | 'dialogue-experiment'
+  /** 선택 근거 기반 문제 풀이 경로 진단 실험. */
+  | 'problem-solving-evaluator';
 
 export interface CallMetric {
   readonly ts: string;

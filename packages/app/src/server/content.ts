@@ -11,16 +11,27 @@ import { resolve } from 'node:path';
 
 import {
   ParagraphDiagnosticGoldSchema,
+  ProblemQuestionGoldSchema,
   type Gold,
   type GeneratedQuerySet,
   type ParagraphDiagnosticGold,
+  type ProblemQuestionGold,
 } from '@csat/pipeline';
-import type { PassageSummary, PassageView, Sentence } from '../shared/contract.js';
+import type {
+  PassageSummary,
+  PassageView,
+  ProblemContentView,
+  Sentence,
+} from '../shared/contract.js';
 
 const ROOT = resolve(process.cwd(), 'content');
 const DIALOGUE_ROOT = resolve(
   process.cwd(),
   'packages/pipeline/fixtures/experiments/dialogue/passages',
+);
+const PROBLEM_ROOT = resolve(
+  process.cwd(),
+  'packages/pipeline/fixtures/experiments/problem-solving',
 );
 
 export interface DialoguePassageParagraph {
@@ -28,6 +39,8 @@ export interface DialoguePassageParagraph {
   readonly position: number;
   readonly text: string;
   readonly goldPath: string | null;
+  readonly candidateGoldPath?: string;
+  readonly goldReviewStatus?: 'human_reviewed' | 'awaiting_human_review';
 }
 
 export interface DialoguePassageContent {
@@ -38,6 +51,8 @@ export interface DialoguePassageContent {
     readonly status: 'exact-local-source' | 'incomplete-local-excerpt';
     readonly note?: string;
   };
+  /** 문단 이해 세션 뒤 이어 풀 수 있는 문제. 현재 MVP는 지문당 하나만 노출한다. */
+  readonly problemQuestionId?: string;
   readonly paragraphs: readonly DialoguePassageParagraph[];
 }
 
@@ -57,6 +72,32 @@ export function loadDialogueGold(goldPath: string): {
     gold: ParagraphDiagnosticGoldSchema.parse(JSON.parse(raw)),
     goldHash: `sha256:${createHash('sha256').update(raw).digest('hex')}`,
   };
+}
+
+export function loadProblemSolvingBundle(questionId: string): {
+  readonly content: ProblemContentView;
+  readonly gold: ProblemQuestionGold;
+} {
+  const supportedQuestionId = 'mrna-vaccine-lipid-nanoparticle-q19';
+  if (questionId !== supportedQuestionId) throw new Error('등록되지 않은 문제입니다.');
+  const content = JSON.parse(readFileSync(
+    resolve(PROBLEM_ROOT, 'public', `${questionId}.json`), 'utf8',
+  )) as ProblemContentView;
+  const gold = ProblemQuestionGoldSchema.parse(JSON.parse(readFileSync(
+    resolve(PROBLEM_ROOT, `${questionId}.json`), 'utf8',
+  )));
+  if (content.questionId !== gold.questionId || content.passageId !== gold.passageId) {
+    throw new Error('공개 문제 콘텐츠와 골드가 일치하지 않습니다.');
+  }
+  if (
+    content.choices.length !== gold.choices.length ||
+    content.choices.some((choice, index) =>
+      choice.choiceId !== gold.choices[index]?.choiceId ||
+      choice.text !== gold.choices[index]?.text)
+  ) {
+    throw new Error('공개 선지와 골드 선지가 일치하지 않습니다.');
+  }
+  return { content: structuredClone(content), gold };
 }
 
 export interface Passage extends PassageView {

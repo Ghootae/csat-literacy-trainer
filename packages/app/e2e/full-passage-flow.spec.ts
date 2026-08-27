@@ -33,6 +33,7 @@ const fixture = JSON.parse(
 let server: Server;
 let sessionRoot: string;
 const evaluationCalls: string[] = [];
+const apiPort = Number(process.env['CSAT_API_PORT'] ?? 5174);
 
 function fixedEvaluation(
   _gold: Gold,
@@ -79,13 +80,13 @@ test.beforeAll(async () => {
   sessionRoot = mkdtempSync(resolve(tmpdir(), 'csat-full-passage-e2e-'));
   process.env['CSAT_SESSION_ROOT'] = sessionRoot;
   server = createLearningServer({
-    port: 5174,
+    port: apiPort,
     responseEvaluator: fixedEvaluation,
     warmer: () => Promise.resolve(),
   });
   await new Promise<void>((resolveListen, reject) => {
     server.once('error', reject);
-    server.listen(5174, '127.0.0.1', resolveListen);
+    server.listen(apiPort, '127.0.0.1', resolveListen);
   });
 });
 

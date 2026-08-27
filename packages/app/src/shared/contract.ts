@@ -199,6 +199,8 @@ export interface DialogueSessionView {
   readonly paragraphCount: number;
   readonly visibleParagraphs: readonly DialogueParagraphView[];
   readonly step: DialogueStepView | null;
+  /** 전체 문단 PASS 뒤에만 서버가 공개한다. */
+  readonly nextProblemQuestionId: string | null;
 }
 
 export interface StartDialogueRequest {
@@ -212,3 +214,87 @@ export interface DialogueResponseRequest {
 export interface DialogueNavigationRequest {
   readonly paragraphIndex: number;
 }
+
+export interface ProblemChoiceView {
+  readonly choiceId: string;
+  readonly position: number;
+  readonly text: string;
+}
+
+export interface ProblemContentView {
+  readonly questionId: string;
+  readonly passageId: string;
+  readonly title: string;
+  readonly exam: string;
+  readonly passage: string;
+  readonly stem: string;
+  readonly scenario: string;
+  readonly image: {
+    readonly url: string;
+    readonly alt: string;
+    readonly width: number;
+    readonly height: number;
+  } | null;
+  readonly choices: readonly ProblemChoiceView[];
+}
+
+export type ProblemSessionPhase =
+  | 'AWAITING_INITIAL_CHOICE'
+  | 'AWAITING_RATIONALE'
+  | 'AWAITING_RESPONSE'
+  | 'AWAITING_RESELECTION'
+  | 'COMPLETED';
+
+export interface ProblemStudentActionView {
+  readonly kind: 'DIAGNOSTIC_QUESTION' | 'CORRECTIVE_QUESTION' | 'COACHING' | 'ITEM_BOUNDARY';
+  readonly text: string;
+}
+
+export interface ProblemTranscriptEntryView {
+  readonly role: 'STUDENT' | 'COACH';
+  readonly kind: 'RATIONALE' | 'ANSWER' | 'RESELECTION' | 'QUESTION' | 'COACHING' | 'RESULT';
+  readonly text: string;
+}
+
+export interface ProblemSessionView {
+  readonly sessionId: string;
+  readonly learningSessionId: string;
+  readonly phase: ProblemSessionPhase;
+  readonly content: ProblemContentView;
+  readonly selectedChoiceId: string | null;
+  readonly action: ProblemStudentActionView | null;
+  readonly reselectionPrompt: string | null;
+  readonly transcript: readonly ProblemTranscriptEntryView[];
+  readonly questionBudget: {
+    readonly used: number;
+    readonly maximum: number;
+  };
+  readonly result: {
+    readonly correct: boolean;
+    readonly finalChoiceId: string;
+    readonly outcome: string;
+  } | null;
+}
+
+export interface StartProblemRequest {
+  readonly questionId: string;
+}
+
+export interface ProblemInitialSubmissionRequest {
+  readonly choiceId: string;
+  readonly rationale?: string;
+  readonly confidence?: number;
+  readonly strategy?: string;
+  readonly runnerUp?: {
+    readonly choiceId: string;
+    readonly rationale: string;
+  };
+}
+
+export interface ProblemRationaleRequest {
+  readonly rationale: string;
+}
+
+export type ProblemActionResponseRequest =
+  | { readonly type: 'TEXT'; readonly text: string }
+  | { readonly type: 'RESELECT'; readonly choiceId: string };

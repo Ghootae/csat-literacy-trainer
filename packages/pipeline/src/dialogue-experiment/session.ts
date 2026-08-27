@@ -130,6 +130,14 @@ export class DialogueSessionEngine {
     return question === null || question === undefined ? null : question;
   }
 
+  /**
+   * 상위 학습 세션으로 넘길 수 있는 종료 스냅샷이다.
+   * 진행 중인 세션은 부분 추론을 확정된 이해 상태처럼 넘기지 않는다.
+   */
+  get completedSessionSnapshot(): DialogueExperimentSession | null {
+    return this.isTerminal ? structuredClone(this.completedSession()) : null;
+  }
+
   async submitInitial(response: string): Promise<DialogueStep> {
     if (this.initialResponse !== undefined) throw new Error('최초 응답은 한 번만 제출할 수 있습니다.');
     if (this.isTerminal) throw new Error('종료된 세션입니다.');

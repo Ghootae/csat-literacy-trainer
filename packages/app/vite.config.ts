@@ -13,7 +13,7 @@ export default defineConfig({
     allowedHosts: true,
     // 대상도 127.0.0.1로 못박는다. `localhost`로 두면 Node 24의 Happy Eyeballs가
     // 이중 스택(tcp46) 리스너를 상대로 멈춰서 /api 요청이 응답 없이 매달린다.
-    proxy: { '/api': 'http://127.0.0.1:5174' },
+    proxy: { '/api': `http://127.0.0.1:${process.env['CSAT_API_PORT'] ?? 5174}` },
   },
   build: { outDir: 'dist-client' },
 });
