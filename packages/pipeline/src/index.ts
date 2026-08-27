@@ -25,6 +25,7 @@ export * from './dialogue-experiment/two-stage-evaluator.js';
 export * from './learning-session/handoff.js';
 // 문항 상세 골드와 기준 경로. 문단 PASS 계약과 분리한다.
 export * from './problem-solving/gold.js';
+export * from './problem-solving/headless-pilot.js';
 // 오답 선택 이후 관찰·가설·타깃별 충분성·단일 행동을 분리하는 진단 기록 계약.
 export * from './problem-solving/episode.js';
 // 모델과 UI 없이 정답·진단·질문·재선택 상태를 결정하는 순수 세션 엔진.
