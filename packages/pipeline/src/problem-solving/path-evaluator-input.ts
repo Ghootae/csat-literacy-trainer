@@ -98,7 +98,7 @@ const SessionStateProjectionSchema = z.object({
 export const ProblemPathEvaluatorInputSchema = z.object({
   promptVersion: z.literal(PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION),
   outputSchemaVersion: z.literal(PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION),
-  evaluationMode: z.enum(['ASSESS_CORRECT_RATIONALE', 'DIAGNOSE_PATH']),
+  evaluationMode: z.enum(['ASSESS_SELECTION_RATIONALE', 'DIAGNOSE_PATH']),
   sessionState: SessionStateProjectionSchema,
   observations: z.array(ProjectedObservationSchema).min(1),
   basicGold: BasicProblemGoldSchema,
@@ -114,7 +114,7 @@ export const ProblemPathEvaluatorInputSchema = z.object({
   ),
 }).strict().superRefine((input, context) => {
   if (
-    input.evaluationMode === 'ASSESS_CORRECT_RATIONALE' &&
+    input.evaluationMode === 'ASSESS_SELECTION_RATIONALE' &&
     input.sessionState.phase !== 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
   ) {
     context.addIssue({ code: 'custom', path: ['sessionState', 'phase'], message: '정답 근거 판정 모드와 세션 단계가 일치하지 않는다.' });
@@ -126,7 +126,7 @@ export const ProblemPathEvaluatorInputSchema = z.object({
     context.addIssue({ code: 'custom', path: ['sessionState', 'phase'], message: '경로 진단 모드와 세션 단계가 일치하지 않는다.' });
   }
   if (
-    input.evaluationMode === 'ASSESS_CORRECT_RATIONALE' &&
+    input.evaluationMode === 'ASSESS_SELECTION_RATIONALE' &&
     input.allowedSupplementalInferences.length > 0
   ) {
     context.addIssue({ code: 'custom', path: ['allowedSupplementalInferences'], message: '정답 근거 사전 판정에는 보충 해설을 제공하지 않는다.' });
@@ -140,6 +140,122 @@ export const ProblemPathEvaluatorInputSchema = z.object({
 });
 
 export type ProblemPathEvaluatorInput = z.infer<typeof ProblemPathEvaluatorInputSchema>;
+
+export const BlindRationaleProviderInputSchema = z.object({
+  promptVersion: z.literal(PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION),
+  outputSchemaVersion: z.literal(PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION),
+  evaluationMode: z.literal('ASSESS_SELECTION_RATIONALE'),
+  rationaleReview: z.object({
+    stem: z.string().min(1),
+    stemPolarity: z.enum(['SELECT_CORRECT', 'SELECT_INCORRECT']),
+    targetOptionText: z.string().min(1),
+    studentRationale: z.object({
+      observationId: z.string().min(1),
+      text: z.string().min(1),
+    }).strict(),
+    sourceFacts: z.array(z.object({
+      ref: z.string().min(1),
+      kind: z.enum([
+        'PASSAGE_PROPOSITION',
+        'SCENARIO_FACT',
+        'VISUAL_ASSERTION',
+        'SOURCE_GROUNDED_INFERENCE',
+      ]),
+      text: z.string().min(1),
+    }).strict()),
+  }).strict(),
+}).strict();
+
+export type BlindRationaleProviderInput = z.infer<
+  typeof BlindRationaleProviderInputSchema
+>;
+
+/**
+ * 정답 근거 평가는 정답 키나 선지 판정 없이 발문·대상 선지·학생 근거와
+ * 출처 기반 사실만 공급자에게 보낸다. 내부 세션은 정오 판정을 위해 정답을
+ * 계속 보유하지만 이 projection 밖으로는 전달하지 않는다.
+ */
+export function projectProblemPathEvaluatorProviderInput(
+  inputValue: ProblemPathEvaluatorInput,
+): ProblemPathEvaluatorInput | BlindRationaleProviderInput {
+  const input = ProblemPathEvaluatorInputSchema.parse(inputValue);
+  if (input.evaluationMode === 'DIAGNOSE_PATH') return input;
+
+  const targetChoice = input.basicGold.choices.find(
+    (choice) => choice.choiceId === input.sessionState.currentChoiceId,
+  );
+  if (targetChoice === undefined) throw new Error('근거 평가 대상 선지를 찾을 수 없다.');
+  const initial = [...input.observations].reverse().find(
+    (observation) =>
+      observation.kind === 'INITIAL_SUBMISSION' &&
+      observation.selectedChoiceId === input.sessionState.currentChoiceId &&
+      observation.rationale !== null,
+  );
+  if (initial === undefined || initial.kind !== 'INITIAL_SUBMISSION' || initial.rationale === null) {
+    throw new Error('블라인드 근거 평가에 사용할 학생 근거가 없다.');
+  }
+
+  const requiredPropositionIds = new Set(
+    targetChoice.requiredReferences.flatMap((reference) => reference.propositionIds),
+  );
+  const requiredScenarioFactIds = new Set(targetChoice.scenarioFactIds);
+  const requiredVisualAssertionIds = new Set(targetChoice.visualAssertionIds);
+  const targetClaimIds = new Set(targetChoice.claimIds);
+  const sourceGroundedInferenceIds = new Set(
+    input.basicGold.optionClaims
+      .filter((claim) => targetClaimIds.has(claim.claimId))
+      .flatMap((claim) => claim.itemInferenceIds),
+  );
+
+  const sourceFacts: BlindRationaleProviderInput['rationaleReview']['sourceFacts'] = [
+    ...input.basicGold.passageDetailGold.propositions
+      .filter((proposition) => requiredPropositionIds.has(proposition.id))
+      .map((proposition) => ({
+        ref: proposition.id,
+        kind: 'PASSAGE_PROPOSITION' as const,
+        text: proposition.description,
+      })),
+    ...(input.basicGold.scenario?.facts ?? [])
+      .filter((fact) => requiredScenarioFactIds.has(fact.id))
+      .map((fact) => ({
+        ref: fact.id,
+        kind: 'SCENARIO_FACT' as const,
+        text: fact.description,
+      })),
+    ...input.basicGold.visualAssertions
+      .filter((assertion) => requiredVisualAssertionIds.has(assertion.id))
+      .map((assertion) => ({
+        ref: assertion.id,
+        kind: 'VISUAL_ASSERTION' as const,
+        text: assertion.description,
+      })),
+    ...input.basicGold.itemInferences
+      .filter((inference) =>
+        sourceGroundedInferenceIds.has(inference.inferenceId) &&
+        inference.grounding !== 'ANSWER_KEY_CONSTRAINED')
+      .map((inference) => ({
+        ref: inference.inferenceId,
+        kind: 'SOURCE_GROUNDED_INFERENCE' as const,
+        text: inference.description,
+      })),
+  ];
+
+  return BlindRationaleProviderInputSchema.parse({
+    promptVersion: input.promptVersion,
+    outputSchemaVersion: input.outputSchemaVersion,
+    evaluationMode: 'ASSESS_SELECTION_RATIONALE',
+    rationaleReview: {
+      stem: input.basicGold.stem,
+      stemPolarity: input.basicGold.stemPolarity,
+      targetOptionText: targetChoice.text,
+      studentRationale: {
+        observationId: initial.observationId,
+        text: initial.rationale,
+      },
+      sourceFacts,
+    },
+  });
+}
 
 export interface SupplementalAccessRequest {
   readonly reason: z.infer<typeof SupplementalAccessReasonSchema>;
@@ -303,7 +419,7 @@ export function createProblemPathEvaluatorInput(options: {
     if (handoff.passageId !== gold.passageId) throw new Error('문단 handoff와 문제 골드의 passageId가 일치하지 않는다.');
   }
   if (
-    options.evaluationMode === 'ASSESS_CORRECT_RATIONALE' &&
+    options.evaluationMode === 'ASSESS_SELECTION_RATIONALE' &&
     options.supplementalAccess !== undefined
   ) {
     throw new Error('정답 근거 사전 판정에는 보충 해설을 요청할 수 없다.');
@@ -423,10 +539,22 @@ export function validateProblemPathEvaluatorOutput(
   const basicGoldIds = allBasicGoldIds(input.basicGold);
 
   const allowedObservationIds = new Set(input.observations.map((item) => item.observationId));
-  if (output.mode === 'ASSESS_CORRECT_RATIONALE') {
+  if (output.mode === 'ASSESS_SELECTION_RATIONALE') {
     validateEvidenceAgainstInput(output.evidence, input);
-    if (output.goldRefs.some((id) => !basicGoldIds.has(id))) {
-      throw new Error('정답 근거 판정이 존재하지 않는 기본 골드를 참조한다.');
+    const providerInput = BlindRationaleProviderInputSchema.parse(
+      projectProblemPathEvaluatorProviderInput(input),
+    );
+    const requiredStance = providerInput.rationaleReview.stemPolarity === 'SELECT_INCORRECT'
+      ? 'REJECTS_OPTION'
+      : 'ACCEPTS_OPTION';
+    if (output.requiredStanceForSelection !== requiredStance) {
+      throw new Error('발문 극성에 필요한 선지 태도 판정이 일치하지 않는다.');
+    }
+    const allowedSourceRefs = new Set(
+      providerInput.rationaleReview.sourceFacts.map((fact) => fact.ref),
+    );
+    if (output.sourceRefs.some((id) => !allowedSourceRefs.has(id))) {
+      throw new Error('근거 판정이 공급자에게 제공되지 않은 출처 사실을 참조한다.');
     }
     return output;
   }

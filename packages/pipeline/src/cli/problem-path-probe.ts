@@ -96,7 +96,7 @@ for (const probe of selected) {
         session = submitProblemActionResponse(session, probe.followUpResponse);
       }
       const evaluationMode = session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
-        ? 'ASSESS_CORRECT_RATIONALE' as const
+        ? 'ASSESS_SELECTION_RATIONALE' as const
         : 'DIAGNOSE_PATH' as const;
       const input = createProblemPathEvaluatorInput({
         evaluationMode,

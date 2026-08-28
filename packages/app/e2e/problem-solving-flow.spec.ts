@@ -37,8 +37,8 @@ class FixedDiagnosticEvaluator implements ProblemPathEvaluator {
       rawOutput: structuredClone(rawDiagnostic),
       call: {
         provider: 'mock', model: 'fixed', effort: 'none',
-        promptVersion: 'path-diagnostic-prompt-v1',
-        schemaVersion: 'problem-path-evaluator-output-v1',
+        promptVersion: 'path-diagnostic-prompt-v2',
+        schemaVersion: 'problem-path-evaluator-output-v2',
         calledAt: '2026-08-27T00:00:00.000Z', durationMs: 1,
         attempts: [{ attempt: 1, outcome: 'success', durationMs: 1 }],
         usage: { inputTokens: 1, outputTokens: 1 },

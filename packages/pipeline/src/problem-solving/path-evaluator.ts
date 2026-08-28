@@ -12,14 +12,14 @@ import {
 } from './episode.js';
 
 export const PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION =
-  'problem-path-evaluator-output-v1' as const;
+  'problem-path-evaluator-output-v2' as const;
 export const PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION =
-  'path-diagnostic-prompt-v1' as const;
+  'path-diagnostic-prompt-v2' as const;
 
 export function loadProblemPathDiagnosticPrompt(): string {
   return readFileSync(resolve(
     process.cwd(),
-    'packages/pipeline/experiments/problem-solving/path-diagnostic-prompt-v1.md',
+    'packages/pipeline/experiments/problem-solving/path-diagnostic-prompt-v2.md',
   ), 'utf8').trim();
 }
 
@@ -608,29 +608,67 @@ export function resolveProblemPathEvaluatorIds(
   });
 }
 
-export const CorrectRationaleEvaluationOutputSchema = z.object({
+export const SelectionRationaleEvaluationOutputSchema = z.object({
   schemaVersion: z.literal(PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION),
-  mode: z.literal('ASSESS_CORRECT_RATIONALE'),
+  mode: z.literal('ASSESS_SELECTION_RATIONALE'),
+  optionStance: z.enum(['ACCEPTS_OPTION', 'REJECTS_OPTION', 'UNCLEAR']),
+  requiredStanceForSelection: z.enum(['ACCEPTS_OPTION', 'REJECTS_OPTION']),
+  stanceConsistency: z.enum(['CONSISTENT', 'CONFLICT', 'UNCLEAR']),
+  groundingAssessment: z.enum(['SUPPORTED', 'CONTRADICTED', 'NOT_ENOUGH_EVIDENCE']),
   assessment: z.enum(['SUPPORTED', 'UNCERTAIN', 'CLEAR_ERROR']),
   reason: z.string().min(1),
   evidence: z.array(EvaluatorEvidenceSchema).min(1),
-  goldRefs: z.array(z.string().min(1)),
+  sourceRefs: z.array(z.string().min(1)),
 }).strict().superRefine((output, context) => {
   if (!output.evidence.some((item) => item.kind === 'QUOTE')) {
     context.addIssue({ code: 'custom', path: ['evidence'], message: '정답 근거 판정에는 학생 근거 원문 인용이 필요하다.' });
   }
-  if (output.assessment === 'CLEAR_ERROR' && output.goldRefs.length === 0) {
-    context.addIssue({ code: 'custom', path: ['goldRefs'], message: '명백한 오류 판정에는 충돌하는 기본 골드 참조가 필요하다.' });
+  const expectedConsistency = output.optionStance === 'UNCLEAR'
+    ? 'UNCLEAR'
+    : output.optionStance === output.requiredStanceForSelection
+      ? 'CONSISTENT'
+      : 'CONFLICT';
+  if (output.stanceConsistency !== expectedConsistency) {
+    context.addIssue({ code: 'custom', path: ['stanceConsistency'], message: '선지에 대한 학생 태도와 선택에 필요한 태도의 일관성 판정이 맞지 않는다.' });
+  }
+  const clearError = output.stanceConsistency === 'CONFLICT' ||
+    output.groundingAssessment === 'CONTRADICTED';
+  if (clearError && output.assessment !== 'CLEAR_ERROR') {
+    context.addIssue({ code: 'custom', path: ['assessment'], message: '태도 충돌 또는 근거 사실 충돌은 CLEAR_ERROR여야 한다.' });
+  }
+  if (!clearError && output.assessment === 'CLEAR_ERROR') {
+    context.addIssue({ code: 'custom', path: ['assessment'], message: 'CLEAR_ERROR에는 태도 충돌 또는 근거 사실 충돌이 필요하다.' });
+  }
+  if (
+    output.assessment === 'SUPPORTED' &&
+    (
+      output.stanceConsistency !== 'CONSISTENT' ||
+      output.groundingAssessment !== 'SUPPORTED'
+    )
+  ) {
+    context.addIssue({ code: 'custom', path: ['assessment'], message: 'SUPPORTED에는 일관된 태도와 지지된 근거가 모두 필요하다.' });
+  }
+  if (
+    output.assessment === 'UNCERTAIN' &&
+    output.stanceConsistency === 'CONSISTENT' &&
+    output.groundingAssessment === 'SUPPORTED'
+  ) {
+    context.addIssue({ code: 'custom', path: ['assessment'], message: '태도와 근거가 모두 확인되면 UNCERTAIN일 수 없다.' });
+  }
+  if (output.groundingAssessment === 'CONTRADICTED' && output.sourceRefs.length === 0) {
+    context.addIssue({ code: 'custom', path: ['sourceRefs'], message: '사실 충돌 판정에는 충돌하는 출처 참조가 필요하다.' });
   }
 });
 
 export const ProblemPathEvaluatorOutputSchema = z.discriminatedUnion('mode', [
-  CorrectRationaleEvaluationOutputSchema,
+  SelectionRationaleEvaluationOutputSchema,
   ProblemPathDiagnosticOutputSchema,
 ]);
 
 export type EvaluatorEvidence = z.infer<typeof EvaluatorEvidenceSchema>;
 export type EvaluatorTargetSnapshot = z.infer<typeof EvaluatorTargetSnapshotSchema>;
 export type ProblemPathDiagnosticOutput = z.infer<typeof ProblemPathDiagnosticOutputSchema>;
-export type CorrectRationaleEvaluationOutput = z.infer<typeof CorrectRationaleEvaluationOutputSchema>;
+export type SelectionRationaleEvaluationOutput = z.infer<
+  typeof SelectionRationaleEvaluationOutputSchema
+>;
 export type ProblemPathEvaluatorOutput = z.infer<typeof ProblemPathEvaluatorOutputSchema>;

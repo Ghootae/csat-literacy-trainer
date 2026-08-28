@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 
 import { recordMetric, type CallMetric } from '../llm/client.js';
 import {
-  CorrectRationaleEvaluationOutputSchema,
+  SelectionRationaleEvaluationOutputSchema,
   PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION,
   PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION,
   ProblemPathDiagnosticOutputSchema,
@@ -13,6 +13,7 @@ import {
 } from './path-evaluator.js';
 import {
   ProblemPathEvaluatorInputSchema,
+  projectProblemPathEvaluatorProviderInput,
   validateProblemPathEvaluatorOutput,
   type ProblemPathEvaluatorInput,
 } from './path-evaluator-input.js';
@@ -84,8 +85,8 @@ class OpenAIProblemPathTransport implements ProblemPathEvaluatorTransport {
 
   async parse(options: Parameters<ProblemPathEvaluatorTransport['parse']>[0]): Promise<ParsedTransportResponse> {
     this.client ??= new OpenAI({ maxRetries: 0 });
-    const outputSchema = options.mode === 'ASSESS_CORRECT_RATIONALE'
-      ? CorrectRationaleEvaluationOutputSchema
+    const outputSchema = options.mode === 'ASSESS_SELECTION_RATIONALE'
+      ? SelectionRationaleEvaluationOutputSchema
       : ProblemPathDiagnosticOutputSchema;
     const response = await this.client.responses.create({
       model: options.model,
@@ -218,6 +219,7 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
 
   async evaluate(inputValue: ProblemPathEvaluatorInput): Promise<ProblemPathEvaluatorCall> {
     const input = ProblemPathEvaluatorInputSchema.parse(inputValue);
+    const providerInput = projectProblemPathEvaluatorProviderInput(input);
     const calledAt = this.now().toISOString();
     const started = performance.now();
     const attempts: ProblemPathEvaluatorCallMetadata['attempts'][number][] = [];
@@ -229,7 +231,7 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
           model: this.model,
           effort: this.effort,
           instructions: loadProblemPathDiagnosticPrompt(),
-          input: JSON.stringify(input),
+          input: JSON.stringify(providerInput),
           mode: input.evaluationMode,
           timeoutMs: this.timeoutMs,
         });

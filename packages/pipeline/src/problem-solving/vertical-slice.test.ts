@@ -34,7 +34,7 @@ function clearPhErrorOutput() {
     quote,
   }];
   return {
-    schemaVersion: 'problem-path-evaluator-output-v1' as const,
+    schemaVersion: 'problem-path-evaluator-output-v2' as const,
     mode: 'DIAGNOSE_PATH' as const,
     snapshotMode: 'FULL' as const,
     basedOnObservationIds: ['O1'],
@@ -116,7 +116,7 @@ function requestReselectionOutput() {
     quote: 'pH가 높아질수록 수소 이온 농도는 낮아집니다.',
   }];
   return {
-    schemaVersion: 'problem-path-evaluator-output-v1' as const,
+    schemaVersion: 'problem-path-evaluator-output-v2' as const,
     mode: 'DIAGNOSE_PATH' as const,
     snapshotMode: 'FULL' as const,
     basedOnObservationIds: ['O1', 'O2'],

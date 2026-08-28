@@ -8,7 +8,7 @@ export const ProblemPathProbeCaseSchema = z.object({
   followUpResponse: z.string().min(1).nullable(),
   variants: z.array(z.enum(['WITH_REPRESENTATIVE_PATHS', 'WITHOUT_REPRESENTATIVE_PATHS'])).min(1),
   expected: z.object({
-    modes: z.array(z.enum(['ASSESS_CORRECT_RATIONALE', 'DIAGNOSE_PATH'])).min(1),
+    modes: z.array(z.enum(['ASSESS_SELECTION_RATIONALE', 'DIAGNOSE_PATH'])).min(1),
     allowedActions: z.array(z.enum([
       'ASK_DIAGNOSTIC', 'ASK_CORRECTIVE', 'REQUEST_RESELECTION',
       'DIRECT_COACHING', 'EXPLAIN_ITEM_BOUNDARY', 'COMPLETE',
@@ -34,7 +34,19 @@ export const PROBLEM_PATH_PROBE_CASES: readonly ProblemPathProbeCase[] = [
     caseId: 'mrna-correct-wrong-rationale', description: '정답 선택과 잘못된 근거를 구분한다.',
     initialChoiceId: 'C5', rationale: 'pH가 높아지면 양전하가 더 강해져서 ⑤가 틀립니다.', followUpResponse: null,
     variants: ['WITH_REPRESENTATIVE_PATHS'],
-    expected: { modes: ['ASSESS_CORRECT_RATIONALE'], allowedActions: [], allowedAssessments: ['CLEAR_ERROR'], requireUnknown: false, forbidSupportedInference: false, forbidSupplementals: true, forbidAnswerChoiceInQuestion: true },
+    expected: { modes: ['ASSESS_SELECTION_RATIONALE'], allowedActions: [], allowedAssessments: ['CLEAR_ERROR'], requireUnknown: false, forbidSupportedInference: false, forbidSupplementals: true, forbidAnswerChoiceInQuestion: true },
+  },
+  {
+    caseId: 'mrna-correct-valid-rationale', description: '정답 정보 없이도 타당한 ⑤ 근거를 승인한다.',
+    initialChoiceId: 'C5', rationale: '⑤입니다. pH가 높아지면 이온화 지질이 중성이 되지만, 그것만으로 소수성이 약해져 더 작은 복합체가 된다고 볼 근거는 없습니다.', followUpResponse: null,
+    variants: ['WITH_REPRESENTATIVE_PATHS'],
+    expected: { modes: ['ASSESS_SELECTION_RATIONALE'], allowedActions: [], allowedAssessments: ['SUPPORTED'], requireUnknown: false, forbidSupportedInference: false, forbidSupplementals: true, forbidAnswerChoiceInQuestion: true },
+  },
+  {
+    caseId: 'mrna-correct-polarity-conflict', description: '부정 발문에서 선택 선지를 맞다고 승인한 P0 근거를 거부한다.',
+    initialChoiceId: 'C5', rationale: 'pH가 높아져 이온화 지질이 중성이 되면 소수성도 약해질 것 같으므로, 소수성 인력이 줄어 복합체 크기가 더 작아진다는 설명이 맞는 것 같습니다.', followUpResponse: null,
+    variants: ['WITH_REPRESENTATIVE_PATHS'],
+    expected: { modes: ['ASSESS_SELECTION_RATIONALE'], allowedActions: [], allowedAssessments: ['CLEAR_ERROR'], requireUnknown: false, forbidSupportedInference: false, forbidSupplementals: true, forbidAnswerChoiceInQuestion: true },
   },
   {
     caseId: 'mrna-c4-partly-correct', description: '정확한 일부 추론까지 오류로 처리하지 않는다.',
@@ -99,7 +111,7 @@ export function assessProblemPathProbe(
   const value = result as any;
   const failures: string[] = [];
   if (!probe.expected.modes.includes(value.mode)) failures.push('MODE');
-  if (value.mode === 'ASSESS_CORRECT_RATIONALE') {
+  if (value.mode === 'ASSESS_SELECTION_RATIONALE') {
     if (!probe.expected.allowedAssessments.includes(value.assessment)) failures.push('ASSESSMENT');
     return { passed: failures.length === 0, failures };
   }

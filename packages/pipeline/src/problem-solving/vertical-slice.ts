@@ -85,7 +85,7 @@ export async function runProblemVerticalSlice(options: {
   for (let sequence = 1; sequence <= testCase.maxEvaluatorTurns; sequence += 1) {
     if (session.phase === 'COMPLETED') break;
     const mode = session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
-      ? 'ASSESS_CORRECT_RATIONALE' as const
+      ? 'ASSESS_SELECTION_RATIONALE' as const
       : 'DIAGNOSE_PATH' as const;
     if (session.phase !== 'AWAITING_CORRECT_RATIONALE_ASSESSMENT' && session.phase !== 'AWAITING_EVALUATION') {
       throw new Error(`수직 슬라이스가 evaluator를 호출할 수 없는 상태다: ${session.phase}`);
@@ -98,7 +98,7 @@ export async function runProblemVerticalSlice(options: {
       includeRepresentativeWrongPaths: testCase.includeRepresentativeWrongPaths ?? true,
     });
     const evaluated = await options.evaluator.evaluate(input);
-    if (evaluated.result.mode === 'ASSESS_CORRECT_RATIONALE') {
+    if (evaluated.result.mode === 'ASSESS_SELECTION_RATIONALE') {
       session = applyCorrectRationaleAssessment(session, evaluated.result.assessment);
       trace.push({
         sequence,

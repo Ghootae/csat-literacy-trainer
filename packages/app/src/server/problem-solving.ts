@@ -190,7 +190,7 @@ export class ProblemSolvingController {
       ) return;
       const input = createProblemPathEvaluatorInput({
         evaluationMode: session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
-          ? 'ASSESS_CORRECT_RATIONALE'
+          ? 'ASSESS_SELECTION_RATIONALE'
           : 'DIAGNOSE_PATH',
         session,
         gold: runtime.gold,
@@ -199,7 +199,7 @@ export class ProblemSolvingController {
       });
       const evaluated = await this.evaluator.evaluate(input);
       runtime.evaluatorCalls.push(structuredClone(evaluated.call));
-      if (evaluated.result.mode === 'ASSESS_CORRECT_RATIONALE') {
+      if (evaluated.result.mode === 'ASSESS_SELECTION_RATIONALE') {
         runtime.session = applyCorrectRationaleAssessment(session, evaluated.result.assessment);
         continue;
       }
