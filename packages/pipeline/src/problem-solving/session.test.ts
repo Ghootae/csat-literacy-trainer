@@ -292,6 +292,7 @@ describe('pure problem solving session', () => {
     ) as any;
     correctiveTurn.turnId = 'T2';
     correctiveTurn.targetSnapshots[0].status = 'SUFFICIENT';
+    correctiveTurn.targetSnapshots[0].learningState = 'PATH_CLARIFIED';
     correctiveTurn.targetSnapshots[0].hypotheses[0].kind = 'STUDENT_ERROR';
     correctiveTurn.nextAction = {
       type: 'ASK_CORRECTIVE',
@@ -309,6 +310,8 @@ describe('pure problem solving session', () => {
     reselectionTurn.turnId = 'T3';
     reselectionTurn.activeTarget = null;
     reselectionTurn.basedOnObservationIds = ['O1', 'O2', 'O3'];
+    reselectionTurn.targetSnapshots[0].status = 'RESOLVED';
+    reselectionTurn.targetSnapshots[0].learningState = 'CORRECTED';
     reselectionTurn.nextAction = {
       type: 'REQUEST_RESELECTION',
       prompt: '방금 확인한 투입 비율의 통제 관계를 반영해 다시 선택해 주세요.',
@@ -317,6 +320,30 @@ describe('pure problem solving session', () => {
     const completed = submitProblemReselection(reselecting, { selectedChoiceId: 'C5' });
 
     expect(completed.result?.outcome).toBe('RESELECTION_CORRECT_UNVERIFIED');
+  });
+
+  it('진단 답변으로 경로만 명확해진 상태에서는 세션도 재선택을 허용하지 않는다', () => {
+    const diagnosticTurn = fixture('mrna-q19-c2-ambiguous-speed.json').turns[0];
+    const diagnosed = applyProblemEvaluatorTurn(wrongSession(), diagnosticTurn);
+    const diagnosticAnswer = submitProblemActionResponse(
+      diagnosed,
+      '속도를 계속 바꾼다는 뜻으로 이해했습니다.',
+    );
+    const pathClarified = structuredClone(
+      fixture('mrna-q19-c2-rational-challenge.json').turns[1],
+    ) as any;
+    pathClarified.turnId = 'T2';
+    pathClarified.targetSnapshots[0].status = 'SUFFICIENT';
+    pathClarified.targetSnapshots[0].learningState = 'PATH_CLARIFIED';
+    pathClarified.targetSnapshots[0].hypotheses[0].kind = 'STUDENT_ERROR';
+    pathClarified.activeTarget = null;
+    pathClarified.nextAction = {
+      type: 'REQUEST_RESELECTION',
+      prompt: '다시 선택해 주세요.',
+    };
+
+    expect(() => applyProblemEvaluatorTurn(diagnosticAnswer, pathClarified))
+      .toThrow(/PATH_CLARIFIED|실제 교정/);
   });
 
   it('표시된 질문이나 코칭 없이 학생 답변을 제출할 수 없다', () => {

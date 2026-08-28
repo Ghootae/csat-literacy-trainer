@@ -7,19 +7,20 @@ import {
   CandidateDivergenceLayerSchema,
 } from './gold.js';
 import {
+  DiagnosticLearningStateSchema,
   DiagnosticTargetKindSchema,
   TargetSufficiencySchema,
 } from './episode.js';
 
 export const PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION =
-  'problem-path-evaluator-output-v2' as const;
+  'problem-path-evaluator-output-v3' as const;
 export const PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION =
-  'path-diagnostic-prompt-v2' as const;
+  'path-diagnostic-prompt-v3' as const;
 
 export function loadProblemPathDiagnosticPrompt(): string {
   return readFileSync(resolve(
     process.cwd(),
-    'packages/pipeline/experiments/problem-solving/path-diagnostic-prompt-v2.md',
+    'packages/pipeline/experiments/problem-solving/path-diagnostic-prompt-v3.md',
   ), 'utf8').trim();
 }
 
@@ -202,6 +203,7 @@ const UnevaluatedTargetSnapshotSchema = z.object({
   kind: DiagnosticTargetKindSchema,
   choiceId: z.string().min(1),
   status: z.enum(['NOT_ASSESSED', 'NOT_DIRECTLY_DIAGNOSED']),
+  learningState: z.null(),
   errorAssessment: z.null(),
   pathSteps: z.array(EvaluatorPathStepSchema).max(0),
   hypotheses: z.array(EvaluatorHypothesisSchema).max(0),
@@ -217,6 +219,7 @@ const EvaluatedTargetSnapshotSchema = z.object({
     'RESOLVED',
     'BOUNDARY_CLARIFICATION_REQUIRED',
   ]),
+  learningState: DiagnosticLearningStateSchema,
   errorAssessment: TargetErrorAssessmentSchema,
   pathSteps: z.array(EvaluatorPathStepSchema).min(1),
   hypotheses: z.array(EvaluatorHypothesisSchema),
@@ -228,6 +231,51 @@ const EvaluatedTargetSnapshotSchema = z.object({
       code: 'custom',
       path: ['sufficiency', 'sufficient'],
       message: '타깃 상태와 충분성 판정이 일치하지 않는다.',
+    });
+  }
+  const allowedLearningStates: Record<string, readonly string[]> = {
+    INSUFFICIENT: ['PATH_UNCLEAR'],
+    SUFFICIENT: ['PATH_CLARIFIED'],
+    RESOLVED: ['CORRECTED', 'NO_ERROR_DETECTED'],
+    BOUNDARY_CLARIFICATION_REQUIRED: ['ITEM_BOUNDARY_CLARIFIED'],
+  };
+  if (
+    !allowedLearningStates[target.status]!.includes(target.learningState)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['learningState'],
+      message: '타깃 상태와 학습 진행 상태가 일치하지 않는다.',
+    });
+  }
+  if (
+    ['CORRECTED', 'NO_ERROR_DETECTED'].includes(target.learningState) &&
+    target.errorAssessment !== 'NO_ERROR_DETECTED'
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['errorAssessment'],
+      message: '교정 완료 또는 오류 없음 상태에는 NO_ERROR_DETECTED 판정이 필요하다.',
+    });
+  }
+  if (
+    target.learningState === 'PATH_CLARIFIED' &&
+    target.errorAssessment !== 'CLEAR_ERROR'
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['errorAssessment'],
+      message: 'PATH_CLARIFIED는 오류 경로가 확인됐지만 아직 수정되지 않은 CLEAR_ERROR 상태다.',
+    });
+  }
+  if (
+    target.learningState === 'CORRECTED' &&
+    !target.pathSteps.some((step) => step.relationToPrior === 'REVISES_PRIOR')
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['pathSteps'],
+      message: 'CORRECTED에는 학생 관찰로 확인된 REVISES_PRIOR 경로 단계가 필요하다.',
     });
   }
   if (
@@ -446,7 +494,7 @@ export const ProblemPathDiagnosticOutputSchema = z.object({
   }
 
   if (action.type === 'ASK_DIAGNOSTIC') {
-    if (active?.status !== 'INSUFFICIENT') {
+    if (active?.status !== 'INSUFFICIENT' || active.learningState !== 'PATH_UNCLEAR') {
       context.addIssue({ code: 'custom', path: ['nextActionCandidate'], message: '진단 질문은 불충분한 타깃에만 허용된다.' });
     }
     const activeHypotheses = hypothesesByTarget.get(action.target) ?? new Set();
@@ -462,6 +510,7 @@ export const ProblemPathDiagnosticOutputSchema = z.object({
     if (
       active === undefined ||
       active.status !== 'SUFFICIENT' ||
+      active.learningState !== 'PATH_CLARIFIED' ||
       active.errorAssessment !== 'CLEAR_ERROR'
     ) {
       context.addIssue({ code: 'custom', path: ['nextActionCandidate'], message: '교정 질문은 충분하고 명백한 오류인 타깃에만 허용된다.' });
@@ -481,6 +530,21 @@ export const ProblemPathDiagnosticOutputSchema = z.object({
       ].includes(active.errorAssessment ?? '')
     ) {
       context.addIssue({ code: 'custom', path: ['nextActionCandidate'], message: '문항 경계 설명에는 충분한 합리적 대안 또는 문항 한계 판정이 필요하다.' });
+    }
+  }
+  if (action.type === 'REQUEST_RESELECTION') {
+    const reselectionReady = output.targets.some(
+      (target) => target.status !== 'NOT_ASSESSED' &&
+        target.status !== 'NOT_DIRECTLY_DIAGNOSED' &&
+        target.learningState !== null &&
+        ['CORRECTED', 'ITEM_BOUNDARY_CLARIFIED'].includes(target.learningState),
+    );
+    if (!reselectionReady) {
+      context.addIssue({
+        code: 'custom',
+        path: ['nextActionCandidate'],
+        message: '경로 파악만으로 재선택할 수 없으며 실제 교정 또는 문항 경계 확인이 필요하다.',
+      });
     }
   }
   if (action.type === 'COMPLETE') {

@@ -420,7 +420,7 @@ type ProblemSolvingNextAction =
 - [x] 정답의 오류 근거에는 교정 질문을 한 번만 허용하고 실패 시 상세 코칭으로 종료한다.
 - [x] 1차·2차 오답마다 해당 선택에 대한 새 근거를 필수로 받는다.
 - [ ] 1차·2차 오답은 차수별 최대 두 번의 학생 대상 질문 기회를 가진다.
-- [ ] `PATH_CLARIFIED`와 `CORRECTED`를 구분하여 진단 답변만으로 재선택시키지 않는다.
+- [x] `PATH_CLARIFIED`와 `CORRECTED`를 구분하여 진단 답변만으로 재선택시키지 않는다.
 - [ ] 3차 정답의 근거가 오류이거나 3차 선택이 오답이면 상세 코칭과 정답 설명 후 종료한다.
 - [x] 시스템이 공개한 정답과 학생이 스스로 해결한 정답을 `answerRevealed`, `resolvedByStudent`로 구분한다.
 - [x] 선택 차수와 정답 근거 검증 수준을 결과 라벨과 감사 기록에 보존한다.
@@ -723,3 +723,15 @@ npm run test:e2e
 - 세션 저장 계약을 `problem-solving-session-v3`로 올렸다.
 - 타입 검사, 기존 결손 산출물 의존 테스트 1개를 제외한 회귀 테스트 563개와 격리 포트 브라우저 E2E 7개가 통과했다.
 - 최대 3회 선택, 오답 차수별 질문 기회, `PATH_CLARIFIED`와 `CORRECTED` 분리 및 3차 강제 종료는 아직 남아 있으므로 섹션 10은 `IN_PROGRESS`다.
+
+### 2026-08-29 — 오답 경로 파악과 실제 교정 상태 분리
+
+- 타깃별 `learningState`를 `PATH_UNCLEAR`, `PATH_CLARIFIED`, `CORRECTED`, `NO_ERROR_DETECTED`, `ITEM_BOUNDARY_CLARIFIED`로 구조화했다.
+- `PATH_CLARIFIED`는 최초 오류와 안전한 개입 지점만 확인된 상태이며 기존 표상이 유지되므로 `ASK_CORRECTIVE`만 가능하다. 이 상태에서 `REQUEST_RESELECTION`을 제안하면 evaluator 출력 계약과 세션 엔진이 모두 거부한다.
+- `CORRECTED`는 학생 원문에 근거한 `REVISES_PRIOR` 경로 단계와 현재 `NO_ERROR_DETECTED` 판정이 함께 있을 때만 허용한다. 질문 문구 반복이나 기존 생각의 재설명만으로는 교정으로 승격하지 않는다.
+- 문항 표현의 합리적 이의는 학생 오류 교정과 분리하여 `ITEM_BOUNDARY_CLARIFIED`로 보존한다.
+- 문제 진단 에피소드를 `problem-diagnostic-episode-v2`, evaluator 출력과 프롬프트를 각각 `problem-path-evaluator-output-v3`, `path-diagnostic-prompt-v3`, 세션을 `problem-solving-session-v4`로 올리고 모든 기대 fixture를 마이그레이션했다.
+- 실제 `gpt-5.6-terra / medium` mRNA ④ 수직 테스트에서 최초 판정은 `PATH_CLARIFIED → ASK_CORRECTIVE`, 학생의 수정 답변 뒤에는 `CORRECTED + REVISES_PRIOR + NO_ERROR_DETECTED → REQUEST_RESELECTION`으로 완료됐다.
+- 첫 실제 실행에서 모델이 과거 오류 이력 때문에 `CORRECTED + CLEAR_ERROR`를 함께 출력한 계약 오류를 발견했다. `errorAssessment`는 현재 표상 판정이며 과거 오류는 초기 경로와 기각 가설에 보존하도록 프롬프트를 명시한 뒤 재실행해 통과했다.
+- 타입 검사, 기존 결손 산출물 의존 테스트 1개를 제외한 회귀 테스트 565개와 격리 포트 브라우저 E2E 7개가 통과했다.
+- 최대 3회 선택, 1·2차 오답의 차수별 질문 기회와 3차 강제 종료는 아직 남아 있으므로 섹션 10은 `IN_PROGRESS`다.

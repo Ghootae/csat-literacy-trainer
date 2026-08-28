@@ -7,12 +7,20 @@ import {
 } from './gold.js';
 
 export const PROBLEM_DIAGNOSTIC_EPISODE_VERSION =
-  'problem-diagnostic-episode-v1' as const;
+  'problem-diagnostic-episode-v2' as const;
 
 export const DiagnosticTargetKindSchema = z.enum([
   'SELECTED_CHOICE',
   'MISSED_ANSWER',
   'ANSWER_RATIONALE',
+]);
+
+export const DiagnosticLearningStateSchema = z.enum([
+  'PATH_UNCLEAR',
+  'PATH_CLARIFIED',
+  'CORRECTED',
+  'NO_ERROR_DETECTED',
+  'ITEM_BOUNDARY_CLARIFIED',
 ]);
 
 export const DiagnosticEntryReasonSchema = z.enum([
@@ -78,6 +86,7 @@ export const DiagnosticTargetSnapshotSchema = z.object({
     'RESOLVED',
     'BOUNDARY_CLARIFICATION_REQUIRED',
   ]),
+  learningState: DiagnosticLearningStateSchema.nullable(),
   reconstructedPath: z.string().min(1).nullable(),
   hypotheses: z.array(DiagnosticHypothesisSchema),
   sufficiency: TargetSufficiencySchema.nullable(),
@@ -88,10 +97,14 @@ export const DiagnosticTargetSnapshotSchema = z.object({
   }
 
   if (['NOT_ASSESSED', 'NOT_DIRECTLY_DIAGNOSED'].includes(target.status)) {
-    if (target.sufficiency !== null || target.hypotheses.length > 0) {
+    if (
+      target.learningState !== null ||
+      target.sufficiency !== null ||
+      target.hypotheses.length > 0
+    ) {
       context.addIssue({
         code: 'custom',
-        message: '미평가 타깃에는 충분성이나 가설을 저장하지 않는다.',
+        message: '미평가 타깃에는 학습 상태, 충분성이나 가설을 저장하지 않는다.',
       });
     }
     return;
@@ -110,6 +123,22 @@ export const DiagnosticTargetSnapshotSchema = z.object({
     !target.sufficiency.sufficient
   ) {
     context.addIssue({ code: 'custom', path: ['status'], message: '충분하거나 해결된 타깃은 충분성 조건을 모두 충족해야 한다.' });
+  }
+  const allowedLearningStates: Record<string, readonly string[]> = {
+    INSUFFICIENT: ['PATH_UNCLEAR'],
+    SUFFICIENT: ['PATH_CLARIFIED'],
+    RESOLVED: ['CORRECTED', 'NO_ERROR_DETECTED'],
+    BOUNDARY_CLARIFICATION_REQUIRED: ['ITEM_BOUNDARY_CLARIFIED'],
+  };
+  if (
+    target.learningState === null ||
+    !allowedLearningStates[target.status]?.includes(target.learningState)
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['learningState'],
+      message: '타깃 상태와 학습 진행 상태가 일치하지 않는다.',
+    });
   }
 
   const activeSignatures = new Set(
@@ -249,6 +278,18 @@ export const DiagnosticTurnSchema = z.object({
   if (action.type === 'REQUEST_RESELECTION' || action.type === 'COMPLETE') {
     if (turn.activeTarget !== null) {
       context.addIssue({ code: 'custom', path: ['activeTarget'], message: '재선택과 완료 행동에는 활성 진단 타깃을 두지 않는다.' });
+    }
+    if (
+      action.type === 'REQUEST_RESELECTION' &&
+      !turn.targetSnapshots.some((target) =>
+        target.learningState === 'CORRECTED' ||
+        target.learningState === 'ITEM_BOUNDARY_CLARIFIED')
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['nextAction'],
+        message: 'PATH_CLARIFIED만으로 재선택할 수 없으며 실제 교정 또는 문항 경계 확인이 필요하다.',
+      });
     }
     return;
   }

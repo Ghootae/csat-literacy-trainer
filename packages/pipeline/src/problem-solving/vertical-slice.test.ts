@@ -34,7 +34,7 @@ function clearPhErrorOutput() {
     quote,
   }];
   return {
-    schemaVersion: 'problem-path-evaluator-output-v2' as const,
+    schemaVersion: 'problem-path-evaluator-output-v3' as const,
     mode: 'DIAGNOSE_PATH' as const,
     snapshotMode: 'FULL' as const,
     basedOnObservationIds: ['O1'],
@@ -42,6 +42,7 @@ function clearPhErrorOutput() {
       kind: 'SELECTED_CHOICE' as const,
       choiceId: 'C4',
       status: 'SUFFICIENT' as const,
+      learningState: 'PATH_CLARIFIED' as const,
       errorAssessment: 'CLEAR_ERROR' as const,
       pathSteps: [{
         identity: { existingId: null, localId: 'LS1' },
@@ -73,6 +74,7 @@ function clearPhErrorOutput() {
       kind: 'MISSED_ANSWER' as const,
       choiceId: 'C5',
       status: 'NOT_ASSESSED' as const,
+      learningState: null,
       errorAssessment: null,
       pathSteps: [] as [],
       hypotheses: [] as [],
@@ -116,7 +118,7 @@ function requestReselectionOutput() {
     quote: 'pH가 높아질수록 수소 이온 농도는 낮아집니다.',
   }];
   return {
-    schemaVersion: 'problem-path-evaluator-output-v2' as const,
+    schemaVersion: 'problem-path-evaluator-output-v3' as const,
     mode: 'DIAGNOSE_PATH' as const,
     snapshotMode: 'FULL' as const,
     basedOnObservationIds: ['O1', 'O2'],
@@ -124,6 +126,7 @@ function requestReselectionOutput() {
       kind: 'SELECTED_CHOICE' as const,
       choiceId: 'C4',
       status: 'RESOLVED' as const,
+      learningState: 'CORRECTED' as const,
       errorAssessment: 'NO_ERROR_DETECTED' as const,
       pathSteps: [{
         identity: { existingId: null, localId: 'LS1B' },
@@ -163,6 +166,7 @@ function requestReselectionOutput() {
       kind: 'MISSED_ANSWER' as const,
       choiceId: 'C5',
       status: 'NOT_DIRECTLY_DIAGNOSED' as const,
+      learningState: null,
       errorAssessment: null,
       pathSteps: [] as [],
       hypotheses: [] as [],

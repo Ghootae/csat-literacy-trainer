@@ -8,7 +8,7 @@ import {
 } from './episode.js';
 
 export const PROBLEM_SOLVING_SESSION_VERSION =
-  'problem-solving-session-v3' as const;
+  'problem-solving-session-v4' as const;
 
 const SessionObservationSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -377,6 +377,14 @@ export function applyProblemEvaluatorTurn(
     throw new Error('이미 처리한 evaluator 턴이다.');
   }
   validateTurnTargets(session, turn);
+  if (
+    turn.nextAction.type === 'REQUEST_RESELECTION' &&
+    !turn.targetSnapshots.some((target) =>
+      target.learningState === 'CORRECTED' ||
+      target.learningState === 'ITEM_BOUNDARY_CLARIFIED')
+  ) {
+    throw new Error('경로가 파악됐다는 이유만으로 재선택할 수 없으며 실제 교정이 확인되어야 한다.');
+  }
 
   if (session.entryReason === 'CORRECT_RATIONALE_REVIEW') {
     const correctiveQuestionsUsed = session.turns.filter(

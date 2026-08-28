@@ -70,6 +70,7 @@ describe('diagnostic turn v2 adapter', () => {
     });
     const boundary = structuredClone(rawOutput) as any;
     boundary.targets[0].status = 'BOUNDARY_CLARIFICATION_REQUIRED';
+    boundary.targets[0].learningState = 'ITEM_BOUNDARY_CLARIFIED';
     boundary.targets[0].errorAssessment = 'REASONABLE_ALTERNATIVE_INTERPRETATION';
     for (const dimension of [
       'choiceExplained', 'interventionPointLocalized',
@@ -96,7 +97,9 @@ describe('diagnostic turn v2 adapter', () => {
     });
     const reselection = structuredClone(rawOutput) as any;
     reselection.targets[0].status = 'RESOLVED';
+    reselection.targets[0].learningState = 'CORRECTED';
     reselection.targets[0].errorAssessment = 'NO_ERROR_DETECTED';
+    reselection.targets[0].pathSteps[0].relationToPrior = 'REVISES_PRIOR';
     for (const dimension of [
       'choiceExplained', 'interventionPointLocalized',
       'safeInterventionAvailable', 'actionRelevantAlternativesControlled',

@@ -113,7 +113,7 @@ function unknownStep() {
 
 function diagnosticOutput() {
   return {
-    schemaVersion: 'problem-path-evaluator-output-v2' as const,
+    schemaVersion: 'problem-path-evaluator-output-v3' as const,
     mode: 'DIAGNOSE_PATH' as const,
     snapshotMode: 'FULL' as const,
     basedOnObservationIds: ['O1'],
@@ -122,6 +122,7 @@ function diagnosticOutput() {
         kind: 'SELECTED_CHOICE' as const,
         choiceId: 'C2',
         status: 'INSUFFICIENT' as const,
+        learningState: 'PATH_UNCLEAR' as const,
         errorAssessment: 'UNCERTAIN' as const,
         pathSteps: [
           {
@@ -147,6 +148,7 @@ function diagnosticOutput() {
         kind: 'MISSED_ANSWER' as const,
         choiceId: 'C5',
         status: 'NOT_ASSESSED' as const,
+        learningState: null,
         errorAssessment: null,
         pathSteps: [] as [],
         hypotheses: [] as [],
@@ -221,6 +223,7 @@ describe('problem path evaluator contract', () => {
   it('충분하더라도 CLEAR_ERROR가 아니면 교정 질문을 거부한다', () => {
     const output = diagnosticOutput() as any;
     output.targets[0].status = 'SUFFICIENT';
+    output.targets[0].learningState = 'PATH_CLARIFIED';
     output.targets[0].errorAssessment = 'REASONABLE_ALTERNATIVE_INTERPRETATION';
     output.targets[0].sufficiency = sufficiency(true);
     output.nextActionCandidate = {
@@ -237,12 +240,13 @@ describe('problem path evaluator contract', () => {
       studentMessage: null,
       supplementalInferenceIds: [],
     };
-    expect(() => ProblemPathDiagnosticOutputSchema.parse(output)).toThrow(/명백한 오류/);
+    expect(() => ProblemPathDiagnosticOutputSchema.parse(output)).toThrow(/CLEAR_ERROR|명백한 오류/);
   });
 
   it('합리적 대안 해석에는 학생 교정과 분리된 문항 경계 설명을 허용한다', () => {
     const output = diagnosticOutput() as any;
     output.targets[0].status = 'BOUNDARY_CLARIFICATION_REQUIRED';
+    output.targets[0].learningState = 'ITEM_BOUNDARY_CLARIFIED';
     output.targets[0].errorAssessment = 'REASONABLE_ALTERNATIVE_INTERPRETATION';
     output.targets[0].sufficiency = sufficiency(true);
     output.nextActionCandidate = {
@@ -260,7 +264,9 @@ describe('problem path evaluator contract', () => {
   it('재선택 같은 전역 행동은 해결된 활성 타깃의 판단 맥락을 보존할 수 있다', () => {
     const output = diagnosticOutput() as any;
     output.targets[0].status = 'RESOLVED';
+    output.targets[0].learningState = 'CORRECTED';
     output.targets[0].errorAssessment = 'NO_ERROR_DETECTED';
+    output.targets[0].pathSteps[0].relationToPrior = 'REVISES_PRIOR';
     output.targets[0].sufficiency = sufficiency(true);
     output.diagnosticDecision.unresolvedStepRefs = [];
     output.nextActionCandidate = {
@@ -274,6 +280,26 @@ describe('problem path evaluator contract', () => {
 
     expect(ProblemPathDiagnosticOutputSchema.parse(output).activeTarget)
       .toBe('SELECTED_CHOICE');
+  });
+
+  it('오답 경로만 파악한 PATH_CLARIFIED 상태에서는 재선택을 거부한다', () => {
+    const output = diagnosticOutput() as any;
+    output.targets[0].status = 'SUFFICIENT';
+    output.targets[0].learningState = 'PATH_CLARIFIED';
+    output.targets[0].errorAssessment = 'CLEAR_ERROR';
+    output.targets[0].sufficiency = sufficiency(true);
+    output.diagnosticDecision.unresolvedStepRefs = [];
+    output.nextActionCandidate = {
+      type: 'REQUEST_RESELECTION',
+      target: null,
+      questionIntent: null,
+      questionText: null,
+      studentMessage: '다시 선택해 주세요.',
+      supplementalInferenceIds: [],
+    };
+
+    expect(() => ProblemPathDiagnosticOutputSchema.parse(output))
+      .toThrow(/경로 파악만으로 재선택/);
   });
 
   it('기존 ID와 호출 로컬 ID를 동시에 만들지 못한다', () => {
@@ -444,7 +470,7 @@ describe('problem path evaluator input projection', () => {
       gold,
     });
     const output = {
-      schemaVersion: 'problem-path-evaluator-output-v2',
+      schemaVersion: 'problem-path-evaluator-output-v3',
       mode: 'ASSESS_SELECTION_RATIONALE',
       optionStance: 'REJECTS_OPTION',
       requiredStanceForSelection: 'REJECTS_OPTION',
@@ -514,7 +540,7 @@ describe('problem path evaluator input projection', () => {
       evaluationMode: 'ASSESS_SELECTION_RATIONALE', session, gold,
     });
     const output = {
-      schemaVersion: 'problem-path-evaluator-output-v2',
+      schemaVersion: 'problem-path-evaluator-output-v3',
       mode: 'ASSESS_SELECTION_RATIONALE',
       optionStance: 'ACCEPTS_OPTION',
       requiredStanceForSelection: 'REJECTS_OPTION',
@@ -602,8 +628,8 @@ describe('problem path evaluator runtime boundary', () => {
     const call = await evaluator.evaluate(evaluatorInput());
 
     expect(call.call).toEqual(expect.objectContaining({
-      promptVersion: 'path-diagnostic-prompt-v2',
-      schemaVersion: 'problem-path-evaluator-output-v2',
+      promptVersion: 'path-diagnostic-prompt-v3',
+      schemaVersion: 'problem-path-evaluator-output-v3',
       usage: { inputTokens: 120, outputTokens: 80 },
     }));
     expect(call.rawOutput).toEqual(diagnosticOutput());
@@ -625,7 +651,7 @@ describe('problem path evaluator runtime boundary', () => {
         transportedInput = options.input;
         return {
           outputParsed: {
-            schemaVersion: 'problem-path-evaluator-output-v2',
+            schemaVersion: 'problem-path-evaluator-output-v3',
             mode: 'ASSESS_SELECTION_RATIONALE',
             optionStance: 'REJECTS_OPTION',
             requiredStanceForSelection: 'REJECTS_OPTION',

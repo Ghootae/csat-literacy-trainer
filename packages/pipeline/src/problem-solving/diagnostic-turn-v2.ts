@@ -78,6 +78,7 @@ function targetSnapshot(target: EvaluatorTargetSnapshot) {
       kind: target.kind,
       choiceId: target.choiceId,
       status: target.status,
+      learningState: null,
       reconstructedPath: null,
       hypotheses: [],
       sufficiency: null,
@@ -87,6 +88,7 @@ function targetSnapshot(target: EvaluatorTargetSnapshot) {
     kind: target.kind,
     choiceId: target.choiceId,
     status: target.status,
+    learningState: target.learningState,
     reconstructedPath: target.pathSteps
       .map((step) => `[${step.epistemicStatus}] ${step.content}`)
       .join(' → '),
