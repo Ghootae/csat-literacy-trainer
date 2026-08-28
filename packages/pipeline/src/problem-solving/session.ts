@@ -8,7 +8,7 @@ import {
 } from './episode.js';
 
 export const PROBLEM_SOLVING_SESSION_VERSION =
-  'problem-solving-session-v1' as const;
+  'problem-solving-session-v2' as const;
 
 const SessionObservationSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -54,11 +54,16 @@ const SessionResultSchema = z.object({
     'CORRECTIVE_QUESTION_CORRECTION',
     'DIAGNOSTIC_THEN_CORRECTION',
     'DIRECT_COACHING_CORRECTION',
+    'RATIONALE_CORRECTED',
+    'RESELECTION_CORRECT_VERIFIED',
+    'RESELECTION_CORRECT_UNVERIFIED',
+    'RESELECTION_RATIONALE_CORRECTED',
     'UNRESOLVED',
   ]),
   finalChoiceId: z.string().min(1),
   correct: z.boolean(),
   initialChoiceWasCorrect: z.boolean(),
+  selectionAttempt: z.number().int().positive(),
   rationaleAssessment: z.enum(['NOT_PROVIDED', 'SUPPORTED', 'UNCERTAIN', 'CLEAR_ERROR']),
 });
 
@@ -88,7 +93,9 @@ export const ProblemSolvingSessionSchema = z.object({
   pendingCorrectOutcome: z.enum([
     'SUPPORTED_RATIONALE_CORRECT',
     'EXTERNALIZATION_CORRECTION',
+    'RESELECTION_CORRECT_VERIFIED',
   ]).nullable(),
+  selectionAttempt: z.number().int().nonnegative(),
   limits: z.object({
     maxDiagnosticQuestions: z.number().int().positive(),
     diagnosticQuestionsUsed: z.number().int().nonnegative(),
@@ -160,6 +167,7 @@ function complete(
       finalChoiceId: latestChoiceId,
       correct: latestChoiceId === session.answerChoiceId,
       initialChoiceWasCorrect: session.initialChoiceId === session.answerChoiceId,
+      selectionAttempt: session.selectionAttempt,
       rationaleAssessment,
     },
   });
@@ -168,6 +176,11 @@ function complete(
 function completedCorrectionOutcome(
   session: ProblemSolvingSession,
 ): NonNullable<ProblemSolvingSession['result']>['outcome'] {
+  if (session.entryReason === 'CORRECT_RATIONALE_REVIEW') {
+    return session.selectionAttempt > 1
+      ? 'RESELECTION_RATIONALE_CORRECTED'
+      : 'RATIONALE_CORRECTED';
+  }
   if (session.turns.some((turn) => turn.nextAction.type === 'DIRECT_COACHING')) {
     return 'DIRECT_COACHING_CORRECTION';
   }
@@ -197,6 +210,7 @@ export function createProblemSolvingSession(input: {
     initialChoiceId: null,
     rationaleAssessment: null,
     pendingCorrectOutcome: null,
+    selectionAttempt: 0,
     limits: {
       maxDiagnosticQuestions: input.maxDiagnosticQuestions ?? 2,
       diagnosticQuestionsUsed: 0,
@@ -237,6 +251,7 @@ export function submitInitialProblemResponse(
   });
   const base = parsed({
     ...session,
+    selectionAttempt: 1,
     initialChoiceId: input.initialChoiceId,
     latestChoiceId: submittedChoiceId,
     observations: [observation],
@@ -287,7 +302,9 @@ export function applyCorrectRationaleAssessment(
       assessed,
       session.pendingCorrectOutcome === 'EXTERNALIZATION_CORRECTION'
         ? 'EXTERNALIZATION_CORRECTION'
-        : 'UNVERIFIED_RATIONALE_CORRECT',
+        : session.pendingCorrectOutcome === 'RESELECTION_CORRECT_VERIFIED'
+          ? 'RESELECTION_CORRECT_UNVERIFIED'
+          : 'UNVERIFIED_RATIONALE_CORRECT',
       'UNCERTAIN',
     );
   }
@@ -430,39 +447,44 @@ export function submitProblemActionResponse(
 
 export function submitProblemReselection(
   session: ProblemSolvingSession,
-  input: { selectedChoiceId: string; rawResponse?: string },
+  input: {
+    selectedChoiceId: string;
+    rationale?: string | null;
+  },
 ): ProblemSolvingSession {
   assertPhase(session, 'AWAITING_RESELECTION');
   if (session.pendingAction?.type !== 'REQUEST_RESELECTION') {
     throw new Error('재선택 요청이 없다.');
+  }
+  const rationale = input.rationale?.trim() || null;
+  const correct = input.selectedChoiceId === session.answerChoiceId;
+  if (!correct && rationale === null) {
+    throw new Error('재선택한 오답에는 새로운 선택 근거가 필요하다.');
   }
   const observation = SessionObservationSchema.parse({
     observationId: `O${session.observations.length + 1}`,
     kind: 'RESELECTION',
     inReplyToTurnId: session.turns.at(-1)!.turnId,
     selectedChoiceId: input.selectedChoiceId,
-    rawResponse: input.rawResponse ?? input.selectedChoiceId,
+    rawResponse: rationale ?? input.selectedChoiceId,
   });
-  const updated = parsed({
+  const base = parsed({
     ...session,
+    selectionAttempt: session.selectionAttempt + 1,
     latestChoiceId: input.selectedChoiceId,
     pendingAction: null,
     observations: [...session.observations, observation],
-    phase: input.selectedChoiceId === session.answerChoiceId
-      ? 'COMPLETED'
+    phase: correct && rationale !== null
+      ? 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
       : 'AWAITING_EVALUATION',
-    entryReason: input.selectedChoiceId === session.answerChoiceId
-      ? session.entryReason
-      : 'WRONG_CHOICE',
-    result: input.selectedChoiceId === session.answerChoiceId
-      ? {
-          outcome: completedCorrectionOutcome(session),
-          finalChoiceId: input.selectedChoiceId,
-          correct: true,
-          initialChoiceWasCorrect: session.initialChoiceId === session.answerChoiceId,
-          rationaleAssessment: session.rationaleAssessment ?? 'NOT_PROVIDED',
-        }
+    entryReason: correct ? session.entryReason : 'WRONG_CHOICE',
+    rationaleAssessment: correct && rationale !== null ? null : session.rationaleAssessment,
+    pendingCorrectOutcome: correct && rationale !== null
+      ? 'RESELECTION_CORRECT_VERIFIED'
       : null,
+    result: null,
   });
-  return updated;
+  if (!correct) return base;
+  if (rationale !== null) return base;
+  return complete(base, 'RESELECTION_CORRECT_UNVERIFIED', 'NOT_PROVIDED');
 }

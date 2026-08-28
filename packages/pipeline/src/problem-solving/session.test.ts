@@ -49,6 +49,7 @@ describe('pure problem solving session', () => {
     expect(session.result).toEqual(expect.objectContaining({
       outcome: 'INDEPENDENT_CORRECT',
       correct: true,
+      selectionAttempt: 1,
       rationaleAssessment: 'NOT_PROVIDED',
     }));
   });
@@ -175,7 +176,11 @@ describe('pure problem solving session', () => {
     const reselecting = applyProblemEvaluatorTurn(acknowledged, reselectionTurn);
     const completed = submitProblemReselection(reselecting, { selectedChoiceId: 'C5' });
 
-    expect(completed.result?.outcome).toBe('DIRECT_COACHING_CORRECTION');
+    expect(completed.result).toEqual(expect.objectContaining({
+      outcome: 'RESELECTION_CORRECT_UNVERIFIED',
+      selectionAttempt: 2,
+      rationaleAssessment: 'NOT_PROVIDED',
+    }));
     expect(completed.phase).toBe('COMPLETED');
   });
 
@@ -215,7 +220,7 @@ describe('pure problem solving session', () => {
     const reselecting = applyProblemEvaluatorTurn(corrected, reselectionTurn);
     const completed = submitProblemReselection(reselecting, { selectedChoiceId: 'C5' });
 
-    expect(completed.result?.outcome).toBe('DIAGNOSTIC_THEN_CORRECTION');
+    expect(completed.result?.outcome).toBe('RESELECTION_CORRECT_UNVERIFIED');
   });
 
   it('표시된 질문이나 코칭 없이 학생 답변을 제출할 수 없다', () => {
@@ -241,8 +246,61 @@ describe('pure problem solving session', () => {
     expect(completed.result).toEqual(expect.objectContaining({
       finalChoiceId: 'C5',
       correct: true,
-      outcome: 'CORRECTIVE_QUESTION_CORRECTION',
+      outcome: 'RESELECTION_CORRECT_UNVERIFIED',
+      selectionAttempt: 2,
+      rationaleAssessment: 'NOT_PROVIDED',
     }));
+  });
+
+  it('재선택 정답에 근거를 쓰면 블라인드 평가를 기다리고 검증된 정답으로 종료한다', () => {
+    const correctiveTurn = fixture('mrna-q19-c4-completed.json').turns[0];
+    const initial = submitInitialProblemResponse(fresh(), {
+      initialChoiceId: 'C4',
+      rationale: 'pH가 높으면 수소 이온도 많아진다고 생각했습니다.',
+    });
+    const asking = applyProblemEvaluatorTurn(initial, correctiveTurn);
+    const answered = submitProblemActionResponse(asking, 'pH가 높으면 수소 이온은 감소합니다.');
+    const reselectionTurn = fixture('mrna-q19-c4-completed.json').turns[1];
+    const reselecting = applyProblemEvaluatorTurn(answered, reselectionTurn);
+    const awaitingAssessment = submitProblemReselection(reselecting, {
+      selectedChoiceId: 'C5',
+      rationale: 'pH 상승 뒤 소수성이 약해진다는 연결은 지문의 관계와 맞지 않습니다.',
+    });
+    const completed = applyCorrectRationaleAssessment(awaitingAssessment, 'SUPPORTED');
+
+    expect(awaitingAssessment.phase).toBe('AWAITING_CORRECT_RATIONALE_ASSESSMENT');
+    expect(awaitingAssessment.observations.at(-1)).toEqual(expect.objectContaining({
+      kind: 'RESELECTION',
+      selectedChoiceId: 'C5',
+      rawResponse: 'pH 상승 뒤 소수성이 약해진다는 연결은 지문의 관계와 맞지 않습니다.',
+    }));
+    expect(completed.result).toEqual(expect.objectContaining({
+      outcome: 'RESELECTION_CORRECT_VERIFIED',
+      selectionAttempt: 2,
+      rationaleAssessment: 'SUPPORTED',
+    }));
+  });
+
+  it('재선택 정답 근거가 명백히 틀리면 정답만으로 종료하지 않고 근거 진단으로 진입한다', () => {
+    const correctiveTurn = fixture('mrna-q19-c4-completed.json').turns[0];
+    const initial = submitInitialProblemResponse(fresh(), {
+      initialChoiceId: 'C4',
+      rationale: 'pH가 높으면 수소 이온도 많아진다고 생각했습니다.',
+    });
+    const asking = applyProblemEvaluatorTurn(initial, correctiveTurn);
+    const answered = submitProblemActionResponse(asking, '관계를 다시 확인했습니다.');
+    const reselectionTurn = fixture('mrna-q19-c4-completed.json').turns[1];
+    const reselecting = applyProblemEvaluatorTurn(answered, reselectionTurn);
+    const awaitingAssessment = submitProblemReselection(reselecting, {
+      selectedChoiceId: 'C5',
+      rationale: 'pH가 높아지면 양전하가 더 강해지기 때문에 ⑤가 틀립니다.',
+    });
+    const diagnostic = applyCorrectRationaleAssessment(awaitingAssessment, 'CLEAR_ERROR');
+
+    expect(diagnostic.phase).toBe('AWAITING_EVALUATION');
+    expect(diagnostic.entryReason).toBe('CORRECT_RATIONALE_REVIEW');
+    expect(diagnostic.selectionAttempt).toBe(2);
+    expect(diagnostic.result).toBeNull();
   });
 
   it('재오답이면 새 선택을 기준으로 다시 평가를 기다린다', () => {
@@ -255,11 +313,34 @@ describe('pure problem solving session', () => {
     const answered = submitProblemActionResponse(asking, '관계를 다시 확인했습니다.');
     const reselectionTurn = fixture('mrna-q19-c4-completed.json').turns[1];
     const reselecting = applyProblemEvaluatorTurn(answered, reselectionTurn);
-    const wrongAgain = submitProblemReselection(reselecting, { selectedChoiceId: 'C3' });
+    const wrongAgain = submitProblemReselection(reselecting, {
+      selectedChoiceId: 'C3',
+      rationale: '그림에서 두 물질이 합쳐지는 위치가 분해 지점처럼 보였습니다.',
+    });
 
     expect(wrongAgain.phase).toBe('AWAITING_EVALUATION');
     expect(wrongAgain.latestChoiceId).toBe('C3');
     expect(wrongAgain.result).toBeNull();
+    expect(wrongAgain.observations.at(-1)).toEqual(expect.objectContaining({
+      rawResponse: '그림에서 두 물질이 합쳐지는 위치가 분해 지점처럼 보였습니다.',
+    }));
+  });
+
+  it('재선택한 오답에는 새로운 선택 근거를 요구한다', () => {
+    const correctiveTurn = fixture('mrna-q19-c4-completed.json').turns[0];
+    const initial = submitInitialProblemResponse(fresh(), {
+      initialChoiceId: 'C4',
+      rationale: 'pH가 높으면 수소 이온도 많아집니다.',
+    });
+    const asking = applyProblemEvaluatorTurn(initial, correctiveTurn);
+    const answered = submitProblemActionResponse(asking, '관계를 다시 확인했습니다.');
+    const reselecting = applyProblemEvaluatorTurn(
+      answered,
+      fixture('mrna-q19-c4-completed.json').turns[1],
+    );
+
+    expect(() => submitProblemReselection(reselecting, { selectedChoiceId: 'C3' }))
+      .toThrow(/새로운 선택 근거/);
   });
 
   it('현재 선택이 오답이면 evaluator의 COMPLETE 제안을 거부한다', () => {

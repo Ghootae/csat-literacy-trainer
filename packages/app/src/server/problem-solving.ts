@@ -159,8 +159,13 @@ export class ProblemSolvingController {
     const session = this.requireProblemSession(runtime);
     if (input.type === 'RESELECT') {
       this.assertChoice(runtime, input.choiceId);
-      runtime.session = submitProblemReselection(session, { selectedChoiceId: input.choiceId });
+      const rationale = input.rationale?.trim() || null;
+      runtime.session = submitProblemReselection(session, {
+        selectedChoiceId: input.choiceId,
+        rationale,
+      });
       this.addStudent(runtime, 'RESELECTION', input.choiceId);
+      if (rationale !== null) this.addStudent(runtime, 'RATIONALE', rationale);
     } else {
       const text = input.text.trim();
       if (text === '') throw new Error('응답을 입력해 주세요.');
@@ -280,6 +285,8 @@ export class ProblemSolvingController {
             correct: session.result.correct,
             finalChoiceId: session.result.finalChoiceId,
             outcome: session.result.outcome,
+            selectionAttempt: session.result.selectionAttempt,
+            rationaleAssessment: session.result.rationaleAssessment,
           },
     };
   }

@@ -121,6 +121,8 @@ const ProblemSessionViewSchema = z.object({
     correct: z.boolean(),
     finalChoiceId: z.string().min(1),
     outcome: z.string().min(1),
+    selectionAttempt: z.number().int().positive(),
+    rationaleAssessment: z.enum(['NOT_PROVIDED', 'SUPPORTED', 'UNCERTAIN', 'CLEAR_ERROR']),
   }).nullable(),
 }).passthrough();
 
@@ -237,7 +239,9 @@ export async function runHeadlessPilotCase(options: {
       next = await options.api.submitRationale(view.sessionId, decision.text!.trim());
     } else if (actionKind === 'RESELECTION') {
       next = await options.api.respond(view.sessionId, {
-        type: 'RESELECT', choiceId: decision.choiceId,
+        type: 'RESELECT',
+        choiceId: decision.choiceId,
+        ...(decision.text?.trim() ? { rationale: decision.text.trim() } : {}),
       });
     } else {
       next = await options.api.respond(view.sessionId, {

@@ -193,6 +193,7 @@ test('오답은 근거를 받은 뒤 내부 스냅샷 없이 확인 질문 하�
 
 test('직접 코칭 확인 응답 뒤 새로고침 없이 재선택 선지가 활성화된다', async ({ page }) => {
   let coachingView: ProblemSessionView | null = null;
+  let receivedReselectionRationale: string | null = null;
   await page.route(/\/api\/problem\/session\/[^/]+\/initial$/, async (route) => {
     const response = await route.fetch();
     const original = await response.json() as ProblemSessionView;
@@ -210,6 +211,29 @@ test('직접 코칭 확인 응답 뒤 새로고침 없이 재선택 선지가 �
   });
   await page.route(/\/api\/problem\/session\/[^/]+\/respond$/, async (route) => {
     if (coachingView === null) throw new Error('직접 코칭 화면이 먼저 생성되어야 한다.');
+    const body = route.request().postDataJSON() as { type: string; rationale?: string };
+    if (body.type === 'RESELECT') {
+      receivedReselectionRationale = body.rationale ?? null;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...coachingView,
+          phase: 'COMPLETED',
+          selectedChoiceId: 'C5',
+          action: null,
+          reselectionPrompt: null,
+          result: {
+            correct: true,
+            finalChoiceId: 'C5',
+            outcome: 'RESELECTION_CORRECT_VERIFIED',
+            selectionAttempt: 2,
+            rationaleAssessment: 'SUPPORTED',
+          },
+        } satisfies ProblemSessionView),
+      });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -233,4 +257,8 @@ test('직접 코칭 확인 응답 뒤 새로고침 없이 재선택 선지가 �
   await expect(page.getByRole('radio').first()).toBeEnabled();
   await page.getByText(/^5$/).click();
   await expect(page.getByRole('button', { name: '다시 선택' })).toBeEnabled();
+  await page.getByLabel('바꾼 이유 (선택 사항)').fill('pH 변화와 소수성 약화의 연결이 맞지 않습니다.');
+  await page.getByRole('button', { name: '다시 선택' }).click();
+  await expect(page.getByText('최종 근거 검증: SUPPORTED')).toBeVisible();
+  expect(receivedReselectionRationale).toBe('pH 변화와 소수성 약화의 연결이 맞지 않습니다.');
 });

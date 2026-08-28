@@ -219,7 +219,9 @@ describe('problem-solving vertical slice', () => {
     expect(result.finalSession.result).toEqual(expect.objectContaining({
       correct: true,
       finalChoiceId: 'C5',
-      outcome: 'CORRECTIVE_QUESTION_CORRECTION',
+      outcome: 'RESELECTION_CORRECT_UNVERIFIED',
+      selectionAttempt: 2,
+      rationaleAssessment: 'NOT_PROVIDED',
     }));
     expect(result.trace.map((entry) => entry.evaluatorResult.mode === 'DIAGNOSE_PATH'
       ? entry.evaluatorResult.nextActionCandidate.type

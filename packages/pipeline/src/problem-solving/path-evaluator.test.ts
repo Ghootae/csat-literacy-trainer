@@ -24,8 +24,11 @@ import {
 } from './path-evaluator-runtime.js';
 import {
   applyCorrectRationaleAssessment,
+  applyProblemEvaluatorTurn,
   createProblemSolvingSession,
   submitInitialProblemResponse,
+  submitProblemActionResponse,
+  submitProblemReselection,
 } from './session.js';
 
 const gold = JSON.parse(readFileSync(resolve(
@@ -53,6 +56,24 @@ function correctRationaleSession() {
   return submitInitialProblemResponse(fresh(), {
     initialChoiceId: 'C5',
     rationale: 'pH가 높아지면 양전하가 더 강해져서 ⑤가 틀립니다.',
+  });
+}
+
+function reselectedCorrectRationaleSession() {
+  const fixture = JSON.parse(readFileSync(resolve(
+    process.cwd(),
+    'packages/pipeline/fixtures/experiments/problem-solving/episodes/mrna-q19-c4-completed.json',
+  ), 'utf8')) as { turns: unknown[] };
+  const initial = submitInitialProblemResponse(fresh(), {
+    initialChoiceId: 'C4',
+    rationale: 'pH가 높으면 수소 이온도 많아진다고 생각했습니다.',
+  });
+  const asking = applyProblemEvaluatorTurn(initial, fixture.turns[0]);
+  const answered = submitProblemActionResponse(asking, 'pH가 높으면 수소 이온 농도는 낮아집니다.');
+  const reselecting = applyProblemEvaluatorTurn(answered, fixture.turns[1]);
+  return submitProblemReselection(reselecting, {
+    selectedChoiceId: 'C5',
+    rationale: 'pH가 높아진 뒤 소수성이 약해진다는 연결이 지문의 관계와 맞지 않습니다.',
   });
 }
 
@@ -404,6 +425,24 @@ describe('problem path evaluator input projection', () => {
       expect(providerInput.rationaleReview.sourceFacts.map((fact) => fact.ref))
         .toEqual(expect.arrayContaining(['MP1', 'MP4', 'SF4']));
     }
+  });
+
+  it('재선택 정답 근거도 선택 ID가 아닌 원문을 블라인드 평가 근거로 투영한다', () => {
+    const input = createProblemPathEvaluatorInput({
+      evaluationMode: 'ASSESS_SELECTION_RATIONALE',
+      session: reselectedCorrectRationaleSession(),
+      gold,
+    });
+    const providerInput = projectProblemPathEvaluatorProviderInput(input);
+
+    expect(providerInput.evaluationMode).toBe('ASSESS_SELECTION_RATIONALE');
+    if (providerInput.evaluationMode === 'ASSESS_SELECTION_RATIONALE') {
+      expect(providerInput.rationaleReview.studentRationale).toEqual(expect.objectContaining({
+        sourceField: 'rawResponse',
+        text: 'pH가 높아진 뒤 소수성이 약해진다는 연결이 지문의 관계와 맞지 않습니다.',
+      }));
+    }
+    expect(JSON.stringify(providerInput)).not.toContain('answerChoiceId');
   });
 
   it('부정 발문에서 선택 선지를 맞다고 승인한 근거를 CLEAR_ERROR로 강제한다', () => {

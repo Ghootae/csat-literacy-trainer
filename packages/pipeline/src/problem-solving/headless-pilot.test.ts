@@ -33,7 +33,14 @@ describe('headless problem pilot', () => {
       async submitRationale() { throw new Error('호출되지 않아야 한다.'); },
       async respond(_sessionId, body: any) {
         if (body.type === 'TEXT') return { view: view('AWAITING_RESELECTION', { reselectionPrompt: '다시 선택하세요.' }), durationMs: 3 };
-        return { view: view('COMPLETED', { selectedChoiceId: 'C5', result: { correct: true, finalChoiceId: 'C5', outcome: 'CORRECTIVE_QUESTION_CORRECTION' } }), durationMs: 1 };
+        expect(body.rationale).toBe('처음 근거입니다.');
+        return { view: view('COMPLETED', { selectedChoiceId: 'C5', result: {
+          correct: true,
+          finalChoiceId: 'C5',
+          outcome: 'RESELECTION_CORRECT_VERIFIED',
+          selectionAttempt: 2,
+          rationaleAssessment: 'SUPPORTED',
+        } }), durationMs: 1 };
       },
     };
     const student: HeadlessStudentRole = {

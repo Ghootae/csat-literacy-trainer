@@ -21,7 +21,7 @@
 
 - `stem`, `stemPolarity`
 - 익명화된 `targetOptionText`
-- `studentRationale` 원문과 관찰 ID
+- `studentRationale` 원문, 관찰 ID와 인용에 사용할 `sourceField`
 - 대상 선지와 관련된 출처 기반 `sourceFacts`
 
 블라인드 입력에는 정답 ID, 대상 선지가 정답인지 여부, 선지 번호, 다른 선지, 선지 판정, 기준 정답 경로, 대표 오답 경로와 공식 해설이 없다. 제공되지 않은 정답 정보를 추측하거나 기억에 의존해 복원하지 않는다.

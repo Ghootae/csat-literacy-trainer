@@ -21,6 +21,7 @@ export function ProblemApp(): React.JSX.Element {
   const [strategy, setStrategy] = useState('');
   const [runnerUpChoiceId, setRunnerUpChoiceId] = useState('');
   const [runnerUpRationale, setRunnerUpRationale] = useState('');
+  const [reselectionRationale, setReselectionRationale] = useState('');
   const [busy, setBusy] = useState(false);
   const [busySeconds, setBusySeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +81,7 @@ export function ProblemApp(): React.JSX.Element {
       setStrategy('');
       setRunnerUpChoiceId('');
       setRunnerUpRationale('');
+      setReselectionRationale('');
     } catch (reason) {
       showError(reason);
     } finally {
@@ -96,6 +98,7 @@ export function ProblemApp(): React.JSX.Element {
     setStrategy('');
     setRunnerUpChoiceId('');
     setRunnerUpRationale('');
+    setReselectionRationale('');
     void run(startProblemSession(QUESTION_ID).then((next) => {
       sessionStorage.setItem(STORAGE_KEY, next.sessionId);
       return next;
@@ -272,10 +275,21 @@ export function ProblemApp(): React.JSX.Element {
           {awaitingReselection && (
             <div className="problem-action">
               <p>{session.reselectionPrompt}</p>
+              <label htmlFor="problem-reselection-rationale">바꾼 이유 (선택 사항)</label>
+              <textarea
+                id="problem-reselection-rationale"
+                value={reselectionRationale}
+                onChange={(event) => setReselectionRationale(event.target.value)}
+                placeholder="새 답을 고른 근거를 적으면 이해 여부를 함께 확인합니다."
+              />
               <button
                 className="primary"
                 disabled={busy || choiceId === null || choiceId === session.selectedChoiceId}
-                onClick={() => choiceId !== null && void run(submitProblemAction(session.sessionId, { type: 'RESELECT', choiceId }), session)}
+                onClick={() => choiceId !== null && void run(submitProblemAction(session.sessionId, {
+                  type: 'RESELECT',
+                  choiceId,
+                  ...(reselectionRationale.trim() === '' ? {} : { rationale: reselectionRationale.trim() }),
+                }), session)}
               >{busy ? '확인 중…' : '다시 선택'}</button>
             </div>
           )}
@@ -284,6 +298,8 @@ export function ProblemApp(): React.JSX.Element {
             <div className={`problem-result ${session.result.correct ? 'correct' : 'incorrect'}`}>
               <strong>{session.result.correct ? '정답입니다.' : '풀이를 종료했습니다.'}</strong>
               <p>최종 선택: {content.choices.find((choice) => choice.choiceId === session.result!.finalChoiceId)?.position}번</p>
+              <p>선택 횟수: {session.result.selectionAttempt}회</p>
+              <p>최종 근거 검증: {session.result.rationaleAssessment}</p>
               <p>교정 수준: {session.result.outcome}</p>
             </div>
           )}

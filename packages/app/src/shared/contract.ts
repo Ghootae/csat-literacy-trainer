@@ -273,6 +273,8 @@ export interface ProblemSessionView {
     readonly correct: boolean;
     readonly finalChoiceId: string;
     readonly outcome: string;
+    readonly selectionAttempt: number;
+    readonly rationaleAssessment: 'NOT_PROVIDED' | 'SUPPORTED' | 'UNCERTAIN' | 'CLEAR_ERROR';
   } | null;
 }
 
@@ -297,4 +299,4 @@ export interface ProblemRationaleRequest {
 
 export type ProblemActionResponseRequest =
   | { readonly type: 'TEXT'; readonly text: string }
-  | { readonly type: 'RESELECT'; readonly choiceId: string };
+  | { readonly type: 'RESELECT'; readonly choiceId: string; readonly rationale?: string };

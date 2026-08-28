@@ -151,6 +151,7 @@ export const BlindRationaleProviderInputSchema = z.object({
     targetOptionText: z.string().min(1),
     studentRationale: z.object({
       observationId: z.string().min(1),
+      sourceField: z.enum(['rationale', 'rawResponse']),
       text: z.string().min(1),
     }).strict(),
     sourceFacts: z.array(z.object({
@@ -185,15 +186,24 @@ export function projectProblemPathEvaluatorProviderInput(
     (choice) => choice.choiceId === input.sessionState.currentChoiceId,
   );
   if (targetChoice === undefined) throw new Error('근거 평가 대상 선지를 찾을 수 없다.');
-  const initial = [...input.observations].reverse().find(
-    (observation) =>
-      observation.kind === 'INITIAL_SUBMISSION' &&
-      observation.selectedChoiceId === input.sessionState.currentChoiceId &&
-      observation.rationale !== null,
+  const rationaleObservation = [...input.observations].reverse().find(
+    (observation) => {
+      if (observation.kind === 'INITIAL_SUBMISSION') {
+        return observation.selectedChoiceId === input.sessionState.currentChoiceId &&
+          observation.rationale !== null;
+      }
+      return observation.kind === 'RESELECTION' &&
+        observation.selectedChoiceId === input.sessionState.currentChoiceId &&
+        observation.rawResponse !== observation.selectedChoiceId;
+    },
   );
-  if (initial === undefined || initial.kind !== 'INITIAL_SUBMISSION' || initial.rationale === null) {
+  if (rationaleObservation === undefined) {
     throw new Error('블라인드 근거 평가에 사용할 학생 근거가 없다.');
   }
+  const studentRationale = rationaleObservation.kind === 'INITIAL_SUBMISSION'
+    ? rationaleObservation.rationale
+    : rationaleObservation.rawResponse;
+  if (studentRationale === null) throw new Error('블라인드 근거 평가 학생 근거가 비어 있다.');
 
   const requiredPropositionIds = new Set(
     targetChoice.requiredReferences.flatMap((reference) => reference.propositionIds),
@@ -249,8 +259,11 @@ export function projectProblemPathEvaluatorProviderInput(
       stemPolarity: input.basicGold.stemPolarity,
       targetOptionText: targetChoice.text,
       studentRationale: {
-        observationId: initial.observationId,
-        text: initial.rationale,
+        observationId: rationaleObservation.observationId,
+        sourceField: rationaleObservation.kind === 'INITIAL_SUBMISSION'
+          ? 'rationale'
+          : 'rawResponse',
+        text: studentRationale,
       },
       sourceFacts,
     },
