@@ -17,7 +17,9 @@ function view(phase: string, extra: Record<string, unknown> = {}) {
     },
     selectedChoiceId: phase === 'AWAITING_INITIAL_CHOICE' ? null : 'C2',
     action: null, reselectionPrompt: null, transcript: [],
-    questionBudget: { used: 0, maximum: 2 }, result: null,
+    questionBudget: { used: 0, maximum: 2 },
+    attemptQuestionBudget: { used: 0, maximum: 2 },
+    result: null,
     ...extra,
   };
 }

@@ -17,6 +17,7 @@ function view(phase: ProblemSessionView['phase']): ProblemSessionView {
     reselectionPrompt: phase === 'AWAITING_RESELECTION' ? '다시 선택해 주세요.' : null,
     transcript: [],
     questionBudget: { used: 0, maximum: 2 },
+    attemptQuestionBudget: { used: 0, maximum: 2 },
     result: null,
   };
 }

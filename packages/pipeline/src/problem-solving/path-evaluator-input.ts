@@ -84,6 +84,8 @@ const SessionStateProjectionSchema = z.object({
   evaluationSequence: z.number().int().positive(),
   diagnosticQuestionsUsed: z.number().int().nonnegative(),
   maxDiagnosticQuestions: z.number().int().positive(),
+  questionsUsedThisAttempt: z.number().int().nonnegative(),
+  maxQuestionsPerWrongAttempt: z.number().int().positive(),
   requiredNextAction: z.enum(['ANY', 'DIRECT_COACHING']),
   allowedActionTypes: z.array(z.enum([
     'ASK_DIAGNOSTIC',
@@ -287,12 +289,13 @@ function allowedActions(session: ProblemSolvingSession): ProblemPathEvaluatorInp
       ? ['ASK_CORRECTIVE']
       : ['DIRECT_COACHING', 'COMPLETE'];
   }
+  if (session.limits.questionsUsedThisAttempt >= session.limits.maxQuestionsPerWrongAttempt) {
+    return ['DIRECT_COACHING', 'REQUEST_RESELECTION', 'EXPLAIN_ITEM_BOUNDARY'];
+  }
   const actions: ProblemPathEvaluatorInput['sessionState']['allowedActionTypes'] = [
     'ASK_CORRECTIVE',
     'REQUEST_RESELECTION',
-    'DIRECT_COACHING',
     'EXPLAIN_ITEM_BOUNDARY',
-    'COMPLETE',
   ];
   if (session.limits.diagnosticQuestionsUsed < session.limits.maxDiagnosticQuestions) {
     actions.unshift('ASK_DIAGNOSTIC');
@@ -315,6 +318,27 @@ export function failedCorrectionSupplementalAccess(
   if (inferenceIds.length === 0 || targetClaims.length === 0) return undefined;
   return {
     reason: 'FAILED_CORRECTION',
+    inferenceIds,
+    targetOptionClaimIds: targetClaims.map((claim) => claim.claimId),
+  };
+}
+
+export function exhaustedWrongAttemptSupplementalAccess(
+  goldInput: ProblemQuestionGold,
+  choiceIds: readonly string[],
+): SupplementalAccessRequest | undefined {
+  const gold = ProblemQuestionGoldSchema.parse(goldInput);
+  const choices = new Set(choiceIds);
+  const targetClaims = gold.optionClaims.filter(
+    (claim) => choices.has(claim.choiceId) &&
+      claim.supplementalUsePolicy.includes('DIRECT_COACHING_ONLY'),
+  );
+  const inferenceIds = [...new Set(
+    targetClaims.flatMap((claim) => claim.fallbackSupplementalInferenceIds),
+  )];
+  if (inferenceIds.length === 0 || targetClaims.length === 0) return undefined;
+  return {
+    reason: 'MAX_DIAGNOSTIC_TURNS',
     inferenceIds,
     targetOptionClaimIds: targetClaims.map((claim) => claim.claimId),
   };
@@ -495,6 +519,8 @@ export function createProblemPathEvaluatorInput(options: {
       evaluationSequence: session.turns.length + 1,
       diagnosticQuestionsUsed: session.limits.diagnosticQuestionsUsed,
       maxDiagnosticQuestions: session.limits.maxDiagnosticQuestions,
+      questionsUsedThisAttempt: session.limits.questionsUsedThisAttempt,
+      maxQuestionsPerWrongAttempt: session.limits.maxQuestionsPerWrongAttempt,
       requiredNextAction: session.requiredNextAction,
       allowedActionTypes: allowedActions(session),
     },
@@ -699,6 +725,13 @@ export function validateProblemPathEvaluatorOutput(
       .some((id) => !allowedSupplementalIds.has(id))
   ) {
     throw new Error('evaluator가 허용되지 않은 보충 해설을 사용했다.');
+  }
+  if (
+    output.nextActionCandidate.type === 'DIRECT_COACHING' &&
+    input.supplementalAccess !== null &&
+    output.nextActionCandidate.reason !== input.supplementalAccess.reason
+  ) {
+    throw new Error('직접 코칭 사유가 코드가 연 보충 해설 조건과 일치하지 않는다.');
   }
   if (
     output.nextActionCandidate.type === 'COMPLETE' &&

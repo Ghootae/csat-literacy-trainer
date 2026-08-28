@@ -47,6 +47,8 @@
 
 `COMPLETE`는 의미적 후보일 뿐이며 실제 종료가 아니다.
 
+질문 예산은 두 층이다. `diagnosticQuestionsUsed/maxDiagnosticQuestions`는 세션 전체 진단 질문 안전 한도이고, `questionsUsedThisAttempt/maxQuestionsPerWrongAttempt`는 현재 오답 선택에 제시한 진단·교정 질문의 합산 한도다. 현재 선택의 예산이 우선하며 재오답으로 새 선택 차수가 시작되면 코드가 0으로 초기화한다.
+
 ## 2. 전체 스냅샷
 
 `DIAGNOSE_PATH`에서는 delta가 아니라 `snapshotMode: FULL`인 최신 전체 스냅샷을 반환한다.
@@ -268,8 +270,11 @@ ID 공간을 섞지 않는다.
 
 ### `DIRECT_COACHING`
 
-- 코드가 직접 코칭을 요구하거나 교정 실패·학생 설명 요청이 확인됐다.
+- 코드가 직접 코칭을 요구하거나 학생 설명 요청이 확인됐다.
 - `allowedSupplementalInferences`에 포함된 SI만 사용할 수 있다.
+- 오답 선택에서 아직 질문 기회가 남아 있다면 명백한 오류에도 직접 코칭하지 않고 `ASK_CORRECTIVE`를 사용한다.
+- 현재 오답 선택에서 진단·교정 질문을 합해 두 번 사용한 뒤에도 실제 수정이 확인되지 않으면 세 번째 질문을 만들지 않고 `DIRECT_COACHING`을 제안한다.
+- 이때 사유는 `MAX_DIAGNOSTIC_TURNS`다. 첫 `DIRECT_COACHING` 제안은 교정 실패 판정이며 `supplementalInferenceIds`를 비운다. 코드는 승인된 보충 해설을 연 뒤 다시 같은 사유의 `DIRECT_COACHING`을 요구하고, 두 번째 제안의 상세 설명을 학생에게 표시한 후 세션을 종료한다.
 
 ### `COMPLETE`
 
@@ -278,7 +283,7 @@ ID 공간을 섞지 않는다.
 - `sessionState.currentChoiceId`가 `sessionState.answerChoiceId`와 다르면 절대 제안하지 않는다.
 - `REASONABLE_ALTERNATIVE_INTERPRETATION` 또는 `GOLD_OR_ITEM_LIMITATION` 타깃은 `NO_ERROR_DETECTED`가 아니므로 완료 근거로 사용할 수 없다.
 
-`sessionState.allowedActionTypes`에 없는 행동을 제안하지 않는다. 질문 예산이 없으면 `ASK_DIAGNOSTIC`을 제안하지 않는다.
+`sessionState.allowedActionTypes`에 없는 행동을 제안하지 않는다. 전역 진단 질문 예산이 없으면 `ASK_DIAGNOSTIC`을 제안하지 않는다. 현재 오답 선택의 합산 질문 예산이 없으면 `ASK_DIAGNOSTIC`과 `ASK_CORRECTIVE`를 모두 제안하지 않는다.
 
 ## 12. 판단, 질문 의도와 학생 문장
 

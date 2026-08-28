@@ -6,6 +6,7 @@ import {
   applyAdaptedProblemEvaluatorTurn,
   applyCorrectRationaleAssessment,
   createProblemPathEvaluatorInput,
+  exhaustedWrongAttemptSupplementalAccess,
   failedCorrectionSupplementalAccess,
   createProblemSolvingSession,
   submitInitialProblemResponse,
@@ -194,10 +195,16 @@ export class ProblemSolvingController {
         session.phase !== 'AWAITING_EVALUATION' &&
         session.phase !== 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
       ) return;
-      const supplementalAccess = session.entryReason === 'CORRECT_RATIONALE_REVIEW' &&
-        session.requiredNextAction === 'DIRECT_COACHING'
-        ? failedCorrectionSupplementalAccess(runtime.gold, session.latestChoiceId!)
-        : undefined;
+      const supplementalAccess = session.requiredNextAction !== 'DIRECT_COACHING'
+        ? undefined
+        : session.entryReason === 'CORRECT_RATIONALE_REVIEW'
+          ? failedCorrectionSupplementalAccess(runtime.gold, session.latestChoiceId!)
+          : session.completeAfterCoachingAcknowledgement
+            ? exhaustedWrongAttemptSupplementalAccess(
+                runtime.gold,
+                [session.latestChoiceId!, session.answerChoiceId],
+              )
+            : undefined;
       const input = createProblemPathEvaluatorInput({
         evaluationMode: session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
           ? 'ASSESS_SELECTION_RATIONALE'
@@ -254,6 +261,7 @@ export class ProblemSolvingController {
         reselectionPrompt: null,
         transcript: structuredClone(runtime.transcript),
         questionBudget: { used: 0, maximum: 2 },
+        attemptQuestionBudget: { used: 0, maximum: 2 },
         result: null,
       };
     }
@@ -284,6 +292,10 @@ export class ProblemSolvingController {
       questionBudget: {
         used: session.limits.diagnosticQuestionsUsed,
         maximum: session.limits.maxDiagnosticQuestions,
+      },
+      attemptQuestionBudget: {
+        used: session.limits.questionsUsedThisAttempt,
+        maximum: session.limits.maxQuestionsPerWrongAttempt,
       },
       result: session.result === null
         ? null

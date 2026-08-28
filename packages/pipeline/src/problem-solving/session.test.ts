@@ -322,6 +322,94 @@ describe('pure problem solving session', () => {
     expect(completed.result?.outcome).toBe('RESELECTION_CORRECT_UNVERIFIED');
   });
 
+  it('현재 오답 선택의 진단·교정 질문을 합산해 두 번까지만 허용한다', () => {
+    const diagnosticTurn = fixture('mrna-q19-c2-ambiguous-speed.json').turns[0];
+    const diagnosed = applyProblemEvaluatorTurn(wrongSession(), diagnosticTurn);
+    const diagnosticAnswer = submitProblemActionResponse(
+      diagnosed,
+      '속도를 계속 바꾸는 뜻으로 이해했습니다.',
+    );
+    const correctiveTurn = structuredClone(
+      fixture('mrna-q19-c2-rational-challenge.json').turns[1],
+    ) as any;
+    correctiveTurn.turnId = 'T2';
+    correctiveTurn.targetSnapshots[0].status = 'SUFFICIENT';
+    correctiveTurn.targetSnapshots[0].learningState = 'PATH_CLARIFIED';
+    correctiveTurn.targetSnapshots[0].hypotheses[0].kind = 'STUDENT_ERROR';
+    correctiveTurn.nextAction = {
+      type: 'ASK_CORRECTIVE',
+      target: 'SELECTED_CHOICE',
+      question: '일정한 비율을 유지하도록 속도를 맞추는 경우에도 불균일해질까요?',
+      purpose: '속도 조절의 통제 의미를 다시 연결한다.',
+      targetedHypothesisIds: ['H-S2'],
+    };
+    const correcting = applyProblemEvaluatorTurn(diagnosticAnswer, correctiveTurn);
+    const secondAnswer = submitProblemActionResponse(
+      correcting,
+      '그래도 속도를 조절하면 무조건 불균일하다고 생각합니다.',
+    );
+    const thirdQuestion = structuredClone(correctiveTurn);
+    thirdQuestion.turnId = 'T3';
+    const constrained = applyProblemEvaluatorTurn(secondAnswer, thirdQuestion);
+
+    expect(correcting.limits).toEqual(expect.objectContaining({
+      diagnosticQuestionsUsed: 1,
+      questionsUsedThisAttempt: 2,
+      maxQuestionsPerWrongAttempt: 2,
+    }));
+    expect(constrained.requiredNextAction).toBe('DIRECT_COACHING');
+    expect(constrained.completeAfterCoachingAcknowledgement).toBe(true);
+    expect(constrained.rejectedEvaluatorProposals.at(-1)?.reason)
+      .toBe('ATTEMPT_QUESTION_BUDGET_EXHAUSTED');
+  });
+
+  it('두 번째 질문에도 교정되지 않으면 상세 코칭 확인 뒤 정답 공개 종료한다', () => {
+    const diagnosticTurn = fixture('mrna-q19-c2-ambiguous-speed.json').turns[0];
+    const diagnosticAnswer = submitProblemActionResponse(
+      applyProblemEvaluatorTurn(wrongSession(), diagnosticTurn),
+      '속도를 계속 바꾸는 뜻으로 이해했습니다.',
+    );
+    const correctiveTurn = structuredClone(
+      fixture('mrna-q19-c2-rational-challenge.json').turns[1],
+    ) as any;
+    correctiveTurn.turnId = 'T2';
+    correctiveTurn.targetSnapshots[0].status = 'SUFFICIENT';
+    correctiveTurn.targetSnapshots[0].learningState = 'PATH_CLARIFIED';
+    correctiveTurn.targetSnapshots[0].hypotheses[0].kind = 'STUDENT_ERROR';
+    correctiveTurn.nextAction = {
+      type: 'ASK_CORRECTIVE', target: 'SELECTED_CHOICE',
+      question: '일정한 비율을 유지하도록 속도를 맞춘 경우도 생각해 볼까요?',
+      purpose: '통제 의미를 교정한다.', targetedHypothesisIds: ['H-S2'],
+    };
+    const secondAnswer = submitProblemActionResponse(
+      applyProblemEvaluatorTurn(diagnosticAnswer, correctiveTurn),
+      '아니요. 여전히 불균일합니다.',
+    );
+    const coachingDecision = structuredClone(correctiveTurn);
+    coachingDecision.turnId = 'T3';
+    coachingDecision.nextAction = {
+      type: 'DIRECT_COACHING', target: 'SELECTED_CHOICE',
+      message: '교정 실패가 확인되었습니다.', coachingReason: 'MAX_DIAGNOSTIC_TURNS',
+      supplementalInferenceIds: [],
+    };
+    const forced = applyProblemEvaluatorTurn(secondAnswer, coachingDecision);
+    const coachingMessage = structuredClone(coachingDecision);
+    coachingMessage.turnId = 'T4';
+    coachingMessage.nextAction.message = '속도 조절은 두 용액의 혼합 비율을 일정하게 유지하기 위한 통제입니다. 정답은 ⑤입니다.';
+    const coaching = applyProblemEvaluatorTurn(forced, coachingMessage);
+    const completed = submitProblemActionResponse(coaching, '확인했습니다.');
+
+    expect(forced.phase).toBe('AWAITING_EVALUATION');
+    expect(forced.requiredNextAction).toBe('DIRECT_COACHING');
+    expect(coaching.phase).toBe('AWAITING_STUDENT_RESPONSE');
+    expect(completed.result).toEqual(expect.objectContaining({
+      outcome: 'DETAILED_COACHING_REQUIRED',
+      correct: false,
+      answerRevealed: true,
+      resolvedByStudent: false,
+    }));
+  });
+
   it('진단 답변으로 경로만 명확해진 상태에서는 세션도 재선택을 허용하지 않는다', () => {
     const diagnosticTurn = fixture('mrna-q19-c2-ambiguous-speed.json').turns[0];
     const diagnosed = applyProblemEvaluatorTurn(wrongSession(), diagnosticTurn);
@@ -443,6 +531,8 @@ describe('pure problem solving session', () => {
 
     expect(wrongAgain.phase).toBe('AWAITING_EVALUATION');
     expect(wrongAgain.latestChoiceId).toBe('C3');
+    expect(asking.limits.questionsUsedThisAttempt).toBe(1);
+    expect(wrongAgain.limits.questionsUsedThisAttempt).toBe(0);
     expect(wrongAgain.result).toBeNull();
     expect(wrongAgain.observations.at(-1)).toEqual(expect.objectContaining({
       rawResponse: '그림에서 두 물질이 합쳐지는 위치가 분해 지점처럼 보였습니다.',

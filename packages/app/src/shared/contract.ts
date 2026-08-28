@@ -269,6 +269,10 @@ export interface ProblemSessionView {
     readonly used: number;
     readonly maximum: number;
   };
+  readonly attemptQuestionBudget: {
+    readonly used: number;
+    readonly maximum: number;
+  };
   readonly result: {
     readonly correct: boolean;
     readonly finalChoiceId: string;

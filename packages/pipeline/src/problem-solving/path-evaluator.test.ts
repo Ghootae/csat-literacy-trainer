@@ -13,6 +13,7 @@ import {
 } from './path-evaluator.js';
 import {
   createProblemPathEvaluatorInput,
+  exhaustedWrongAttemptSupplementalAccess,
   failedCorrectionSupplementalAccess,
   projectProblemPathEvaluatorProviderInput,
   validateProblemPathEvaluatorOutput,
@@ -349,6 +350,30 @@ describe('problem path evaluator contract', () => {
 });
 
 describe('problem path evaluator input projection', () => {
+  it('오답 선택별 질문 예산을 evaluator에 투영하고 소진 뒤 질문 행동을 제거한다', () => {
+    const exhausted = structuredClone(wrongSession());
+    exhausted.limits.questionsUsedThisAttempt = 2;
+    const input = createProblemPathEvaluatorInput({
+      evaluationMode: 'DIAGNOSE_PATH', session: exhausted, gold,
+    });
+
+    expect(input.sessionState).toEqual(expect.objectContaining({
+      questionsUsedThisAttempt: 2,
+      maxQuestionsPerWrongAttempt: 2,
+    }));
+    expect(input.sessionState.allowedActionTypes).toContain('DIRECT_COACHING');
+    expect(input.sessionState.allowedActionTypes).not.toContain('ASK_DIAGNOSTIC');
+    expect(input.sessionState.allowedActionTypes).not.toContain('ASK_CORRECTIVE');
+  });
+
+  it('오답 질문 소진 뒤 정답 선지의 승인된 직접 코칭 보충 해설만 연다', () => {
+    expect(exhaustedWrongAttemptSupplementalAccess(gold, ['C2', 'C5'])).toEqual({
+      reason: 'MAX_DIAGNOSTIC_TURNS',
+      inferenceIds: ['SI1'],
+      targetOptionClaimIds: ['OC5-2'],
+    });
+  });
+
   it('정답 오류 근거는 첫 교정 질문 뒤 완료 또는 상세 코칭만 허용한다', () => {
     const diagnostic = applyCorrectRationaleAssessment(correctRationaleSession(), 'CLEAR_ERROR');
     const beforeQuestion = createProblemPathEvaluatorInput({

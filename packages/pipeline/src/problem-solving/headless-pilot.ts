@@ -117,6 +117,7 @@ const ProblemSessionViewSchema = z.object({
     text: z.string(),
   }).passthrough()),
   questionBudget: z.object({ used: z.number().int(), maximum: z.number().int() }),
+  attemptQuestionBudget: z.object({ used: z.number().int(), maximum: z.number().int() }).optional(),
   result: z.object({
     correct: z.boolean(),
     finalChoiceId: z.string().min(1),
