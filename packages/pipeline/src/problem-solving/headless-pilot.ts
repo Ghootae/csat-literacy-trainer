@@ -123,6 +123,8 @@ const ProblemSessionViewSchema = z.object({
     outcome: z.string().min(1),
     selectionAttempt: z.number().int().positive(),
     rationaleAssessment: z.enum(['NOT_PROVIDED', 'SUPPORTED', 'UNCERTAIN', 'CLEAR_ERROR']),
+    answerRevealed: z.boolean(),
+    resolvedByStudent: z.boolean(),
   }).nullable(),
 }).passthrough();
 

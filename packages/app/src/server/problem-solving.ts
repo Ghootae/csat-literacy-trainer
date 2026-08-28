@@ -6,6 +6,7 @@ import {
   applyAdaptedProblemEvaluatorTurn,
   applyCorrectRationaleAssessment,
   createProblemPathEvaluatorInput,
+  failedCorrectionSupplementalAccess,
   createProblemSolvingSession,
   submitInitialProblemResponse,
   submitProblemActionResponse,
@@ -193,6 +194,10 @@ export class ProblemSolvingController {
         session.phase !== 'AWAITING_EVALUATION' &&
         session.phase !== 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
       ) return;
+      const supplementalAccess = session.entryReason === 'CORRECT_RATIONALE_REVIEW' &&
+        session.requiredNextAction === 'DIRECT_COACHING'
+        ? failedCorrectionSupplementalAccess(runtime.gold, session.latestChoiceId!)
+        : undefined;
       const input = createProblemPathEvaluatorInput({
         evaluationMode: session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
           ? 'ASSESS_SELECTION_RATIONALE'
@@ -201,6 +206,7 @@ export class ProblemSolvingController {
         gold: runtime.gold,
         paragraphHandoff: runtime.paragraphHandoff,
         previousDiagnosticState: runtime.previousDiagnosticState,
+        ...(supplementalAccess === undefined ? {} : { supplementalAccess }),
       });
       const evaluated = await this.evaluator.evaluate(input);
       runtime.evaluatorCalls.push(structuredClone(evaluated.call));
@@ -287,6 +293,8 @@ export class ProblemSolvingController {
             outcome: session.result.outcome,
             selectionAttempt: session.result.selectionAttempt,
             rationaleAssessment: session.result.rationaleAssessment,
+            answerRevealed: session.result.answerRevealed,
+            resolvedByStudent: session.result.resolvedByStudent,
           },
     };
   }

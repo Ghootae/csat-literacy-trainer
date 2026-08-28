@@ -13,6 +13,7 @@ import {
 } from './path-evaluator.js';
 import {
   createProblemPathEvaluatorInput,
+  failedCorrectionSupplementalAccess,
   projectProblemPathEvaluatorProviderInput,
   validateProblemPathEvaluatorOutput,
 } from './path-evaluator-input.js';
@@ -75,6 +76,17 @@ function reselectedCorrectRationaleSession() {
     selectedChoiceId: 'C5',
     rationale: 'pH가 높아진 뒤 소수성이 약해진다는 연결이 지문의 관계와 맞지 않습니다.',
   });
+}
+
+function answeredCorrectRationaleCorrectionSession() {
+  const fixture = JSON.parse(readFileSync(resolve(
+    process.cwd(),
+    'packages/pipeline/fixtures/experiments/problem-solving/episodes/mrna-q19-correct-choice-wrong-rationale.json',
+  ), 'utf8')) as { turns: unknown[] };
+  const awaiting = correctRationaleSession();
+  const diagnostic = applyCorrectRationaleAssessment(awaiting, 'CLEAR_ERROR');
+  const asking = applyProblemEvaluatorTurn(diagnostic, fixture.turns[0]);
+  return submitProblemActionResponse(asking, '그래도 양전하가 더 강해진다고 생각합니다.');
 }
 
 function sufficiency(sufficient: boolean) {
@@ -311,6 +323,54 @@ describe('problem path evaluator contract', () => {
 });
 
 describe('problem path evaluator input projection', () => {
+  it('정답 오류 근거는 첫 교정 질문 뒤 완료 또는 상세 코칭만 허용한다', () => {
+    const diagnostic = applyCorrectRationaleAssessment(correctRationaleSession(), 'CLEAR_ERROR');
+    const beforeQuestion = createProblemPathEvaluatorInput({
+      evaluationMode: 'DIAGNOSE_PATH', session: diagnostic, gold,
+    });
+    const afterAnswer = answeredCorrectRationaleCorrectionSession();
+    const fixture = JSON.parse(readFileSync(resolve(
+      process.cwd(),
+      'packages/pipeline/fixtures/experiments/problem-solving/episodes/mrna-q19-correct-choice-wrong-rationale.json',
+    ), 'utf8')) as { turns: any[] };
+    const coachingRequired = applyProblemEvaluatorTurn(afterAnswer, {
+      ...structuredClone(fixture.turns[0]),
+      turnId: 'T2',
+      basedOnObservationIds: ['O1', 'O2'],
+      nextAction: {
+        type: 'DIRECT_COACHING',
+        target: 'ANSWER_RATIONALE',
+        message: '교정 실패로 상세 설명이 필요합니다.',
+        coachingReason: 'FAILED_CORRECTION',
+        supplementalInferenceIds: [],
+      },
+    });
+    const access = failedCorrectionSupplementalAccess(gold, 'C5');
+    const afterQuestion = createProblemPathEvaluatorInput({
+      evaluationMode: 'DIAGNOSE_PATH',
+      session: afterAnswer,
+      gold,
+    });
+    const coachingInput = createProblemPathEvaluatorInput({
+      evaluationMode: 'DIAGNOSE_PATH',
+      session: coachingRequired,
+      gold,
+      ...(access === undefined ? {} : { supplementalAccess: access }),
+    });
+
+    expect(beforeQuestion.sessionState.allowedActionTypes).toEqual(['ASK_CORRECTIVE']);
+    expect(afterQuestion.sessionState.allowedActionTypes).toEqual(['DIRECT_COACHING', 'COMPLETE']);
+    expect(afterQuestion.allowedSupplementalInferences).toEqual([]);
+    expect(coachingInput.sessionState.allowedActionTypes).toEqual(['DIRECT_COACHING']);
+    expect(access).toEqual({
+      reason: 'FAILED_CORRECTION',
+      inferenceIds: ['SI1'],
+      targetOptionClaimIds: ['OC5-2'],
+    });
+    expect(coachingInput.allowedSupplementalInferences.map((item) => item.inferenceId))
+      .toEqual(['SI1']);
+  });
+
   it('초기 진단 입력에서 보충 해설 필드를 기본 골드로부터 물리적으로 제거한다', () => {
     const input = createProblemPathEvaluatorInput({
       evaluationMode: 'DIAGNOSE_PATH',

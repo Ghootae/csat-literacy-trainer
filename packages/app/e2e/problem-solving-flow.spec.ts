@@ -167,6 +167,39 @@ test('mRNA 19번 공개 DTO와 독립 정답 완료 상태를 새로고침 후�
   await expect(page.getByText('교정 수준: INDEPENDENT_CORRECT')).toBeVisible();
 });
 
+test('정답 공개 상세 코칭 종료를 학생의 독립 정답으로 표시하지 않는다', async ({ page }) => {
+  await page.route(/\/api\/problem\/session\/[^/]+\/initial$/, async (route) => {
+    const response = await route.fetch();
+    const original = await response.json() as ProblemSessionView;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...original,
+        phase: 'COMPLETED',
+        result: {
+          correct: true,
+          finalChoiceId: 'C5',
+          outcome: 'DETAILED_COACHING_REQUIRED',
+          selectionAttempt: 1,
+          rationaleAssessment: 'CLEAR_ERROR',
+          answerRevealed: true,
+          resolvedByStudent: false,
+        },
+      } satisfies ProblemSessionView),
+    });
+  });
+
+  await page.goto('/problem');
+  await page.getByText(/^5$/).click();
+  await page.getByRole('button', { name: '선택 제출' }).click();
+
+  await expect(page.getByText('상세 코칭으로 풀이를 마쳤습니다.')).toBeVisible();
+  await expect(page.getByText('학생 스스로 해결: 아니요')).toBeVisible();
+  await expect(page.getByText('정답 공개: 예')).toBeVisible();
+  await expect(page.getByText('정답입니다.')).not.toBeVisible();
+});
+
 test('오답은 근거를 받은 뒤 내부 스냅샷 없이 확인 질문 하나만 표시한다', async ({ page }) => {
   await page.goto('/problem');
   await page.getByText(/^2$/).click();
@@ -229,6 +262,8 @@ test('직접 코칭 확인 응답 뒤 새로고침 없이 재선택 선지가 �
             outcome: 'RESELECTION_CORRECT_VERIFIED',
             selectionAttempt: 2,
             rationaleAssessment: 'SUPPORTED',
+            answerRevealed: false,
+            resolvedByStudent: true,
           },
         } satisfies ProblemSessionView),
       });

@@ -64,7 +64,13 @@ describe('problem solving server controller', () => {
     const completed = await controller.submitInitial(started.sessionId, { choiceId: 'C5' });
 
     expect(completed.phase).toBe('COMPLETED');
-    expect(completed.result).toEqual(expect.objectContaining({ correct: true, finalChoiceId: 'C5' }));
+    expect(completed.result).toEqual(expect.objectContaining({
+      correct: true,
+      finalChoiceId: 'C5',
+      selectionAttempt: 1,
+      answerRevealed: false,
+      resolvedByStudent: true,
+    }));
     expect(evaluator.calls).toHaveLength(0);
     expect(logger.records).toHaveLength(1);
     expect(logger.records[0]).toMatchObject({

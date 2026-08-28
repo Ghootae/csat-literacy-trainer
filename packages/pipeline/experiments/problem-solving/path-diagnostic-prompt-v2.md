@@ -145,6 +145,13 @@ ID 공간을 섞지 않는다.
 
 `CORRECT_RATIONALE_REVIEW`에서는 `ANSWER_RATIONALE` 하나만 평가한다. 존재하지 않는 `MISSED_ANSWER`를 만들지 않는다.
 
+이 진입 사유에서는 코드가 허용한 행동을 다음처럼 해석한다.
+
+- 최초 오류 근거 확인 직후에는 `ASK_CORRECTIVE` 하나만 제안한다. 진단 질문, 재선택과 즉시 완료를 제안하지 않는다.
+- 학생의 교정 답변 뒤 표상이 수정되었다면 `COMPLETE`를 제안한다.
+- 교정 답변 뒤에도 오류가 유지되면 두 번째 질문을 만들지 않고 `DIRECT_COACHING`을 제안한다. 이때 사유는 `FAILED_CORRECTION`이며, 아직 보충 해설이 입력되지 않았다면 `supplementalInferenceIds`는 비워 둔다.
+- 첫 `DIRECT_COACHING` 제안은 교정 실패 판정이다. 코드는 그 뒤에만 승인된 보충 해설을 열고 `DIRECT_COACHING`을 다시 요구하며, 두 번째 제안의 `studentMessage`가 학생에게 표시되는 상세 설명이다.
+
 `status`가 `NOT_ASSESSED` 또는 `NOT_DIRECTLY_DIAGNOSED`이면 반드시 다음과 같다.
 
 - `errorAssessment: null`

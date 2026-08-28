@@ -40,6 +40,8 @@ describe('headless problem pilot', () => {
           outcome: 'RESELECTION_CORRECT_VERIFIED',
           selectionAttempt: 2,
           rationaleAssessment: 'SUPPORTED',
+          answerRevealed: false,
+          resolvedByStudent: true,
         } }), durationMs: 1 };
       },
     };

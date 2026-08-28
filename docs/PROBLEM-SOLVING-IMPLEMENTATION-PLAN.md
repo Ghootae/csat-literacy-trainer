@@ -417,12 +417,12 @@ type ProblemSolvingNextAction =
 - [x] 선택 근거 평가 모델 입력에서 정답 ID·정답 여부·선지 판정·기준 경로·대표 오답 경로를 제거한다.
 - [x] 발문 극성과 학생의 선지 태도를 분리해 선택·근거 충돌을 `CLEAR_ERROR`로 거부한다.
 - [x] 1차·2차 정답은 근거 없음, 타당한 근거, 불확실한 근거, 오류·극성 충돌 근거를 구분한다.
-- [ ] 정답의 오류 근거에는 교정 질문을 한 번만 허용하고 실패 시 상세 코칭으로 종료한다.
+- [x] 정답의 오류 근거에는 교정 질문을 한 번만 허용하고 실패 시 상세 코칭으로 종료한다.
 - [x] 1차·2차 오답마다 해당 선택에 대한 새 근거를 필수로 받는다.
 - [ ] 1차·2차 오답은 차수별 최대 두 번의 학생 대상 질문 기회를 가진다.
 - [ ] `PATH_CLARIFIED`와 `CORRECTED`를 구분하여 진단 답변만으로 재선택시키지 않는다.
 - [ ] 3차 정답의 근거가 오류이거나 3차 선택이 오답이면 상세 코칭과 정답 설명 후 종료한다.
-- [ ] 시스템이 공개한 정답과 학생이 스스로 해결한 정답을 `answerRevealed`, `resolvedByStudent`로 구분한다.
+- [x] 시스템이 공개한 정답과 학생이 스스로 해결한 정답을 `answerRevealed`, `resolvedByStudent`로 구분한다.
 - [x] 선택 차수와 정답 근거 검증 수준을 결과 라벨과 감사 기록에 보존한다.
 - [ ] 기존 질문 예산과 새 차수별 질문 기회의 우선순위를 코드 상태로 고정한다.
 
@@ -712,3 +712,14 @@ npm run test:e2e
 - 세션 저장 계약을 `problem-solving-session-v2`로 올렸다.
 - 타입 검사, 기존 결손 산출물 의존 테스트 1개를 제외한 회귀 테스트 559개와 격리 포트 브라우저 E2E 6개가 통과했다.
 - 최대 3회 선택, 차수별 질문 기회, 3차 종료와 정답 공개 구분은 아직 남아 있으므로 섹션 10은 `IN_PROGRESS`다.
+
+### 2026-08-28 — 정답 오류 근거의 1회 교정·상세 코칭 종료
+
+- `CORRECT_RATIONALE_REVIEW` 진입 직후에는 `ASK_CORRECTIVE` 한 번만 허용하고, 해당 답변 뒤에는 `COMPLETE` 또는 `DIRECT_COACHING`만 허용하도록 코드 상태를 제한했다.
+- 교정 답변에서 표상 수정이 확인되면 `RATIONALE_CORRECTED` 또는 `RESELECTION_RATIONALE_CORRECTED`로 종료하고 최종 근거 상태를 `SUPPORTED`로 기록한다.
+- 오류가 유지되면 두 번째 질문을 거부하고 `FAILED_CORRECTION` 상세 코칭을 표시한다. 학생이 코칭을 확인하면 추가 evaluator 호출 없이 `DETAILED_COACHING_REQUIRED`로 종료한다.
+- 교정 답변의 1차 평가는 기본 골드만으로 수행한다. evaluator가 `FAILED_CORRECTION`을 판정한 뒤에만 승인된 `AFTER_FAILED_CORRECTION` 보충 정보를 열고, 두 번째 호출에서 학생에게 표시할 상세 코칭을 생성한다.
+- 모든 완료 결과에 `answerRevealed`와 `resolvedByStudent`를 추가했다. 상세 코칭 종료는 정답 선택 상태라도 `answerRevealed: true`, `resolvedByStudent: false`로 기록하고 UI에서도 독립 정답과 구분한다.
+- 세션 저장 계약을 `problem-solving-session-v3`로 올렸다.
+- 타입 검사, 기존 결손 산출물 의존 테스트 1개를 제외한 회귀 테스트 563개와 격리 포트 브라우저 E2E 7개가 통과했다.
+- 최대 3회 선택, 오답 차수별 질문 기회, `PATH_CLARIFIED`와 `CORRECTED` 분리 및 3차 강제 종료는 아직 남아 있으므로 섹션 10은 `IN_PROGRESS`다.

@@ -95,6 +95,102 @@ describe('pure problem solving session', () => {
     expect(asking.phase).toBe('AWAITING_STUDENT_RESPONSE');
   });
 
+  it('정답의 오류 근거에는 교정 질문 하나만 허용하고 수정 확인 시 학생 해결로 종료한다', () => {
+    const awaiting = submitInitialProblemResponse(fresh(), {
+      initialChoiceId: 'C5',
+      rationale: 'pH가 높아지면 양전하가 더 강해져서 ⑤가 틀립니다.',
+    });
+    const diagnostic = applyCorrectRationaleAssessment(awaiting, 'CLEAR_ERROR');
+    const correctiveTurn = fixture('mrna-q19-correct-choice-wrong-rationale.json').turns[0] as any;
+    const asking = applyProblemEvaluatorTurn(diagnostic, correctiveTurn);
+    const answered = submitProblemActionResponse(
+      asking,
+      'pH가 높아지면 이온화 지질은 전기적으로 중성이 됩니다.',
+    );
+    const completed = applyProblemEvaluatorTurn(answered, {
+      ...structuredClone(correctiveTurn),
+      turnId: 'T2',
+      basedOnObservationIds: ['O1', 'O2'],
+      activeTarget: null,
+      nextAction: { type: 'COMPLETE', summary: '전하 상태의 방향을 수정했습니다.' },
+    });
+
+    expect(completed.result).toEqual(expect.objectContaining({
+      outcome: 'RATIONALE_CORRECTED',
+      rationaleAssessment: 'SUPPORTED',
+      answerRevealed: false,
+      resolvedByStudent: true,
+    }));
+  });
+
+  it('정답 근거 교정 답변 뒤 두 번째 질문을 거부한다', () => {
+    const awaiting = submitInitialProblemResponse(fresh(), {
+      initialChoiceId: 'C5',
+      rationale: 'pH가 높아지면 양전하가 더 강해져서 ⑤가 틀립니다.',
+    });
+    const diagnostic = applyCorrectRationaleAssessment(awaiting, 'CLEAR_ERROR');
+    const correctiveTurn = fixture('mrna-q19-correct-choice-wrong-rationale.json').turns[0] as any;
+    const asking = applyProblemEvaluatorTurn(diagnostic, correctiveTurn);
+    const answered = submitProblemActionResponse(asking, '아직 양전하가 더 강해진다고 생각합니다.');
+
+    expect(() => applyProblemEvaluatorTurn(answered, {
+      ...structuredClone(correctiveTurn),
+      turnId: 'T2',
+      basedOnObservationIds: ['O1', 'O2'],
+    })).toThrow(/완료 또는 상세 코칭/);
+  });
+
+  it('정답 근거 교정 실패는 상세 코칭 확인 후 정답 공개·학생 미해결로 종료한다', () => {
+    const awaiting = submitInitialProblemResponse(fresh(), {
+      initialChoiceId: 'C5',
+      rationale: 'pH가 높아지면 양전하가 더 강해져서 ⑤가 틀립니다.',
+    });
+    const diagnostic = applyCorrectRationaleAssessment(awaiting, 'CLEAR_ERROR');
+    const correctiveTurn = fixture('mrna-q19-correct-choice-wrong-rationale.json').turns[0] as any;
+    const asking = applyProblemEvaluatorTurn(diagnostic, correctiveTurn);
+    const answered = submitProblemActionResponse(asking, '그래도 양전하가 더 강해진다고 생각합니다.');
+    const coachingDecision = applyProblemEvaluatorTurn(answered, {
+      ...structuredClone(correctiveTurn),
+      turnId: 'T2',
+      basedOnObservationIds: ['O1', 'O2'],
+      nextAction: {
+        type: 'DIRECT_COACHING',
+        target: 'ANSWER_RATIONALE',
+        message: '교정 답변에도 오류가 유지되어 상세 설명이 필요합니다.',
+        coachingReason: 'FAILED_CORRECTION',
+        supplementalInferenceIds: [],
+      },
+    });
+    const coaching = applyProblemEvaluatorTurn(coachingDecision, {
+      ...structuredClone(correctiveTurn),
+      turnId: 'T3',
+      basedOnObservationIds: ['O1', 'O2'],
+      nextAction: {
+        type: 'DIRECT_COACHING',
+        target: 'ANSWER_RATIONALE',
+        message: '높은 pH에서는 이온화 지질이 중성이 됩니다. 이 관계를 적용하면 ⑤의 설명은 성립하지 않습니다.',
+        coachingReason: 'FAILED_CORRECTION',
+        supplementalInferenceIds: ['SI1'],
+      },
+    });
+    const completed = submitProblemActionResponse(coaching, '확인했습니다.');
+
+    expect(coachingDecision.phase).toBe('AWAITING_EVALUATION');
+    expect(coachingDecision.requiredNextAction).toBe('DIRECT_COACHING');
+    expect(coaching.phase).toBe('AWAITING_STUDENT_RESPONSE');
+    expect(completed.result).toEqual(expect.objectContaining({
+      outcome: 'DETAILED_COACHING_REQUIRED',
+      correct: true,
+      rationaleAssessment: 'CLEAR_ERROR',
+      answerRevealed: true,
+      resolvedByStudent: false,
+    }));
+    expect(completed.observations.at(-1)).toEqual(expect.objectContaining({
+      responseType: 'COACHING_ACKNOWLEDGEMENT',
+      rawResponse: '확인했습니다.',
+    }));
+  });
+
   it('오답에는 선택 근거를 필수로 요구한다', () => {
     expect(() => submitInitialProblemResponse(fresh(), {
       initialChoiceId: 'C2',

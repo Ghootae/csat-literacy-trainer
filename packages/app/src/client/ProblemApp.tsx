@@ -296,10 +296,16 @@ export function ProblemApp(): React.JSX.Element {
 
           {session.phase === 'COMPLETED' && session.result !== null && (
             <div className={`problem-result ${session.result.correct ? 'correct' : 'incorrect'}`}>
-              <strong>{session.result.correct ? '정답입니다.' : '풀이를 종료했습니다.'}</strong>
+              <strong>{session.result.answerRevealed
+                ? '상세 코칭으로 풀이를 마쳤습니다.'
+                : session.result.correct
+                  ? '정답입니다.'
+                  : '풀이를 종료했습니다.'}</strong>
               <p>최종 선택: {content.choices.find((choice) => choice.choiceId === session.result!.finalChoiceId)?.position}번</p>
               <p>선택 횟수: {session.result.selectionAttempt}회</p>
               <p>최종 근거 검증: {session.result.rationaleAssessment}</p>
+              <p>학생 스스로 해결: {session.result.resolvedByStudent ? '예' : '아니요'}</p>
+              <p>정답 공개: {session.result.answerRevealed ? '예' : '아니요'}</p>
               <p>교정 수준: {session.result.outcome}</p>
             </div>
           )}

@@ -278,6 +278,15 @@ export interface SupplementalAccessRequest {
 
 function allowedActions(session: ProblemSolvingSession): ProblemPathEvaluatorInput['sessionState']['allowedActionTypes'] {
   if (session.requiredNextAction === 'DIRECT_COACHING') return ['DIRECT_COACHING'];
+  if (session.entryReason === 'CORRECT_RATIONALE_REVIEW') {
+    const correctiveQuestionsUsed = session.turns.filter(
+      (turn) => turn.nextAction.type === 'ASK_CORRECTIVE' &&
+        turn.nextAction.target === 'ANSWER_RATIONALE',
+    ).length;
+    return correctiveQuestionsUsed === 0
+      ? ['ASK_CORRECTIVE']
+      : ['DIRECT_COACHING', 'COMPLETE'];
+  }
   const actions: ProblemPathEvaluatorInput['sessionState']['allowedActionTypes'] = [
     'ASK_CORRECTIVE',
     'REQUEST_RESELECTION',
@@ -289,6 +298,26 @@ function allowedActions(session: ProblemSolvingSession): ProblemPathEvaluatorInp
     actions.unshift('ASK_DIAGNOSTIC');
   }
   return actions;
+}
+
+export function failedCorrectionSupplementalAccess(
+  goldInput: ProblemQuestionGold,
+  choiceId: string,
+): SupplementalAccessRequest | undefined {
+  const gold = ProblemQuestionGoldSchema.parse(goldInput);
+  const targetClaims = gold.optionClaims.filter(
+    (claim) => claim.choiceId === choiceId &&
+      claim.supplementalUsePolicy.includes('AFTER_FAILED_CORRECTION'),
+  );
+  const inferenceIds = [...new Set(
+    targetClaims.flatMap((claim) => claim.fallbackSupplementalInferenceIds),
+  )];
+  if (inferenceIds.length === 0 || targetClaims.length === 0) return undefined;
+  return {
+    reason: 'FAILED_CORRECTION',
+    inferenceIds,
+    targetOptionClaimIds: targetClaims.map((claim) => claim.claimId),
+  };
 }
 
 function projectObservations(session: ProblemSolvingSession): ProblemPathEvaluatorInput['observations'] {

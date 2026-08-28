@@ -8,7 +8,7 @@ import {
 } from './episode.js';
 
 export const PROBLEM_SOLVING_SESSION_VERSION =
-  'problem-solving-session-v2' as const;
+  'problem-solving-session-v3' as const;
 
 const SessionObservationSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -58,6 +58,7 @@ const SessionResultSchema = z.object({
     'RESELECTION_CORRECT_VERIFIED',
     'RESELECTION_CORRECT_UNVERIFIED',
     'RESELECTION_RATIONALE_CORRECTED',
+    'DETAILED_COACHING_REQUIRED',
     'UNRESOLVED',
   ]),
   finalChoiceId: z.string().min(1),
@@ -65,6 +66,8 @@ const SessionResultSchema = z.object({
   initialChoiceWasCorrect: z.boolean(),
   selectionAttempt: z.number().int().positive(),
   rationaleAssessment: z.enum(['NOT_PROVIDED', 'SUPPORTED', 'UNCERTAIN', 'CLEAR_ERROR']),
+  answerRevealed: z.boolean(),
+  resolvedByStudent: z.boolean(),
 });
 
 const RejectedEvaluatorProposalSchema = z.object({
@@ -125,6 +128,18 @@ export const ProblemSolvingSessionSchema = z.object({
   if (session.limits.diagnosticQuestionsUsed > session.limits.maxDiagnosticQuestions) {
     context.addIssue({ code: 'custom', path: ['limits'], message: '진단 질문 예산을 초과했다.' });
   }
+  if (session.result?.resolvedByStudent === true && session.result.correct !== true) {
+    context.addIssue({ code: 'custom', path: ['result', 'resolvedByStudent'], message: '학생 해결 성공은 최종 정답일 때만 기록할 수 있다.' });
+  }
+  if (session.result?.answerRevealed === true && session.result.resolvedByStudent === true) {
+    context.addIssue({ code: 'custom', path: ['result'], message: '정답 공개 종료를 학생의 독립 해결로 기록할 수 없다.' });
+  }
+  if (
+    session.result?.outcome === 'DETAILED_COACHING_REQUIRED' &&
+    (!session.result.answerRevealed || session.result.resolvedByStudent)
+  ) {
+    context.addIssue({ code: 'custom', path: ['result'], message: '상세 코칭 종료에는 정답 공개와 학생 미해결 상태가 필요하다.' });
+  }
   if (
     session.requiredNextAction === 'DIRECT_COACHING' &&
     session.phase !== 'AWAITING_EVALUATION'
@@ -154,6 +169,10 @@ function complete(
   session: ProblemSolvingSession,
   outcome: NonNullable<ProblemSolvingSession['result']>['outcome'],
   rationaleAssessment: NonNullable<ProblemSolvingSession['result']>['rationaleAssessment'],
+  options: {
+    readonly answerRevealed?: boolean;
+    readonly resolvedByStudent?: boolean;
+  } = {},
 ): ProblemSolvingSession {
   const latestChoiceId = session.latestChoiceId;
   if (latestChoiceId === null) throw new Error('최종 선택이 없다.');
@@ -169,6 +188,8 @@ function complete(
       initialChoiceWasCorrect: session.initialChoiceId === session.answerChoiceId,
       selectionAttempt: session.selectionAttempt,
       rationaleAssessment,
+      answerRevealed: options.answerRevealed ?? false,
+      resolvedByStudent: options.resolvedByStudent ?? latestChoiceId === session.answerChoiceId,
     },
   });
 }
@@ -357,11 +378,35 @@ export function applyProblemEvaluatorTurn(
   }
   validateTurnTargets(session, turn);
 
+  if (session.entryReason === 'CORRECT_RATIONALE_REVIEW') {
+    const correctiveQuestionsUsed = session.turns.filter(
+      (item) => item.nextAction.type === 'ASK_CORRECTIVE' &&
+        item.nextAction.target === 'ANSWER_RATIONALE',
+    ).length;
+    if (correctiveQuestionsUsed === 0 && turn.nextAction.type !== 'ASK_CORRECTIVE') {
+      throw new Error('정답의 오류 근거에는 먼저 교정 질문 하나만 허용된다.');
+    }
+    if (
+      correctiveQuestionsUsed >= 1 &&
+      turn.nextAction.type !== 'COMPLETE' &&
+      turn.nextAction.type !== 'DIRECT_COACHING'
+    ) {
+      throw new Error('정답 근거 교정 질문 이후에는 완료 또는 상세 코칭만 허용된다.');
+    }
+    if (
+      correctiveQuestionsUsed >= 1 &&
+      turn.nextAction.type === 'DIRECT_COACHING' &&
+      turn.nextAction.coachingReason !== 'FAILED_CORRECTION'
+    ) {
+      throw new Error('정답 근거 교정 실패의 상세 코칭 사유가 올바르지 않다.');
+    }
+  }
+
   if (
     session.requiredNextAction === 'DIRECT_COACHING' &&
     turn.nextAction.type !== 'DIRECT_COACHING'
   ) {
-    throw new Error('진단 질문 예산 소진 후에는 직접 코칭만 허용된다.');
+    throw new Error('코드가 직접 코칭을 요구한 상태에서는 직접 코칭만 허용된다.');
   }
   if (
     turn.nextAction.type === 'ASK_DIAGNOSTIC' &&
@@ -389,8 +434,27 @@ export function applyProblemEvaluatorTurn(
     return complete(
       withTurn,
       completedCorrectionOutcome(withTurn),
-      session.rationaleAssessment ?? 'NOT_PROVIDED',
+      session.entryReason === 'CORRECT_RATIONALE_REVIEW'
+        ? 'SUPPORTED'
+        : session.rationaleAssessment ?? 'NOT_PROVIDED',
     );
+  }
+
+  if (
+    session.entryReason === 'CORRECT_RATIONALE_REVIEW' &&
+    turn.nextAction.type === 'DIRECT_COACHING' &&
+    session.requiredNextAction === 'ANY'
+  ) {
+    if (turn.nextAction.supplementalInferenceIds.length > 0) {
+      throw new Error('교정 실패가 확정되기 전에는 보충 해설을 사용할 수 없다.');
+    }
+    return parsed({
+      ...session,
+      phase: 'AWAITING_EVALUATION',
+      turns: [...session.turns, turn],
+      pendingAction: null,
+      requiredNextAction: 'DIRECT_COACHING',
+    });
   }
 
   const diagnosticQuestionsUsed = session.limits.diagnosticQuestionsUsed +
@@ -437,12 +501,21 @@ export function submitProblemActionResponse(
     responseType,
     rawResponse,
   });
-  return parsed({
+  const answered = parsed({
     ...session,
     phase: 'AWAITING_EVALUATION',
     pendingAction: null,
     observations: [...session.observations, observation],
   });
+  if (action.type === 'DIRECT_COACHING' && session.entryReason === 'CORRECT_RATIONALE_REVIEW') {
+    return complete(
+      answered,
+      'DETAILED_COACHING_REQUIRED',
+      'CLEAR_ERROR',
+      { answerRevealed: true, resolvedByStudent: false },
+    );
+  }
+  return answered;
 }
 
 export function submitProblemReselection(

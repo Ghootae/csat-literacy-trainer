@@ -275,6 +275,8 @@ export interface ProblemSessionView {
     readonly outcome: string;
     readonly selectionAttempt: number;
     readonly rationaleAssessment: 'NOT_PROVIDED' | 'SUPPORTED' | 'UNCERTAIN' | 'CLEAR_ERROR';
+    readonly answerRevealed: boolean;
+    readonly resolvedByStudent: boolean;
   } | null;
 }
 
