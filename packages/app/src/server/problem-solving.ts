@@ -8,6 +8,7 @@ import {
   createProblemPathEvaluatorInput,
   exhaustedWrongAttemptSupplementalAccess,
   failedCorrectionSupplementalAccess,
+  finalAttemptSupplementalAccess,
   createProblemSolvingSession,
   submitInitialProblemResponse,
   submitProblemActionResponse,
@@ -197,14 +198,19 @@ export class ProblemSolvingController {
       ) return;
       const supplementalAccess = session.requiredNextAction !== 'DIRECT_COACHING'
         ? undefined
-        : session.entryReason === 'CORRECT_RATIONALE_REVIEW'
-          ? failedCorrectionSupplementalAccess(runtime.gold, session.latestChoiceId!)
-          : session.completeAfterCoachingAcknowledgement
-            ? exhaustedWrongAttemptSupplementalAccess(
-                runtime.gold,
-                [session.latestChoiceId!, session.answerChoiceId],
-              )
-            : undefined;
+        : session.selectionAttempt >= session.limits.maxSelectionAttempts
+          ? finalAttemptSupplementalAccess(
+              runtime.gold,
+              [session.latestChoiceId!, session.answerChoiceId],
+            )
+          : session.entryReason === 'CORRECT_RATIONALE_REVIEW'
+            ? failedCorrectionSupplementalAccess(runtime.gold, session.latestChoiceId!)
+            : session.completeAfterCoachingAcknowledgement
+              ? exhaustedWrongAttemptSupplementalAccess(
+                  runtime.gold,
+                  [session.latestChoiceId!, session.answerChoiceId],
+                )
+              : undefined;
       const input = createProblemPathEvaluatorInput({
         evaluationMode: session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
           ? 'ASSESS_SELECTION_RATIONALE'
@@ -262,6 +268,7 @@ export class ProblemSolvingController {
         transcript: structuredClone(runtime.transcript),
         questionBudget: { used: 0, maximum: 2 },
         attemptQuestionBudget: { used: 0, maximum: 2 },
+        selectionProgress: { current: 0, maximum: 3 },
         result: null,
       };
     }
@@ -296,6 +303,10 @@ export class ProblemSolvingController {
       attemptQuestionBudget: {
         used: session.limits.questionsUsedThisAttempt,
         maximum: session.limits.maxQuestionsPerWrongAttempt,
+      },
+      selectionProgress: {
+        current: session.selectionAttempt,
+        maximum: session.limits.maxSelectionAttempts,
       },
       result: session.result === null
         ? null

@@ -15,6 +15,7 @@ import {
   createProblemPathEvaluatorInput,
   exhaustedWrongAttemptSupplementalAccess,
   failedCorrectionSupplementalAccess,
+  finalAttemptSupplementalAccess,
   projectProblemPathEvaluatorProviderInput,
   validateProblemPathEvaluatorOutput,
 } from './path-evaluator-input.js';
@@ -303,6 +304,23 @@ describe('problem path evaluator contract', () => {
       .toThrow(/경로 파악만으로 재선택/);
   });
 
+  it('최종 선택에서는 불충분한 경로를 발명하지 않고 직접 코칭할 수 있다', () => {
+    const output = diagnosticOutput() as any;
+    output.nextActionCandidate = {
+      type: 'DIRECT_COACHING',
+      target: 'SELECTED_CHOICE',
+      reason: 'FINAL_ATTEMPT',
+      questionIntent: null,
+      questionText: null,
+      studentMessage: '현재 선택의 판단 기준과 정답 경로를 설명합니다.',
+      supplementalInferenceIds: [],
+    };
+
+    const parsed = ProblemPathDiagnosticOutputSchema.parse(output);
+    expect(parsed.targets[0]?.learningState).toBe('PATH_UNCLEAR');
+    expect(parsed.nextActionCandidate.type).toBe('DIRECT_COACHING');
+  });
+
   it('기존 ID와 호출 로컬 ID를 동시에 만들지 못한다', () => {
     const output = diagnosticOutput() as any;
     output.targets[0].pathSteps[0].identity = {
@@ -372,6 +390,27 @@ describe('problem path evaluator input projection', () => {
       inferenceIds: ['SI1'],
       targetOptionClaimIds: ['OC5-2'],
     });
+  });
+
+  it('3차 선택은 FINAL_ATTEMPT 직접 코칭만 허용하고 선택 상한을 투영한다', () => {
+    const final = structuredClone(wrongSession());
+    final.selectionAttempt = 3;
+    final.requiredNextAction = 'DIRECT_COACHING';
+    final.completeAfterCoachingAcknowledgement = true;
+    const access = finalAttemptSupplementalAccess(gold, ['C2', 'C5']);
+    const input = createProblemPathEvaluatorInput({
+      evaluationMode: 'DIAGNOSE_PATH', session: final, gold,
+      ...(access === undefined ? {} : { supplementalAccess: access }),
+    });
+
+    expect(input.sessionState).toEqual(expect.objectContaining({
+      selectionAttempt: 3,
+      maxSelectionAttempts: 3,
+      allowedActionTypes: ['DIRECT_COACHING'],
+    }));
+    expect(input.supplementalAccess?.reason).toBe('FINAL_ATTEMPT');
+    expect(input.allowedSupplementalInferences.map((item) => item.inferenceId))
+      .toEqual(['SI1']);
   });
 
   it('정답 오류 근거는 첫 교정 질문 뒤 완료 또는 상세 코칭만 허용한다', () => {

@@ -237,6 +237,7 @@ const DirectCoachingActionSchema = z.object({
     'FAILED_CORRECTION',
     'EXPLANATION_REQUEST',
     'ITEM_INTERPRETATION_BOUNDARY',
+    'FINAL_ATTEMPT',
   ]),
   supplementalInferenceIds: z.array(z.string().min(1)),
 }).strict();
@@ -310,9 +311,17 @@ export const DiagnosticTurnSchema = z.object({
   }
   if (
     action.type === 'DIRECT_COACHING' &&
+    action.coachingReason !== 'FINAL_ATTEMPT' &&
     !['SUFFICIENT', 'BOUNDARY_CLARIFICATION_REQUIRED'].includes(target.status)
   ) {
     context.addIssue({ code: 'custom', path: ['nextAction'], message: '직접 코칭에는 충분한 진단 또는 문항 경계 판정이 필요하다.' });
+  }
+  if (
+    action.type === 'DIRECT_COACHING' &&
+    action.coachingReason === 'FINAL_ATTEMPT' &&
+    ['NOT_ASSESSED', 'NOT_DIRECTLY_DIAGNOSED'].includes(target.status)
+  ) {
+    context.addIssue({ code: 'custom', path: ['nextAction'], message: '최종 선택 직접 코칭에도 최소한 평가된 타깃이 필요하다.' });
   }
   if (
     action.type === 'EXPLAIN_ITEM_BOUNDARY' &&
@@ -580,6 +589,7 @@ export function validateDiagnosticEpisodeAgainstGold(
         FAILED_CORRECTION: 'AFTER_FAILED_CORRECTION',
         EXPLANATION_REQUEST: 'ON_EXPLANATION_REQUEST',
         ITEM_INTERPRETATION_BOUNDARY: null,
+        FINAL_ATTEMPT: 'DIRECT_COACHING_ONLY',
       } as const;
       const requiredPolicy = policyByReason[action.coachingReason];
       const target = turn.targetSnapshots.find(

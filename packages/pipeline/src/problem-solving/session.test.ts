@@ -39,6 +39,22 @@ function wrongSession(maxDiagnosticQuestions = 2) {
   });
 }
 
+function awaitingReselectionAfterCorrection() {
+  const initial = submitInitialProblemResponse(fresh(), {
+    initialChoiceId: 'C4',
+    rationale: 'pH가 높으면 수소 이온도 많아집니다.',
+  });
+  const asking = applyProblemEvaluatorTurn(
+    initial,
+    fixture('mrna-q19-c4-completed.json').turns[0],
+  );
+  const answered = submitProblemActionResponse(asking, 'pH와 수소 이온 관계를 수정했습니다.');
+  return applyProblemEvaluatorTurn(
+    answered,
+    fixture('mrna-q19-c4-completed.json').turns[1],
+  );
+}
+
 describe('pure problem solving session', () => {
   it('근거 없는 최초 정답을 독립 정답으로 종료한다', () => {
     const session = submitInitialProblemResponse(fresh(), {
@@ -554,6 +570,98 @@ describe('pure problem solving session', () => {
 
     expect(() => submitProblemReselection(reselecting, { selectedChoiceId: 'C3' }))
       .toThrow(/새로운 선택 근거/);
+  });
+
+  it('3차 오답은 추가 질문이나 재선택 없이 상세 코칭 확인 뒤 종료한다', () => {
+    const reselecting = structuredClone(awaitingReselectionAfterCorrection());
+    reselecting.selectionAttempt = 2;
+    const thirdWrong = submitProblemReselection(reselecting, {
+      selectedChoiceId: 'C3',
+      rationale: '그림의 합류 지점이 mRNA 분해를 뜻한다고 생각했습니다.',
+    });
+    const coachingTurn = structuredClone(
+      fixture('mrna-q19-c2-rational-challenge.json').turns[1],
+    ) as any;
+    coachingTurn.turnId = 'T3';
+    const selectedTarget = coachingTurn.targetSnapshots.find(
+      (target: any) => target.kind === 'SELECTED_CHOICE',
+    );
+    selectedTarget.choiceId = 'C3';
+    selectedTarget.status = 'INSUFFICIENT';
+    selectedTarget.learningState = 'PATH_UNCLEAR';
+    for (const dimension of [
+      'choiceExplained',
+      'interventionPointLocalized',
+      'safeInterventionAvailable',
+      'actionRelevantAlternativesControlled',
+    ]) {
+      selectedTarget.sufficiency[dimension].satisfied = false;
+    }
+    selectedTarget.sufficiency.sufficient = false;
+    coachingTurn.nextAction = {
+      type: 'DIRECT_COACHING', target: 'SELECTED_CHOICE',
+      message: '그림의 합류는 혼합과 복합체 형성을 뜻합니다. 정답은 ⑤입니다.',
+      coachingReason: 'FINAL_ATTEMPT', supplementalInferenceIds: [],
+    };
+    const coaching = applyProblemEvaluatorTurn(thirdWrong, coachingTurn);
+    const completed = submitProblemActionResponse(coaching, '확인했습니다.');
+
+    expect(thirdWrong).toEqual(expect.objectContaining({
+      selectionAttempt: 3,
+      phase: 'AWAITING_EVALUATION',
+      requiredNextAction: 'DIRECT_COACHING',
+      completeAfterCoachingAcknowledgement: true,
+    }));
+    expect(thirdWrong.limits.questionsUsedThisAttempt).toBe(0);
+    expect(completed.result).toEqual(expect.objectContaining({
+      outcome: 'DETAILED_COACHING_REQUIRED',
+      selectionAttempt: 3,
+      correct: false,
+      answerRevealed: true,
+      resolvedByStudent: false,
+    }));
+  });
+
+  it('3차 정답의 오류 근거는 교정 질문 없이 상세 코칭으로 종료한다', () => {
+    const reselecting = structuredClone(awaitingReselectionAfterCorrection());
+    reselecting.selectionAttempt = 2;
+    const awaitingAssessment = submitProblemReselection(reselecting, {
+      selectedChoiceId: 'C5',
+      rationale: 'pH가 높아지면 양전하가 강해지기 때문에 ⑤가 틀립니다.',
+    });
+    const forced = applyCorrectRationaleAssessment(awaitingAssessment, 'CLEAR_ERROR');
+    const coachingTurn = structuredClone(
+      fixture('mrna-q19-correct-choice-wrong-rationale.json').turns[0],
+    ) as any;
+    coachingTurn.turnId = 'T3';
+    coachingTurn.nextAction = {
+      type: 'DIRECT_COACHING', target: 'ANSWER_RATIONALE',
+      message: '높은 pH에서는 이온화 지질이 중성이 됩니다. 정답은 ⑤입니다.',
+      coachingReason: 'FINAL_ATTEMPT', supplementalInferenceIds: [],
+    };
+    const coaching = applyProblemEvaluatorTurn(forced, coachingTurn);
+    const completed = submitProblemActionResponse(coaching, '확인했습니다.');
+
+    expect(forced.requiredNextAction).toBe('DIRECT_COACHING');
+    expect(forced.turns.filter((turn) => turn.nextAction.type === 'ASK_CORRECTIVE'))
+      .toHaveLength(1);
+    expect(completed.result).toEqual(expect.objectContaining({
+      outcome: 'DETAILED_COACHING_REQUIRED',
+      selectionAttempt: 3,
+      correct: true,
+      rationaleAssessment: 'CLEAR_ERROR',
+      answerRevealed: true,
+      resolvedByStudent: false,
+    }));
+  });
+
+  it('3차 선택 뒤 4차 선택을 거부한다', () => {
+    const reselecting = structuredClone(awaitingReselectionAfterCorrection());
+    reselecting.selectionAttempt = 3;
+
+    expect(() => submitProblemReselection(reselecting, {
+      selectedChoiceId: 'C5',
+    })).toThrow(/최대 선택 횟수/);
   });
 
   it('현재 선택이 오답이면 evaluator의 COMPLETE 제안을 거부한다', () => {

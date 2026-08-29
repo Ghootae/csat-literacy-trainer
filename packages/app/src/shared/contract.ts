@@ -273,6 +273,10 @@ export interface ProblemSessionView {
     readonly used: number;
     readonly maximum: number;
   };
+  readonly selectionProgress: {
+    readonly current: number;
+    readonly maximum: number;
+  };
   readonly result: {
     readonly correct: boolean;
     readonly finalChoiceId: string;

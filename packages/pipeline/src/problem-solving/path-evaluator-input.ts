@@ -27,6 +27,7 @@ export const SupplementalAccessReasonSchema = z.enum([
   'FAILED_CORRECTION',
   'EXPLANATION_REQUEST',
   'MAX_DIAGNOSTIC_TURNS',
+  'FINAL_ATTEMPT',
 ]);
 
 const ProjectedObservationSchema = z.discriminatedUnion('kind', [
@@ -86,6 +87,8 @@ const SessionStateProjectionSchema = z.object({
   maxDiagnosticQuestions: z.number().int().positive(),
   questionsUsedThisAttempt: z.number().int().nonnegative(),
   maxQuestionsPerWrongAttempt: z.number().int().positive(),
+  selectionAttempt: z.number().int().positive(),
+  maxSelectionAttempts: z.number().int().positive(),
   requiredNextAction: z.enum(['ANY', 'DIRECT_COACHING']),
   allowedActionTypes: z.array(z.enum([
     'ASK_DIAGNOSTIC',
@@ -344,6 +347,14 @@ export function exhaustedWrongAttemptSupplementalAccess(
   };
 }
 
+export function finalAttemptSupplementalAccess(
+  goldInput: ProblemQuestionGold,
+  choiceIds: readonly string[],
+): SupplementalAccessRequest | undefined {
+  const access = exhaustedWrongAttemptSupplementalAccess(goldInput, choiceIds);
+  return access === undefined ? undefined : { ...access, reason: 'FINAL_ATTEMPT' };
+}
+
 function projectObservations(session: ProblemSolvingSession): ProblemPathEvaluatorInput['observations'] {
   return session.observations.map((observation) => {
     if (observation.kind === 'INITIAL_SUBMISSION') {
@@ -398,6 +409,7 @@ function authorizeSupplementalInferences(
     FAILED_CORRECTION: 'AFTER_FAILED_CORRECTION',
     EXPLANATION_REQUEST: 'ON_EXPLANATION_REQUEST',
     MAX_DIAGNOSTIC_TURNS: 'DIRECT_COACHING_ONLY',
+    FINAL_ATTEMPT: 'DIRECT_COACHING_ONLY',
   } as const;
   const claimsById = new Map(gold.optionClaims.map((claim) => [claim.claimId, claim]));
   const targetClaims = request.targetOptionClaimIds.map((id) => {
@@ -497,6 +509,15 @@ export function createProblemPathEvaluatorInput(options: {
     throw new Error('질문 예산 소진 상태가 아니면 MAX_DIAGNOSTIC_TURNS 보충 해설을 열 수 없다.');
   }
   if (
+    options.supplementalAccess?.reason === 'FINAL_ATTEMPT' &&
+    (
+      session.requiredNextAction !== 'DIRECT_COACHING' ||
+      session.selectionAttempt < session.limits.maxSelectionAttempts
+    )
+  ) {
+    throw new Error('최종 선택 상태가 아니면 FINAL_ATTEMPT 보충 해설을 열 수 없다.');
+  }
+  if (
     options.supplementalAccess?.reason === 'FAILED_CORRECTION' &&
     !session.observations.some(
       (item) => item.kind === 'FOLLOW_UP_RESPONSE' && item.responseType === 'CORRECTIVE_ANSWER',
@@ -521,6 +542,8 @@ export function createProblemPathEvaluatorInput(options: {
       maxDiagnosticQuestions: session.limits.maxDiagnosticQuestions,
       questionsUsedThisAttempt: session.limits.questionsUsedThisAttempt,
       maxQuestionsPerWrongAttempt: session.limits.maxQuestionsPerWrongAttempt,
+      selectionAttempt: session.selectionAttempt,
+      maxSelectionAttempts: session.limits.maxSelectionAttempts,
       requiredNextAction: session.requiredNextAction,
       allowedActionTypes: allowedActions(session),
     },

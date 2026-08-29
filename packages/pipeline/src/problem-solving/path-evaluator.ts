@@ -381,6 +381,7 @@ const DirectCoachingCandidateSchema = z.object({
     'MAX_DIAGNOSTIC_TURNS',
     'FAILED_CORRECTION',
     'EXPLANATION_REQUEST',
+    'FINAL_ATTEMPT',
   ]),
   questionIntent: z.null(),
   questionText: z.null(),

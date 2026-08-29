@@ -115,6 +115,7 @@ describe('problem solving server controller', () => {
     expect(diagnosed.action).toEqual(expect.objectContaining({ kind: 'DIAGNOSTIC_QUESTION' }));
     expect(diagnosed.questionBudget).toEqual({ used: 1, maximum: 2 });
     expect(diagnosed.attemptQuestionBudget).toEqual({ used: 1, maximum: 2 });
+    expect(diagnosed.selectionProgress).toEqual({ current: 1, maximum: 3 });
     expect(diagnosed.transcript).toHaveLength(2);
     expect(evaluator.calls).toHaveLength(1);
     const serialized = JSON.stringify(diagnosed);

@@ -19,6 +19,7 @@ function view(phase: string, extra: Record<string, unknown> = {}) {
     action: null, reselectionPrompt: null, transcript: [],
     questionBudget: { used: 0, maximum: 2 },
     attemptQuestionBudget: { used: 0, maximum: 2 },
+    selectionProgress: { current: 0, maximum: 3 },
     result: null,
     ...extra,
   };

@@ -18,6 +18,7 @@ function view(phase: ProblemSessionView['phase']): ProblemSessionView {
     transcript: [],
     questionBudget: { used: 0, maximum: 2 },
     attemptQuestionBudget: { used: 0, maximum: 2 },
+    selectionProgress: { current: 0, maximum: 3 },
     result: null,
   };
 }

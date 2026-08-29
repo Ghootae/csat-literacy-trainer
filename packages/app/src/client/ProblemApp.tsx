@@ -126,6 +126,7 @@ export function ProblemApp(): React.JSX.Element {
         </div>
         <div className="dialogue-run-actions">
           <span className="dialogue-progress">이번 선택 질문 {session.attemptQuestionBudget.used}/{session.attemptQuestionBudget.maximum}</span>
+          <span className="dialogue-progress">선택 {session.selectionProgress.current}/{session.selectionProgress.maximum}</span>
           <a
             className="problem-link"
             href={dialogueSessionId === null ? '/dialogue' : `/dialogue?sessionId=${encodeURIComponent(dialogueSessionId)}`}

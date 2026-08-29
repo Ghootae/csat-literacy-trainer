@@ -49,6 +49,8 @@
 
 질문 예산은 두 층이다. `diagnosticQuestionsUsed/maxDiagnosticQuestions`는 세션 전체 진단 질문 안전 한도이고, `questionsUsedThisAttempt/maxQuestionsPerWrongAttempt`는 현재 오답 선택에 제시한 진단·교정 질문의 합산 한도다. 현재 선택의 예산이 우선하며 재오답으로 새 선택 차수가 시작되면 코드가 0으로 초기화한다.
 
+선택은 `selectionAttempt/maxSelectionAttempts`로 제한된다. 최종 선택 차수에서는 질문과 재선택을 만들지 않는다. 코드가 `DIRECT_COACHING`만 허용하면 사유를 `FINAL_ATTEMPT`로 두고, 현재 선택의 판정과 정답 설명을 포함한 상세 코칭을 제안한다.
+
 ## 2. 전체 스냅샷
 
 `DIAGNOSE_PATH`에서는 delta가 아니라 `snapshotMode: FULL`인 최신 전체 스냅샷을 반환한다.
@@ -267,6 +269,7 @@ ID 공간을 섞지 않는다.
 - `EXPLAIN_ITEM_BOUNDARY`에 대한 학생의 확인 응답 뒤 현재 선택이 그대로 오답이면, 새 오류를 발명하지 말고 `REQUEST_RESELECTION`으로 이동한다.
 - “각 선지”, “모든 선지”, “전체 선지”를 다시 검토하라고 요구하지 않는다. 방금 진단·교정한 개념이나 관계를 명시하고 그것만 반영해 다시 선택하게 한다.
 - 예: “방금 확인한 pH와 수소 이온 농도의 관계를 반영해 다시 선택해 보세요.”
+- `selectionAttempt`가 `maxSelectionAttempts`에 도달했다면 절대 제안하지 않는다.
 
 ### `DIRECT_COACHING`
 
@@ -275,6 +278,8 @@ ID 공간을 섞지 않는다.
 - 오답 선택에서 아직 질문 기회가 남아 있다면 명백한 오류에도 직접 코칭하지 않고 `ASK_CORRECTIVE`를 사용한다.
 - 현재 오답 선택에서 진단·교정 질문을 합해 두 번 사용한 뒤에도 실제 수정이 확인되지 않으면 세 번째 질문을 만들지 않고 `DIRECT_COACHING`을 제안한다.
 - 이때 사유는 `MAX_DIAGNOSTIC_TURNS`다. 첫 `DIRECT_COACHING` 제안은 교정 실패 판정이며 `supplementalInferenceIds`를 비운다. 코드는 승인된 보충 해설을 연 뒤 다시 같은 사유의 `DIRECT_COACHING`을 요구하고, 두 번째 제안의 상세 설명을 학생에게 표시한 후 세션을 종료한다.
+- 최종 선택 차수에서 코드가 직접 코칭을 강제하면 사유는 `FINAL_ATTEMPT`다. 이 호출은 이미 종료가 확정된 상태이므로 제공된 보충 해설을 사용할 수 있고, 학생에게 표시할 상세 코칭과 정답 설명을 한 번에 작성한다.
+- 최종 선택 근거가 모호해 사고 경로가 불충분해도 `UNKNOWN`을 발명하거나 억지로 충분하게 만들지 않는다. 평가된 타깃의 `PATH_UNCLEAR`를 유지한 채, 관찰된 선택·근거와 기본 골드를 토대로 현재 선택의 문제와 정답 기준 경로를 직접 설명한다.
 
 ### `COMPLETE`
 

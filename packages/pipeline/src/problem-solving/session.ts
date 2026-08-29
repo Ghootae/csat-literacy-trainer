@@ -8,7 +8,7 @@ import {
 } from './episode.js';
 
 export const PROBLEM_SOLVING_SESSION_VERSION =
-  'problem-solving-session-v5' as const;
+  'problem-solving-session-v6' as const;
 
 const SessionObservationSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -107,6 +107,7 @@ export const ProblemSolvingSessionSchema = z.object({
     diagnosticQuestionsUsed: z.number().int().nonnegative(),
     maxQuestionsPerWrongAttempt: z.number().int().positive(),
     questionsUsedThisAttempt: z.number().int().nonnegative(),
+    maxSelectionAttempts: z.number().int().positive(),
   }),
   requiredNextAction: z.enum(['ANY', 'DIRECT_COACHING']),
   completeAfterCoachingAcknowledgement: z.boolean(),
@@ -137,6 +138,9 @@ export const ProblemSolvingSessionSchema = z.object({
   if (session.limits.questionsUsedThisAttempt > session.limits.maxQuestionsPerWrongAttempt) {
     context.addIssue({ code: 'custom', path: ['limits'], message: '현재 오답 선택의 질문 예산을 초과했다.' });
   }
+  if (session.selectionAttempt > session.limits.maxSelectionAttempts) {
+    context.addIssue({ code: 'custom', path: ['selectionAttempt'], message: '최대 선택 횟수를 초과했다.' });
+  }
   if (session.result?.resolvedByStudent === true && session.result.correct !== true) {
     context.addIssue({ code: 'custom', path: ['result', 'resolvedByStudent'], message: '학생 해결 성공은 최종 정답일 때만 기록할 수 있다.' });
   }
@@ -157,9 +161,10 @@ export const ProblemSolvingSessionSchema = z.object({
   }
   if (
     session.completeAfterCoachingAcknowledgement &&
-    session.entryReason !== 'WRONG_CHOICE'
+    session.entryReason !== 'WRONG_CHOICE' &&
+    session.entryReason !== 'CORRECT_RATIONALE_REVIEW'
   ) {
-    context.addIssue({ code: 'custom', path: ['completeAfterCoachingAcknowledgement'], message: '오답 선택의 상세 코칭 종료에만 종료 대기 상태를 사용할 수 있다.' });
+    context.addIssue({ code: 'custom', path: ['completeAfterCoachingAcknowledgement'], message: '오답 또는 오류 정답 근거의 상세 코칭 종료에만 종료 대기 상태를 사용할 수 있다.' });
   }
 });
 
@@ -253,6 +258,7 @@ export function createProblemSolvingSession(input: {
       diagnosticQuestionsUsed: 0,
       maxQuestionsPerWrongAttempt: 2,
       questionsUsedThisAttempt: 0,
+      maxSelectionAttempts: 3,
     },
     requiredNextAction: 'ANY',
     completeAfterCoachingAcknowledgement: false,
@@ -348,6 +354,16 @@ export function applyCorrectRationaleAssessment(
       'UNCERTAIN',
     );
   }
+  if (session.selectionAttempt >= session.limits.maxSelectionAttempts) {
+    return parsed({
+      ...assessed,
+      phase: 'AWAITING_EVALUATION',
+      entryReason: 'CORRECT_RATIONALE_REVIEW',
+      pendingCorrectOutcome: null,
+      requiredNextAction: 'DIRECT_COACHING',
+      completeAfterCoachingAcknowledgement: true,
+    });
+  }
   return parsed({
     ...assessed,
     phase: 'AWAITING_EVALUATION',
@@ -398,6 +414,12 @@ export function applyProblemEvaluatorTurn(
   validateTurnTargets(session, turn);
   if (
     turn.nextAction.type === 'REQUEST_RESELECTION' &&
+    session.selectionAttempt >= session.limits.maxSelectionAttempts
+  ) {
+    throw new Error('최대 선택 횟수에 도달해 재선택할 수 없다.');
+  }
+  if (
+    turn.nextAction.type === 'REQUEST_RESELECTION' &&
     !turn.targetSnapshots.some((target) =>
       target.learningState === 'CORRECTED' ||
       target.learningState === 'ITEM_BOUNDARY_CLARIFIED')
@@ -405,7 +427,10 @@ export function applyProblemEvaluatorTurn(
     throw new Error('경로가 파악됐다는 이유만으로 재선택할 수 없으며 실제 교정이 확인되어야 한다.');
   }
 
-  if (session.entryReason === 'CORRECT_RATIONALE_REVIEW') {
+  if (
+    session.entryReason === 'CORRECT_RATIONALE_REVIEW' &&
+    session.selectionAttempt < session.limits.maxSelectionAttempts
+  ) {
     const correctiveQuestionsUsed = session.turns.filter(
       (item) => item.nextAction.type === 'ASK_CORRECTIVE' &&
         item.nextAction.target === 'ANSWER_RATIONALE',
@@ -438,9 +463,13 @@ export function applyProblemEvaluatorTurn(
   if (
     session.completeAfterCoachingAcknowledgement &&
     turn.nextAction.type === 'DIRECT_COACHING' &&
-    turn.nextAction.coachingReason !== 'MAX_DIAGNOSTIC_TURNS'
+    turn.nextAction.coachingReason !== (
+      session.selectionAttempt >= session.limits.maxSelectionAttempts
+        ? 'FINAL_ATTEMPT'
+        : 'MAX_DIAGNOSTIC_TURNS'
+    )
   ) {
-    throw new Error('오답 질문 예산 소진 뒤 직접 코칭 사유가 올바르지 않다.');
+    throw new Error('종료 조건에 필요한 직접 코칭 사유가 올바르지 않다.');
   }
   const isWrongAttemptQuestion = session.entryReason === 'WRONG_CHOICE' &&
     (turn.nextAction.type === 'ASK_DIAGNOSTIC' || turn.nextAction.type === 'ASK_CORRECTIVE');
@@ -626,6 +655,9 @@ export function submitProblemReselection(
   if (session.pendingAction?.type !== 'REQUEST_RESELECTION') {
     throw new Error('재선택 요청이 없다.');
   }
+  if (session.selectionAttempt >= session.limits.maxSelectionAttempts) {
+    throw new Error('최대 선택 횟수에 도달해 더 선택할 수 없다.');
+  }
   const rationale = input.rationale?.trim() || null;
   const correct = input.selectedChoiceId === session.answerChoiceId;
   if (!correct && rationale === null) {
@@ -656,7 +688,11 @@ export function submitProblemReselection(
       ...session.limits,
       questionsUsedThisAttempt: correct ? session.limits.questionsUsedThisAttempt : 0,
     },
-    completeAfterCoachingAcknowledgement: false,
+    requiredNextAction: !correct && session.selectionAttempt + 1 >= session.limits.maxSelectionAttempts
+      ? 'DIRECT_COACHING'
+      : 'ANY',
+    completeAfterCoachingAcknowledgement:
+      !correct && session.selectionAttempt + 1 >= session.limits.maxSelectionAttempts,
     result: null,
   });
   if (!correct) return base;
