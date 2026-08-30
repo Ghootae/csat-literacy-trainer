@@ -74,6 +74,7 @@ describe('problem solving server controller', () => {
       rationaleNonEvaluationReason: null,
       answerRevealed: false,
       resolvedByStudent: true,
+      resolutionOutcome: 'INITIAL_CORRECT',
       interventionHistory: [],
       effectiveRepairPath: 'NONE',
     }));

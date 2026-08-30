@@ -297,6 +297,16 @@ export interface ProblemSessionView {
     readonly answerRevealed: boolean;
     readonly resolvedByStudent: boolean;
     readonly resolutionStage: 'INITIAL' | 'SECOND_SELECTION' | 'THIRD_SELECTION' | 'ANSWER_REVEALED';
+    readonly resolutionOutcome:
+      | 'INITIAL_CORRECT'
+      | 'INITIAL_CORRECT_VERIFIED'
+      | 'INITIAL_CORRECT_UNVERIFIED'
+      | 'SECOND_SELECTION_CORRECT_VERIFIED'
+      | 'SECOND_SELECTION_CORRECT_UNVERIFIED'
+      | 'THIRD_SELECTION_CORRECT_VERIFIED'
+      | 'THIRD_SELECTION_CORRECT_UNVERIFIED'
+      | 'ANSWER_REVEALED'
+      | 'UNRESOLVED';
     readonly interventionPath:
       | 'NONE'
       | 'DIAGNOSTIC_ONLY'

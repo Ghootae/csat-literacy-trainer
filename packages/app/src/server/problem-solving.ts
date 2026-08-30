@@ -399,6 +399,7 @@ export class ProblemSolvingController {
             answerRevealed: session.result.answerRevealed,
             resolvedByStudent: session.result.resolvedByStudent,
             resolutionStage: session.result.resolutionStage,
+            resolutionOutcome: session.result.resolutionOutcome,
             interventionPath: session.result.interventionPath,
             interventionHistory: session.result.interventionHistory,
             effectiveRepairPath: session.result.effectiveRepairPath,

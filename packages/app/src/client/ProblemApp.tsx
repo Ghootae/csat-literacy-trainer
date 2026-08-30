@@ -366,7 +366,8 @@ export function ProblemApp(): React.JSX.Element {
               <p>최종 근거 검증: {rationaleAssessmentLabel(session.result)}</p>
               <p>학생 스스로 해결: {session.result.resolvedByStudent ? '예' : '아니요'}</p>
               <p>정답 공개: {session.result.answerRevealed ? '예' : '아니요'}</p>
-              <p>교정 수준: {session.result.outcome}</p>
+              <p>최종 결과: {session.result.resolutionOutcome}</p>
+              <p>상세 결과 유형: {session.result.outcome}</p>
               <p>해결 단계: {session.result.resolutionStage}</p>
               <p>최종 유효 교정 경로: {session.result.effectiveRepairPath}</p>
               <p>전체 개입 이력: {session.result.interventionHistory.length === 0

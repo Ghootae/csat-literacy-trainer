@@ -8,7 +8,7 @@ import {
 } from './episode.js';
 
 export const PROBLEM_SOLVING_SESSION_VERSION =
-  'problem-solving-session-v8' as const;
+  'problem-solving-session-v9' as const;
 
 const ResultRationaleAssessmentSchema = z.enum([
   'NOT_PROVIDED',
@@ -34,6 +34,18 @@ const EffectiveRepairPathSchema = z.enum([
   'ITEM_BOUNDARY',
   'DIRECT_COACHING',
   'STATIC_ANSWER_EXPLANATION',
+]);
+
+const ResolutionOutcomeSchema = z.enum([
+  'INITIAL_CORRECT',
+  'INITIAL_CORRECT_VERIFIED',
+  'INITIAL_CORRECT_UNVERIFIED',
+  'SECOND_SELECTION_CORRECT_VERIFIED',
+  'SECOND_SELECTION_CORRECT_UNVERIFIED',
+  'THIRD_SELECTION_CORRECT_VERIFIED',
+  'THIRD_SELECTION_CORRECT_UNVERIFIED',
+  'ANSWER_REVEALED',
+  'UNRESOLVED',
 ]);
 
 const SessionObservationSchema = z.discriminatedUnion('kind', [
@@ -106,6 +118,7 @@ const SessionResultSchema = z.object({
     'THIRD_SELECTION',
     'ANSWER_REVEALED',
   ]),
+  resolutionOutcome: ResolutionOutcomeSchema,
   interventionPath: EffectiveRepairPathSchema,
   interventionHistory: z.array(InterventionEventSchema),
   effectiveRepairPath: EffectiveRepairPathSchema,
@@ -215,6 +228,14 @@ export const ProblemSolvingSessionSchema = z.object({
     if (result.interventionPath !== result.effectiveRepairPath) {
       context.addIssue({ code: 'custom', path: ['result', 'interventionPath'], message: '호환용 개입 경로는 최종 유효 교정 경로와 일치해야 한다.' });
     }
+    if (result.resolutionOutcome !== deriveResolutionOutcome({
+      correct: result.correct,
+      answerRevealed: result.answerRevealed,
+      resolutionStage: result.resolutionStage,
+      rationaleAssessment: result.rationaleAssessment,
+    })) {
+      context.addIssue({ code: 'custom', path: ['result', 'resolutionOutcome'], message: '결합 결과 라벨이 해결 회차와 근거 검증 상태와 일치하지 않는다.' });
+    }
   }
   if (
     session.result?.outcome === 'DETAILED_COACHING_REQUIRED' &&
@@ -256,6 +277,31 @@ function assertPhase(
 
 type InterventionEvent = z.infer<typeof InterventionEventSchema>;
 type EffectiveRepairPath = z.infer<typeof EffectiveRepairPathSchema>;
+type ResolutionOutcome = z.infer<typeof ResolutionOutcomeSchema>;
+
+function deriveResolutionOutcome(input: {
+  readonly correct: boolean;
+  readonly answerRevealed: boolean;
+  readonly resolutionStage: 'INITIAL' | 'SECOND_SELECTION' | 'THIRD_SELECTION' | 'ANSWER_REVEALED';
+  readonly rationaleAssessment: z.infer<typeof ResultRationaleAssessmentSchema>;
+}): ResolutionOutcome {
+  if (input.answerRevealed) return 'ANSWER_REVEALED';
+  if (!input.correct) return 'UNRESOLVED';
+  if (input.resolutionStage === 'INITIAL') {
+    if (input.rationaleAssessment === 'SUPPORTED') return 'INITIAL_CORRECT_VERIFIED';
+    if (input.rationaleAssessment === 'NOT_PROVIDED') return 'INITIAL_CORRECT';
+    return 'INITIAL_CORRECT_UNVERIFIED';
+  }
+  const verified = input.rationaleAssessment === 'SUPPORTED';
+  if (input.resolutionStage === 'SECOND_SELECTION') {
+    return verified
+      ? 'SECOND_SELECTION_CORRECT_VERIFIED'
+      : 'SECOND_SELECTION_CORRECT_UNVERIFIED';
+  }
+  return verified
+    ? 'THIRD_SELECTION_CORRECT_VERIFIED'
+    : 'THIRD_SELECTION_CORRECT_UNVERIFIED';
+}
 
 function interventionEvent(
   action: ProblemSolvingNextAction,
@@ -358,6 +404,14 @@ function complete(
   const rationaleNonEvaluationReason = rationaleAssessment === 'NOT_EVALUATED'
     ? options.rationaleNonEvaluationReason ?? 'PATH_DIAGNOSIS_ONLY'
     : null;
+  const correct = latestChoiceId === session.answerChoiceId;
+  const resolutionStage = answerRevealed
+    ? 'ANSWER_REVEALED' as const
+    : session.selectionAttempt <= 1
+      ? 'INITIAL' as const
+      : session.selectionAttempt === 2
+        ? 'SECOND_SELECTION' as const
+        : 'THIRD_SELECTION' as const;
   return parsed({
     ...session,
     phase: 'COMPLETED',
@@ -367,7 +421,7 @@ function complete(
     result: {
       outcome,
       finalChoiceId: latestChoiceId,
-      correct: latestChoiceId === session.answerChoiceId,
+      correct,
       initialChoiceWasCorrect: session.initialChoiceId === session.answerChoiceId,
       selectionAttempt: session.selectionAttempt,
       rationaleSubmission: rationaleProvided ? 'PROVIDED' : 'NOT_PROVIDED',
@@ -375,13 +429,13 @@ function complete(
       rationaleNonEvaluationReason,
       answerRevealed,
       resolvedByStudent: options.resolvedByStudent ?? latestChoiceId === session.answerChoiceId,
-      resolutionStage: answerRevealed
-        ? 'ANSWER_REVEALED'
-        : session.selectionAttempt <= 1
-          ? 'INITIAL'
-          : session.selectionAttempt === 2
-            ? 'SECOND_SELECTION'
-            : 'THIRD_SELECTION',
+      resolutionStage,
+      resolutionOutcome: deriveResolutionOutcome({
+        correct,
+        answerRevealed,
+        resolutionStage,
+        rationaleAssessment,
+      }),
       interventionPath: effectiveRepairPath,
       interventionHistory: history,
       effectiveRepairPath,

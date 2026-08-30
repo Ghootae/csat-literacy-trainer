@@ -49,6 +49,7 @@ describe('headless problem pilot', () => {
           answerRevealed: false,
           resolvedByStudent: true,
           resolutionStage: 'SECOND_SELECTION',
+          resolutionOutcome: 'SECOND_SELECTION_CORRECT_VERIFIED',
           interventionPath: 'CORRECTIVE_ONLY',
           interventionHistory: ['CORRECTIVE_QUESTION'],
           effectiveRepairPath: 'CORRECTIVE_ONLY',

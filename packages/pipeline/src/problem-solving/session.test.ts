@@ -67,6 +67,7 @@ describe('pure problem solving session', () => {
       correct: true,
       selectionAttempt: 1,
       rationaleAssessment: 'NOT_PROVIDED',
+      resolutionOutcome: 'INITIAL_CORRECT',
     }));
   });
 
@@ -79,6 +80,7 @@ describe('pure problem solving session', () => {
 
     expect(awaiting.phase).toBe('AWAITING_CORRECT_RATIONALE_ASSESSMENT');
     expect(completed.result?.outcome).toBe('SUPPORTED_RATIONALE_CORRECT');
+    expect(completed.result?.resolutionOutcome).toBe('INITIAL_CORRECT_VERIFIED');
     expect(completed.observations[0]).toEqual(expect.objectContaining({
       rationale: 'pH 상승 뒤 소수성이 약해진다는 연결이 지문에서 정당화되지 않습니다.',
     }));
@@ -505,6 +507,7 @@ describe('pure problem solving session', () => {
       outcome: 'RESELECTION_CORRECT_VERIFIED',
       selectionAttempt: 2,
       rationaleAssessment: 'SUPPORTED',
+      resolutionOutcome: 'SECOND_SELECTION_CORRECT_VERIFIED',
     }));
   });
 
@@ -597,6 +600,7 @@ describe('pure problem solving session', () => {
       answerRevealed: true,
       resolvedByStudent: false,
       resolutionStage: 'ANSWER_REVEALED',
+      resolutionOutcome: 'ANSWER_REVEALED',
       interventionPath: 'STATIC_ANSWER_EXPLANATION',
       effectiveRepairPath: 'STATIC_ANSWER_EXPLANATION',
       answerExplanation: '정답은 ⑤입니다. ⑤의 소수성·크기 연결은 지문에 근거가 없습니다.',
@@ -622,6 +626,7 @@ describe('pure problem solving session', () => {
 
     expect(completed.result).toEqual(expect.objectContaining({
       resolutionStage: 'SECOND_SELECTION',
+      resolutionOutcome: 'SECOND_SELECTION_CORRECT_UNVERIFIED',
       interventionPath: 'CORRECTIVE_ONLY',
       effectiveRepairPath: 'CORRECTIVE_ONLY',
       interventionHistory: ['ITEM_BOUNDARY', 'CORRECTIVE_QUESTION'],
@@ -639,6 +644,7 @@ describe('pure problem solving session', () => {
 
     expect(completed.result).toEqual(expect.objectContaining({
       resolutionStage: 'SECOND_SELECTION',
+      resolutionOutcome: 'SECOND_SELECTION_CORRECT_UNVERIFIED',
       interventionPath: 'DIRECT_COACHING',
       effectiveRepairPath: 'DIRECT_COACHING',
       interventionHistory: ['DIRECT_COACHING', 'CORRECTIVE_QUESTION'],
@@ -660,6 +666,25 @@ describe('pure problem solving session', () => {
       answerRevealed: false,
       resolvedByStudent: true,
       resolutionStage: 'THIRD_SELECTION',
+      resolutionOutcome: 'THIRD_SELECTION_CORRECT_UNVERIFIED',
+    }));
+  });
+
+  it('3차 정답의 타당한 근거를 결합 결과 라벨에서 2차와 구분한다', () => {
+    const reselecting = structuredClone(awaitingReselectionAfterCorrection());
+    reselecting.selectionAttempt = 2;
+    const awaitingAssessment = submitProblemReselection(reselecting, {
+      selectedChoiceId: 'C5',
+      rationale: 'pH 변화가 소수성 약화와 크기 감소를 만든다는 근거가 없습니다.',
+    });
+    const completed = applyCorrectRationaleAssessment(awaitingAssessment, 'SUPPORTED');
+
+    expect(completed.result).toEqual(expect.objectContaining({
+      outcome: 'RESELECTION_CORRECT_VERIFIED',
+      selectionAttempt: 3,
+      resolutionStage: 'THIRD_SELECTION',
+      resolutionOutcome: 'THIRD_SELECTION_CORRECT_VERIFIED',
+      rationaleAssessment: 'SUPPORTED',
     }));
   });
 

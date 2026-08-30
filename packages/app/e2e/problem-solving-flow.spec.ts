@@ -164,7 +164,8 @@ test('mRNA 19번 공개 DTO와 독립 정답 완료 상태를 새로고침 후�
 
   await page.reload();
   await expect(page.getByText('정답입니다.')).toBeVisible();
-  await expect(page.getByText('교정 수준: INDEPENDENT_CORRECT')).toBeVisible();
+  await expect(page.getByText('최종 결과: INITIAL_CORRECT')).toBeVisible();
+  await expect(page.getByText('상세 결과 유형: INDEPENDENT_CORRECT')).toBeVisible();
 });
 
 test('정답 공개 상세 코칭 종료를 학생의 독립 정답으로 표시하지 않는다', async ({ page }) => {
@@ -188,6 +189,8 @@ test('정답 공개 상세 코칭 종료를 학생의 독립 정답으로 표시
           answerRevealed: true,
           resolvedByStudent: false,
           resolutionStage: 'ANSWER_REVEALED',
+          resolutionOutcome: 'ANSWER_REVEALED',
+          resolutionOutcome: 'ANSWER_REVEALED',
           interventionPath: 'STATIC_ANSWER_EXPLANATION',
           interventionHistory: ['CORRECTIVE_QUESTION', 'STATIC_ANSWER_EXPLANATION'],
           effectiveRepairPath: 'STATIC_ANSWER_EXPLANATION',
@@ -204,6 +207,7 @@ test('정답 공개 상세 코칭 종료를 학생의 독립 정답으로 표시
   await expect(page.getByText('상세 코칭으로 풀이를 마쳤습니다.')).toBeVisible();
   await expect(page.getByText('학생 스스로 해결: 아니요')).toBeVisible();
   await expect(page.getByText('정답 공개: 예')).toBeVisible();
+  await expect(page.getByText('최종 결과: ANSWER_REVEALED')).toBeVisible();
   await expect(page.getByText('최종 근거: 제출됨')).toBeVisible();
   await expect(page.getByText('최종 근거 검증: 최종 시도 정적 종결로 별도 평가하지 않음')).toBeVisible();
   await expect(page.getByText('최종 유효 교정 경로: STATIC_ANSWER_EXPLANATION')).toBeVisible();
@@ -278,6 +282,8 @@ test('직접 코칭 확인 응답 뒤 새로고침 없이 재선택 선지가 �
             answerRevealed: false,
             resolvedByStudent: true,
             resolutionStage: 'SECOND_SELECTION',
+            resolutionOutcome: 'SECOND_SELECTION_CORRECT_VERIFIED',
+            resolutionOutcome: 'SECOND_SELECTION_CORRECT_VERIFIED',
             interventionPath: 'DIRECT_COACHING',
             interventionHistory: ['DIRECT_COACHING'],
             effectiveRepairPath: 'DIRECT_COACHING',
@@ -312,6 +318,7 @@ test('직접 코칭 확인 응답 뒤 새로고침 없이 재선택 선지가 �
   await expect(page.getByRole('button', { name: '다시 선택' })).toBeEnabled();
   await page.getByLabel('바꾼 이유 (선택 사항)').fill('pH 변화와 소수성 약화의 연결이 맞지 않습니다.');
   await page.getByRole('button', { name: '다시 선택' }).click();
+  await expect(page.getByText('최종 결과: SECOND_SELECTION_CORRECT_VERIFIED')).toBeVisible();
   await expect(page.getByText('최종 근거 검증: SUPPORTED')).toBeVisible();
   expect(receivedReselectionRationale).toBe('pH 변화와 소수성 약화의 연결이 맞지 않습니다.');
 });

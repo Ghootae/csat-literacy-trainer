@@ -51,6 +51,7 @@
 | 10 | 유한 선택·피드백 종료 계약 구현 | `COMPLETED` |
 | 11 | 25세션 파일럿 P0 상태 전이 안정화 | `COMPLETED` |
 | 12 | 최종 근거·개입 경로 분석 계약 보정 | `COMPLETED` |
+| 13 | 해결 회차·근거 검증 결합 결과 라벨 | `COMPLETED` |
 
 ## 4. 구현 불변 조건
 
@@ -466,6 +467,21 @@ type ProblemSolvingNextAction =
 - [x] 호환용 `interventionPath`는 `effectiveRepairPath`와 일치시켜 기존 분석의 오판을 막는다.
 - [x] UI에 근거 제출·평가 상태, 최종 유효 교정 경로와 전체 개입 이력을 구분해 표시한다.
 
+### 섹션 13. 해결 회차·근거 검증 결합 결과 라벨
+
+상태: `COMPLETED`
+
+`outcome`과 `resolutionStage`를 원본 분석 축으로 유지하면서, 라벨 하나만으로도 해결 회차와 근거 검증 수준을 알 수 있는 `resolutionOutcome`을 코드가 생성한다.
+
+구현 완료 조건:
+
+- [x] 최초 정답은 근거 없음·검증·미검증을 `INITIAL_CORRECT`, `INITIAL_CORRECT_VERIFIED`, `INITIAL_CORRECT_UNVERIFIED`로 구분한다.
+- [x] 2차 정답은 `SECOND_SELECTION_CORRECT_VERIFIED | UNVERIFIED`로 구분한다.
+- [x] 3차 정답은 `THIRD_SELECTION_CORRECT_VERIFIED | UNVERIFIED`로 구분한다.
+- [x] 정답 공개 종료는 선택 정오와 관계없이 `ANSWER_REVEALED`로 구분한다.
+- [x] `resolutionOutcome`은 모델이 아니라 세션 코드가 해결 회차·정오·정답 공개·근거 평가로부터 결정한다.
+- [x] UI는 `resolutionOutcome`을 `최종 결과`, 기존 `outcome`을 `상세 결과 유형`으로 표시한다.
+
 ## 6. MVP 이후로 미루는 범위
 
 다음은 mRNA 19번 수직 슬라이스와 PCR 행동 기준 또는 두 번째 로컬 문항의 교차 검증이 끝날 때까지 구현하지 않는다.
@@ -837,3 +853,12 @@ npm run test:e2e
 - 파일럿의 `DIRECT_COACHING → CORRECTIVE_QUESTION`이 `ITEM_BOUNDARY → CORRECTIVE_QUESTION`으로 저장된 원인은, `DIRECT_COACHING` 행동의 `coachingReason: ITEM_INTERPRETATION_BOUNDARY`를 이력 이벤트 `ITEM_BOUNDARY`로 바꾼 것이었다.
 - `interventionHistory`는 학생에게 실제로 제공된 행동 타입을 보존하도록 수정했다. `DIRECT_COACHING`은 사유와 관계없이 `DIRECT_COACHING`으로, 실제 `EXPLAIN_ITEM_BOUNDARY`만 `ITEM_BOUNDARY`로 기록한다.
 - ② 오답의 문항 경계 사유 직접 코칭 후 교정 질문을 거쳐 정답에 도달한 경로를 고정해, `interventionHistory: [DIRECT_COACHING, CORRECTIVE_QUESTION]`과 `effectiveRepairPath: DIRECT_COACHING`을 검증했다.
+
+### 2026-08-31 — 회차별 결합 결과 라벨 추가
+
+- 2차·3차 정답이 모두 `RESELECTION_CORRECT_VERIFIED`로 표시되던 문제를, 원본 `outcome`을 분해하지 않고 결합 축 `resolutionOutcome`을 추가해 해결했다.
+- `resolutionOutcome`은 `SECOND_SELECTION_CORRECT_VERIFIED`, `THIRD_SELECTION_CORRECT_VERIFIED` 등으로 해결 회차와 근거 검증 수준을 하나의 라벨에 보존한다.
+- 세션 계약을 `problem-solving-session-v9`로 올리고, 저장된 라벨이 원본 축과 다르면 스키마가 거부하도록 고정했다.
+- UI에서 기존 `교정 수준`을 `상세 결과 유형`으로 바꾸고, `resolutionOutcome`을 `최종 결과`로 별도 표시했다.
+- 타입 검사, 결합 라벨 집중 회귀 78개와 문제 풀이 브라우저 E2E 6개가 통과했다. 전체 회귀는 589개가 통과했고, 기존 누락 `.omc` 실험 산출물 의존 테스트 1개만 동일하게 실패했다.
+- 섹션 13의 완료 조건을 모두 충족해 `COMPLETED`로 고정했다.
