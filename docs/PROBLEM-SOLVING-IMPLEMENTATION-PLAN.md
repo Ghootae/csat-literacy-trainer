@@ -759,3 +759,14 @@ npm run test:e2e
 - 세션 저장 계약을 `problem-solving-session-v6`로 올렸다.
 - 타입 검사와 관련 집중 테스트 78개가 통과했다. 기존 결손 실험 산출물 의존 테스트 1개를 제외한 회귀 테스트 574개와 격리 포트 브라우저 E2E 7개가 통과했다.
 - 섹션 10의 유한 선택·피드백 종료 완료 조건을 모두 충족하여 `COMPLETED`로 변경했다.
+
+### 2026-08-30 — 실제 파일럿 evaluator 계약 안정화
+
+- mRNA 19번 실제 모델 파일럿에서 `status`, `learningState`, `errorAssessment`, `sufficiency`의 중복 조합이 간헐적으로 어긋나 API 500을 만드는 세 사례를 확인했다.
+- 모델의 충분성·현재 오류 판정·관찰 근거는 유지하되, 기계적으로 따라오는 `status`와 `learningState`는 코드가 다시 계산하도록 변경했다. 공급자 원출력은 감사용 `rawOutput`에 그대로 보존한다.
+- 합리적 대안·문항 한계는 `BOUNDARY_CLARIFICATION_REQUIRED + ITEM_BOUNDARY_CLARIFIED`, 명백한 미수정 오류는 `SUFFICIENT + PATH_CLARIFIED`, 오류 없음은 `REVISES_PRIOR` 유무에 따라 `CORRECTED`와 `NO_ERROR_DETECTED`로 결정한다.
+- 모델이 질문 사용량을 관찰 개수로 잘못 추정해 허용되지 않은 직접 코칭을 제안한 사례를 확인했다. 실제 Structured Output JSON Schema의 다음 행동 union을 매 호출의 `allowedActionTypes`로 제한해 질문 예산과 종료 권한을 생성 단계부터 코드가 강제한다.
+- 재선택 근거 원문이 내부 선택 ID와 같은 `C5`일 때 세션은 근거 있음, 블라인드 projection은 근거 없음으로 다르게 판단하던 경계를 수정했다. 짧은 원문도 판정기에 전달하여 타당성 또는 불확실성으로 안전하게 종료한다.
+- 상태 조합 세 실패 형태, 원출력 보존, 동적 행동 스키마 제한과 `C5` 원문 projection을 고정 회귀로 추가했다.
+- 최종 타입 검사와 기존 결손 산출물 의존 테스트 1개를 제외한 회귀 테스트 580개가 통과했다. 브라우저 E2E는 7개 중 6개가 최초 실행에서 통과했고, 문단 이동 준비 타임아웃 1개는 격리 재실행에서 통과했다.
+- 실제 모델 재실행에서는 첫 보완 후 10개 중 9개가 완료됐고, 행동 스키마 보완 후 다음 실행에서 8개가 완료됐다. 남은 두 건 중 하나는 `C5` projection 결함으로 수정·회귀 고정했으며, 다른 하나와 수정 후 표적 재검증은 `api.openai.com` DNS `ENOTFOUND`가 반복되어 외부 연결 복구 후 다시 확인해야 한다.

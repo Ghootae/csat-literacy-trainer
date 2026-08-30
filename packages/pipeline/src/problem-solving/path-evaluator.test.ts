@@ -17,9 +17,11 @@ import {
   failedCorrectionSupplementalAccess,
   finalAttemptSupplementalAccess,
   projectProblemPathEvaluatorProviderInput,
+  resolveCodeOwnedDiagnosticTargetStates,
   validateProblemPathEvaluatorOutput,
 } from './path-evaluator-input.js';
 import {
+  createProblemPathProviderOutputJsonSchema,
   OpenAIProblemPathEvaluator,
   ProblemPathEvaluatorContractError,
   ProblemPathTransportError,
@@ -62,7 +64,9 @@ function correctRationaleSession() {
   });
 }
 
-function reselectedCorrectRationaleSession() {
+function reselectedCorrectRationaleSession(
+  rationale = 'pH가 높아진 뒤 소수성이 약해진다는 연결이 지문의 관계와 맞지 않습니다.',
+) {
   const fixture = JSON.parse(readFileSync(resolve(
     process.cwd(),
     'packages/pipeline/fixtures/experiments/problem-solving/episodes/mrna-q19-c4-completed.json',
@@ -76,7 +80,7 @@ function reselectedCorrectRationaleSession() {
   const reselecting = applyProblemEvaluatorTurn(answered, fixture.turns[1]);
   return submitProblemReselection(reselecting, {
     selectedChoiceId: 'C5',
-    rationale: 'pH가 높아진 뒤 소수성이 약해진다는 연결이 지문의 관계와 맞지 않습니다.',
+    rationale,
   });
 }
 
@@ -183,6 +187,81 @@ function diagnosticOutput() {
 }
 
 describe('problem path evaluator contract', () => {
+  it('충분한 합리적 해석의 상태를 문항 경계 상태로 코드가 결정한다', () => {
+    const output = diagnosticOutput() as any;
+    output.targets[0].status = 'SUFFICIENT';
+    output.targets[0].learningState = 'PATH_CLARIFIED';
+    output.targets[0].errorAssessment = 'REASONABLE_ALTERNATIVE_INTERPRETATION';
+    output.targets[0].sufficiency = sufficiency(true);
+    output.nextActionCandidate = {
+      type: 'EXPLAIN_ITEM_BOUNDARY',
+      target: 'SELECTED_CHOICE',
+      questionIntent: null,
+      questionText: null,
+      studentMessage: '그 해석은 합리적이며 문항에서는 일정 비율을 유지하는 통제로 해석합니다.',
+      supplementalInferenceIds: [],
+    };
+
+    const resolved = ProblemPathDiagnosticOutputSchema.parse(
+      resolveCodeOwnedDiagnosticTargetStates(output),
+    );
+    expect(resolved.targets[0]).toEqual(expect.objectContaining({
+      status: 'BOUNDARY_CLARIFICATION_REQUIRED',
+      learningState: 'ITEM_BOUNDARY_CLARIFIED',
+    }));
+  });
+
+  it('수정 근거 없는 CORRECTED를 오류 없음 상태로 코드가 낮춘다', () => {
+    const output = diagnosticOutput() as any;
+    output.targets[0].status = 'RESOLVED';
+    output.targets[0].learningState = 'CORRECTED';
+    output.targets[0].errorAssessment = 'NO_ERROR_DETECTED';
+    output.targets[0].sufficiency = sufficiency(true);
+    output.diagnosticDecision.unresolvedStepRefs = [];
+    output.nextActionCandidate = {
+      type: 'COMPLETE',
+      target: null,
+      questionIntent: null,
+      questionText: null,
+      studentMessage: '현재 근거에서 오류가 발견되지 않았습니다.',
+      supplementalInferenceIds: [],
+    };
+
+    const resolved = ProblemPathDiagnosticOutputSchema.parse(
+      resolveCodeOwnedDiagnosticTargetStates(output),
+    );
+    expect(resolved.targets[0]).toEqual(expect.objectContaining({
+      status: 'RESOLVED',
+      learningState: 'NO_ERROR_DETECTED',
+    }));
+  });
+
+  it('수정 관찰이 있으면 오류 없음 판정에서 CORRECTED를 코드가 결정한다', () => {
+    const output = diagnosticOutput() as any;
+    output.targets[0].status = 'SUFFICIENT';
+    output.targets[0].learningState = 'PATH_CLARIFIED';
+    output.targets[0].errorAssessment = 'NO_ERROR_DETECTED';
+    output.targets[0].pathSteps[0].relationToPrior = 'REVISES_PRIOR';
+    output.targets[0].sufficiency = sufficiency(true);
+    output.diagnosticDecision.unresolvedStepRefs = [];
+    output.nextActionCandidate = {
+      type: 'REQUEST_RESELECTION',
+      target: null,
+      questionIntent: null,
+      questionText: null,
+      studentMessage: '방금 수정한 관계를 반영해 다시 선택해 주세요.',
+      supplementalInferenceIds: [],
+    };
+
+    const resolved = ProblemPathDiagnosticOutputSchema.parse(
+      resolveCodeOwnedDiagnosticTargetStates(output),
+    );
+    expect(resolved.targets[0]).toEqual(expect.objectContaining({
+      status: 'RESOLVED',
+      learningState: 'CORRECTED',
+    }));
+  });
+
   it('evaluator의 광범위한 전체 선지 재검사 문구를 거부한다', () => {
     expect(() => EvaluatorNextActionCandidateSchema.parse({
       type: 'REQUEST_RESELECTION',
@@ -205,6 +284,8 @@ describe('problem path evaluator contract', () => {
     expect(prompt).toContain('candidateDivergenceLayers`는 오류를 분류하기 위한 후보 라벨');
     expect(prompt).toContain('분류를 더 정밀하게 만들기 위한 질문은 진단 질문이 아니다');
     expect(prompt).toContain('오류 분류의 정밀도만 높이는 `UNKNOWN`은 진단 질문의 근거가 아니다');
+    expect(prompt).toContain('allowedActionTypes`는 설명용 힌트가 아니라');
+    expect(prompt).toContain('`sufficient: true` + `CLEAR_ERROR`');
   });
 
   it('미평가 타깃은 오류 평가·경로·가설·충분성을 만들지 않는다', () => {
@@ -595,6 +676,24 @@ describe('problem path evaluator input projection', () => {
     expect(JSON.stringify(providerInput)).not.toContain('answerChoiceId');
   });
 
+  it('재선택 근거가 선택 ID와 같아도 제출된 원문으로 안전하게 판정한다', () => {
+    const input = createProblemPathEvaluatorInput({
+      evaluationMode: 'ASSESS_SELECTION_RATIONALE',
+      session: reselectedCorrectRationaleSession('C5'),
+      gold,
+    });
+    const providerInput = projectProblemPathEvaluatorProviderInput(input);
+
+    expect(providerInput.evaluationMode).toBe('ASSESS_SELECTION_RATIONALE');
+    if (providerInput.evaluationMode === 'ASSESS_SELECTION_RATIONALE') {
+      expect(providerInput.rationaleReview.studentRationale).toEqual({
+        observationId: 'O3',
+        sourceField: 'rawResponse',
+        text: 'C5',
+      });
+    }
+  });
+
   it('부정 발문에서 선택 선지를 맞다고 승인한 근거를 CLEAR_ERROR로 강제한다', () => {
     const session = submitInitialProblemResponse(fresh(), {
       initialChoiceId: 'C5',
@@ -674,6 +773,18 @@ describe('problem path evaluator runtime boundary', () => {
     });
   }
 
+  it('공급자 JSON Schema를 현재 코드가 허용한 행동으로 제한한다', () => {
+    const schema = createProblemPathProviderOutputJsonSchema({
+      mode: 'DIAGNOSE_PATH',
+      allowedActionTypes: ['ASK_CORRECTIVE'],
+    }) as any;
+    const variants = schema.properties.nextActionCandidate.anyOf as any[];
+    expect(variants.map((variant) => variant.properties.type.const))
+      .toEqual(['ASK_CORRECTIVE']);
+    expect(JSON.stringify(schema.properties.nextActionCandidate))
+      .not.toContain('DIRECT_COACHING');
+  });
+
   it('검증된 전체 스냅샷의 local ID를 확정하고 호출 메타데이터를 반환한다', async () => {
     const transport: ProblemPathEvaluatorTransport = {
       async parse() {
@@ -705,6 +816,42 @@ describe('problem path evaluator runtime boundary', () => {
           existingId: 'PS-T1-1', localId: null,
         });
       }
+    }
+  });
+
+  it('공급자의 중복 상태값을 코드가 교정하되 원출력은 감사용으로 보존한다', async () => {
+    const raw = diagnosticOutput() as any;
+    raw.targets[0].status = 'SUFFICIENT';
+    raw.targets[0].learningState = 'PATH_CLARIFIED';
+    raw.targets[0].errorAssessment = 'GOLD_OR_ITEM_LIMITATION';
+    raw.targets[0].sufficiency = sufficiency(true);
+    raw.nextActionCandidate = {
+      type: 'EXPLAIN_ITEM_BOUNDARY',
+      target: 'SELECTED_CHOICE',
+      questionIntent: null,
+      questionText: null,
+      studentMessage: '학생의 해석은 문항 표현상 합리적인 범위입니다.',
+      supplementalInferenceIds: [],
+    };
+    const transport: ProblemPathEvaluatorTransport = {
+      async parse() {
+        return { outputParsed: raw };
+      },
+    };
+    const evaluator = new OpenAIProblemPathEvaluator({
+      transport,
+      metricRecorder: () => undefined,
+    });
+
+    const call = await evaluator.evaluate(evaluatorInput());
+
+    expect(call.rawOutput).toEqual(raw);
+    expect(call.result.mode).toBe('DIAGNOSE_PATH');
+    if (call.result.mode === 'DIAGNOSE_PATH') {
+      expect(call.result.targets[0]).toEqual(expect.objectContaining({
+        status: 'BOUNDARY_CLARIFICATION_REQUIRED',
+        learningState: 'ITEM_BOUNDARY_CLARIFIED',
+      }));
     }
   });
 

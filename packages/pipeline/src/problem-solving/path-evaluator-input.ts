@@ -198,8 +198,7 @@ export function projectProblemPathEvaluatorProviderInput(
           observation.rationale !== null;
       }
       return observation.kind === 'RESELECTION' &&
-        observation.selectedChoiceId === input.sessionState.currentChoiceId &&
-        observation.rawResponse !== observation.selectedChoiceId;
+        observation.selectedChoiceId === input.sessionState.currentChoiceId;
     },
   );
   if (rationaleObservation === undefined) {
@@ -618,13 +617,94 @@ function validateEvidenceAgainstInput(
   }
 }
 
+/**
+ * `status`와 `learningState`는 모델이 판단할 독립 의미값이 아니다.
+ * 모델이 제시한 충분성·현재 오류 판정·학생의 수정 근거에서 코드가 두 상태를
+ * 결정한다. 공급자 원출력은 runtime의 `rawOutput`에 별도로 보존된다.
+ */
+export function resolveCodeOwnedDiagnosticTargetStates(outputInput: unknown): unknown {
+  const output = structuredClone(outputInput);
+  if (
+    typeof output !== 'object' ||
+    output === null ||
+    !('mode' in output) ||
+    output.mode !== 'DIAGNOSE_PATH' ||
+    !('targets' in output) ||
+    !Array.isArray(output.targets)
+  ) {
+    return output;
+  }
+
+  for (const target of output.targets) {
+    if (
+      typeof target !== 'object' ||
+      target === null ||
+      !('sufficiency' in target) ||
+      typeof target.sufficiency !== 'object' ||
+      target.sufficiency === null ||
+      !('sufficient' in target.sufficiency) ||
+      typeof target.sufficiency.sufficient !== 'boolean' ||
+      !('errorAssessment' in target) ||
+      typeof target.errorAssessment !== 'string'
+    ) {
+      continue;
+    }
+
+    if (!target.sufficiency.sufficient) {
+      Object.assign(target, {
+        status: 'INSUFFICIENT',
+        learningState: 'PATH_UNCLEAR',
+      });
+      continue;
+    }
+
+    if (target.errorAssessment === 'CLEAR_ERROR') {
+      Object.assign(target, {
+        status: 'SUFFICIENT',
+        learningState: 'PATH_CLARIFIED',
+      });
+      continue;
+    }
+
+    if (
+      target.errorAssessment === 'REASONABLE_ALTERNATIVE_INTERPRETATION' ||
+      target.errorAssessment === 'GOLD_OR_ITEM_LIMITATION'
+    ) {
+      Object.assign(target, {
+        status: 'BOUNDARY_CLARIFICATION_REQUIRED',
+        learningState: 'ITEM_BOUNDARY_CLARIFIED',
+      });
+      continue;
+    }
+
+    if (target.errorAssessment === 'NO_ERROR_DETECTED') {
+      const hasObservedRevision = 'pathSteps' in target &&
+        Array.isArray(target.pathSteps) &&
+        target.pathSteps.some((step: unknown) =>
+          typeof step === 'object' &&
+          step !== null &&
+          'relationToPrior' in step &&
+          step.relationToPrior === 'REVISES_PRIOR'
+        );
+      Object.assign(target, {
+        status: 'RESOLVED',
+        learningState: hasObservedRevision ? 'CORRECTED' : 'NO_ERROR_DETECTED',
+      });
+    }
+  }
+
+  return output;
+}
+
 export function validateProblemPathEvaluatorOutput(
   outputInput: unknown,
   evaluatorInput: ProblemPathEvaluatorInput,
   options: { readonly allowCodeResolvedIds?: boolean } = {},
 ): ProblemPathEvaluatorOutput {
   const input = ProblemPathEvaluatorInputSchema.parse(evaluatorInput);
-  const output = ProblemPathEvaluatorOutputSchema.parse(outputInput);
+  const output = ProblemPathEvaluatorOutputSchema.parse(
+    resolveCodeOwnedDiagnosticTargetStates(outputInput),
+  );
   if (output.mode !== input.evaluationMode) throw new Error('evaluator 입력 모드와 출력 모드가 일치하지 않는다.');
 
   const basicGoldIds = allBasicGoldIds(input.basicGold);

@@ -47,6 +47,11 @@
 
 `COMPLETE`는 의미적 후보일 뿐이며 실제 종료가 아니다.
 
+`sessionState.allowedActionTypes`는 설명용 힌트가 아니라 이번 호출의 절대적인
+행동 허용 목록이다. 관찰 개수로 사용한 질문 수를 추정하지 말고
+`questionsUsedThisAttempt` 값을 그대로 따른다. 목록에 없는 행동은 교육적으로
+타당해 보여도 출력하지 않는다. 공급자 출력 스키마도 이 목록으로 제한된다.
+
 질문 예산은 두 층이다. `diagnosticQuestionsUsed/maxDiagnosticQuestions`는 세션 전체 진단 질문 안전 한도이고, `questionsUsedThisAttempt/maxQuestionsPerWrongAttempt`는 현재 오답 선택에 제시한 진단·교정 질문의 합산 한도다. 현재 선택의 예산이 우선하며 재오답으로 새 선택 차수가 시작되면 코드가 0으로 초기화한다.
 
 선택은 `selectionAttempt/maxSelectionAttempts`로 제한된다. 최종 선택 차수에서는 질문과 재선택을 만들지 않는다. 코드가 `DIRECT_COACHING`만 허용하면 사유를 `FINAL_ATTEMPT`로 두고, 현재 선택의 판정과 정답 설명을 포함한 상세 코칭을 제안한다.
@@ -205,6 +210,17 @@ ID 공간을 섞지 않는다.
 ### 학습 진행 상태
 
 충분성과 학생의 실제 수정 여부를 `learningState`로 분리한다.
+
+`status`와 `learningState`는 공급자 출력 형식과 판단 설명을 위한 호환 필드이며,
+최종값은 코드가 `sufficiency.sufficient`, `errorAssessment`, 경로의
+`relationToPrior: REVISES_PRIOR`에서 다시 계산한다. 일상적인 의미의 “경로가
+명확해졌다”를 임의로 `PATH_CLARIFIED`에 넣지 말고 다음 대응을 사용한다.
+
+- `sufficient: false` → `status: INSUFFICIENT`, `learningState: PATH_UNCLEAR`
+- `sufficient: true` + `CLEAR_ERROR` → `status: SUFFICIENT`, `learningState: PATH_CLARIFIED`
+- `sufficient: true` + 합리적 대안 해석·문항 한계 → `status: BOUNDARY_CLARIFICATION_REQUIRED`, `learningState: ITEM_BOUNDARY_CLARIFIED`
+- `sufficient: true` + `NO_ERROR_DETECTED` + 학생 근거가 있는 `REVISES_PRIOR` → `status: RESOLVED`, `learningState: CORRECTED`
+- `sufficient: true` + `NO_ERROR_DETECTED` + `REVISES_PRIOR` 없음 → `status: RESOLVED`, `learningState: NO_ERROR_DETECTED`
 
 - `PATH_UNCLEAR`: 오답을 만든 경로가 아직 불충분하다.
 - `PATH_CLARIFIED`: 최초 오류와 안전한 개입 지점은 확인됐지만 학생의 기존 표상은 아직 유지된다.

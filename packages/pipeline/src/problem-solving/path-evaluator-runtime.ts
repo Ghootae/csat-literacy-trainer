@@ -76,8 +76,54 @@ export interface ProblemPathEvaluatorTransport {
     readonly instructions: string;
     readonly input: string;
     readonly mode: ProblemPathEvaluatorInput['evaluationMode'];
+    readonly allowedActionTypes: ProblemPathEvaluatorInput['sessionState']['allowedActionTypes'];
     readonly timeoutMs: number;
   }): Promise<ParsedTransportResponse>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** 코드 상태가 허용한 다음 행동만 공급자의 constrained decoding 후보로 남긴다. */
+export function createProblemPathProviderOutputJsonSchema(options: {
+  readonly mode: ProblemPathEvaluatorInput['evaluationMode'];
+  readonly allowedActionTypes: ProblemPathEvaluatorInput['sessionState']['allowedActionTypes'];
+}) {
+  const jsonSchema = options.mode === 'ASSESS_SELECTION_RATIONALE'
+    ? z.toJSONSchema(SelectionRationaleEvaluationOutputSchema)
+    : z.toJSONSchema(ProblemPathDiagnosticOutputSchema);
+  if (options.mode !== 'DIAGNOSE_PATH') return jsonSchema;
+
+  const properties = isRecord(jsonSchema) && isRecord(jsonSchema['properties'])
+    ? jsonSchema['properties']
+    : undefined;
+  const nextAction = properties === undefined || !isRecord(properties['nextActionCandidate'])
+    ? undefined
+    : properties['nextActionCandidate'];
+  const variants = nextAction === undefined || !Array.isArray(nextAction['anyOf'])
+    ? undefined
+    : nextAction['anyOf'];
+  if (variants === undefined) {
+    throw new Error('problem path evaluator의 다음 행동 JSON Schema를 찾을 수 없다.');
+  }
+  if (nextAction === undefined) {
+    throw new Error('problem path evaluator의 다음 행동 JSON Schema 객체가 없다.');
+  }
+
+  const allowed = new Set<string>(options.allowedActionTypes);
+  const filtered = variants.filter((variant) => {
+    if (!isRecord(variant) || !isRecord(variant['properties'])) return false;
+    const typeProperty = variant['properties']['type'];
+    return isRecord(typeProperty) &&
+      typeof typeProperty['const'] === 'string' &&
+      allowed.has(typeProperty['const']);
+  });
+  if (filtered.length === 0) {
+    throw new Error('현재 코드 상태가 허용한 evaluator 다음 행동 스키마가 없다.');
+  }
+  nextAction['anyOf'] = filtered;
+  return jsonSchema;
 }
 
 class OpenAIProblemPathTransport implements ProblemPathEvaluatorTransport {
@@ -85,9 +131,6 @@ class OpenAIProblemPathTransport implements ProblemPathEvaluatorTransport {
 
   async parse(options: Parameters<ProblemPathEvaluatorTransport['parse']>[0]): Promise<ParsedTransportResponse> {
     this.client ??= new OpenAI({ maxRetries: 0 });
-    const outputSchema = options.mode === 'ASSESS_SELECTION_RATIONALE'
-      ? SelectionRationaleEvaluationOutputSchema
-      : ProblemPathDiagnosticOutputSchema;
     const response = await this.client.responses.create({
       model: options.model,
       instructions: options.instructions,
@@ -100,7 +143,7 @@ class OpenAIProblemPathTransport implements ProblemPathEvaluatorTransport {
           type: 'json_schema',
           name: 'problem_path_evaluator_output',
           strict: true,
-          schema: z.toJSONSchema(outputSchema),
+          schema: createProblemPathProviderOutputJsonSchema(options),
         },
       },
     }, { timeout: options.timeoutMs, maxRetries: 0 });
@@ -233,6 +276,7 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
           instructions: loadProblemPathDiagnosticPrompt(),
           input: JSON.stringify(providerInput),
           mode: input.evaluationMode,
+          allowedActionTypes: input.sessionState.allowedActionTypes,
           timeoutMs: this.timeoutMs,
         });
         if (response.outputParsed === null) {
