@@ -288,11 +288,31 @@ export interface ProblemSessionView {
     readonly finalChoiceId: string;
     readonly outcome: string;
     readonly selectionAttempt: number;
-    readonly rationaleAssessment: 'NOT_PROVIDED' | 'SUPPORTED' | 'UNCERTAIN' | 'CLEAR_ERROR';
+    readonly rationaleSubmission: 'PROVIDED' | 'NOT_PROVIDED';
+    readonly rationaleAssessment: 'NOT_PROVIDED' | 'NOT_EVALUATED' | 'SUPPORTED' | 'UNCERTAIN' | 'CLEAR_ERROR';
+    readonly rationaleNonEvaluationReason:
+      | 'FINAL_ATTEMPT_STATIC_TERMINATION'
+      | 'PATH_DIAGNOSIS_ONLY'
+      | null;
     readonly answerRevealed: boolean;
     readonly resolvedByStudent: boolean;
     readonly resolutionStage: 'INITIAL' | 'SECOND_SELECTION' | 'THIRD_SELECTION' | 'ANSWER_REVEALED';
     readonly interventionPath:
+      | 'NONE'
+      | 'DIAGNOSTIC_ONLY'
+      | 'CORRECTIVE_ONLY'
+      | 'DIAGNOSTIC_THEN_CORRECTIVE'
+      | 'ITEM_BOUNDARY'
+      | 'DIRECT_COACHING'
+      | 'STATIC_ANSWER_EXPLANATION';
+    readonly interventionHistory: readonly (
+      | 'DIAGNOSTIC_QUESTION'
+      | 'CORRECTIVE_QUESTION'
+      | 'ITEM_BOUNDARY'
+      | 'DIRECT_COACHING'
+      | 'STATIC_ANSWER_EXPLANATION'
+    )[];
+    readonly effectiveRepairPath:
       | 'NONE'
       | 'DIAGNOSTIC_ONLY'
       | 'CORRECTIVE_ONLY'

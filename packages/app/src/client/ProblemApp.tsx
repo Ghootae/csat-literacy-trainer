@@ -14,6 +14,13 @@ import { recoverProblemMutation } from './problem-session-recovery.js';
 const QUESTION_ID = 'mrna-vaccine-lipid-nanoparticle-q19';
 const STORAGE_KEY = `csat.problem.${QUESTION_ID}`;
 
+function rationaleAssessmentLabel(result: NonNullable<ProblemSessionView['result']>): string {
+  if (result.rationaleAssessment !== 'NOT_EVALUATED') return result.rationaleAssessment;
+  return result.rationaleNonEvaluationReason === 'FINAL_ATTEMPT_STATIC_TERMINATION'
+    ? '최종 시도 정적 종결로 별도 평가하지 않음'
+    : '오답 경로 진단에만 사용하고 정답 근거로는 별도 평가하지 않음';
+}
+
 export function ProblemApp(): React.JSX.Element {
   const [session, setSession] = useState<ProblemSessionView | null>(null);
   const [choiceId, setChoiceId] = useState<string | null>(null);
@@ -355,12 +362,16 @@ export function ProblemApp(): React.JSX.Element {
                   : '풀이를 종료했습니다.'}</strong>
               <p>최종 선택: {content.choices.find((choice) => choice.choiceId === session.result!.finalChoiceId)?.position}번</p>
               <p>선택 횟수: {session.result.selectionAttempt}회</p>
-              <p>최종 근거 검증: {session.result.rationaleAssessment}</p>
+              <p>최종 근거: {session.result.rationaleSubmission === 'PROVIDED' ? '제출됨' : '제출하지 않음'}</p>
+              <p>최종 근거 검증: {rationaleAssessmentLabel(session.result)}</p>
               <p>학생 스스로 해결: {session.result.resolvedByStudent ? '예' : '아니요'}</p>
               <p>정답 공개: {session.result.answerRevealed ? '예' : '아니요'}</p>
               <p>교정 수준: {session.result.outcome}</p>
               <p>해결 단계: {session.result.resolutionStage}</p>
-              <p>개입 경로: {session.result.interventionPath}</p>
+              <p>최종 유효 교정 경로: {session.result.effectiveRepairPath}</p>
+              <p>전체 개입 이력: {session.result.interventionHistory.length === 0
+                ? 'NONE'
+                : session.result.interventionHistory.join(' → ')}</p>
               {session.result.answerExplanation !== null && <p>{session.result.answerExplanation}</p>}
             </div>
           )}

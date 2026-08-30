@@ -65,6 +65,7 @@ const ProjectedObservationSchema = z.discriminatedUnion('kind', [
     inReplyToTurnId: z.string().min(1),
     selectedChoiceId: z.string().min(1),
     rawResponse: z.string().min(1),
+    rationaleProvided: z.boolean(),
   }).strict(),
 ]);
 

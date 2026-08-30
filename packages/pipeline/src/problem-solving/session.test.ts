@@ -591,13 +591,35 @@ describe('pure problem solving session', () => {
       outcome: 'DETAILED_COACHING_REQUIRED',
       selectionAttempt: 3,
       correct: false,
+      rationaleSubmission: 'PROVIDED',
+      rationaleAssessment: 'NOT_EVALUATED',
+      rationaleNonEvaluationReason: 'FINAL_ATTEMPT_STATIC_TERMINATION',
       answerRevealed: true,
       resolvedByStudent: false,
       resolutionStage: 'ANSWER_REVEALED',
       interventionPath: 'STATIC_ANSWER_EXPLANATION',
+      effectiveRepairPath: 'STATIC_ANSWER_EXPLANATION',
       answerExplanation: '정답은 ⑤입니다. ⑤의 소수성·크기 연결은 지문에 근거가 없습니다.',
     }));
+    expect(completed.result?.interventionHistory.at(-1)).toBe('STATIC_ANSWER_EXPLANATION');
     expect(completed.turns).toHaveLength(reselecting.turns.length);
+  });
+
+  it('이전 문항 경계 설명이 있어도 성공에 직접 연결된 교정 경로를 보존한다', () => {
+    const reselecting = structuredClone(awaitingReselectionAfterCorrection());
+    const boundaryTurn = structuredClone(
+      fixture('mrna-q19-c2-rational-challenge.json').turns[1],
+    ) as any;
+    boundaryTurn.turnId = 'T0';
+    reselecting.turns = [boundaryTurn, ...reselecting.turns];
+    const completed = submitProblemReselection(reselecting, { selectedChoiceId: 'C5' });
+
+    expect(completed.result).toEqual(expect.objectContaining({
+      resolutionStage: 'SECOND_SELECTION',
+      interventionPath: 'CORRECTIVE_ONLY',
+      effectiveRepairPath: 'CORRECTIVE_ONLY',
+      interventionHistory: ['ITEM_BOUNDARY', 'CORRECTIVE_QUESTION'],
+    }));
   });
 
   it('3차에 스스로 정답을 선택하면 2차 교정과 구분해 기록한다', () => {

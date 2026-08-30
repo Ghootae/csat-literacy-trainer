@@ -69,8 +69,13 @@ describe('problem solving server controller', () => {
       correct: true,
       finalChoiceId: 'C5',
       selectionAttempt: 1,
+      rationaleSubmission: 'NOT_PROVIDED',
+      rationaleAssessment: 'NOT_PROVIDED',
+      rationaleNonEvaluationReason: null,
       answerRevealed: false,
       resolvedByStudent: true,
+      interventionHistory: [],
+      effectiveRepairPath: 'NONE',
     }));
     expect(evaluator.calls).toHaveLength(0);
     expect(logger.records).toHaveLength(1);

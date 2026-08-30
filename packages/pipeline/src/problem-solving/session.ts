@@ -8,7 +8,33 @@ import {
 } from './episode.js';
 
 export const PROBLEM_SOLVING_SESSION_VERSION =
-  'problem-solving-session-v7' as const;
+  'problem-solving-session-v8' as const;
+
+const ResultRationaleAssessmentSchema = z.enum([
+  'NOT_PROVIDED',
+  'NOT_EVALUATED',
+  'SUPPORTED',
+  'UNCERTAIN',
+  'CLEAR_ERROR',
+]);
+
+const InterventionEventSchema = z.enum([
+  'DIAGNOSTIC_QUESTION',
+  'CORRECTIVE_QUESTION',
+  'ITEM_BOUNDARY',
+  'DIRECT_COACHING',
+  'STATIC_ANSWER_EXPLANATION',
+]);
+
+const EffectiveRepairPathSchema = z.enum([
+  'NONE',
+  'DIAGNOSTIC_ONLY',
+  'CORRECTIVE_ONLY',
+  'DIAGNOSTIC_THEN_CORRECTIVE',
+  'ITEM_BOUNDARY',
+  'DIRECT_COACHING',
+  'STATIC_ANSWER_EXPLANATION',
+]);
 
 const SessionObservationSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -41,6 +67,7 @@ const SessionObservationSchema = z.discriminatedUnion('kind', [
     inReplyToTurnId: z.string().min(1),
     selectedChoiceId: z.string().min(1),
     rawResponse: z.string().min(1),
+    rationaleProvided: z.boolean(),
   }).strict(),
 ]);
 
@@ -65,7 +92,12 @@ const SessionResultSchema = z.object({
   correct: z.boolean(),
   initialChoiceWasCorrect: z.boolean(),
   selectionAttempt: z.number().int().positive(),
-  rationaleAssessment: z.enum(['NOT_PROVIDED', 'SUPPORTED', 'UNCERTAIN', 'CLEAR_ERROR']),
+  rationaleSubmission: z.enum(['PROVIDED', 'NOT_PROVIDED']),
+  rationaleAssessment: ResultRationaleAssessmentSchema,
+  rationaleNonEvaluationReason: z.enum([
+    'FINAL_ATTEMPT_STATIC_TERMINATION',
+    'PATH_DIAGNOSIS_ONLY',
+  ]).nullable(),
   answerRevealed: z.boolean(),
   resolvedByStudent: z.boolean(),
   resolutionStage: z.enum([
@@ -74,15 +106,9 @@ const SessionResultSchema = z.object({
     'THIRD_SELECTION',
     'ANSWER_REVEALED',
   ]),
-  interventionPath: z.enum([
-    'NONE',
-    'DIAGNOSTIC_ONLY',
-    'CORRECTIVE_ONLY',
-    'DIAGNOSTIC_THEN_CORRECTIVE',
-    'ITEM_BOUNDARY',
-    'DIRECT_COACHING',
-    'STATIC_ANSWER_EXPLANATION',
-  ]),
+  interventionPath: EffectiveRepairPathSchema,
+  interventionHistory: z.array(InterventionEventSchema),
+  effectiveRepairPath: EffectiveRepairPathSchema,
   answerExplanation: z.string().min(1).nullable(),
 });
 
@@ -175,6 +201,21 @@ export const ProblemSolvingSessionSchema = z.object({
   ) {
     context.addIssue({ code: 'custom', path: ['result', 'resolutionStage'], message: '정답 공개 종료의 해결 단계가 올바르지 않다.' });
   }
+  if (session.result !== null) {
+    const result = session.result;
+    if (result.rationaleSubmission === 'NOT_PROVIDED' && result.rationaleAssessment !== 'NOT_PROVIDED') {
+      context.addIssue({ code: 'custom', path: ['result', 'rationaleAssessment'], message: '제출하지 않은 근거를 평가할 수 없다.' });
+    }
+    if (result.rationaleSubmission === 'PROVIDED' && result.rationaleAssessment === 'NOT_PROVIDED') {
+      context.addIssue({ code: 'custom', path: ['result', 'rationaleAssessment'], message: '제출된 근거를 NOT_PROVIDED로 기록할 수 없다.' });
+    }
+    if ((result.rationaleAssessment === 'NOT_EVALUATED') !== (result.rationaleNonEvaluationReason !== null)) {
+      context.addIssue({ code: 'custom', path: ['result', 'rationaleNonEvaluationReason'], message: '근거 미평가 상태와 사유가 함께 존재해야 한다.' });
+    }
+    if (result.interventionPath !== result.effectiveRepairPath) {
+      context.addIssue({ code: 'custom', path: ['result', 'interventionPath'], message: '호환용 개입 경로는 최종 유효 교정 경로와 일치해야 한다.' });
+    }
+  }
   if (
     session.result?.outcome === 'DETAILED_COACHING_REQUIRED' &&
     (!session.result.answerRevealed || session.result.resolvedByStudent)
@@ -213,15 +254,82 @@ function assertPhase(
   }
 }
 
+type InterventionEvent = z.infer<typeof InterventionEventSchema>;
+type EffectiveRepairPath = z.infer<typeof EffectiveRepairPathSchema>;
+
+function interventionEvent(
+  action: ProblemSolvingNextAction,
+): InterventionEvent | null {
+  if (action.type === 'ASK_DIAGNOSTIC') return 'DIAGNOSTIC_QUESTION';
+  if (action.type === 'ASK_CORRECTIVE') return 'CORRECTIVE_QUESTION';
+  if (action.type === 'EXPLAIN_ITEM_BOUNDARY') return 'ITEM_BOUNDARY';
+  if (action.type === 'DIRECT_COACHING') {
+    return action.coachingReason === 'ITEM_INTERPRETATION_BOUNDARY'
+      ? 'ITEM_BOUNDARY'
+      : 'DIRECT_COACHING';
+  }
+  return null;
+}
+
+function interventionHistory(
+  session: ProblemSolvingSession,
+  includeStaticAnswerExplanation: boolean,
+): InterventionEvent[] {
+  const history = session.turns.flatMap((turn) => {
+    const event = interventionEvent(turn.nextAction);
+    return event === null ? [] : [event];
+  });
+  return includeStaticAnswerExplanation
+    ? [...history, 'STATIC_ANSWER_EXPLANATION']
+    : history;
+}
+
+function turnsInLatestRepairWindow(
+  session: ProblemSolvingSession,
+): ProblemSolvingSession['turns'] {
+  const selectionObservations = session.observations.filter(
+    (observation) => observation.kind === 'INITIAL_SUBMISSION' || observation.kind === 'RESELECTION',
+  );
+  const previousSelection = selectionObservations.at(-2);
+  if (previousSelection?.kind !== 'RESELECTION') return session.turns;
+  const boundaryIndex = session.turns.findIndex(
+    (turn) => turn.turnId === previousSelection.inReplyToTurnId,
+  );
+  return boundaryIndex < 0 ? session.turns : session.turns.slice(boundaryIndex + 1);
+}
+
+function summarizeRepairPath(events: readonly InterventionEvent[]): EffectiveRepairPath {
+  if (events.includes('STATIC_ANSWER_EXPLANATION')) return 'STATIC_ANSWER_EXPLANATION';
+  if (events.includes('DIRECT_COACHING')) return 'DIRECT_COACHING';
+  const hasDiagnostic = events.includes('DIAGNOSTIC_QUESTION');
+  const hasCorrective = events.includes('CORRECTIVE_QUESTION');
+  if (hasDiagnostic && hasCorrective) return 'DIAGNOSTIC_THEN_CORRECTIVE';
+  if (hasCorrective) return 'CORRECTIVE_ONLY';
+  if (events.includes('ITEM_BOUNDARY')) return 'ITEM_BOUNDARY';
+  if (hasDiagnostic) return 'DIAGNOSTIC_ONLY';
+  return 'NONE';
+}
+
+function latestRationaleWasProvided(session: ProblemSolvingSession): boolean {
+  const latestSelection = [...session.observations].reverse().find(
+    (observation) => observation.kind === 'INITIAL_SUBMISSION' || observation.kind === 'RESELECTION',
+  );
+  if (latestSelection === undefined) return false;
+  return latestSelection.kind === 'INITIAL_SUBMISSION'
+    ? latestSelection.rationale !== null
+    : latestSelection.rationaleProvided;
+}
+
 function complete(
   session: ProblemSolvingSession,
   outcome: NonNullable<ProblemSolvingSession['result']>['outcome'],
-  rationaleAssessment: NonNullable<ProblemSolvingSession['result']>['rationaleAssessment'],
+  rationaleAssessmentInput: NonNullable<ProblemSolvingSession['result']>['rationaleAssessment'],
   options: {
     readonly answerRevealed?: boolean;
     readonly resolvedByStudent?: boolean;
     readonly answerExplanation?: string;
-    readonly interventionPath?: NonNullable<ProblemSolvingSession['result']>['interventionPath'];
+    readonly effectiveRepairPath?: EffectiveRepairPath;
+    readonly rationaleNonEvaluationReason?: NonNullable<ProblemSolvingSession['result']>['rationaleNonEvaluationReason'];
   } = {},
 ): ProblemSolvingSession {
   const latestChoiceId = session.latestChoiceId;
@@ -240,20 +348,20 @@ function complete(
   if (answerRevealed && answerExplanation === undefined) {
     throw new Error('정답 공개 종료에는 학생에게 표시할 정적 또는 직접 코칭 해설이 필요하다.');
   }
-  const hasDiagnostic = session.turns.some((turn) => turn.nextAction.type === 'ASK_DIAGNOSTIC');
-  const hasCorrective = session.turns.some((turn) => turn.nextAction.type === 'ASK_CORRECTIVE');
-  const inferredInterventionPath: NonNullable<ProblemSolvingSession['result']>['interventionPath'] =
-    session.turns.some((turn) => turn.nextAction.type === 'DIRECT_COACHING')
-      ? 'DIRECT_COACHING'
-      : session.turns.some((turn) => turn.nextAction.type === 'EXPLAIN_ITEM_BOUNDARY')
-        ? 'ITEM_BOUNDARY'
-        : hasDiagnostic && hasCorrective
-          ? 'DIAGNOSTIC_THEN_CORRECTIVE'
-          : hasCorrective
-            ? 'CORRECTIVE_ONLY'
-            : hasDiagnostic
-              ? 'DIAGNOSTIC_ONLY'
-              : 'NONE';
+  const staticTermination = options.effectiveRepairPath === 'STATIC_ANSWER_EXPLANATION';
+  const history = interventionHistory(session, staticTermination);
+  const latestWindowEvents = turnsInLatestRepairWindow(session).flatMap((turn) => {
+    const event = interventionEvent(turn.nextAction);
+    return event === null ? [] : [event];
+  });
+  const effectiveRepairPath = options.effectiveRepairPath ?? summarizeRepairPath(latestWindowEvents);
+  const rationaleProvided = latestRationaleWasProvided(session);
+  const rationaleAssessment = rationaleProvided && rationaleAssessmentInput === 'NOT_PROVIDED'
+    ? 'NOT_EVALUATED'
+    : rationaleAssessmentInput;
+  const rationaleNonEvaluationReason = rationaleAssessment === 'NOT_EVALUATED'
+    ? options.rationaleNonEvaluationReason ?? 'PATH_DIAGNOSIS_ONLY'
+    : null;
   return parsed({
     ...session,
     phase: 'COMPLETED',
@@ -266,7 +374,9 @@ function complete(
       correct: latestChoiceId === session.answerChoiceId,
       initialChoiceWasCorrect: session.initialChoiceId === session.answerChoiceId,
       selectionAttempt: session.selectionAttempt,
+      rationaleSubmission: rationaleProvided ? 'PROVIDED' : 'NOT_PROVIDED',
       rationaleAssessment,
+      rationaleNonEvaluationReason,
       answerRevealed,
       resolvedByStudent: options.resolvedByStudent ?? latestChoiceId === session.answerChoiceId,
       resolutionStage: answerRevealed
@@ -276,7 +386,9 @@ function complete(
           : session.selectionAttempt === 2
             ? 'SECOND_SELECTION'
             : 'THIRD_SELECTION',
-      interventionPath: options.interventionPath ?? inferredInterventionPath,
+      interventionPath: effectiveRepairPath,
+      interventionHistory: history,
+      effectiveRepairPath,
       answerExplanation: answerExplanation ?? null,
     },
   });
@@ -737,6 +849,7 @@ export function submitProblemReselection(
     inReplyToTurnId: session.turns.at(-1)!.turnId,
     selectedChoiceId: input.selectedChoiceId,
     rawResponse: rationale ?? input.selectedChoiceId,
+    rationaleProvided: rationale !== null,
   });
   const base = parsed({
     ...session,
@@ -748,7 +861,7 @@ export function submitProblemReselection(
       ? 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
       : 'AWAITING_EVALUATION',
     entryReason: correct ? session.entryReason : 'WRONG_CHOICE',
-    rationaleAssessment: correct && rationale !== null ? null : session.rationaleAssessment,
+    rationaleAssessment: null,
     pendingCorrectOutcome: correct && rationale !== null
       ? 'RESELECTION_CORRECT_VERIFIED'
       : null,
@@ -779,7 +892,8 @@ export function submitProblemReselection(
         answerRevealed: true,
         resolvedByStudent: false,
         answerExplanation: input.finalAnswerExplanation.trim(),
-        interventionPath: 'STATIC_ANSWER_EXPLANATION',
+        effectiveRepairPath: 'STATIC_ANSWER_EXPLANATION',
+        rationaleNonEvaluationReason: 'FINAL_ATTEMPT_STATIC_TERMINATION',
       },
     );
   }

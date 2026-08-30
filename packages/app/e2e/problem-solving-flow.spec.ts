@@ -178,15 +178,19 @@ test('정답 공개 상세 코칭 종료를 학생의 독립 정답으로 표시
         ...original,
         phase: 'COMPLETED',
         result: {
-          correct: true,
-          finalChoiceId: 'C5',
+          correct: false,
+          finalChoiceId: 'C2',
           outcome: 'DETAILED_COACHING_REQUIRED',
-          selectionAttempt: 1,
-          rationaleAssessment: 'CLEAR_ERROR',
+          selectionAttempt: 3,
+          rationaleSubmission: 'PROVIDED',
+          rationaleAssessment: 'NOT_EVALUATED',
+          rationaleNonEvaluationReason: 'FINAL_ATTEMPT_STATIC_TERMINATION',
           answerRevealed: true,
           resolvedByStudent: false,
           resolutionStage: 'ANSWER_REVEALED',
-          interventionPath: 'DIRECT_COACHING',
+          interventionPath: 'STATIC_ANSWER_EXPLANATION',
+          interventionHistory: ['CORRECTIVE_QUESTION', 'STATIC_ANSWER_EXPLANATION'],
+          effectiveRepairPath: 'STATIC_ANSWER_EXPLANATION',
           answerExplanation: '정답은 ⑤입니다.',
         },
       } satisfies ProblemSessionView),
@@ -200,6 +204,10 @@ test('정답 공개 상세 코칭 종료를 학생의 독립 정답으로 표시
   await expect(page.getByText('상세 코칭으로 풀이를 마쳤습니다.')).toBeVisible();
   await expect(page.getByText('학생 스스로 해결: 아니요')).toBeVisible();
   await expect(page.getByText('정답 공개: 예')).toBeVisible();
+  await expect(page.getByText('최종 근거: 제출됨')).toBeVisible();
+  await expect(page.getByText('최종 근거 검증: 최종 시도 정적 종결로 별도 평가하지 않음')).toBeVisible();
+  await expect(page.getByText('최종 유효 교정 경로: STATIC_ANSWER_EXPLANATION')).toBeVisible();
+  await expect(page.getByText('전체 개입 이력: CORRECTIVE_QUESTION → STATIC_ANSWER_EXPLANATION')).toBeVisible();
   await expect(page.getByText('정답입니다.')).not.toBeVisible();
 });
 
@@ -264,11 +272,15 @@ test('직접 코칭 확인 응답 뒤 새로고침 없이 재선택 선지가 �
             finalChoiceId: 'C5',
             outcome: 'RESELECTION_CORRECT_VERIFIED',
             selectionAttempt: 2,
+            rationaleSubmission: 'PROVIDED',
             rationaleAssessment: 'SUPPORTED',
+            rationaleNonEvaluationReason: null,
             answerRevealed: false,
             resolvedByStudent: true,
             resolutionStage: 'SECOND_SELECTION',
             interventionPath: 'DIRECT_COACHING',
+            interventionHistory: ['DIRECT_COACHING'],
+            effectiveRepairPath: 'DIRECT_COACHING',
             answerExplanation: null,
           },
         } satisfies ProblemSessionView),
