@@ -611,6 +611,12 @@ describe('pure problem solving session', () => {
       fixture('mrna-q19-c2-rational-challenge.json').turns[1],
     ) as any;
     boundaryTurn.turnId = 'T0';
+    boundaryTurn.nextAction = {
+      type: 'EXPLAIN_ITEM_BOUNDARY',
+      target: 'SELECTED_CHOICE',
+      message: '②는 일정한 혼합 비율을 유지한다는 출제 의도로 처리합니다.',
+      purpose: '합리적인 표현상 이의를 문항 경계로 설명한다.',
+    };
     reselecting.turns = [boundaryTurn, ...reselecting.turns];
     const completed = submitProblemReselection(reselecting, { selectedChoiceId: 'C5' });
 
@@ -619,6 +625,23 @@ describe('pure problem solving session', () => {
       interventionPath: 'CORRECTIVE_ONLY',
       effectiveRepairPath: 'CORRECTIVE_ONLY',
       interventionHistory: ['ITEM_BOUNDARY', 'CORRECTIVE_QUESTION'],
+    }));
+  });
+
+  it('직접 코칭의 사유가 문항 경계여도 실제 개입 이력은 DIRECT_COACHING으로 보존한다', () => {
+    const reselecting = structuredClone(awaitingReselectionAfterCorrection());
+    const directCoachingTurn = structuredClone(
+      fixture('mrna-q19-c2-rational-challenge.json').turns[1],
+    ) as any;
+    directCoachingTurn.turnId = 'T0';
+    reselecting.turns = [directCoachingTurn, ...reselecting.turns];
+    const completed = submitProblemReselection(reselecting, { selectedChoiceId: 'C5' });
+
+    expect(completed.result).toEqual(expect.objectContaining({
+      resolutionStage: 'SECOND_SELECTION',
+      interventionPath: 'DIRECT_COACHING',
+      effectiveRepairPath: 'DIRECT_COACHING',
+      interventionHistory: ['DIRECT_COACHING', 'CORRECTIVE_QUESTION'],
     }));
   });
 

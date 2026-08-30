@@ -263,11 +263,7 @@ function interventionEvent(
   if (action.type === 'ASK_DIAGNOSTIC') return 'DIAGNOSTIC_QUESTION';
   if (action.type === 'ASK_CORRECTIVE') return 'CORRECTIVE_QUESTION';
   if (action.type === 'EXPLAIN_ITEM_BOUNDARY') return 'ITEM_BOUNDARY';
-  if (action.type === 'DIRECT_COACHING') {
-    return action.coachingReason === 'ITEM_INTERPRETATION_BOUNDARY'
-      ? 'ITEM_BOUNDARY'
-      : 'DIRECT_COACHING';
-  }
+  if (action.type === 'DIRECT_COACHING') return 'DIRECT_COACHING';
   return null;
 }
 

@@ -461,6 +461,7 @@ type ProblemSolvingNextAction =
 - [x] 제출된 근거를 평가하지 않은 경우 `NOT_EVALUATED`로 기록하고 사유를 보존한다.
 - [x] 3차 오답 정적 종결은 LLM을 다시 호출하지 않고 `FINAL_ATTEMPT_STATIC_TERMINATION`으로 표시한다.
 - [x] 전체 개입을 `interventionHistory`에 순서대로 보존한다.
+- [x] 개입 이력은 의미적 사유가 아니라 학생에게 실제로 제공된 행동 타입을 그대로 기록한다.
 - [x] 최종 선택에 직접 연결된 개입 구간만 `effectiveRepairPath`로 요약한다.
 - [x] 호환용 `interventionPath`는 `effectiveRepairPath`와 일치시켜 기존 분석의 오판을 막는다.
 - [x] UI에 근거 제출·평가 상태, 최종 유효 교정 경로와 전체 개입 이력을 구분해 표시한다.
@@ -830,3 +831,9 @@ npm run test:e2e
 - 정답 유도를 추가하지 않고 현재 오답의 국소 교정만 제공하는 정책은 유지했다. 재선택 전 정답 선지를 직접 겨냥한 1건은 즉시 프롬프트 변경 대신 교차 문항 회귀 관찰 항목으로 보존했다.
 - 전체 타입 검사와 문제 풀이 브라우저 E2E 6개가 통과했다. 전체 회귀는 587개가 통과했고, 기존 누락 `.omc` 실험 산출물을 직접 읽는 무관한 테스트 1개만 동일하게 실패했다.
 - 섹션 12의 완료 조건을 모두 충족해 `COMPLETED`로 고정했다.
+
+### 2026-08-31 — 직접 코칭 이력의 행동 타입 보존
+
+- 파일럿의 `DIRECT_COACHING → CORRECTIVE_QUESTION`이 `ITEM_BOUNDARY → CORRECTIVE_QUESTION`으로 저장된 원인은, `DIRECT_COACHING` 행동의 `coachingReason: ITEM_INTERPRETATION_BOUNDARY`를 이력 이벤트 `ITEM_BOUNDARY`로 바꾼 것이었다.
+- `interventionHistory`는 학생에게 실제로 제공된 행동 타입을 보존하도록 수정했다. `DIRECT_COACHING`은 사유와 관계없이 `DIRECT_COACHING`으로, 실제 `EXPLAIN_ITEM_BOUNDARY`만 `ITEM_BOUNDARY`로 기록한다.
+- ② 오답의 문항 경계 사유 직접 코칭 후 교정 질문을 거쳐 정답에 도달한 경로를 고정해, `interventionHistory: [DIRECT_COACHING, CORRECTIVE_QUESTION]`과 `effectiveRepairPath: DIRECT_COACHING`을 검증했다.
