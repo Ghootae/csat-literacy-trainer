@@ -20,6 +20,7 @@ function view(phase: string, extra: Record<string, unknown> = {}) {
     questionBudget: { used: 0, maximum: 2 },
     attemptQuestionBudget: { used: 0, maximum: 2 },
     selectionProgress: { current: 0, maximum: 3 },
+    evaluation: { status: 'IDLE', message: null },
     result: null,
     ...extra,
   };
@@ -45,6 +46,9 @@ describe('headless problem pilot', () => {
           rationaleAssessment: 'SUPPORTED',
           answerRevealed: false,
           resolvedByStudent: true,
+          resolutionStage: 'SECOND_SELECTION',
+          interventionPath: 'CORRECTIVE_ONLY',
+          answerExplanation: null,
         } }), durationMs: 1 };
       },
     };

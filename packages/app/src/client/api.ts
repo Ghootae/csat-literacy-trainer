@@ -149,6 +149,12 @@ export function fetchProblemSession(sessionId: string): Promise<ProblemSessionVi
   return jsonFetch<ProblemSessionView>(`/api/problem/session/${sessionId}`);
 }
 
+export function resumeProblemSession(sessionId: string): Promise<ProblemSessionView> {
+  return jsonFetch<ProblemSessionView>(`/api/problem/session/${sessionId}/resume`, {
+    method: 'POST',
+  });
+}
+
 export function submitProblemInitial(
   sessionId: string,
   body: ProblemInitialSubmissionRequest,

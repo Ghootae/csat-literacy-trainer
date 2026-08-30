@@ -179,6 +179,9 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
         const body = (await readBody(req)) as ProblemActionResponseRequest;
         return json(res, 200, await problemSolving.respond(sessionId, body));
       }
+      if (req.method === 'POST' && action === 'resume') {
+        return json(res, 200, await problemSolving.resume(sessionId));
+      }
     }
 
     if (req.method === 'POST' && url.pathname === '/api/dialogue/session') {

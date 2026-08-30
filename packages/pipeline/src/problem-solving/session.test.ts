@@ -572,53 +572,49 @@ describe('pure problem solving session', () => {
       .toThrow(/새로운 선택 근거/);
   });
 
-  it('3차 오답은 추가 질문이나 재선택 없이 상세 코칭 확인 뒤 종료한다', () => {
+  it('3차 오답은 LLM 턴 없이 정적 골드 해설과 함께 원자적으로 종료한다', () => {
     const reselecting = structuredClone(awaitingReselectionAfterCorrection());
     reselecting.selectionAttempt = 2;
-    const thirdWrong = submitProblemReselection(reselecting, {
+    const completed = submitProblemReselection(reselecting, {
       selectedChoiceId: 'C3',
       rationale: '그림의 합류 지점이 mRNA 분해를 뜻한다고 생각했습니다.',
+      finalAnswerExplanation: '정답은 ⑤입니다. ⑤의 소수성·크기 연결은 지문에 근거가 없습니다.',
     });
-    const coachingTurn = structuredClone(
-      fixture('mrna-q19-c2-rational-challenge.json').turns[1],
-    ) as any;
-    coachingTurn.turnId = 'T3';
-    const selectedTarget = coachingTurn.targetSnapshots.find(
-      (target: any) => target.kind === 'SELECTED_CHOICE',
-    );
-    selectedTarget.choiceId = 'C3';
-    selectedTarget.status = 'INSUFFICIENT';
-    selectedTarget.learningState = 'PATH_UNCLEAR';
-    for (const dimension of [
-      'choiceExplained',
-      'interventionPointLocalized',
-      'safeInterventionAvailable',
-      'actionRelevantAlternativesControlled',
-    ]) {
-      selectedTarget.sufficiency[dimension].satisfied = false;
-    }
-    selectedTarget.sufficiency.sufficient = false;
-    coachingTurn.nextAction = {
-      type: 'DIRECT_COACHING', target: 'SELECTED_CHOICE',
-      message: '그림의 합류는 혼합과 복합체 형성을 뜻합니다. 정답은 ⑤입니다.',
-      coachingReason: 'FINAL_ATTEMPT', supplementalInferenceIds: [],
-    };
-    const coaching = applyProblemEvaluatorTurn(thirdWrong, coachingTurn);
-    const completed = submitProblemActionResponse(coaching, '확인했습니다.');
 
-    expect(thirdWrong).toEqual(expect.objectContaining({
+    expect(completed).toEqual(expect.objectContaining({
       selectionAttempt: 3,
-      phase: 'AWAITING_EVALUATION',
-      requiredNextAction: 'DIRECT_COACHING',
-      completeAfterCoachingAcknowledgement: true,
+      phase: 'COMPLETED',
+      requiredNextAction: 'ANY',
+      completeAfterCoachingAcknowledgement: false,
     }));
-    expect(thirdWrong.limits.questionsUsedThisAttempt).toBe(0);
     expect(completed.result).toEqual(expect.objectContaining({
       outcome: 'DETAILED_COACHING_REQUIRED',
       selectionAttempt: 3,
       correct: false,
       answerRevealed: true,
       resolvedByStudent: false,
+      resolutionStage: 'ANSWER_REVEALED',
+      interventionPath: 'STATIC_ANSWER_EXPLANATION',
+      answerExplanation: '정답은 ⑤입니다. ⑤의 소수성·크기 연결은 지문에 근거가 없습니다.',
+    }));
+    expect(completed.turns).toHaveLength(reselecting.turns.length);
+  });
+
+  it('3차에 스스로 정답을 선택하면 2차 교정과 구분해 기록한다', () => {
+    const reselecting = structuredClone(awaitingReselectionAfterCorrection());
+    reselecting.selectionAttempt = 2;
+    const completed = submitProblemReselection(reselecting, {
+      selectedChoiceId: 'C5',
+    });
+
+    expect(completed.phase).toBe('COMPLETED');
+    expect(completed.result).toEqual(expect.objectContaining({
+      outcome: 'RESELECTION_CORRECT_UNVERIFIED',
+      selectionAttempt: 3,
+      correct: true,
+      answerRevealed: false,
+      resolvedByStudent: true,
+      resolutionStage: 'THIRD_SELECTION',
     }));
   });
 

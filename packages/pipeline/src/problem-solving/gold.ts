@@ -175,6 +175,11 @@ export const ProblemQuestionGoldSchema = z.object({
   requiredPathStepIds: z.array(z.string().min(1)).min(1),
   decisivePathStepIds: z.array(z.string().min(1)).min(1),
   conclusionStepIds: z.array(z.string().min(1)).min(1),
+  finalAnswerExplanation: z.object({
+    answerChoiceId: z.string().min(1),
+    message: z.string().min(1),
+    referencePathStepIds: z.array(z.string().min(1)).min(1),
+  }).strict(),
   representativeWrongPaths: z.array(z.object({
     id: z.string().min(1),
     scope: z.enum(['SELECTED_WRONG_CHOICE', 'MISSED_ANSWER', 'COMBINED']),
@@ -216,6 +221,9 @@ export const ProblemQuestionGoldSchema = z.object({
   }
   if (gold.choices.filter((choice) => choice.judgment === expectedJudgment).length !== 1) {
     issue(['choices'], '발문에 맞는 정답 선지가 정확히 하나여야 한다.');
+  }
+  if (gold.finalAnswerExplanation.answerChoiceId !== gold.answerChoiceId) {
+    issue(['finalAnswerExplanation', 'answerChoiceId'], '정적 최종 해설의 정답 선지가 골드 정답과 일치하지 않는다.');
   }
 
   const factIds = gold.scenario?.facts.map((fact) => fact.id) ?? [];
@@ -266,6 +274,13 @@ export const ProblemQuestionGoldSchema = z.object({
     gold.optionClaims.map((claim) => [claim.claimId, claim]),
   );
   if (duplicate(claimIds)) issue(['optionClaims'], '선지 주장 ID 중복');
+  const referencePathStepIds = new Set(gold.referencePath.map((step) => step.stepId));
+  if (
+    gold.finalAnswerExplanation.referencePathStepIds
+      .some((stepId) => !referencePathStepIds.has(stepId))
+  ) {
+    issue(['finalAnswerExplanation', 'referencePathStepIds'], '정적 최종 해설이 존재하지 않는 기준 경로 단계를 참조한다.');
+  }
   for (const choiceId of choiceIds) {
     const orders = gold.optionClaims
       .filter((claim) => claim.choiceId === choiceId)

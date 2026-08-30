@@ -286,6 +286,8 @@ describe('problem path evaluator contract', () => {
     expect(prompt).toContain('오류 분류의 정밀도만 높이는 `UNKNOWN`은 진단 질문의 근거가 아니다');
     expect(prompt).toContain('allowedActionTypes`는 설명용 힌트가 아니라');
     expect(prompt).toContain('`sufficient: true` + `CLEAR_ERROR`');
+    expect(prompt).toContain('COMPLETE_RELEVANT_SOURCE_FACTS_FOR_TARGET_OPTION');
+    expect(prompt).toContain('지문이 pH에 따른 전하 변화만 제시하고');
   });
 
   it('미평가 타깃은 오류 평가·경로·가설·충분성을 만들지 않는다', () => {
@@ -642,6 +644,10 @@ describe('problem path evaluator input projection', () => {
     const serialized = JSON.stringify(providerInput);
 
     expect(providerInput.evaluationMode).toBe('ASSESS_SELECTION_RATIONALE');
+    if (providerInput.evaluationMode === 'ASSESS_SELECTION_RATIONALE') {
+      expect(providerInput.rationaleReview.sourceCoverage.status)
+        .toBe('COMPLETE_RELEVANT_SOURCE_FACTS_FOR_TARGET_OPTION');
+    }
     expect(serialized).not.toContain('answerChoiceId');
     expect(serialized).not.toContain('currentChoiceId');
     expect(serialized).not.toContain('questionId');
@@ -674,6 +680,34 @@ describe('problem path evaluator input projection', () => {
       }));
     }
     expect(JSON.stringify(providerInput)).not.toContain('answerChoiceId');
+  });
+
+  it('관련 근거 범위에서 소수성·크기 연결의 부재를 짚은 정답 근거를 SUPPORTED로 허용한다', () => {
+    const rationale = '지문에는 pH가 높아지면 중성이 된다고만 했고 소수성이나 크기가 변한다는 말은 없어서 5번이다.';
+    const session = submitInitialProblemResponse(fresh(), {
+      initialChoiceId: 'C5',
+      rationale,
+    });
+    const input = createProblemPathEvaluatorInput({
+      evaluationMode: 'ASSESS_SELECTION_RATIONALE', session, gold,
+    });
+    const output = {
+      schemaVersion: 'problem-path-evaluator-output-v3',
+      mode: 'ASSESS_SELECTION_RATIONALE',
+      optionStance: 'REJECTS_OPTION',
+      requiredStanceForSelection: 'REJECTS_OPTION',
+      stanceConsistency: 'CONSISTENT',
+      groundingAssessment: 'SUPPORTED',
+      assessment: 'SUPPORTED',
+      reason: '승인된 관련 출처 사실에는 pH에 따른 중성화만 있고 소수성·크기 변화 연결은 없다.',
+      evidence: [{
+        kind: 'QUOTE', observationId: 'O1', sourceField: 'rationale',
+        quote: '소수성이나 크기가 변한다는 말은 없어서',
+      }],
+      sourceRefs: ['MP4', 'SF4'],
+    };
+
+    expect(validateProblemPathEvaluatorOutput(output, input)).toEqual(output);
   });
 
   it('재선택 근거가 선택 ID와 같아도 제출된 원문으로 안전하게 판정한다', () => {

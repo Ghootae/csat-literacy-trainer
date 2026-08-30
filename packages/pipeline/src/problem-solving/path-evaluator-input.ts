@@ -169,6 +169,10 @@ export const BlindRationaleProviderInputSchema = z.object({
       ]),
       text: z.string().min(1),
     }).strict()),
+    sourceCoverage: z.object({
+      status: z.literal('COMPLETE_RELEVANT_SOURCE_FACTS_FOR_TARGET_OPTION'),
+      description: z.string().min(1),
+    }).strict(),
   }).strict(),
 }).strict();
 
@@ -270,6 +274,10 @@ export function projectProblemPathEvaluatorProviderInput(
         text: studentRationale,
       },
       sourceFacts,
+      sourceCoverage: {
+        status: 'COMPLETE_RELEVANT_SOURCE_FACTS_FOR_TARGET_OPTION',
+        description: 'sourceFacts는 대상 선지의 관계를 판단하기 위해 승인 골드가 지정한 관련 지문·보기 사실 전체다.',
+      },
     },
   });
 }

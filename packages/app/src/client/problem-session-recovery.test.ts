@@ -19,6 +19,14 @@ function view(phase: ProblemSessionView['phase']): ProblemSessionView {
     questionBudget: { used: 0, maximum: 2 },
     attemptQuestionBudget: { used: 0, maximum: 2 },
     selectionProgress: { current: 0, maximum: 3 },
+    evaluation: {
+      status: phase === 'PROCESSING'
+        ? 'PROCESSING'
+        : phase === 'EVALUATION_ERROR'
+          ? 'RETRYABLE_ERROR'
+          : 'IDLE',
+      message: phase === 'EVALUATION_ERROR' ? '다시 진행할 수 있습니다.' : null,
+    },
     result: null,
   };
 }
@@ -45,5 +53,17 @@ describe('problem mutation recovery', () => {
       async () => view('AWAITING_RESPONSE'),
       { stallMs: 0, pollMs: 0 },
     )).rejects.toBe(failure);
+  });
+
+  it('선택은 저장됐지만 평가 중이면 빈 응답 대신 PROCESSING placeholder를 반환한다', async () => {
+    const recovered = await recoverProblemMutation(
+      new Promise<ProblemSessionView>(() => undefined),
+      view('AWAITING_RESELECTION'),
+      async () => view('PROCESSING'),
+      { stallMs: 0, pollMs: 0 },
+    );
+
+    expect(recovered.phase).toBe('PROCESSING');
+    expect(recovered.evaluation.status).toBe('PROCESSING');
   });
 });

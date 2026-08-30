@@ -29,29 +29,30 @@ const rawDiagnostic = JSON.parse(readFileSync(resolve(
   'packages/pipeline/fixtures/experiments/problem-solving/probes/mrna-c2-vague-evaluator-output.json',
 ), 'utf8'));
 
+function successfulCall(input: ProblemPathEvaluatorInput): ProblemPathEvaluatorCall {
+  const result = resolveProblemPathEvaluatorIds(rawDiagnostic, {
+    turnSequence: input.sessionState.evaluationSequence,
+  });
+  return {
+    result,
+    rawOutput: structuredClone(rawDiagnostic),
+    call: {
+      provider: 'mock', model: 'fixed', effort: 'none',
+      promptVersion: 'path-diagnostic-prompt-v3',
+      schemaVersion: 'problem-path-evaluator-output-v3',
+      calledAt: '2026-08-27T00:00:00.000Z', durationMs: 1,
+      attempts: [{ attempt: 1, outcome: 'success', durationMs: 1 }],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    },
+  };
+}
+
 class CountingEvaluator implements ProblemPathEvaluator {
   calls: ProblemPathEvaluatorInput[] = [];
 
   async evaluate(input: ProblemPathEvaluatorInput): Promise<ProblemPathEvaluatorCall> {
     this.calls.push(structuredClone(input));
-    const result = resolveProblemPathEvaluatorIds(rawDiagnostic, {
-      turnSequence: input.sessionState.evaluationSequence,
-    });
-    return {
-      result,
-      rawOutput: structuredClone(rawDiagnostic),
-      call: {
-        provider: 'mock',
-        model: 'fixed',
-        effort: 'none',
-        promptVersion: 'path-diagnostic-prompt-v3',
-        schemaVersion: 'problem-path-evaluator-output-v3',
-        calledAt: '2026-08-27T00:00:00.000Z',
-        durationMs: 1,
-        attempts: [{ attempt: 1, outcome: 'success', durationMs: 1 }],
-        usage: { inputTokens: 1, outputTokens: 1 },
-      },
-    };
+    return successfulCall(input);
   }
 }
 
@@ -143,5 +144,67 @@ describe('problem solving server controller', () => {
       strategy: '그림의 혼합 순서를 먼저 확인했다.',
       runnerUp: { choiceId: 'C5', rationale: 'pH 변화 부분도 의심스러웠다.' },
     });
+  });
+
+  it('선택 저장 직후 evaluator가 끝나지 않아도 PROCESSING placeholder를 공개한다', async () => {
+    let release: (() => void) | undefined;
+    let calls = 0;
+    const evaluator: ProblemPathEvaluator = {
+      evaluate(input) {
+        calls += 1;
+        return new Promise((resolveCall) => {
+          release = () => resolveCall(successfulCall(input));
+        });
+      },
+    };
+    const controller = new ProblemSolvingController({ evaluator });
+    const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+    await controller.submitInitial(started.sessionId, { choiceId: 'C2' });
+    const pending = controller.submitRationale(started.sessionId, '그냥 이상해 보여요.');
+
+    expect(controller.get(started.sessionId)).toMatchObject({
+      phase: 'PROCESSING',
+      selectedChoiceId: 'C2',
+      action: null,
+      evaluation: { status: 'PROCESSING', message: null },
+    });
+
+    const concurrentResume = controller.resume(started.sessionId);
+    expect(calls).toBe(1);
+    release?.();
+    const [completedEvaluation, resumedEvaluation] = await Promise.all([
+      pending,
+      concurrentResume,
+    ]);
+    expect(completedEvaluation.phase).toBe('AWAITING_RESPONSE');
+    expect(resumedEvaluation.phase).toBe('AWAITING_RESPONSE');
+    expect(calls).toBe(1);
+  });
+
+  it('evaluator 실패를 재개 가능한 상태로 보존하고 저장된 선택에서 한 번만 재개한다', async () => {
+    let calls = 0;
+    const evaluator: ProblemPathEvaluator = {
+      async evaluate(input) {
+        calls += 1;
+        if (calls === 1) throw new Error('일시적 evaluator 실패');
+        return successfulCall(input);
+      },
+    };
+    const controller = new ProblemSolvingController({ evaluator });
+    const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+    await controller.submitInitial(started.sessionId, { choiceId: 'C2' });
+
+    await expect(controller.submitRationale(started.sessionId, '그냥 이상해 보여요.'))
+      .rejects.toThrow(/일시적 evaluator 실패/);
+    expect(controller.get(started.sessionId)).toMatchObject({
+      phase: 'EVALUATION_ERROR',
+      selectedChoiceId: 'C2',
+      evaluation: { status: 'RETRYABLE_ERROR' },
+    });
+
+    const resumed = await controller.resume(started.sessionId);
+    expect(resumed.phase).toBe('AWAITING_RESPONSE');
+    expect(resumed.action?.kind).toBe('DIAGNOSTIC_QUESTION');
+    expect(calls).toBe(2);
   });
 });

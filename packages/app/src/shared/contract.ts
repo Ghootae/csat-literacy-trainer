@@ -241,6 +241,8 @@ export interface ProblemContentView {
 export type ProblemSessionPhase =
   | 'AWAITING_INITIAL_CHOICE'
   | 'AWAITING_RATIONALE'
+  | 'PROCESSING'
+  | 'EVALUATION_ERROR'
   | 'AWAITING_RESPONSE'
   | 'AWAITING_RESELECTION'
   | 'COMPLETED';
@@ -277,6 +279,10 @@ export interface ProblemSessionView {
     readonly current: number;
     readonly maximum: number;
   };
+  readonly evaluation: {
+    readonly status: 'IDLE' | 'PROCESSING' | 'RETRYABLE_ERROR';
+    readonly message: string | null;
+  };
   readonly result: {
     readonly correct: boolean;
     readonly finalChoiceId: string;
@@ -285,6 +291,16 @@ export interface ProblemSessionView {
     readonly rationaleAssessment: 'NOT_PROVIDED' | 'SUPPORTED' | 'UNCERTAIN' | 'CLEAR_ERROR';
     readonly answerRevealed: boolean;
     readonly resolvedByStudent: boolean;
+    readonly resolutionStage: 'INITIAL' | 'SECOND_SELECTION' | 'THIRD_SELECTION' | 'ANSWER_REVEALED';
+    readonly interventionPath:
+      | 'NONE'
+      | 'DIAGNOSTIC_ONLY'
+      | 'CORRECTIVE_ONLY'
+      | 'DIAGNOSTIC_THEN_CORRECTIVE'
+      | 'ITEM_BOUNDARY'
+      | 'DIRECT_COACHING'
+      | 'STATIC_ANSWER_EXPLANATION';
+    readonly answerExplanation: string | null;
   } | null;
 }
 

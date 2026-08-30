@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { ProblemSessionView } from '../shared/contract.js';
 import {
   fetchProblemSession,
+  resumeProblemSession,
   startProblemSession,
   submitProblemAction,
   submitProblemInitial,
@@ -25,6 +26,7 @@ export function ProblemApp(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [busySeconds, setBusySeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const automaticResumeKeys = useRef(new Set<string>());
 
   useEffect(() => {
     let active = true;
@@ -55,6 +57,34 @@ export function ProblemApp(): React.JSX.Element {
     }, 1_000);
     return () => window.clearInterval(timer);
   }, [busy]);
+
+  useEffect(() => {
+    if (session?.phase !== 'PROCESSING') return;
+    let active = true;
+    const poll = window.setInterval(() => {
+      void fetchProblemSession(session.sessionId).then((next) => {
+        if (!active || next.phase === 'PROCESSING') return;
+        setSession(next);
+        setChoiceId(next.selectedChoiceId);
+      }).catch(() => undefined);
+    }, 1_000);
+    return () => {
+      active = false;
+      window.clearInterval(poll);
+    };
+  }, [session?.phase, session?.sessionId]);
+
+  useEffect(() => {
+    if (session?.phase !== 'EVALUATION_ERROR') return;
+    const key = [
+      session.sessionId,
+      session.selectionProgress.current,
+      session.selectedChoiceId,
+    ].join(':');
+    if (automaticResumeKeys.current.has(key)) return;
+    automaticResumeKeys.current.add(key);
+    void run(resumeProblemSession(session.sessionId), session);
+  }, [session?.phase, session?.sessionId, session?.selectionProgress.current, session?.selectedChoiceId]);
 
   function showError(reason: unknown): void {
     setError(reason instanceof Error ? reason.message : String(reason));
@@ -115,6 +145,8 @@ export function ProblemApp(): React.JSX.Element {
   const awaitingRationale = session.phase === 'AWAITING_RATIONALE';
   const awaitingResponse = session.phase === 'AWAITING_RESPONSE';
   const awaitingReselection = session.phase === 'AWAITING_RESELECTION';
+  const processing = session.phase === 'PROCESSING';
+  const evaluationError = session.phase === 'EVALUATION_ERROR';
   const isCoaching = session.action?.kind === 'COACHING' || session.action?.kind === 'ITEM_BOUNDARY';
 
   return (
@@ -156,7 +188,7 @@ export function ProblemApp(): React.JSX.Element {
             )}
           </div>
 
-          <fieldset className="problem-choices" disabled={busy || awaitingRationale || awaitingResponse || session.phase === 'COMPLETED'}>
+          <fieldset className="problem-choices" disabled={busy || awaitingRationale || awaitingResponse || processing || evaluationError || session.phase === 'COMPLETED'}>
             <legend>{awaitingReselection ? '다시 선택해 주세요.' : '답을 선택해 주세요.'}</legend>
             {content.choices.map((choice) => (
               <label key={choice.choiceId} className={choiceId === choice.choiceId ? 'selected' : ''}>
@@ -295,6 +327,25 @@ export function ProblemApp(): React.JSX.Element {
             </div>
           )}
 
+          {processing && (
+            <div className="problem-action" role="status" aria-live="polite">
+              <span>후속 상태 생성 중</span>
+              <p>선택과 근거는 저장되었습니다. 다음 질문이나 결과를 준비하고 있습니다.</p>
+            </div>
+          )}
+
+          {evaluationError && (
+            <div className="problem-action" role="alert">
+              <span>진행을 다시 시작할 수 있습니다</span>
+              <p>{session.evaluation.message ?? '저장된 선택부터 후속 진단을 다시 생성합니다.'}</p>
+              <button
+                className="primary"
+                disabled={busy}
+                onClick={() => void run(resumeProblemSession(session.sessionId), session)}
+              >{busy ? '다시 진행 중…' : '다시 진행'}</button>
+            </div>
+          )}
+
           {session.phase === 'COMPLETED' && session.result !== null && (
             <div className={`problem-result ${session.result.correct ? 'correct' : 'incorrect'}`}>
               <strong>{session.result.answerRevealed
@@ -308,6 +359,9 @@ export function ProblemApp(): React.JSX.Element {
               <p>학생 스스로 해결: {session.result.resolvedByStudent ? '예' : '아니요'}</p>
               <p>정답 공개: {session.result.answerRevealed ? '예' : '아니요'}</p>
               <p>교정 수준: {session.result.outcome}</p>
+              <p>해결 단계: {session.result.resolutionStage}</p>
+              <p>개입 경로: {session.result.interventionPath}</p>
+              {session.result.answerExplanation !== null && <p>{session.result.answerExplanation}</p>}
             </div>
           )}
 

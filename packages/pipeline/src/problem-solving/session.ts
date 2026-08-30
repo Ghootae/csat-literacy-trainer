@@ -8,7 +8,7 @@ import {
 } from './episode.js';
 
 export const PROBLEM_SOLVING_SESSION_VERSION =
-  'problem-solving-session-v6' as const;
+  'problem-solving-session-v7' as const;
 
 const SessionObservationSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -68,6 +68,22 @@ const SessionResultSchema = z.object({
   rationaleAssessment: z.enum(['NOT_PROVIDED', 'SUPPORTED', 'UNCERTAIN', 'CLEAR_ERROR']),
   answerRevealed: z.boolean(),
   resolvedByStudent: z.boolean(),
+  resolutionStage: z.enum([
+    'INITIAL',
+    'SECOND_SELECTION',
+    'THIRD_SELECTION',
+    'ANSWER_REVEALED',
+  ]),
+  interventionPath: z.enum([
+    'NONE',
+    'DIAGNOSTIC_ONLY',
+    'CORRECTIVE_ONLY',
+    'DIAGNOSTIC_THEN_CORRECTIVE',
+    'ITEM_BOUNDARY',
+    'DIRECT_COACHING',
+    'STATIC_ANSWER_EXPLANATION',
+  ]),
+  answerExplanation: z.string().min(1).nullable(),
 });
 
 const RejectedEvaluatorProposalSchema = z.object({
@@ -148,6 +164,18 @@ export const ProblemSolvingSessionSchema = z.object({
     context.addIssue({ code: 'custom', path: ['result'], message: '정답 공개 종료를 학생의 독립 해결로 기록할 수 없다.' });
   }
   if (
+    session.result !== null &&
+    session.result.answerRevealed !== (session.result.answerExplanation !== null)
+  ) {
+    context.addIssue({ code: 'custom', path: ['result', 'answerExplanation'], message: '정답 공개 상태와 공개 해설 유무가 일치해야 한다.' });
+  }
+  if (
+    session.result?.answerRevealed === true &&
+    session.result.resolutionStage !== 'ANSWER_REVEALED'
+  ) {
+    context.addIssue({ code: 'custom', path: ['result', 'resolutionStage'], message: '정답 공개 종료의 해결 단계가 올바르지 않다.' });
+  }
+  if (
     session.result?.outcome === 'DETAILED_COACHING_REQUIRED' &&
     (!session.result.answerRevealed || session.result.resolvedByStudent)
   ) {
@@ -192,10 +220,40 @@ function complete(
   options: {
     readonly answerRevealed?: boolean;
     readonly resolvedByStudent?: boolean;
+    readonly answerExplanation?: string;
+    readonly interventionPath?: NonNullable<ProblemSolvingSession['result']>['interventionPath'];
   } = {},
 ): ProblemSolvingSession {
   const latestChoiceId = session.latestChoiceId;
   if (latestChoiceId === null) throw new Error('최종 선택이 없다.');
+  const answerRevealed = options.answerRevealed ?? false;
+  const directCoachingMessage = [...session.turns].reverse().find(
+    (turn) => turn.nextAction.type === 'DIRECT_COACHING',
+  )?.nextAction;
+  const answerExplanation = answerRevealed
+    ? options.answerExplanation ?? (
+        directCoachingMessage?.type === 'DIRECT_COACHING'
+          ? directCoachingMessage.message
+          : undefined
+      )
+    : undefined;
+  if (answerRevealed && answerExplanation === undefined) {
+    throw new Error('정답 공개 종료에는 학생에게 표시할 정적 또는 직접 코칭 해설이 필요하다.');
+  }
+  const hasDiagnostic = session.turns.some((turn) => turn.nextAction.type === 'ASK_DIAGNOSTIC');
+  const hasCorrective = session.turns.some((turn) => turn.nextAction.type === 'ASK_CORRECTIVE');
+  const inferredInterventionPath: NonNullable<ProblemSolvingSession['result']>['interventionPath'] =
+    session.turns.some((turn) => turn.nextAction.type === 'DIRECT_COACHING')
+      ? 'DIRECT_COACHING'
+      : session.turns.some((turn) => turn.nextAction.type === 'EXPLAIN_ITEM_BOUNDARY')
+        ? 'ITEM_BOUNDARY'
+        : hasDiagnostic && hasCorrective
+          ? 'DIAGNOSTIC_THEN_CORRECTIVE'
+          : hasCorrective
+            ? 'CORRECTIVE_ONLY'
+            : hasDiagnostic
+              ? 'DIAGNOSTIC_ONLY'
+              : 'NONE';
   return parsed({
     ...session,
     phase: 'COMPLETED',
@@ -209,8 +267,17 @@ function complete(
       initialChoiceWasCorrect: session.initialChoiceId === session.answerChoiceId,
       selectionAttempt: session.selectionAttempt,
       rationaleAssessment,
-      answerRevealed: options.answerRevealed ?? false,
+      answerRevealed,
       resolvedByStudent: options.resolvedByStudent ?? latestChoiceId === session.answerChoiceId,
+      resolutionStage: answerRevealed
+        ? 'ANSWER_REVEALED'
+        : session.selectionAttempt <= 1
+          ? 'INITIAL'
+          : session.selectionAttempt === 2
+            ? 'SECOND_SELECTION'
+            : 'THIRD_SELECTION',
+      interventionPath: options.interventionPath ?? inferredInterventionPath,
+      answerExplanation: answerExplanation ?? null,
     },
   });
 }
@@ -649,6 +716,7 @@ export function submitProblemReselection(
   input: {
     selectedChoiceId: string;
     rationale?: string | null;
+    finalAnswerExplanation?: string;
   },
 ): ProblemSolvingSession {
   assertPhase(session, 'AWAITING_RESELECTION');
@@ -695,7 +763,26 @@ export function submitProblemReselection(
       !correct && session.selectionAttempt + 1 >= session.limits.maxSelectionAttempts,
     result: null,
   });
-  if (!correct) return base;
+  if (!correct) {
+    if (base.selectionAttempt < base.limits.maxSelectionAttempts) return base;
+    if (input.finalAnswerExplanation?.trim() === '') {
+      throw new Error('최종 오답의 정적 정답 해설이 비어 있다.');
+    }
+    if (input.finalAnswerExplanation === undefined) {
+      throw new Error('최종 오답은 검토된 정적 정답 해설로 즉시 종료해야 한다.');
+    }
+    return complete(
+      base,
+      'DETAILED_COACHING_REQUIRED',
+      base.rationaleAssessment ?? 'NOT_PROVIDED',
+      {
+        answerRevealed: true,
+        resolvedByStudent: false,
+        answerExplanation: input.finalAnswerExplanation.trim(),
+        interventionPath: 'STATIC_ANSWER_EXPLANATION',
+      },
+    );
+  }
   if (rationale !== null) return base;
   return complete(base, 'RESELECTION_CORRECT_UNVERIFIED', 'NOT_PROVIDED');
 }

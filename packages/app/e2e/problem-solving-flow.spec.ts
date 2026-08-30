@@ -185,6 +185,9 @@ test('정답 공개 상세 코칭 종료를 학생의 독립 정답으로 표시
           rationaleAssessment: 'CLEAR_ERROR',
           answerRevealed: true,
           resolvedByStudent: false,
+          resolutionStage: 'ANSWER_REVEALED',
+          interventionPath: 'DIRECT_COACHING',
+          answerExplanation: '정답은 ⑤입니다.',
         },
       } satisfies ProblemSessionView),
     });
@@ -264,6 +267,9 @@ test('직접 코칭 확인 응답 뒤 새로고침 없이 재선택 선지가 �
             rationaleAssessment: 'SUPPORTED',
             answerRevealed: false,
             resolvedByStudent: true,
+            resolutionStage: 'SECOND_SELECTION',
+            interventionPath: 'DIRECT_COACHING',
+            answerExplanation: null,
           },
         } satisfies ProblemSessionView),
       });
@@ -296,4 +302,45 @@ test('직접 코칭 확인 응답 뒤 새로고침 없이 재선택 선지가 �
   await page.getByRole('button', { name: '다시 선택' }).click();
   await expect(page.getByText('최종 근거 검증: SUPPORTED')).toBeVisible();
   expect(receivedReselectionRationale).toBe('pH 변화와 소수성 약화의 연결이 맞지 않습니다.');
+});
+
+test('evaluator 오류 상태를 저장된 근거에서 자동 재개한다', async ({ page }) => {
+  let recoverableView: ProblemSessionView | null = null;
+  let resumeCalls = 0;
+  await page.route(/\/api\/problem\/session\/[^/]+\/rationale$/, async (route) => {
+    const response = await route.fetch();
+    const original = await response.json() as ProblemSessionView;
+    recoverableView = original;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ...original,
+        phase: 'EVALUATION_ERROR',
+        action: null,
+        evaluation: {
+          status: 'RETRYABLE_ERROR',
+          message: '일시적으로 판정을 완료하지 못했습니다.',
+        },
+      } satisfies ProblemSessionView),
+    });
+  });
+  await page.route(/\/api\/problem\/session\/[^/]+\/resume$/, async (route) => {
+    resumeCalls += 1;
+    if (recoverableView === null) throw new Error('복구할 evaluator 결과가 필요하다.');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(recoverableView),
+    });
+  });
+
+  await page.goto('/problem');
+  await page.getByText(/^2$/).click();
+  await page.getByRole('button', { name: '선택 제출' }).click();
+  await page.getByLabel('왜 이 답을 골랐나요?').fill('그냥 이상해 보여요.');
+  await page.getByRole('button', { name: '근거 제출' }).click();
+
+  await expect(page.getByText('확인 질문', { exact: true })).toBeVisible();
+  expect(resumeCalls).toBe(1);
 });

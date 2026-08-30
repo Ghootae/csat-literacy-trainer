@@ -41,6 +41,9 @@ interface ProblemRuntime {
   previousDiagnosticState: ProblemPathDiagnosticOutput | null;
   transcript: ProblemTranscriptEntryView[];
   evaluatorCalls: ProblemPathEvaluatorCallMetadata[];
+  evaluationStatus: 'IDLE' | 'PROCESSING' | 'RETRYABLE_ERROR';
+  evaluationError: string | null;
+  evaluationPromise: Promise<void> | null;
   logged: boolean;
 }
 
@@ -96,6 +99,9 @@ export class ProblemSolvingController {
       previousDiagnosticState: null,
       transcript: [],
       evaluatorCalls: [],
+      evaluationStatus: 'IDLE',
+      evaluationError: null,
+      evaluationPromise: null,
       logged: false,
     };
     this.sessions.set(sessionId, runtime);
@@ -129,7 +135,7 @@ export class ProblemSolvingController {
       runnerUp: input.runnerUp ?? null,
     });
     if (rationale !== null) this.addStudent(runtime, 'RATIONALE', rationale);
-    await this.evaluateUntilStudentBoundary(runtime);
+    await this.ensureEvaluation(runtime);
     this.persistIfCompleted(runtime);
     return this.view(runtime);
   }
@@ -149,7 +155,7 @@ export class ProblemSolvingController {
       runnerUp: pending.runnerUp ?? null,
     });
     this.addStudent(runtime, 'RATIONALE', rationale);
-    await this.evaluateUntilStudentBoundary(runtime);
+    await this.ensureEvaluation(runtime);
     this.persistIfCompleted(runtime);
     return this.view(runtime);
   }
@@ -166,16 +172,41 @@ export class ProblemSolvingController {
       runtime.session = submitProblemReselection(session, {
         selectedChoiceId: input.choiceId,
         rationale,
+        finalAnswerExplanation: runtime.gold.finalAnswerExplanation.message,
       });
       this.addStudent(runtime, 'RESELECTION', input.choiceId);
       if (rationale !== null) this.addStudent(runtime, 'RATIONALE', rationale);
+      if (
+        runtime.session.result?.interventionPath === 'STATIC_ANSWER_EXPLANATION' &&
+        runtime.session.result.answerExplanation !== null
+      ) {
+        runtime.transcript.push({
+          role: 'COACH',
+          kind: 'COACHING',
+          text: runtime.session.result.answerExplanation,
+        });
+      }
     } else {
       const text = input.text.trim();
       if (text === '') throw new Error('응답을 입력해 주세요.');
       runtime.session = submitProblemActionResponse(session, text);
       this.addStudent(runtime, 'ANSWER', text);
     }
-    await this.evaluateUntilStudentBoundary(runtime);
+    await this.ensureEvaluation(runtime);
+    this.persistIfCompleted(runtime);
+    return this.view(runtime);
+  }
+
+  async resume(sessionId: string): Promise<ProblemSessionView> {
+    const runtime = this.requireSession(sessionId);
+    const session = this.requireProblemSession(runtime);
+    if (
+      session.phase !== 'AWAITING_EVALUATION' &&
+      session.phase !== 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
+    ) {
+      return this.view(runtime);
+    }
+    await this.ensureEvaluation(runtime);
     this.persistIfCompleted(runtime);
     return this.view(runtime);
   }
@@ -186,6 +217,37 @@ export class ProblemSolvingController {
       questionId: runtime.gold.questionId,
       answerChoiceId: runtime.gold.answerChoiceId,
     });
+  }
+
+  private ensureEvaluation(runtime: ProblemRuntime): Promise<void> {
+    const session = this.requireProblemSession(runtime);
+    if (
+      session.phase !== 'AWAITING_EVALUATION' &&
+      session.phase !== 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
+    ) {
+      runtime.evaluationStatus = 'IDLE';
+      runtime.evaluationError = null;
+      return Promise.resolve();
+    }
+    if (runtime.evaluationPromise !== null) return runtime.evaluationPromise;
+
+    runtime.evaluationStatus = 'PROCESSING';
+    runtime.evaluationError = null;
+    const running = this.evaluateUntilStudentBoundary(runtime)
+      .then(() => {
+        runtime.evaluationStatus = 'IDLE';
+        runtime.evaluationError = null;
+      })
+      .catch((error: unknown) => {
+        runtime.evaluationStatus = 'RETRYABLE_ERROR';
+        runtime.evaluationError = '후속 진단 상태 생성에 실패했습니다. 저장된 선택부터 다시 진행할 수 있습니다.';
+        throw error;
+      })
+      .finally(() => {
+        if (runtime.evaluationPromise === running) runtime.evaluationPromise = null;
+      });
+    runtime.evaluationPromise = running;
+    return running;
   }
 
   private async evaluateUntilStudentBoundary(runtime: ProblemRuntime): Promise<void> {
@@ -269,18 +331,26 @@ export class ProblemSolvingController {
         questionBudget: { used: 0, maximum: 2 },
         attemptQuestionBudget: { used: 0, maximum: 2 },
         selectionProgress: { current: 0, maximum: 3 },
+        evaluation: { status: 'IDLE', message: null },
         result: null,
       };
     }
     const action = session.pendingAction;
-    return {
-      sessionId: runtime.sessionId,
-      learningSessionId: runtime.learningSessionId,
-      phase: session.phase === 'COMPLETED'
+    const evaluatorPending = session.phase === 'AWAITING_EVALUATION' ||
+      session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT';
+    const publicPhase: ProblemSessionView['phase'] = evaluatorPending
+      ? runtime.evaluationStatus === 'RETRYABLE_ERROR'
+        ? 'EVALUATION_ERROR'
+        : 'PROCESSING'
+      : session.phase === 'COMPLETED'
         ? 'COMPLETED'
         : session.phase === 'AWAITING_RESELECTION'
           ? 'AWAITING_RESELECTION'
-          : 'AWAITING_RESPONSE',
+          : 'AWAITING_RESPONSE';
+    return {
+      sessionId: runtime.sessionId,
+      learningSessionId: runtime.learningSessionId,
+      phase: publicPhase,
       content: structuredClone(runtime.content),
       selectedChoiceId: session.latestChoiceId,
       action: action === null || action.type === 'REQUEST_RESELECTION'
@@ -308,6 +378,14 @@ export class ProblemSolvingController {
         current: session.selectionAttempt,
         maximum: session.limits.maxSelectionAttempts,
       },
+      evaluation: {
+        status: evaluatorPending
+          ? runtime.evaluationStatus === 'RETRYABLE_ERROR'
+            ? 'RETRYABLE_ERROR'
+            : 'PROCESSING'
+          : 'IDLE',
+        message: runtime.evaluationError,
+      },
       result: session.result === null
         ? null
         : {
@@ -318,6 +396,9 @@ export class ProblemSolvingController {
             rationaleAssessment: session.result.rationaleAssessment,
             answerRevealed: session.result.answerRevealed,
             resolvedByStudent: session.result.resolvedByStudent,
+            resolutionStage: session.result.resolutionStage,
+            interventionPath: session.result.interventionPath,
+            answerExplanation: session.result.answerExplanation,
           },
     };
   }

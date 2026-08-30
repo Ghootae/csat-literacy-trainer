@@ -143,6 +143,20 @@ describe('problem-solving gold', () => {
     ]);
   });
 
+  it('3차 오답 정적 해설은 기본 결정 경로만 사용하고 보충 해설을 포함하지 않는다', () => {
+    const gold = ProblemQuestionGoldSchema.parse(
+      fixture('mrna-vaccine-lipid-nanoparticle-q19.json'),
+    );
+
+    expect(gold.finalAnswerExplanation).toMatchObject({
+      answerChoiceId: 'C5',
+      referencePathStepIds: ['RP2', 'RP3', 'RP4', 'RP5'],
+    });
+    expect(gold.finalAnswerExplanation.message).toContain('지문과 보기에 근거가 없습니다');
+    expect(gold.finalAnswerExplanation.message).not.toContain('소수성이 강');
+    expect(gold.finalAnswerExplanation.message).not.toContain('크기가 더 커');
+  });
+
   it('보충 해설 참조와 사용 정책 중 하나만 지정하면 거부한다', () => {
     const raw = fixture('mrna-vaccine-lipid-nanoparticle-q19.json') as Record<string, unknown>;
     const claims = raw['optionClaims'] as Array<Record<string, unknown>>;

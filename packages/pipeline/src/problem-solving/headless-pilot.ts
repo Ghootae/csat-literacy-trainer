@@ -88,6 +88,8 @@ const ProblemSessionViewSchema = z.object({
   phase: z.enum([
     'AWAITING_INITIAL_CHOICE',
     'AWAITING_RATIONALE',
+    'PROCESSING',
+    'EVALUATION_ERROR',
     'AWAITING_RESPONSE',
     'AWAITING_RESELECTION',
     'COMPLETED',
@@ -127,6 +129,9 @@ const ProblemSessionViewSchema = z.object({
     rationaleAssessment: z.enum(['NOT_PROVIDED', 'SUPPORTED', 'UNCERTAIN', 'CLEAR_ERROR']),
     answerRevealed: z.boolean(),
     resolvedByStudent: z.boolean(),
+    resolutionStage: z.enum(['INITIAL', 'SECOND_SELECTION', 'THIRD_SELECTION', 'ANSWER_REVEALED']),
+    interventionPath: z.string().min(1),
+    answerExplanation: z.string().nullable(),
   }).nullable(),
 }).passthrough();
 

@@ -23,6 +23,7 @@
 - 익명화된 `targetOptionText`
 - `studentRationale` 원문, 관찰 ID와 인용에 사용할 `sourceField`
 - 대상 선지와 관련된 출처 기반 `sourceFacts`
+- 대상 선지 판단에 필요한 승인 근거의 범위를 나타내는 `sourceCoverage`
 
 블라인드 입력에는 정답 ID, 대상 선지가 정답인지 여부, 선지 번호, 다른 선지, 선지 판정, 기준 정답 경로, 대표 오답 경로와 공식 해설이 없다. 제공되지 않은 정답 정보를 추측하거나 기억에 의존해 복원하지 않는다.
 
@@ -246,6 +247,14 @@ ID 공간을 섞지 않는다.
 - `SUPPORTED`: 선택에 필요한 태도와 학생 태도가 일치하고 근거가 제공된 출처 사실에 의해 지지된다.
 - `UNCERTAIN`: 모호·불완전하거나 안전하게 평가할 수 없다.
 - `CLEAR_ERROR`: 학생 태도가 선택에 필요한 태도와 충돌하거나 학생 근거가 출처 사실과 명백히 충돌한다.
+
+`sourceCoverage.status`가 `COMPLETE_RELEVANT_SOURCE_FACTS_FOR_TARGET_OPTION`이면
+제공된 `sourceFacts`는 대상 선지 관계를 판단하기 위한 승인된 관련 사실 전체다.
+학생이 선지가 추가한 관계가 지문·보기에 제시되지 않았음을 정확히 지적했고 실제
+`sourceFacts`에도 그 연결이 없다면, 단순히 명시적 반대 명제가 없다는 이유로
+`UNCERTAIN`을 사용하지 말고 출처 범위에 근거한 `SUPPORTED`로 판정한다. 예를 들어
+지문이 pH에 따른 전하 변화만 제시하고 소수성이나 입자 크기 변화는 제시하지
+않는다는 지적은 해당 부재가 sourceFacts 범위와 일치하면 유효한 근거다.
 
 `SELECT_INCORRECT` 발문에서 대상 선지를 선택하려면 그 선지를 거부해야 하고, `SELECT_CORRECT` 발문에서 선택하려면 그 선지를 받아들여야 한다. 예를 들어 부정 발문에서 대상 선지를 고른 학생이 “이 설명은 맞다”고 말하면 출처 사실 판정과 무관하게 `stanceConsistency: CONFLICT`, `assessment: CLEAR_ERROR`다.
 
