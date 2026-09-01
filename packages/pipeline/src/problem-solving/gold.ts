@@ -104,6 +104,20 @@ export const OptionClaimSchema = ReferencedEvidenceSchema.extend({
 export const ItemInferenceSchema = ReferencedEvidenceSchema.extend({
   inferenceId: z.string().min(1),
   description: z.string().min(1),
+  premiseRefs: z.array(z.string().min(1)).min(1),
+  operation: z.enum([
+    'APPLY_RULE',
+    'CHECK_CONDITION',
+    'COMPARE',
+    'CLASSIFY',
+    'MAP_CONCEPT',
+    'FOLLOW_CAUSAL_CHAIN',
+    'CALCULATE',
+    'CHECK_JUSTIFICATION',
+  ]),
+  conclusion: z.string().min(1),
+  targetClaimEffect: z.enum(['SUPPORTS', 'CONTRADICTS']),
+  targetClaimIds: z.array(z.string().min(1)).min(1),
   grounding: z.enum([
     'SOURCE_EXPLICIT',
     'SOURCE_ENTAILED',
@@ -314,6 +328,33 @@ export const ProblemQuestionGoldSchema = z.object({
 
   for (const [index, inference] of gold.itemInferences.entries()) {
     validateEvidence(inference, ['itemInferences', index]);
+    if (duplicate(inference.premiseRefs)) {
+      issue(['itemInferences', index, 'premiseRefs'], '문항 추론 전제 참조 중복');
+    }
+    const evidenceRefs = new Set([
+      ...inference.references.flatMap((reference) => [
+        ...reference.propositionIds,
+        ...reference.relationIds,
+      ]),
+      ...inference.scenarioFactIds,
+      ...inference.visualAssertionIds,
+    ]);
+    const premiseRefs = new Set(inference.premiseRefs);
+    if (
+      evidenceRefs.size !== premiseRefs.size ||
+      [...evidenceRefs].some((id) => !premiseRefs.has(id))
+    ) {
+      issue(
+        ['itemInferences', index, 'premiseRefs'],
+        'premiseRefs는 기존 지문·보기·시각 근거 참조와 정확히 일치해야 한다.',
+      );
+    }
+    if (inference.grounding === 'SOURCE_ENTAILED' && inference.premiseRefs.length === 0) {
+      issue(
+        ['itemInferences', index, 'premiseRefs'],
+        'SOURCE_ENTAILED 문항 추론에는 하나 이상의 전제 참조가 필요하다.',
+      );
+    }
   }
   for (const [index, inference] of gold.supplementalExplanationInferences.entries()) {
     validateEvidence(inference, ['supplementalExplanationInferences', index]);
@@ -388,6 +429,50 @@ export const ProblemQuestionGoldSchema = z.object({
         ['optionClaims', index, 'decisionBasis'],
         '의존 판정에는 앞선 주장 의존 관계가 필요하다.',
       );
+    }
+  }
+
+  const inferencesById = new Map(
+    gold.itemInferences.map((inference) => [inference.inferenceId, inference]),
+  );
+  for (const [index, inference] of gold.itemInferences.entries()) {
+    if (duplicate(inference.targetClaimIds)) {
+      issue(['itemInferences', index, 'targetClaimIds'], '문항 추론 대상 주장 ID 중복');
+    }
+    if (inference.targetClaimIds.some((id) => !allowedClaimIds.has(id))) {
+      issue(['itemInferences', index, 'targetClaimIds'], '존재하지 않는 대상 주장 ID');
+    }
+    for (const targetClaimId of inference.targetClaimIds) {
+      const claim = claimsById.get(targetClaimId);
+      if (claim === undefined) continue;
+      if (!claim.itemInferenceIds.includes(inference.inferenceId)) {
+        issue(
+          ['itemInferences', index, 'targetClaimIds'],
+          '문항 추론과 대상 주장의 itemInferenceIds 참조가 서로 일치해야 한다.',
+        );
+      }
+      const compatible = inference.targetClaimEffect === 'SUPPORTS'
+        ? claim.assessment === 'SUPPORTED' && claim.decision === 'ACCEPTED'
+        : (
+            claim.assessment === 'CONTRADICTED' ||
+            claim.assessment === 'NOT_JUSTIFIED'
+          ) && claim.decision === 'REJECTED';
+      if (!compatible) {
+        issue(
+          ['itemInferences', index, 'targetClaimEffect'],
+          '문항 추론 효과와 대상 선지 주장의 판정 방향이 모순된다.',
+        );
+      }
+    }
+  }
+  for (const [index, claim] of gold.optionClaims.entries()) {
+    for (const inferenceId of claim.itemInferenceIds) {
+      if (!inferencesById.get(inferenceId)?.targetClaimIds.includes(claim.claimId)) {
+        issue(
+          ['optionClaims', index, 'itemInferenceIds'],
+          '대상 주장이 참조한 문항 추론에 해당 claimId가 역참조되어야 한다.',
+        );
+      }
     }
   }
 
@@ -498,3 +583,37 @@ export const ProblemQuestionGoldSchema = z.object({
 });
 
 export type ProblemQuestionGold = z.infer<typeof ProblemQuestionGoldSchema>;
+
+export interface ProblemGoldAuditWarning {
+  readonly code: 'EXCESSIVE_SCENARIO_FACT_REFERENCES' | 'EXCESSIVE_TOTAL_PREMISE_REFERENCES';
+  readonly inferenceId: string;
+  readonly message: string;
+  readonly refs: readonly string[];
+}
+
+/** 의미적 과잉 참조는 자동 실패시키지 않고 사람 검수 대상으로 보고한다. */
+export function auditProblemGoldWarnings(
+  goldInput: ProblemQuestionGold,
+): readonly ProblemGoldAuditWarning[] {
+  const gold = ProblemQuestionGoldSchema.parse(goldInput);
+  const warnings: ProblemGoldAuditWarning[] = [];
+  for (const inference of gold.itemInferences) {
+    if (inference.scenarioFactIds.length > 3) {
+      warnings.push({
+        code: 'EXCESSIVE_SCENARIO_FACT_REFERENCES',
+        inferenceId: inference.inferenceId,
+        message: '하나의 문항 추론이 보기 사실을 4개 이상 참조한다. 실제 필요한 사실만 남겼는지 검토해야 한다.',
+        refs: inference.scenarioFactIds,
+      });
+    }
+    if (inference.premiseRefs.length > 6) {
+      warnings.push({
+        code: 'EXCESSIVE_TOTAL_PREMISE_REFERENCES',
+        inferenceId: inference.inferenceId,
+        message: '하나의 문항 추론이 전제를 7개 이상 참조한다. 판단에 불필요한 근거가 포함됐는지 검토해야 한다.',
+        refs: inference.premiseRefs,
+      });
+    }
+  }
+  return warnings;
+}

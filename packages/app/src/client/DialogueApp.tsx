@@ -19,6 +19,15 @@ interface TranscriptEntry {
   readonly step: DialogueStepView;
 }
 
+const DIRECT_PROBLEMS = [
+  { questionId: 'mrna-vaccine-lipid-nanoparticle-q19', label: 'mRNA 19번' },
+  { questionId: 'gongsun-long-later-mohists-q12', label: '명실론 12번' },
+] as const;
+
+function problemNumber(questionId: string): string {
+  return questionId.match(/-q(\d+)$/u)?.[1] ?? '연결';
+}
+
 export function DialogueApp(): React.JSX.Element {
   const [passages, setPassages] = useState<readonly DialoguePassageSummary[] | null>(null);
   const [session, setSession] = useState<DialogueSessionView | null>(null);
@@ -122,7 +131,15 @@ export function DialogueApp(): React.JSX.Element {
           <p className="dialogue-kicker">자유 응답 판정기 · 개발자용</p>
           <h1>순차 지문 테스트</h1>
           <p>문단을 자유롭게 이동하며 응답과 피드백을 테스트할 수 있습니다.</p>
-          <p><a className="problem-link" href="/problem">mRNA 19번 문제 풀이 진단 열기</a></p>
+          <p className="dialogue-direct-problems">
+            {DIRECT_PROBLEMS.map((problem) => (
+              <a
+                className="problem-link"
+                href={`/problem?questionId=${encodeURIComponent(problem.questionId)}`}
+                key={problem.questionId}
+              >{problem.label} 문제 풀이 진단 열기</a>
+            ))}
+          </p>
         </header>
         <section className="dialogue-passage-list" aria-label="테스트할 지문">
           {passages.map((passage) => (
@@ -253,7 +270,7 @@ export function DialogueApp(): React.JSX.Element {
             <strong>전체 지문을 완료했습니다.</strong>
             {session.nextProblemQuestionId !== null && (
               <button className="primary" disabled={busy} onClick={() => void continueToProblem()}>
-                {busy ? '문제 준비 중…' : '이 이해 기록으로 19번 풀기'}
+                {busy ? '문제 준비 중…' : `이 이해 기록으로 ${problemNumber(session.nextProblemQuestionId)}번 풀기`}
               </button>
             )}
             <button onClick={returnToPassages}>지문 목록</button>

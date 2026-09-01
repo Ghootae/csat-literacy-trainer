@@ -44,7 +44,7 @@ function paragraphTexts(passage: string): string[] {
     parts[parts.length - 2] = `${parts[parts.length - 2]}\n${footnote}`;
     parts.pop();
   }
-  if (parts.length !== 5) throw new Error(`mRNA 지문 문단 수가 5가 아니다: ${parts.length}`);
+  if (parts.length === 0) throw new Error('지문에 문단이 없다.');
   return parts;
 }
 
@@ -54,7 +54,8 @@ if (effort !== 'medium' && effort !== 'high') throw new Error(`지원하지 않�
 if (!process.env['OPENAI_API_KEY']) throw new Error('OPENAI_API_KEY가 필요하다.');
 const sourcePath = resolve(
   process.cwd(),
-  'packages/pipeline/fixtures/experiments/problem-solving/public/mrna-vaccine-lipid-nanoparticle-q19.json',
+  option('--source') ??
+    'packages/pipeline/fixtures/experiments/problem-solving/public/mrna-vaccine-lipid-nanoparticle-q19.json',
 );
 const source = JSON.parse(readFileSync(sourcePath, 'utf8')) as PublicProblemContent;
 const texts = paragraphTexts(source.passage);
@@ -65,7 +66,7 @@ const paragraphs = texts.map((text, index) => ({
 }));
 const runId = new Date().toISOString().replaceAll(':', '-');
 const outputDir = resolve(
-  option('--output-dir') ?? '.omc/experiments/dialogue-gold/mrna-vaccine-lipid-nanoparticle',
+  option('--output-dir') ?? `.omc/experiments/dialogue-gold/${source.passageId}`,
   runId,
 );
 mkdirSync(resolve(outputDir, 'candidates'), { recursive: true });
@@ -111,7 +112,7 @@ for (const paragraph of paragraphs) {
   }
   const verdict = diagnosticGold === null ? 'NEEDS_REVIEW' : 'READY_CANDIDATE';
   const artifact = {
-    artifactType: 'mrna-dialogue-gold-candidate-v1',
+    artifactType: 'dialogue-gold-candidate-v1',
     paragraphId: paragraph.paragraphId,
     position: paragraph.position,
     sourcePath,
@@ -128,7 +129,7 @@ for (const paragraph of paragraphs) {
 }
 
 writeJson(resolve(outputDir, 'manifest.json'), {
-  artifactType: 'mrna-dialogue-gold-candidate-manifest-v1',
+  artifactType: 'dialogue-gold-candidate-manifest-v1',
   generatedAt: new Date().toISOString(),
   sourcePath,
   model,

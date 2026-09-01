@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   applyCorrectRationaleAssessment,
+  applyDeterministicExhaustedWrongAttemptCoaching,
   applyProblemEvaluatorTurn,
   createProblemSolvingSession,
   submitInitialProblemResponse,
@@ -37,6 +38,19 @@ function wrongSession(maxDiagnosticQuestions = 2) {
     initialChoiceId: 'C2',
     rationale: '속도를 조절하면 투입량이 달라져 균일하지 않을 것 같아요.',
   });
+}
+
+function finalAnswerReveal(lastChoiceId = 'C3') {
+  return {
+    finalAnswerExplanation: '정답은 ⑤입니다. 마지막 선택은 지문 관계와 맞지 않으며 ⑤의 소수성·크기 연결은 지문에 근거가 없습니다.',
+    finalAnswerReveal: {
+      answerChoiceId: 'C5',
+      lastChoiceId,
+      lastChoiceExplanation: '마지막 선택은 보기와 지문의 조건을 잘못 연결했습니다.',
+      correctChoiceExplanation: '⑤의 소수성 약화와 크기 감소 연결은 지문에 근거가 없습니다.',
+      groundingSummary: 'pH 상승은 이온화 지질의 전하 상태를 중성으로 바꾼다고 제시되어 있습니다.',
+    },
+  };
 }
 
 function awaitingReselectionAfterCorrection() {
@@ -158,7 +172,7 @@ describe('pure problem solving session', () => {
     })).toThrow(/완료 또는 상세 코칭/);
   });
 
-  it('정답 근거 교정 실패는 상세 코칭 확인 후 정답 공개·학생 미해결로 종료한다', () => {
+  it('정답 근거 교정 실패는 정답 공개 없이 상세 코칭·학생 미해결로 종료한다', () => {
     const awaiting = submitInitialProblemResponse(fresh(), {
       initialChoiceId: 'C5',
       rationale: 'pH가 높아지면 양전하가 더 강해져서 ⑤가 틀립니다.',
@@ -200,7 +214,7 @@ describe('pure problem solving session', () => {
       outcome: 'DETAILED_COACHING_REQUIRED',
       correct: true,
       rationaleAssessment: 'CLEAR_ERROR',
-      answerRevealed: true,
+      answerRevealed: false,
       resolvedByStudent: false,
     }));
     expect(completed.observations.at(-1)).toEqual(expect.objectContaining({
@@ -376,12 +390,13 @@ describe('pure problem solving session', () => {
       maxQuestionsPerWrongAttempt: 2,
     }));
     expect(constrained.requiredNextAction).toBe('DIRECT_COACHING');
-    expect(constrained.completeAfterCoachingAcknowledgement).toBe(true);
+    expect(constrained.completeAfterCoachingAcknowledgement).toBe(false);
+    expect(constrained.requestReselectionAfterCoachingAcknowledgement).toBe(true);
     expect(constrained.rejectedEvaluatorProposals.at(-1)?.reason)
       .toBe('ATTEMPT_QUESTION_BUDGET_EXHAUSTED');
   });
 
-  it('두 번째 질문에도 교정되지 않으면 상세 코칭 확인 뒤 정답 공개 종료한다', () => {
+  it('첫 오답의 두 번째 질문에도 교정되지 않으면 상세 코칭 뒤 2차 선택으로 이동한다', () => {
     const diagnosticTurn = fixture('mrna-q19-c2-ambiguous-speed.json').turns[0];
     const diagnosticAnswer = submitProblemActionResponse(
       applyProblemEvaluatorTurn(wrongSession(), diagnosticTurn),
@@ -413,19 +428,97 @@ describe('pure problem solving session', () => {
     const forced = applyProblemEvaluatorTurn(secondAnswer, coachingDecision);
     const coachingMessage = structuredClone(coachingDecision);
     coachingMessage.turnId = 'T4';
-    coachingMessage.nextAction.message = '속도 조절은 두 용액의 혼합 비율을 일정하게 유지하기 위한 통제입니다. 정답은 ⑤입니다.';
+    coachingMessage.nextAction.message = '속도 조절은 두 용액의 혼합 비율을 일정하게 유지하기 위한 통제입니다.';
     const coaching = applyProblemEvaluatorTurn(forced, coachingMessage);
     const completed = submitProblemActionResponse(coaching, '확인했습니다.');
 
     expect(forced.phase).toBe('AWAITING_EVALUATION');
     expect(forced.requiredNextAction).toBe('DIRECT_COACHING');
     expect(coaching.phase).toBe('AWAITING_STUDENT_RESPONSE');
-    expect(completed.result).toEqual(expect.objectContaining({
-      outcome: 'DETAILED_COACHING_REQUIRED',
-      correct: false,
-      answerRevealed: true,
-      resolvedByStudent: false,
+    expect(completed.result).toBeNull();
+    expect(completed.phase).toBe('AWAITING_RESELECTION');
+    expect(completed.selectionCount).toBe(1);
+    expect(completed.pendingAction?.type).toBe('REQUEST_RESELECTION');
+    expect(completed.interventionCountForCurrentSelection).toBe(3);
+    expect(completed.interventionCount).toBe(3);
+    expect(completed.turns.filter((turn) => turn.nextAction.type === 'DIRECT_COACHING'))
+      .toHaveLength(1);
+  });
+
+  it('질문 2/2 뒤 모델 호출 없이 결정론적 코칭을 표시하고 2차 선택으로 이동한다', () => {
+    const diagnosticTurn = fixture('mrna-q19-c2-ambiguous-speed.json').turns[0];
+    const firstAnswer = submitProblemActionResponse(
+      applyProblemEvaluatorTurn(wrongSession(), diagnosticTurn),
+      '어느 관계인지 아직 모르겠습니다.',
+    );
+    const secondTurn = structuredClone(diagnosticTurn) as any;
+    secondTurn.turnId = 'T2';
+    secondTurn.basedOnObservationIds = ['O1', 'O2'];
+    const secondAnswer = submitProblemActionResponse(
+      applyProblemEvaluatorTurn(firstAnswer, secondTurn),
+      '두 번째 질문에도 잘 모르겠습니다.',
+    );
+    const coaching = applyDeterministicExhaustedWrongAttemptCoaching(
+      secondAnswer,
+      '현재 선택한 2번은 두 용액의 투입량과 혼합 비율을 일정하게 통제하는 설명입니다.',
+    );
+    const reselecting = submitProblemActionResponse(coaching, '확인했습니다.');
+
+    expect(coaching.phase).toBe('AWAITING_STUDENT_RESPONSE');
+    expect(coaching.pendingAction).toEqual(expect.objectContaining({
+      type: 'DIRECT_COACHING',
+      coachingReason: 'MAX_DIAGNOSTIC_TURNS',
     }));
+    expect(coaching.interventionCountForCurrentSelection).toBe(3);
+    expect(reselecting.phase).toBe('AWAITING_RESELECTION');
+    expect(reselecting.selectionCount).toBe(1);
+    expect(reselecting.result).toBeNull();
+  });
+
+  it('두 번째 오답의 질문 예산이 소진되어도 상세 코칭 뒤 3차 선택을 보장한다', () => {
+    const firstReselection = awaitingReselectionAfterCorrection();
+    const secondWrong = submitProblemReselection(firstReselection, {
+      selectedChoiceId: 'C3',
+      rationale: '그림의 두 흐름이 합쳐지지 않는다고 생각했습니다.',
+    });
+    const firstQuestion = structuredClone(
+      fixture('mrna-q19-c3-visual-representation.json').turns[0],
+    ) as any;
+    firstQuestion.turnId = 'T3';
+    firstQuestion.basedOnObservationIds = [secondWrong.observations.at(-1).observationId];
+    const firstAnswer = submitProblemActionResponse(
+      applyProblemEvaluatorTurn(secondWrong, firstQuestion),
+      '그래도 서로 분리되어 보입니다.',
+    );
+    const secondQuestion = structuredClone(firstQuestion);
+    secondQuestion.turnId = 'T4';
+    secondQuestion.basedOnObservationIds = [
+      secondWrong.observations.at(-1).observationId,
+      firstAnswer.observations.at(-1).observationId,
+    ];
+    const secondAnswer = submitProblemActionResponse(
+      applyProblemEvaluatorTurn(firstAnswer, secondQuestion),
+      '합류 지점을 봐도 판단이 바뀌지 않습니다.',
+    );
+    const rejectedQuestion = structuredClone(secondQuestion);
+    rejectedQuestion.turnId = 'T5';
+    const forced = applyProblemEvaluatorTurn(secondAnswer, rejectedQuestion);
+    const coachingDecision = structuredClone(secondQuestion);
+    coachingDecision.turnId = 'T6';
+    coachingDecision.nextAction = {
+      type: 'DIRECT_COACHING', target: 'SELECTED_CHOICE',
+      message: '그림의 두 흐름은 Y자 관에서 합류합니다.',
+      coachingReason: 'MAX_DIAGNOSTIC_TURNS', supplementalInferenceIds: [],
+    };
+    const coaching = applyProblemEvaluatorTurn(forced, coachingDecision);
+    const awaitingThirdSelection = submitProblemActionResponse(coaching, '확인했습니다.');
+
+    expect(awaitingThirdSelection.selectionCount).toBe(2);
+    expect(awaitingThirdSelection.phase).toBe('AWAITING_RESELECTION');
+    expect(awaitingThirdSelection.pendingAction?.type).toBe('REQUEST_RESELECTION');
+    expect(awaitingThirdSelection.result).toBeNull();
+    expect(awaitingThirdSelection.turns.filter((turn) => turn.nextAction.type === 'DIRECT_COACHING'))
+      .toHaveLength(1);
   });
 
   it('진단 답변으로 경로만 명확해진 상태에서는 세션도 재선택을 허용하지 않는다', () => {
@@ -581,7 +674,7 @@ describe('pure problem solving session', () => {
     const completed = submitProblemReselection(reselecting, {
       selectedChoiceId: 'C3',
       rationale: '그림의 합류 지점이 mRNA 분해를 뜻한다고 생각했습니다.',
-      finalAnswerExplanation: '정답은 ⑤입니다. ⑤의 소수성·크기 연결은 지문에 근거가 없습니다.',
+      ...finalAnswerReveal('C3'),
     });
 
     expect(completed).toEqual(expect.objectContaining({
@@ -603,10 +696,36 @@ describe('pure problem solving session', () => {
       resolutionOutcome: 'ANSWER_REVEALED',
       interventionPath: 'STATIC_ANSWER_EXPLANATION',
       effectiveRepairPath: 'STATIC_ANSWER_EXPLANATION',
-      answerExplanation: '정답은 ⑤입니다. ⑤의 소수성·크기 연결은 지문에 근거가 없습니다.',
+      answerExplanation: expect.stringContaining('정답은 ⑤입니다.'),
+      answerReveal: expect.objectContaining({
+        answerChoiceId: 'C5',
+        lastChoiceId: 'C3',
+      }),
     }));
     expect(completed.result?.interventionHistory.at(-1)).toBe('STATIC_ANSWER_EXPLANATION');
     expect(completed.turns).toHaveLength(reselecting.turns.length);
+  });
+
+  it('3차 오답의 정답 공개 본문이 불완전하면 ANSWER_REVEALED로 종료하지 않는다', () => {
+    const reselecting = structuredClone(awaitingReselectionAfterCorrection());
+    reselecting.selectionAttempt = 2;
+
+    expect(() => submitProblemReselection(reselecting, {
+      selectedChoiceId: 'C3',
+      rationale: '마지막에도 ③을 선택했습니다.',
+      finalAnswerExplanation: '정답은 ⑤입니다.',
+    })).toThrow(/완전한 정적 정답 공개/);
+    expect(() => submitProblemReselection(reselecting, {
+      selectedChoiceId: 'C3',
+      rationale: '마지막에도 ③을 선택했습니다.',
+      ...finalAnswerReveal('C3'),
+      finalAnswerReveal: {
+        ...finalAnswerReveal('C3').finalAnswerReveal,
+        groundingSummary: '',
+      },
+    })).toThrow();
+    expect(reselecting.phase).toBe('AWAITING_RESELECTION');
+    expect(reselecting.result).toBeNull();
   });
 
   it('이전 문항 경계 설명이 있어도 성공에 직접 연결된 교정 경로를 보존한다', () => {
@@ -629,7 +748,7 @@ describe('pure problem solving session', () => {
       resolutionOutcome: 'SECOND_SELECTION_CORRECT_UNVERIFIED',
       interventionPath: 'CORRECTIVE_ONLY',
       effectiveRepairPath: 'CORRECTIVE_ONLY',
-      interventionHistory: ['ITEM_BOUNDARY', 'CORRECTIVE_QUESTION'],
+      interventionHistory: ['DIRECT_COACHING', 'CORRECTIVE_QUESTION'],
     }));
   });
 
@@ -688,7 +807,7 @@ describe('pure problem solving session', () => {
     }));
   });
 
-  it('3차 정답의 오류 근거는 교정 질문 없이 상세 코칭으로 종료한다', () => {
+  it('3차 정답의 오류 근거는 정답 공개 없이 상세 코칭으로 종료한다', () => {
     const reselecting = structuredClone(awaitingReselectionAfterCorrection());
     reselecting.selectionAttempt = 2;
     const awaitingAssessment = submitProblemReselection(reselecting, {
@@ -716,7 +835,7 @@ describe('pure problem solving session', () => {
       selectionAttempt: 3,
       correct: true,
       rationaleAssessment: 'CLEAR_ERROR',
-      answerRevealed: true,
+      answerRevealed: false,
       resolvedByStudent: false,
     }));
   });

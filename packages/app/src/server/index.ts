@@ -173,7 +173,11 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
       }
       if (req.method === 'POST' && action === 'rationale') {
         const body = (await readBody(req)) as ProblemRationaleRequest;
-        return json(res, 200, await problemSolving.submitRationale(sessionId, body.rationale));
+        return json(res, 200, await problemSolving.submitRationale(
+          sessionId,
+          body.rationale,
+          body.transitionId,
+        ));
       }
       if (req.method === 'POST' && action === 'respond') {
         const body = (await readBody(req)) as ProblemActionResponseRequest;

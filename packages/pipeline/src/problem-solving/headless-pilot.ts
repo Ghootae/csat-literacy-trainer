@@ -83,6 +83,125 @@ export const DEFAULT_MRNA_Q19_PERSONAS: readonly StudentPersona[] = [
   },
 ].map((persona) => StudentPersonaSchema.parse(persona));
 
+export const DEFAULT_MOHIST_Q12_PERSONAS: readonly StudentPersona[] = [
+  {
+    personaId: 'MH-REFERENT-ACCURATE', level: 'MID_HIGH',
+    profile: '두 학파의 명–실 대응 원칙과 대화 속 각 표현의 지시 범위를 정확히 구별한다.',
+    initialBias: '④의 ⓓ와 ⓔ가 같은 대상을 지시한다는 전제를 먼저 검토한다.',
+    responseStyle: '선지의 전제와 적용 규칙을 한두 문장으로 분명히 말한다.',
+  },
+  {
+    personaId: 'MH-C4-PRINCIPLE-ONLY', level: 'MID_HIGH',
+    profile: '공손룡의 원칙은 이해하지만 복합 선지에서 후반 원칙이 맞으면 앞 전제를 덜 검토한다.',
+    initialBias: '④ 후반부가 공손룡의 견해와 비슷해 보여 ④를 적절하다고 처리하고 다른 선지를 의심한다.',
+    responseStyle: '어느 학파의 규칙을 적용했는지 구체적으로 말한다.',
+  },
+  {
+    personaId: 'M-SCHOOL-CONFLATION', level: 'MID',
+    profile: '공손룡과 후기 묵가의 예시는 기억하지만 어느 쪽이 다중 대응을 허용하는지 흔들린다.',
+    initialBias: '공손룡도 맥락에 따라 같은 명이 여러 실을 지시할 수 있다고 생각해 ①을 의심한다.',
+    responseStyle: '자신이 기억한 학파 원칙을 근거로 답한다.',
+  },
+  {
+    personaId: 'M-FIXED-NAME-CLASS', level: 'MID',
+    profile: '달명·유명·사명의 정의는 기억하지만 하나의 단어가 상황에 따라 분류가 달라지는 점을 놓친다.',
+    initialBias: '‘옷’은 언제나 유명이라고 생각해 ③을 부적절하다고 본다.',
+    responseStyle: '용어 정의를 짧게 인용해 설명한다.',
+  },
+  {
+    personaId: 'ML-WHITE-HORSE-REVERSAL', level: 'MID_LOW',
+    profile: '흰 말 사례의 결론 방향을 반대로 기억한다.',
+    initialBias: '공손룡도 빨간 옷을 그냥 옷이라고 불러도 된다고 생각해 ⑤를 의심한다.',
+    responseStyle: '흰 말 사례와 옷 사례를 직접 대응해 답한다.',
+  },
+  {
+    personaId: 'ML-SAME-CONVERSATION-TARGET', level: 'MID_LOW',
+    profile: '대화의 화제가 같으면 표현들이 같은 실을 지시한다고 성급히 묶는다.',
+    initialBias: 'ⓓ와 ⓔ가 모두 갑이 찾는 옷 이야기이므로 같은 대상을 지시한다고 생각한다.',
+    responseStyle: '대화 장면을 근거로 짧게 인과를 말한다.',
+  },
+  {
+    personaId: 'L-ONE-TO-ONE-EVERYONE', level: 'LOW',
+    profile: '두 학파의 차이를 놓치고 명과 실은 언제나 일대일이어야 한다고 이해한다.',
+    initialBias: '후기 묵가도 한 명이 여러 실을 가리키는 것을 반대한다고 생각해 ②를 고른다.',
+    responseStyle: '쉬운 말로 같은 이름이면 같은 물건이어야 한다고 답한다.',
+  },
+  {
+    personaId: 'L-KEYWORD-MATCHER', level: 'LOW',
+    profile: '선지 전체보다 ‘일대일’, ‘유명’, ‘속성’ 같은 단어가 지문에 있었는지를 중심으로 고른다.',
+    initialBias: '‘유명을 사명으로 사용’이라는 표현이 낯설어 ③을 고르지만 이유가 선명하지 않다.',
+    responseStyle: '처음에는 모호하게 답하고 구체적으로 물으면 한 생각을 말한다.',
+  },
+  {
+    personaId: 'LL-GUESS-C1', level: 'LOWEST',
+    profile: '명과 실의 관계를 거의 복원하지 못하고 첫 선지를 추측한다.',
+    initialBias: '첫 선택은 C1이며 INITIAL_RESPONSE의 text는 null로 둔다.',
+    responseStyle: '매우 짧게 답하고 처음에는 이유를 모르겠다고 말한다.',
+  },
+  {
+    personaId: 'LL-NAME-OBJECT-MERGE', level: 'LOWEST',
+    profile: '이름과 실제 대상, 대상의 속성을 하나로 섞어 이해한다.',
+    initialBias: '문장에 옷이라는 글자가 같으면 모두 같은 대상을 뜻한다고 생각해 임의의 오답을 고른다.',
+    responseStyle: '옷이라는 말이 같다는 점만 반복하지만 질문받은 표현에는 직접 답하려 한다.',
+  },
+].map((persona) => StudentPersonaSchema.parse(persona));
+
+function expandedPersonas(
+  prefix: string,
+  biases: readonly [string, string, string, string, string],
+): readonly StudentPersona[] {
+  const levels = ['MID_HIGH', 'MID', 'MID_LOW', 'LOW', 'LOWEST'] as const;
+  const profiles = [
+    '지문과 보기의 조건을 비교적 정확히 연결하며 복합 선지의 전제를 확인한다.',
+    '핵심 개념은 기억하지만 보기 상황에 적용할 때 한 관계를 혼동한다.',
+    '개별 사실은 기억하지만 조건의 순서나 작용 범위를 놓치기 쉽다.',
+    '눈에 띄는 표현과 일상적 직관을 중심으로 판단한다.',
+    '관계를 거의 복원하지 못하고 한 단어나 첫인상으로 선택한다.',
+  ];
+  return biases.map((initialBias, index) => StudentPersonaSchema.parse({
+    personaId: `${prefix}-${levels[index]}`,
+    level: levels[index],
+    profile: profiles[index],
+    initialBias,
+    responseStyle: index < 2
+      ? '한두 문장으로 사용한 근거를 말하고 납득한 교정은 반영한다.'
+      : index < 4
+        ? '짧은 문장으로 한 관계만 설명하며 구체적으로 물으면 생각을 드러낸다.'
+        : '처음에는 이유를 모르겠다고 답할 수 있고, 직접적인 질문에만 매우 짧게 답한다.',
+  }));
+}
+
+export const EXPANDED_PERSONAS_BY_QUESTION_ID: Readonly<Record<string, readonly StudentPersona[]>> = {
+  'corporate-law-q13': expandedPersonas('LAW13', [
+    '②에서 개인의 출자와 대표 이사의 권한 근거가 다르다고 보아 C2를 선택한다.',
+    '설립자가 재산을 냈으므로 주주들이 갑 개인에게 법인격과 운용 권한을 주었다고 생각해 C5를 의심한다.',
+    '자본금은 절대로 줄일 수 없다고 기억해 C4를 고른다.',
+    '자본 거래 이익은 법인 목적에 쓸 수 없다고 생각해 C3을 고른다.',
+    '설립자라면 회사 재산을 자유롭게 다룰 수 있다고 생각해 C5를 고르며 이유는 단순하다.',
+  ]),
+  'information-asymmetry-free-marketplace-q13': expandedPersonas('INFO13', [
+    '다수 의견의 위헌 결론과 ⑤의 제재 결론이 반대임을 확인해 C5를 선택한다.',
+    'AI를 이용한 제작자 갑은 현재 생성물 표시 의무로 곧바로 제재된다고 생각해 C2를 고른다.',
+    '플랫폼에도 현재 AI 표시 의무가 이미 부과된다고 생각해 C1을 고른다.',
+    '위험한 주장을 처벌하는 법이 다수 의견과도 맞는다고 생각해 C3을 고른다.',
+    '소수 의견이 최종 헌법 재판소 결론이라고 섞어 이해해 C4를 고른다.',
+  ]),
+  'surface-tension-laplace-q16': expandedPersonas('SURFACE16', [
+    '밀도 두 배와 노즐 지름 절반이 곱에서 상쇄됨을 계산해 C3을 선택한다.',
+    '첨가제 뒤 정상 출력이면 오네소르게 수가 더 커졌다고 생각해 C2를 고른다.',
+    '밀도 증가만 보고 오네소르게 수가 작아진다고 판단해 C3을 의심하고 C1을 고른다.',
+    '시간이 지나면 파란 잉크도 자동으로 적정 범위를 벗어난다고 생각해 C4를 고른다.',
+    '더 끈적하면 작은 위성 방울로 쪼개진다고 생각해 C5를 고른다.',
+  ]),
+  'dopamine-motor-control-q13': expandedPersonas('DOPA13', [
+    '카르비도파는 말초에서만 작용하므로 흑질 도파민 작용 기간을 늘리지 못한다고 보아 C2를 선택한다.',
+    '효소를 억제하면 도파민 분해도 늦어진다고 생각해 C2를 맞는 설명으로 보고 C1을 고른다.',
+    '레보도파도 도파민의 한 종류라 혈액-뇌 장벽을 통과하지 못한다고 생각해 C1을 고른다.',
+    '프라미펙솔이 도파민처럼 기능하므로 흑질의 도파민 합성도 늘린다고 생각해 C3을 고른다.',
+    '카르비도파가 레보도파의 뇌 진입 자체를 막는다고 생각해 C4를 고른다.',
+  ]),
+};
+
 const ProblemSessionViewSchema = z.object({
   sessionId: z.string().min(1),
   phase: z.enum([
@@ -108,6 +227,9 @@ const ProblemSessionViewSchema = z.object({
     }).passthrough()).min(1),
   }).passthrough(),
   selectedChoiceId: z.string().nullable(),
+  selectionCount: z.number().int().nonnegative(),
+  interventionCount: z.number().int().nonnegative(),
+  interventionCountForCurrentSelection: z.number().int().nonnegative(),
   action: z.object({
     kind: z.enum(['DIAGNOSTIC_QUESTION', 'CORRECTIVE_QUESTION', 'COACHING', 'ITEM_BOUNDARY']),
     text: z.string().min(1),
@@ -150,6 +272,13 @@ const ProblemSessionViewSchema = z.object({
     interventionHistory: z.array(z.string().min(1)),
     effectiveRepairPath: z.string().min(1),
     answerExplanation: z.string().nullable(),
+    answerReveal: z.object({
+      answerChoiceId: z.string().min(1),
+      lastChoiceId: z.string().min(1),
+      lastChoiceExplanation: z.string().min(1),
+      correctChoiceExplanation: z.string().min(1),
+      groundingSummary: z.string().min(1),
+    }).nullable(),
   }).nullable(),
 }).passthrough();
 
@@ -186,9 +315,39 @@ export interface HeadlessStudentRole {
 
 export interface HeadlessProblemApi {
   start(questionId: string): Promise<{ view: unknown; durationMs: number }>;
+  get(sessionId: string): Promise<{ view: unknown; durationMs: number }>;
+  resume(sessionId: string): Promise<{ view: unknown; durationMs: number }>;
   submitInitial(sessionId: string, body: unknown): Promise<{ view: unknown; durationMs: number }>;
   submitRationale(sessionId: string, rationale: string): Promise<{ view: unknown; durationMs: number }>;
   respond(sessionId: string, body: unknown): Promise<{ view: unknown; durationMs: number }>;
+}
+
+async function runWithEvaluationRecovery(
+  api: HeadlessProblemApi,
+  sessionId: string,
+  mutation: () => Promise<{ view: unknown; durationMs: number }>,
+): Promise<{ view: unknown; durationMs: number }> {
+  try {
+    return await mutation();
+  } catch (initialError) {
+    let durationMs = 0;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const restored = await api.get(sessionId);
+      durationMs += restored.durationMs;
+      const view = ProblemSessionViewSchema.parse(restored.view);
+      if (view.phase !== 'EVALUATION_ERROR' && view.phase !== 'PROCESSING') {
+        return { view, durationMs };
+      }
+      if (view.phase === 'PROCESSING') continue;
+      try {
+        const resumed = await api.resume(sessionId);
+        return { view: resumed.view, durationMs: durationMs + resumed.durationMs };
+      } catch {
+        // 저장된 관찰은 유지된다. 다음 반복에서 최신 상태를 다시 읽고 평가만 재개한다.
+      }
+    }
+    throw initialError;
+  }
 }
 
 export interface HeadlessPilotCaseResult {
@@ -257,23 +416,24 @@ export async function runHeadlessPilotCase(options: {
     let next: { view: unknown; durationMs: number };
     if (actionKind === 'INITIAL_RESPONSE') {
       initialChoiceId = decision.choiceId!;
-      next = await options.api.submitInitial(view.sessionId, {
+      next = await runWithEvaluationRecovery(options.api, view.sessionId, () => options.api.submitInitial(view.sessionId, {
         choiceId: decision.choiceId,
         ...(decision.text?.trim() ? { rationale: decision.text.trim() } : {}),
         ...(decision.confidence === null ? {} : { confidence: decision.confidence }),
-      });
+      }));
     } else if (actionKind === 'RATIONALE') {
-      next = await options.api.submitRationale(view.sessionId, decision.text!.trim());
+      next = await runWithEvaluationRecovery(options.api, view.sessionId, () =>
+        options.api.submitRationale(view.sessionId, decision.text!.trim()));
     } else if (actionKind === 'RESELECTION') {
-      next = await options.api.respond(view.sessionId, {
+      next = await runWithEvaluationRecovery(options.api, view.sessionId, () => options.api.respond(view.sessionId, {
         type: 'RESELECT',
         choiceId: decision.choiceId,
         ...(decision.text?.trim() ? { rationale: decision.text.trim() } : {}),
-      });
+      }));
     } else {
-      next = await options.api.respond(view.sessionId, {
+      next = await runWithEvaluationRecovery(options.api, view.sessionId, () => options.api.respond(view.sessionId, {
         type: 'TEXT', text: decision.text!.trim(),
-      });
+      }));
     }
     view = ProblemSessionViewSchema.parse(next.view);
     events.push({

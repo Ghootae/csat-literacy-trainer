@@ -312,9 +312,17 @@ export const DiagnosticTurnSchema = z.object({
   if (
     action.type === 'DIRECT_COACHING' &&
     action.coachingReason !== 'FINAL_ATTEMPT' &&
+    action.coachingReason !== 'MAX_DIAGNOSTIC_TURNS' &&
     !['SUFFICIENT', 'BOUNDARY_CLARIFICATION_REQUIRED'].includes(target.status)
   ) {
     context.addIssue({ code: 'custom', path: ['nextAction'], message: '직접 코칭에는 충분한 진단 또는 문항 경계 판정이 필요하다.' });
+  }
+  if (
+    action.type === 'DIRECT_COACHING' &&
+    action.coachingReason === 'MAX_DIAGNOSTIC_TURNS' &&
+    ['NOT_ASSESSED', 'NOT_DIRECTLY_DIAGNOSED'].includes(target.status)
+  ) {
+    context.addIssue({ code: 'custom', path: ['nextAction'], message: '질문 예산 소진 코칭에도 최소한 평가된 선택 타깃이 필요하다.' });
   }
   if (
     action.type === 'DIRECT_COACHING' &&

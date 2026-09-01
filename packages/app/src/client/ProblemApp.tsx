@@ -11,8 +11,28 @@ import {
 } from './api.js';
 import { recoverProblemMutation } from './problem-session-recovery.js';
 
-const QUESTION_ID = 'mrna-vaccine-lipid-nanoparticle-q19';
-const STORAGE_KEY = `csat.problem.${QUESTION_ID}`;
+const DEFAULT_QUESTION_ID = 'mrna-vaccine-lipid-nanoparticle-q19';
+
+const PROBLEM_CATALOG = [
+  { questionId: 'mrna-vaccine-lipid-nanoparticle-q19', exam: '고2 2023년 3월 · 교육청 모의평가', title: 'mRNA 백신과 지질 나노 입자', questionNumber: 19 },
+  { questionId: 'gongsun-long-later-mohists-q12', exam: '고3 2023년 4월 · 교육청 모의평가', title: '공손룡과 후기 묵가의 명실론', questionNumber: 12 },
+  { questionId: 'corporate-law-q13', exam: '고3 2025년 10월 · 교육청 모의평가', title: '법인의 종류와 자산 운용의 법적 통제', questionNumber: 13 },
+  { questionId: 'information-asymmetry-free-marketplace-q13', exam: '고3 2026년 6월 · 평가원 모의평가', title: '정보 비대칭과 사상의 자유 시장 이론', questionNumber: 13 },
+  { questionId: 'surface-tension-laplace-q16', exam: '고3 2026년 6월 · 평가원 모의평가', title: '표면 장력과 라플라스 식', questionNumber: 16 },
+  { questionId: 'dopamine-motor-control-q13', exam: '고3 2026년 3월 · 교육청 모의평가', title: '도파민의 합성, 수용체, 수의적 운동 조절', questionNumber: 13 },
+] as const;
+
+function isProblemCatalogRoute(): boolean {
+  return window.location.pathname === '/problems' || window.location.pathname === '/problems/';
+}
+
+function requestedQuestionId(): string {
+  return new URLSearchParams(window.location.search).get('questionId') ?? DEFAULT_QUESTION_ID;
+}
+
+function storageKey(questionId: string): string {
+  return `csat.problem.${questionId}`;
+}
 
 function rationaleAssessmentLabel(result: NonNullable<ProblemSessionView['result']>): string {
   if (result.rationaleAssessment !== 'NOT_EVALUATED') return result.rationaleAssessment;
@@ -22,6 +42,7 @@ function rationaleAssessmentLabel(result: NonNullable<ProblemSessionView['result
 }
 
 export function ProblemApp(): React.JSX.Element {
+  const catalogMode = isProblemCatalogRoute();
   const [session, setSession] = useState<ProblemSessionView | null>(null);
   const [choiceId, setChoiceId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -36,22 +57,28 @@ export function ProblemApp(): React.JSX.Element {
   const automaticResumeKeys = useRef(new Set<string>());
 
   useEffect(() => {
+    if (catalogMode) return;
     let active = true;
+    const questionId = requestedQuestionId();
     const linkedSessionId = new URLSearchParams(window.location.search).get('sessionId');
-    const saved = linkedSessionId ?? sessionStorage.getItem(STORAGE_KEY);
+    const saved = linkedSessionId ?? sessionStorage.getItem(storageKey(questionId));
     const request = linkedSessionId !== null
       ? fetchProblemSession(linkedSessionId)
       : saved === null
-        ? startProblemSession(QUESTION_ID)
-        : fetchProblemSession(saved).catch(() => startProblemSession(QUESTION_ID));
+        ? startProblemSession(questionId)
+        : fetchProblemSession(saved).then((restored) =>
+            restored.content.questionId === questionId
+              ? restored
+              : startProblemSession(questionId),
+          ).catch(() => startProblemSession(questionId));
     request.then((next) => {
       if (!active) return;
-      sessionStorage.setItem(STORAGE_KEY, next.sessionId);
+      sessionStorage.setItem(storageKey(next.content.questionId), next.sessionId);
       setSession(next);
       setChoiceId(next.selectedChoiceId);
     }).catch(showError);
     return () => { active = false; };
-  }, []);
+  }, [catalogMode]);
 
   useEffect(() => {
     if (!busy) {
@@ -127,7 +154,8 @@ export function ProblemApp(): React.JSX.Element {
   }
 
   function restart(): void {
-    sessionStorage.removeItem(STORAGE_KEY);
+    const questionId = session?.content.questionId ?? requestedQuestionId();
+    sessionStorage.removeItem(storageKey(questionId));
     setSession(null);
     setChoiceId(null);
     setDraft('');
@@ -136,10 +164,35 @@ export function ProblemApp(): React.JSX.Element {
     setRunnerUpChoiceId('');
     setRunnerUpRationale('');
     setReselectionRationale('');
-    void run(startProblemSession(QUESTION_ID).then((next) => {
-      sessionStorage.setItem(STORAGE_KEY, next.sessionId);
+    void run(startProblemSession(questionId).then((next) => {
+      sessionStorage.setItem(storageKey(next.content.questionId), next.sessionId);
       return next;
     }));
+  }
+
+  if (catalogMode) {
+    return (
+      <main className="problem-shell problem-catalog-shell">
+        <header className="problem-catalog-header">
+          <p className="dialogue-kicker">문제 풀이 진단 · 파일럿</p>
+          <h1>풀 문제를 선택해 주세요.</h1>
+          <p>문단 대화 없이 6개 문제 중 하나를 선택해 바로 시작합니다.</p>
+        </header>
+        <section className="problem-catalog" aria-label="풀 수 있는 문제">
+          {PROBLEM_CATALOG.map((problem) => (
+            <a
+              className="problem-catalog-card"
+              href={`/problem?questionId=${encodeURIComponent(problem.questionId)}`}
+              key={problem.questionId}
+            >
+              <span className="problem-catalog-exam">{problem.exam}</span>
+              <strong>{problem.title}</strong>
+              <span className="problem-catalog-number">{problem.questionNumber}번 풀기</span>
+            </a>
+          ))}
+        </section>
+      </main>
+    );
   }
 
   if (session === null) {
@@ -161,15 +214,16 @@ export function ProblemApp(): React.JSX.Element {
       <header className="problem-header">
         <div>
           <p className="dialogue-kicker">{content.exam}</p>
-          <h1>{content.title} · 19번</h1>
+          <h1>{content.title} · {content.questionNumber}번</h1>
         </div>
         <div className="dialogue-run-actions">
           <span className="dialogue-progress">이번 선택 질문 {session.attemptQuestionBudget.used}/{session.attemptQuestionBudget.maximum}</span>
           <span className="dialogue-progress">선택 {session.selectionProgress.current}/{session.selectionProgress.maximum}</span>
+          <span className="dialogue-progress">이번 선택 개입 {session.interventionCountForCurrentSelection}회</span>
           <a
             className="problem-link"
-            href={dialogueSessionId === null ? '/dialogue' : `/dialogue?sessionId=${encodeURIComponent(dialogueSessionId)}`}
-          >문단 대화</a>
+            href={dialogueSessionId === null ? '/problems' : `/dialogue?sessionId=${encodeURIComponent(dialogueSessionId)}`}
+          >{dialogueSessionId === null ? '문제 목록' : '문단 대화'}</a>
           <button disabled={busy} onClick={restart}>새로 풀기</button>
         </div>
       </header>
@@ -357,6 +411,8 @@ export function ProblemApp(): React.JSX.Element {
             <div className={`problem-result ${session.result.correct ? 'correct' : 'incorrect'}`}>
               <strong>{session.result.answerRevealed
                 ? '상세 코칭으로 풀이를 마쳤습니다.'
+                : !session.result.resolvedByStudent
+                  ? '근거 코칭으로 풀이를 마쳤습니다.'
                 : session.result.correct
                   ? '정답입니다.'
                   : '풀이를 종료했습니다.'}</strong>
@@ -373,7 +429,14 @@ export function ProblemApp(): React.JSX.Element {
               <p>전체 개입 이력: {session.result.interventionHistory.length === 0
                 ? 'NONE'
                 : session.result.interventionHistory.join(' → ')}</p>
-              {session.result.answerExplanation !== null && <p>{session.result.answerExplanation}</p>}
+              {session.result.answerReveal !== null && (
+                <div className="problem-answer-reveal">
+                  <p><strong>정답</strong> {content.choices.find((choice) => choice.choiceId === session.result!.answerReveal!.answerChoiceId)?.position}번</p>
+                  <p><strong>마지막 선택이 아닌 이유</strong> {session.result.answerReveal.lastChoiceExplanation}</p>
+                  <p><strong>정답 선지의 이유</strong> {session.result.answerReveal.correctChoiceExplanation}</p>
+                  <p><strong>지문·보기 근거</strong> {session.result.answerReveal.groundingSummary}</p>
+                </div>
+              )}
             </div>
           )}
 

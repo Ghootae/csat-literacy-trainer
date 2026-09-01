@@ -5,6 +5,7 @@ import {
   adaptProblemPathDiagnosticOutput,
   applyAdaptedProblemEvaluatorTurn,
   applyCorrectRationaleAssessment,
+  applyDeterministicExhaustedWrongAttemptCoaching,
   createProblemPathEvaluatorInput,
   exhaustedWrongAttemptSupplementalAccess,
   failedCorrectionSupplementalAccess,
@@ -44,7 +45,27 @@ interface ProblemRuntime {
   evaluationStatus: 'IDLE' | 'PROCESSING' | 'RETRYABLE_ERROR';
   evaluationError: string | null;
   evaluationPromise: Promise<void> | null;
+  transitionFingerprints: Map<string, string>;
+  transitionPromises: Map<string, Promise<ProblemSessionView>>;
   logged: boolean;
+}
+
+const CORRECT_RATIONALE_ASSESSMENT_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(request: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('정답 근거 평가 제한 시간을 초과했습니다.')), timeoutMs);
+    request.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 export interface CompletedProblemSessionRecord {
@@ -102,6 +123,8 @@ export class ProblemSolvingController {
       evaluationStatus: 'IDLE',
       evaluationError: null,
       evaluationPromise: null,
+      transitionFingerprints: new Map(),
+      transitionPromises: new Map(),
       logged: false,
     };
     this.sessions.set(sessionId, runtime);
@@ -117,6 +140,15 @@ export class ProblemSolvingController {
     input: ProblemInitialSubmissionRequest,
   ): Promise<ProblemSessionView> {
     const runtime = this.requireSession(sessionId);
+    if (input.transitionId !== undefined) {
+      const { transitionId, ...payload } = input;
+      return this.runIdempotentTransition(
+        runtime,
+        transitionId,
+        JSON.stringify({ kind: 'INITIAL', payload }),
+        () => this.submitInitial(sessionId, payload),
+      );
+    }
     if (runtime.session !== null || runtime.pendingInitialSubmission !== null) {
       throw new Error('최초 선택은 한 번만 제출할 수 있습니다.');
     }
@@ -140,8 +172,20 @@ export class ProblemSolvingController {
     return this.view(runtime);
   }
 
-  async submitRationale(sessionId: string, rationaleInput: string): Promise<ProblemSessionView> {
+  async submitRationale(
+    sessionId: string,
+    rationaleInput: string,
+    transitionId?: string,
+  ): Promise<ProblemSessionView> {
     const runtime = this.requireSession(sessionId);
+    if (transitionId !== undefined) {
+      return this.runIdempotentTransition(
+        runtime,
+        transitionId,
+        JSON.stringify({ kind: 'RATIONALE', rationale: rationaleInput }),
+        () => this.submitRationale(sessionId, rationaleInput),
+      );
+    }
     const pending = runtime.pendingInitialSubmission;
     if (runtime.session !== null || pending === null) throw new Error('선택 근거를 받을 상태가 아닙니다.');
     const rationale = rationaleInput.trim();
@@ -165,14 +209,25 @@ export class ProblemSolvingController {
     input: ProblemActionResponseRequest,
   ): Promise<ProblemSessionView> {
     const runtime = this.requireSession(sessionId);
+    if (input.transitionId !== undefined) {
+      const { transitionId, ...payload } = input;
+      return this.runIdempotentTransition(
+        runtime,
+        transitionId,
+        JSON.stringify({ kind: 'RESPONSE', payload }),
+        () => this.respond(sessionId, payload),
+      );
+    }
     const session = this.requireProblemSession(runtime);
     if (input.type === 'RESELECT') {
       this.assertChoice(runtime, input.choiceId);
       const rationale = input.rationale?.trim() || null;
+      const isThirdWrongSelection = session.selectionAttempt + 1 >= session.limits.maxSelectionAttempts &&
+        input.choiceId !== runtime.gold.answerChoiceId;
       runtime.session = submitProblemReselection(session, {
         selectedChoiceId: input.choiceId,
         rationale,
-        finalAnswerExplanation: runtime.gold.finalAnswerExplanation.message,
+        ...(isThirdWrongSelection ? this.finalAnswerReveal(runtime, input.choiceId) : {}),
       });
       this.addStudent(runtime, 'RESELECTION', input.choiceId);
       if (rationale !== null) this.addStudent(runtime, 'RATIONALE', rationale);
@@ -219,6 +274,65 @@ export class ProblemSolvingController {
     });
   }
 
+  private runIdempotentTransition(
+    runtime: ProblemRuntime,
+    transitionId: string,
+    fingerprint: string,
+    operation: () => Promise<ProblemSessionView>,
+  ): Promise<ProblemSessionView> {
+    const normalizedId = transitionId.trim();
+    if (normalizedId === '') throw new Error('전이 ID가 비어 있습니다.');
+    const previousFingerprint = runtime.transitionFingerprints.get(normalizedId);
+    if (previousFingerprint !== undefined && previousFingerprint !== fingerprint) {
+      throw new Error('같은 전이 ID를 서로 다른 요청에 사용할 수 없습니다.');
+    }
+    const previous = runtime.transitionPromises.get(normalizedId);
+    if (previous !== undefined) return previous;
+    runtime.transitionFingerprints.set(normalizedId, fingerprint);
+    const pending = operation();
+    runtime.transitionPromises.set(normalizedId, pending);
+    return pending;
+  }
+
+  private finalAnswerReveal(runtime: ProblemRuntime, lastChoiceId: string): {
+    readonly finalAnswerExplanation: string;
+    readonly finalAnswerReveal: {
+      readonly answerChoiceId: string;
+      readonly lastChoiceId: string;
+      readonly lastChoiceExplanation: string;
+      readonly correctChoiceExplanation: string;
+      readonly groundingSummary: string;
+    };
+  } {
+    const answer = runtime.gold.choices.find((choice) => choice.choiceId === runtime.gold.answerChoiceId);
+    const lastChoice = runtime.gold.choices.find((choice) => choice.choiceId === lastChoiceId);
+    if (answer === undefined || lastChoice === undefined) throw new Error('정답 공개 선지 정보를 찾을 수 없습니다.');
+    const groundingSummary = runtime.gold.referencePath
+      .filter((step) => runtime.gold.finalAnswerExplanation.referencePathStepIds.includes(step.stepId))
+      .map((step) => step.description)
+      .join(' ')
+      .trim();
+    const finalAnswerReveal = {
+      answerChoiceId: answer.choiceId,
+      lastChoiceId: lastChoice.choiceId,
+      lastChoiceExplanation: lastChoice.rationale,
+      correctChoiceExplanation: runtime.gold.finalAnswerExplanation.message,
+      groundingSummary,
+    };
+    if (Object.values(finalAnswerReveal).some((value) => value.trim() === '')) {
+      throw new Error('정답 공개 본문에 필요한 정답·오답·근거 정보가 비어 있습니다.');
+    }
+    return {
+      finalAnswerReveal,
+      finalAnswerExplanation: [
+        `정답은 ${answer.position}번입니다.`,
+        `마지막 선택 ${lastChoice.position}번: ${lastChoice.rationale}`,
+        runtime.gold.finalAnswerExplanation.message,
+        `근거 관계: ${groundingSummary}`,
+      ].join('\n'),
+    };
+  }
+
   private ensureEvaluation(runtime: ProblemRuntime): Promise<void> {
     const session = this.requireProblemSession(runtime);
     if (
@@ -239,6 +353,15 @@ export class ProblemSolvingController {
         runtime.evaluationError = null;
       })
       .catch((error: unknown) => {
+        const current = this.requireProblemSession(runtime);
+        if (current.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT') {
+          // 정오는 이미 코드가 확정했다. 부가적인 근거 평가 실패가 정답 종결을
+          // 막지 않도록 보수적인 UNCERTAIN 결과로 결정론적으로 닫는다.
+          runtime.session = applyCorrectRationaleAssessment(current, 'UNCERTAIN');
+          runtime.evaluationStatus = 'IDLE';
+          runtime.evaluationError = null;
+          return;
+        }
         runtime.evaluationStatus = 'RETRYABLE_ERROR';
         runtime.evaluationError = '후속 진단 상태 생성에 실패했습니다. 저장된 선택부터 다시 진행할 수 있습니다.';
         throw error;
@@ -258,6 +381,23 @@ export class ProblemSolvingController {
         session.phase !== 'AWAITING_EVALUATION' &&
         session.phase !== 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
       ) return;
+      if (
+        session.phase === 'AWAITING_EVALUATION' &&
+        session.entryReason === 'WRONG_CHOICE' &&
+        session.selectionCount < session.limits.maxSelectionAttempts &&
+        session.limits.questionsUsedThisAttempt >= session.limits.maxQuestionsPerWrongAttempt
+      ) {
+        const selectedChoice = runtime.gold.choices.find(
+          (choice) => choice.choiceId === session.latestChoiceId,
+        );
+        if (selectedChoice === undefined) throw new Error('현재 오답 선지의 결정론적 코칭 근거가 없습니다.');
+        runtime.session = applyDeterministicExhaustedWrongAttemptCoaching(
+          session,
+          `현재 선택한 ${selectedChoice.position}번에서 확인할 관계는 다음과 같습니다. ${selectedChoice.rationale}`,
+        );
+        this.addCoachAction(runtime);
+        return;
+      }
       const supplementalAccess = session.requiredNextAction !== 'DIRECT_COACHING'
         ? undefined
         : session.selectionAttempt >= session.limits.maxSelectionAttempts
@@ -267,7 +407,7 @@ export class ProblemSolvingController {
             )
           : session.entryReason === 'CORRECT_RATIONALE_REVIEW'
             ? failedCorrectionSupplementalAccess(runtime.gold, session.latestChoiceId!)
-            : session.completeAfterCoachingAcknowledgement
+            : session.requestReselectionAfterCoachingAcknowledgement
               ? exhaustedWrongAttemptSupplementalAccess(
                   runtime.gold,
                   [session.latestChoiceId!, session.answerChoiceId],
@@ -283,7 +423,10 @@ export class ProblemSolvingController {
         previousDiagnosticState: runtime.previousDiagnosticState,
         ...(supplementalAccess === undefined ? {} : { supplementalAccess }),
       });
-      const evaluated = await this.evaluator.evaluate(input);
+      const evaluationRequest = this.evaluator.evaluate(input);
+      const evaluated = session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
+        ? await withTimeout(evaluationRequest, CORRECT_RATIONALE_ASSESSMENT_TIMEOUT_MS)
+        : await evaluationRequest;
       runtime.evaluatorCalls.push(structuredClone(evaluated.call));
       if (evaluated.result.mode === 'ASSESS_SELECTION_RATIONALE') {
         runtime.session = applyCorrectRationaleAssessment(session, evaluated.result.assessment);
@@ -325,6 +468,9 @@ export class ProblemSolvingController {
           : 'AWAITING_RATIONALE',
         content: structuredClone(runtime.content),
         selectedChoiceId: runtime.pendingInitialSubmission?.choiceId ?? null,
+        selectionCount: 0,
+        interventionCount: 0,
+        interventionCountForCurrentSelection: 0,
         action: null,
         reselectionPrompt: null,
         transcript: structuredClone(runtime.transcript),
@@ -353,6 +499,9 @@ export class ProblemSolvingController {
       phase: publicPhase,
       content: structuredClone(runtime.content),
       selectedChoiceId: session.latestChoiceId,
+      selectionCount: session.selectionCount,
+      interventionCount: session.interventionCount,
+      interventionCountForCurrentSelection: session.interventionCountForCurrentSelection,
       action: action === null || action.type === 'REQUEST_RESELECTION'
         ? null
         : action.type === 'ASK_DIAGNOSTIC'
@@ -404,6 +553,7 @@ export class ProblemSolvingController {
             interventionHistory: session.result.interventionHistory,
             effectiveRepairPath: session.result.effectiveRepairPath,
             answerExplanation: session.result.answerExplanation,
+            answerReveal: session.result.answerReveal,
           },
     };
   }

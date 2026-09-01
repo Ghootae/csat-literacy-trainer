@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { ProblemQuestionGoldSchema } from './gold.js';
+import { ProblemQuestionGoldSchema, auditProblemGoldWarnings } from './gold.js';
 
 function fixture(name = 'dopamine-motor-control-q13.json') {
   const path = resolve(
@@ -15,6 +15,67 @@ function fixture(name = 'dopamine-motor-control-q13.json') {
 }
 
 describe('problem-solving gold', () => {
+  const sixQuestionFixtures = [
+    'mrna-vaccine-lipid-nanoparticle-q19.json',
+    'gongsun-long-later-mohists-q12.json',
+    'corporate-law-q13.json',
+    'information-asymmetry-free-marketplace-q13.json',
+    'surface-tension-laplace-q16.json',
+    'dopamine-motor-control-q13.json',
+  ] as const;
+
+  it('운영 6문항의 모든 itemInference가 완결된 방향성 계약을 만족한다', () => {
+    for (const name of sixQuestionFixtures) {
+      const gold = ProblemQuestionGoldSchema.parse(fixture(name));
+      for (const inference of gold.itemInferences) {
+        expect(inference.conclusion.length).toBeGreaterThan(0);
+        expect(inference.description).toBe(inference.conclusion);
+        expect(inference.premiseRefs.length).toBeGreaterThan(0);
+        expect(inference.targetClaimIds.length).toBeGreaterThan(0);
+        expect(['SUPPORTS', 'CONTRADICTS']).toContain(inference.targetClaimEffect);
+      }
+      expect(auditProblemGoldWarnings(gold)).toEqual([]);
+    }
+  });
+
+  it('결론·효과·전제가 없는 itemInference를 거부한다', () => {
+    for (const missingField of ['conclusion', 'targetClaimEffect', 'premiseRefs'] as const) {
+      const raw = fixture('information-asymmetry-free-marketplace-q13.json') as any;
+      delete raw.itemInferences[0][missingField];
+      expect(() => ProblemQuestionGoldSchema.parse(raw)).toThrow();
+    }
+  });
+
+  it('문항 추론 효과와 대상 선지 판정 방향의 모순을 거부한다', () => {
+    const raw = fixture('information-asymmetry-free-marketplace-q13.json') as any;
+    raw.itemInferences.find((item: any) => item.inferenceId === 'II5').targetClaimEffect = 'SUPPORTS';
+
+    expect(() => ProblemQuestionGoldSchema.parse(raw)).toThrow(/판정 방향이 모순/);
+  });
+
+  it('기존 근거 참조와 premiseRefs가 다르면 거부한다', () => {
+    const raw = fixture('information-asymmetry-free-marketplace-q13.json') as any;
+    raw.itemInferences[0].premiseRefs = ['MP1'];
+
+    expect(() => ProblemQuestionGoldSchema.parse(raw)).toThrow(/정확히 일치/);
+  });
+
+  it('과도한 보기 사실 참조는 파싱을 막지 않고 warning으로 보고한다', () => {
+    const raw = fixture('information-asymmetry-free-marketplace-q13.json') as any;
+    const inference = raw.itemInferences[0];
+    inference.scenarioFactIds = ['SF1', 'SF2', 'SF3', 'SF4'];
+    inference.premiseRefs = [
+      ...inference.references.flatMap((reference: any) => reference.propositionIds),
+      ...inference.scenarioFactIds,
+    ];
+    const gold = ProblemQuestionGoldSchema.parse(raw);
+
+    expect(auditProblemGoldWarnings(gold)).toContainEqual(expect.objectContaining({
+      code: 'EXCESSIVE_SCENARIO_FACT_REFERENCES',
+      inferenceId: 'II1',
+    }));
+  });
+
   it('실제 보기 적용 문항의 발문 극성, 선지 판단, 참조 경로를 검증한다', () => {
     const gold = ProblemQuestionGoldSchema.parse(fixture());
 
@@ -58,7 +119,7 @@ describe('problem-solving gold', () => {
       'VA4',
     ]);
     expect(gold.choices.find((choice) => choice.choiceId === 'C2')?.visualAssertionIds)
-      .toEqual(['VA1', 'VA2', 'VA3', 'VA4']);
+      .toEqual(['VA3', 'VA4']);
   });
 
   it('mRNA 19번의 지문 명제를 MP1~MP5로 제한하고 해설 추론을 별도 보존한다', () => {

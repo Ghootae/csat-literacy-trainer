@@ -6,7 +6,9 @@ import { z } from 'zod/v4';
 
 import {
   DEFAULT_MRNA_Q19_PERSONAS,
+  DEFAULT_MOHIST_Q12_PERSONAS,
   HEADLESS_PROBLEM_PILOT_VERSION,
+  EXPANDED_PERSONAS_BY_QUESTION_ID,
   StudentDecisionSchema,
   runHeadlessPilotCase,
   type HeadlessProblemApi,
@@ -17,7 +19,7 @@ import {
   type StudentPersona,
 } from '../problem-solving/headless-pilot.js';
 
-const QUESTION_ID = 'mrna-vaccine-lipid-nanoparticle-q19';
+const DEFAULT_QUESTION_ID = 'mrna-vaccine-lipid-nanoparticle-q19';
 
 function option(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -69,6 +71,14 @@ class HttpProblemApi implements HeadlessProblemApi {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ questionId }),
     });
+  }
+
+  get(sessionId: string): Promise<{ view: unknown; durationMs: number }> {
+    return this.request(`/api/problem/session/${sessionId}`);
+  }
+
+  resume(sessionId: string): Promise<{ view: unknown; durationMs: number }> {
+    return this.request(`/api/problem/session/${sessionId}/resume`, { method: 'POST' });
   }
 
   submitInitial(sessionId: string, body: unknown): Promise<{ view: unknown; durationMs: number }> {
@@ -162,11 +172,17 @@ class OpenAIStudentRole implements HeadlessStudentRole {
 
 if (!process.env['OPENAI_API_KEY']) throw new Error('OPENAI_API_KEY가 필요하다.');
 const baseUrl = (option('--base-url') ?? 'http://127.0.0.1:5374').replace(/\/$/, '');
+const questionId = option('--question-id') ?? DEFAULT_QUESTION_ID;
 const model = option('--student-model') ?? 'gpt-5.6-terra';
 const effortOption = option('--student-effort') ?? 'low';
 if (!['none', 'low', 'medium'].includes(effortOption)) throw new Error(`지원하지 않는 학생 effort: ${effortOption}`);
 const selectedPersonaId = option('--persona') ?? 'all';
-const personas = DEFAULT_MRNA_Q19_PERSONAS.filter(
+const availablePersonas = questionId === 'gongsun-long-later-mohists-q12'
+  ? DEFAULT_MOHIST_Q12_PERSONAS
+  : questionId === DEFAULT_QUESTION_ID
+    ? DEFAULT_MRNA_Q19_PERSONAS
+    : EXPANDED_PERSONAS_BY_QUESTION_ID[questionId] ?? [];
+const personas = availablePersonas.filter(
   (persona) => selectedPersonaId === 'all' || persona.personaId === selectedPersonaId,
 );
 if (personas.length === 0) throw new Error(`알 수 없는 학생 persona: ${selectedPersonaId}`);
@@ -188,7 +204,7 @@ const results: Array<
 for (const persona of personas) {
   process.stdout.write(`RUN ${persona.personaId} (${persona.level})\n`);
   try {
-    const result = await runHeadlessPilotCase({ persona, questionId: QUESTION_ID, api, student });
+    const result = await runHeadlessPilotCase({ persona, questionId, api, student });
     results.push({ status: 'PASS', result });
     process.stdout.write(
       `${result.completed && result.finalView.result?.correct === true ? 'PASS' : 'FAIL'} ${persona.personaId}: ` +
@@ -226,7 +242,7 @@ const artifact = {
   schemaVersion: HEADLESS_PROBLEM_PILOT_VERSION,
   runId,
   generatedAt: new Date().toISOString(),
-  source: { questionId: QUESTION_ID, baseUrl, publicProjectionOnly: true },
+  source: { questionId, baseUrl, publicProjectionOnly: true },
   summary,
   records: results,
 };

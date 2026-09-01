@@ -12,6 +12,7 @@ import type {
 } from '@csat/pipeline';
 
 import { DialogueController } from './dialogue.js';
+import { loadDialoguePassages } from './content.js';
 import { ProblemSolvingController } from './problem-solving.js';
 import type {
   ProblemPathEvaluator,
@@ -87,15 +88,26 @@ class FixedEvaluator implements DialogueEvaluator {
 }
 
 describe('개발자용 순차 대화 세션', () => {
-  it('전체 원문과 승인 골드가 있는 다섯 지문만 시작할 수 있다', () => {
+  it('전체 원문과 승인 골드가 있는 여섯 지문만 시작할 수 있다', () => {
     const controller = new DialogueController({ evaluator: new FixedEvaluator('PASS') });
     const passages = controller.listPassages();
-    expect(passages.filter((passage) => passage.available)).toHaveLength(5);
+    expect(passages.filter((passage) => passage.available)).toHaveLength(6);
+    expect(passages.find((passage) => passage.passageId === 'gongsun-long-later-mohists'))
+      .toMatchObject({ available: true, paragraphCount: 5 });
     const hegel = passages.find((passage) => passage.passageId === 'hegel-aesthetics-absolute-spirit');
     expect(hegel).toMatchObject({ available: false, paragraphCount: 1 });
     expect(() => controller.start('hegel-aesthetics-absolute-spirit')).toThrow(/전체 원문|완전한 지문/);
     const mrna = passages.find((passage) => passage.passageId === 'mrna-vaccine-lipid-nanoparticle');
     expect(mrna).toMatchObject({ available: true, paragraphCount: 5 });
+    expect(loadDialoguePassages().filter((passage) => passage.passageId !== 'hegel-aesthetics-absolute-spirit').map((passage) => passage.problemQuestionId))
+      .toEqual(expect.arrayContaining([
+        'mrna-vaccine-lipid-nanoparticle-q19',
+        'gongsun-long-later-mohists-q12',
+        'corporate-law-q13',
+        'information-asymmetry-free-marketplace-q13',
+        'surface-tension-laplace-q16',
+        'dopamine-motor-control-q13',
+      ]));
   });
 
   it('응답 없이도 앞뒤 문단을 이동하고 방문한 문단을 계속 보여 준다', () => {

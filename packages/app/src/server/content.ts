@@ -78,14 +78,21 @@ export function loadProblemSolvingBundle(questionId: string): {
   readonly content: ProblemContentView;
   readonly gold: ProblemQuestionGold;
 } {
-  const supportedQuestionId = 'mrna-vaccine-lipid-nanoparticle-q19';
-  if (questionId !== supportedQuestionId) throw new Error('등록되지 않은 문제입니다.');
+  if (!/^[a-z0-9-]+$/u.test(questionId)) throw new Error('등록되지 않은 문제입니다.');
+  const contentPath = resolve(PROBLEM_ROOT, 'public', `${questionId}.json`);
+  const goldPath = resolve(PROBLEM_ROOT, `${questionId}.json`);
+  if (!existsSync(contentPath) || !existsSync(goldPath)) {
+    throw new Error('등록되지 않은 문제입니다.');
+  }
   const content = JSON.parse(readFileSync(
-    resolve(PROBLEM_ROOT, 'public', `${questionId}.json`), 'utf8',
+    contentPath, 'utf8',
   )) as ProblemContentView;
   const gold = ProblemQuestionGoldSchema.parse(JSON.parse(readFileSync(
-    resolve(PROBLEM_ROOT, `${questionId}.json`), 'utf8',
+    goldPath, 'utf8',
   )));
+  if (gold.reviewStatus !== 'human_reviewed') {
+    throw new Error('사람 검토를 완료하지 않은 문제입니다.');
+  }
   if (content.questionId !== gold.questionId || content.passageId !== gold.passageId) {
     throw new Error('공개 문제 콘텐츠와 골드가 일치하지 않습니다.');
   }

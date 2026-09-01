@@ -58,3 +58,50 @@ describe('mRNA 19번 공개 문제 콘텐츠', () => {
     expect(serialized).not.toContain('optionClaims');
   });
 });
+
+describe('공손룡과 후기 묵가 12번 공개 문제 콘텐츠', () => {
+  it('승인 골드와 공개 콘텐츠를 문제 ID로 함께 로드한다', () => {
+    const { content, gold } = loadProblemSolvingBundle('gongsun-long-later-mohists-q12');
+    expect(content).toMatchObject({
+      questionId: 'gongsun-long-later-mohists-q12',
+      questionNumber: 12,
+      passageId: 'gongsun-long-later-mohists',
+      image: null,
+    });
+    expect(gold.reviewStatus).toBe('human_reviewed');
+    expect(gold.answerChoiceId).toBe('C4');
+    expect(content.choices.map((choice) => choice.text)).toEqual(
+      gold.choices.map((choice) => choice.text),
+    );
+  });
+
+  it('경로 형태가 아닌 문제 ID는 파일시스템 조회 전에 거부한다', () => {
+    expect(() => loadProblemSolvingBundle('../gongsun-long-later-mohists-q12'))
+      .toThrow(/등록되지 않은 문제/);
+  });
+});
+
+describe('확장 적용형 문제 콘텐츠', () => {
+  const cases = [
+    ['corporate-law-q13', 13, 'C2'],
+    ['information-asymmetry-free-marketplace-q13', 13, 'C5'],
+    ['surface-tension-laplace-q16', 16, 'C3'],
+    ['dopamine-motor-control-q13', 13, 'C2'],
+  ] as const;
+
+  it.each(cases)('%s 공개 콘텐츠와 승인 골드가 일치한다', (questionId, questionNumber, answerChoiceId) => {
+    const { content, gold } = loadProblemSolvingBundle(questionId);
+    expect(content.questionNumber).toBe(questionNumber);
+    expect(gold.reviewStatus).toBe('human_reviewed');
+    expect(gold.answerChoiceId).toBe(answerChoiceId);
+    expect(content.choices.map((choice) => choice.text)).toEqual(
+      gold.choices.map((choice) => choice.text),
+    );
+    expect(JSON.stringify(content)).not.toContain('answerChoiceId');
+    const answerClaim = gold.optionClaims.find((claim) => claim.choiceId === answerChoiceId);
+    expect(answerClaim?.decisionCritical).toBe(true);
+    expect(answerClaim?.assessment).toBe(
+      gold.stemPolarity === 'SELECT_CORRECT' ? 'SUPPORTED' : 'CONTRADICTED',
+    );
+  });
+});

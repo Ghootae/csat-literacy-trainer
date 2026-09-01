@@ -255,7 +255,8 @@ export function projectProblemPathEvaluatorProviderInput(
       .map((inference) => ({
         ref: inference.inferenceId,
         kind: 'SOURCE_GROUNDED_INFERENCE' as const,
-        text: inference.description,
+        // 빠른 근거 판정에는 추론 행위 요약이 아니라 방향이 완결된 결론을 제공한다.
+        text: inference.conclusion,
       })),
   ];
 
@@ -297,7 +298,7 @@ function allowedActions(session: ProblemSolvingSession): ProblemPathEvaluatorInp
         turn.nextAction.target === 'ANSWER_RATIONALE',
     ).length;
     return correctiveQuestionsUsed === 0
-      ? ['ASK_CORRECTIVE']
+      ? ['ASK_CORRECTIVE', 'COMPLETE']
       : ['DIRECT_COACHING', 'COMPLETE'];
   }
   if (session.limits.questionsUsedThisAttempt >= session.limits.maxQuestionsPerWrongAttempt) {
@@ -822,12 +823,43 @@ export function validateProblemPathEvaluatorOutput(
   if (!input.sessionState.allowedActionTypes.includes(output.nextActionCandidate.type)) {
     throw new Error(`현재 코드 상태가 허용하지 않는 행동: ${output.nextActionCandidate.type}`);
   }
+  const scopedAction = output.nextActionCandidate;
+  if (
+    input.sessionState.entryReason === 'WRONG_CHOICE' &&
+    (
+      scopedAction.type === 'ASK_DIAGNOSTIC' ||
+      scopedAction.type === 'ASK_CORRECTIVE' ||
+      scopedAction.type === 'DIRECT_COACHING' ||
+      scopedAction.type === 'EXPLAIN_ITEM_BOUNDARY'
+    ) &&
+    scopedAction.target !== 'SELECTED_CHOICE'
+  ) {
+    throw new Error('재선택 전 질문·교정·코칭은 현재 선택 선지만 대상으로 해야 한다.');
+  }
   const intent = output.nextActionCandidate.questionIntent;
   if (
     intent !== null &&
     intent.targetRelationRefs.some((id) => !basicGoldIds.has(id))
   ) {
     throw new Error('질문 의도가 존재하지 않는 기본 골드 관계를 참조한다.');
+  }
+  if (intent !== null && input.sessionState.entryReason === 'WRONG_CHOICE') {
+    const answerChoice = input.basicGold.choices.find(
+      (choice) => choice.choiceId === input.sessionState.answerChoiceId,
+    );
+    const selectedChoice = input.basicGold.choices.find(
+      (choice) => choice.choiceId === input.sessionState.currentChoiceId,
+    );
+    if (answerChoice === undefined || selectedChoice === undefined) {
+      throw new Error('질문 범위 검증에 필요한 선지 골드가 없다.');
+    }
+    const selectedClaimIds = new Set(selectedChoice.claimIds);
+    const forbiddenAnswerClaimIds = new Set(
+      answerChoice.claimIds.filter((id) => !selectedClaimIds.has(id)),
+    );
+    if (intent.targetRelationRefs.some((id) => forbiddenAnswerClaimIds.has(id))) {
+      throw new Error('재선택 전 질문은 선택하지 않은 정답 선지의 주장을 참조할 수 없다.');
+    }
   }
   const allowedSupplementalIds = new Set(
     input.allowedSupplementalInferences.map((item) => item.inferenceId),

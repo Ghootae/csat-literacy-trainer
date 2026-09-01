@@ -159,10 +159,13 @@ export function submitProblemInitial(
   sessionId: string,
   body: ProblemInitialSubmissionRequest,
 ): Promise<ProblemSessionView> {
+  const requestBody = body.transitionId === undefined
+    ? { ...body, transitionId: crypto.randomUUID() }
+    : body;
   return jsonFetch<ProblemSessionView>(`/api/problem/session/${sessionId}/initial`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(requestBody),
   });
 }
 
@@ -170,10 +173,13 @@ export function submitProblemRationale(
   sessionId: string,
   body: ProblemRationaleRequest,
 ): Promise<ProblemSessionView> {
+  const requestBody = body.transitionId === undefined
+    ? { ...body, transitionId: crypto.randomUUID() }
+    : body;
   return jsonFetch<ProblemSessionView>(`/api/problem/session/${sessionId}/rationale`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(requestBody),
   });
 }
 
@@ -181,9 +187,12 @@ export function submitProblemAction(
   sessionId: string,
   body: ProblemActionResponseRequest,
 ): Promise<ProblemSessionView> {
+  const requestBody = body.transitionId === undefined
+    ? { ...body, transitionId: crypto.randomUUID() }
+    : body;
   return jsonFetch<ProblemSessionView>(`/api/problem/session/${sessionId}/respond`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify(requestBody),
   });
 }

@@ -22,6 +22,7 @@ import {
 } from './path-evaluator-input.js';
 import {
   createProblemPathProviderOutputJsonSchema,
+  hasSelectionRationaleSemanticContradiction,
   OpenAIProblemPathEvaluator,
   ProblemPathEvaluatorContractError,
   ProblemPathTransportError,
@@ -40,6 +41,50 @@ const gold = JSON.parse(readFileSync(resolve(
   process.cwd(),
   'packages/pipeline/fixtures/experiments/problem-solving/mrna-vaccine-lipid-nanoparticle-q19.json',
 ), 'utf8')) as ProblemQuestionGold;
+
+const mohistsGold = JSON.parse(readFileSync(resolve(
+  process.cwd(),
+  'packages/pipeline/fixtures/experiments/problem-solving/gongsun-long-later-mohists-q12.json',
+), 'utf8')) as ProblemQuestionGold;
+
+const informationGold = JSON.parse(readFileSync(resolve(
+  process.cwd(),
+  'packages/pipeline/fixtures/experiments/problem-solving/information-asymmetry-free-marketplace-q13.json',
+), 'utf8')) as ProblemQuestionGold;
+
+const informationRationale =
+  '1번과 3번은 맞는 설명이고, 다수 의견은 실명 확인 미실시 제재를 위헌으로 보았으므로 5번이 틀립니다.';
+
+function informationRationaleInput() {
+  const session = submitInitialProblemResponse(createProblemSolvingSession({
+    sessionId: 'S-INFO-RATIONALE',
+    questionId: informationGold.questionId,
+    answerChoiceId: informationGold.answerChoiceId,
+  }), { initialChoiceId: 'C5', rationale: informationRationale });
+  return createProblemPathEvaluatorInput({
+    evaluationMode: 'ASSESS_SELECTION_RATIONALE',
+    session,
+    gold: informationGold,
+  });
+}
+
+function contradictoryInformationStanceOutput() {
+  return {
+    schemaVersion: 'problem-path-evaluator-output-v3',
+    mode: 'ASSESS_SELECTION_RATIONALE',
+    optionStance: 'ACCEPTS_OPTION',
+    requiredStanceForSelection: 'REJECTS_OPTION',
+    stanceConsistency: 'CONFLICT',
+    groundingAssessment: 'SUPPORTED',
+    assessment: 'CLEAR_ERROR',
+    reason: '학생은 대상 선지를 틀린 설명이라고 판단했다. 그런데 구조화 태도에서는 대상 선지를 받아들인 것으로 표시했다.',
+    evidence: [{
+      kind: 'QUOTE', observationId: 'O1', sourceField: 'rationale',
+      quote: informationRationale,
+    }],
+    sourceRefs: ['MP5', 'II5'],
+  } as const;
+}
 
 function fresh() {
   return createProblemSolvingSession({
@@ -273,6 +318,48 @@ describe('problem path evaluator contract', () => {
     })).toThrow(/전체 선지 재검사/);
   });
 
+  it('재선택 전에는 MISSED_ANSWER를 학생 질문 타깃으로 사용할 수 없다', () => {
+    const input = createProblemPathEvaluatorInput({
+      evaluationMode: 'DIAGNOSE_PATH', session: wrongSession(), gold,
+    });
+    const output = diagnosticOutput() as any;
+    output.targets[1] = {
+      kind: 'MISSED_ANSWER', choiceId: 'C5', status: 'INSUFFICIENT',
+      learningState: 'PATH_UNCLEAR', errorAssessment: 'UNCERTAIN',
+      pathSteps: [{ ...unknownStep(), identity: { existingId: null, localId: 'LS-MISSED' } }],
+      hypotheses: [], sufficiency: sufficiency(false),
+    };
+    output.activeTarget = 'MISSED_ANSWER';
+    output.diagnosticDecision = {
+      target: 'MISSED_ANSWER', reason: '정답을 놓친 이유를 확인한다.',
+      targetHypothesisRefs: [], unresolvedStepRefs: ['LS-MISSED'],
+    };
+    output.nextActionCandidate = {
+      type: 'ASK_DIAGNOSTIC', target: 'MISSED_ANSWER',
+      questionIntent: {
+        kind: 'DIAGNOSTIC', purpose: '정답 선지의 연결을 확인한다.',
+        distinguishesHypothesisRefs: [], resolvesUnknownStepRefs: ['LS-MISSED'],
+        targetRelationRefs: ['OC5-2'], interventionStrength: 'DIAGNOSTIC',
+      },
+      questionText: 'pH 상승 뒤 소수성이 약해진다는 연결을 어떻게 판단했나요?',
+      studentMessage: null, supplementalInferenceIds: [],
+    };
+
+    expect(() => validateProblemPathEvaluatorOutput(output, input))
+      .toThrow(/현재 선택 선지만 대상/);
+  });
+
+  it('현재 선택 질문으로 위장해도 정답 선지 claim을 참조할 수 없다', () => {
+    const input = createProblemPathEvaluatorInput({
+      evaluationMode: 'DIAGNOSE_PATH', session: wrongSession(), gold,
+    });
+    const output = diagnosticOutput() as any;
+    output.nextActionCandidate.questionIntent.targetRelationRefs = ['OC5-2'];
+
+    expect(() => validateProblemPathEvaluatorOutput(output, input))
+      .toThrow(/정답 선지의 주장을 참조/);
+  });
+
   it('버전 고정 프롬프트가 전체 스냅샷과 상태별 행동 계약을 명시한다', () => {
     const prompt = loadProblemPathDiagnosticPrompt();
     expect(prompt).toContain('snapshotMode: FULL');
@@ -478,6 +565,7 @@ describe('problem path evaluator input projection', () => {
   it('3차 선택은 FINAL_ATTEMPT 직접 코칭만 허용하고 선택 상한을 투영한다', () => {
     const final = structuredClone(wrongSession());
     final.selectionAttempt = 3;
+    final.selectionCount = 3;
     final.requiredNextAction = 'DIRECT_COACHING';
     final.completeAfterCoachingAcknowledgement = true;
     const access = finalAttemptSupplementalAccess(gold, ['C2', 'C5']);
@@ -531,7 +619,7 @@ describe('problem path evaluator input projection', () => {
       ...(access === undefined ? {} : { supplementalAccess: access }),
     });
 
-    expect(beforeQuestion.sessionState.allowedActionTypes).toEqual(['ASK_CORRECTIVE']);
+    expect(beforeQuestion.sessionState.allowedActionTypes).toEqual(['ASK_CORRECTIVE', 'COMPLETE']);
     expect(afterQuestion.sessionState.allowedActionTypes).toEqual(['DIRECT_COACHING', 'COMPLETE']);
     expect(afterQuestion.allowedSupplementalInferences).toEqual([]);
     expect(coachingInput.sessionState.allowedActionTypes).toEqual(['DIRECT_COACHING']);
@@ -710,6 +798,46 @@ describe('problem path evaluator input projection', () => {
     expect(validateProblemPathEvaluatorOutput(output, input)).toEqual(output);
   });
 
+  it('묵가 ④의 오류를 다른 표현으로 특정한 실제 파일럿 근거를 SUPPORTED로 보존한다', () => {
+    const rationale = '후기 묵가는 하나의 명이 여러 실을 지시하는 것을 허용하고, 공손룡은 빨간 옷과 옷의 명을 구분합니다. 4번만 두 표현이 같은 대상을 지시한다고 잘못 봅니다.';
+    const session = submitInitialProblemResponse(createProblemSolvingSession({
+      sessionId: 'S-MOHIST-L',
+      questionId: mohistsGold.questionId,
+      answerChoiceId: mohistsGold.answerChoiceId,
+    }), {
+      initialChoiceId: 'C4',
+      rationale,
+    });
+    const input = createProblemPathEvaluatorInput({
+      evaluationMode: 'ASSESS_SELECTION_RATIONALE',
+      session,
+      gold: mohistsGold,
+    });
+    const providerInput = projectProblemPathEvaluatorProviderInput(input);
+    expect(providerInput.evaluationMode).toBe('ASSESS_SELECTION_RATIONALE');
+    if (providerInput.evaluationMode !== 'ASSESS_SELECTION_RATIONALE') return;
+    expect(providerInput.rationaleReview.sourceFacts.map((fact) => fact.ref))
+      .toEqual(expect.arrayContaining(['MP4', 'SF4', 'SF5', 'II4']));
+
+    const output = {
+      schemaVersion: 'problem-path-evaluator-output-v3',
+      mode: 'ASSESS_SELECTION_RATIONALE',
+      optionStance: 'REJECTS_OPTION',
+      requiredStanceForSelection: 'REJECTS_OPTION',
+      stanceConsistency: 'CONSISTENT',
+      groundingAssessment: 'SUPPORTED',
+      assessment: 'SUPPORTED',
+      reason: '학생은 ④가 두 표현을 같은 대상으로 보는 전제를 잘못이라고 지적했으며 이는 II4와 일치한다.',
+      evidence: [{
+        kind: 'QUOTE', observationId: 'O1', sourceField: 'rationale',
+        quote: '4번만 두 표현이 같은 대상을 지시한다고 잘못 봅니다',
+      }],
+      sourceRefs: ['MP4', 'SF4', 'SF5', 'II4'],
+    } as const;
+    expect(validateProblemPathEvaluatorOutput(output, input)).toEqual(output);
+    expect(loadProblemPathDiagnosticPrompt()).toContain('누가 무엇을 잘못 판단했다는 문장인지');
+  });
+
   it('재선택 근거가 선택 ID와 같아도 제출된 원문으로 안전하게 판정한다', () => {
     const input = createProblemPathEvaluatorInput({
       evaluationMode: 'ASSESS_SELECTION_RATIONALE',
@@ -811,12 +939,14 @@ describe('problem path evaluator runtime boundary', () => {
     const schema = createProblemPathProviderOutputJsonSchema({
       mode: 'DIAGNOSE_PATH',
       allowedActionTypes: ['ASK_CORRECTIVE'],
+      allowedActionTargetKinds: ['SELECTED_CHOICE'],
     }) as any;
     const variants = schema.properties.nextActionCandidate.anyOf as any[];
     expect(variants.map((variant) => variant.properties.type.const))
       .toEqual(['ASK_CORRECTIVE']);
     expect(JSON.stringify(schema.properties.nextActionCandidate))
       .not.toContain('DIRECT_COACHING');
+    expect(variants[0].properties.target.enum).toEqual(['SELECTED_CHOICE']);
   });
 
   it('검증된 전체 스냅샷의 local ID를 확정하고 호출 메타데이터를 반환한다', async () => {
@@ -932,6 +1062,80 @@ describe('problem path evaluator runtime boundary', () => {
     expect(JSON.parse(transportedInput)).toEqual(
       projectProblemPathEvaluatorProviderInput(input),
     );
+  });
+
+  it('자연어 설명이 대상 선지를 거부하면서 optionStance가 ACCEPTS이면 의미 모순으로 판정한다', () => {
+    const input = informationRationaleInput();
+    const output = contradictoryInformationStanceOutput();
+
+    expect(hasSelectionRationaleSemanticContradiction(output, input)).toBe(true);
+  });
+
+  it('빠른 근거 평가의 의미 모순은 한 번 재시도하고 정상 판정을 사용한다', async () => {
+    let calls = 0;
+    const supported = {
+      schemaVersion: 'problem-path-evaluator-output-v3',
+      mode: 'ASSESS_SELECTION_RATIONALE',
+      optionStance: 'REJECTS_OPTION',
+      requiredStanceForSelection: 'REJECTS_OPTION',
+      stanceConsistency: 'CONSISTENT',
+      groundingAssessment: 'SUPPORTED',
+      assessment: 'SUPPORTED',
+      reason: '학생은 5번이 틀렸다고 거부했고 위헌 결정에 따른 제재 불가 결론과 일치한다.',
+      evidence: [{
+        kind: 'QUOTE', observationId: 'O1', sourceField: 'rationale',
+        quote: informationRationale,
+      }],
+      sourceRefs: ['MP5', 'II5'],
+    } as const;
+    const transport: ProblemPathEvaluatorTransport = {
+      async parse() {
+        calls += 1;
+        return { outputParsed: calls === 1 ? contradictoryInformationStanceOutput() : supported };
+      },
+    };
+    const evaluator = new OpenAIProblemPathEvaluator({
+      transport,
+      maxTransportRetries: 0,
+      metricRecorder: () => undefined,
+    });
+
+    const call = await evaluator.evaluate(informationRationaleInput());
+
+    expect(calls).toBe(2);
+    expect(call.result).toEqual(supported);
+    expect(call.call.attempts.map((attempt) => attempt.errorType)).toEqual([
+      'semantic_stance_contradiction',
+      undefined,
+    ]);
+  });
+
+  it('의미 모순이 재시도 후에도 반복되면 CLEAR_ERROR 대신 UNCERTAIN으로 폴백한다', async () => {
+    let calls = 0;
+    const transport: ProblemPathEvaluatorTransport = {
+      async parse() {
+        calls += 1;
+        return { outputParsed: contradictoryInformationStanceOutput() };
+      },
+    };
+    const evaluator = new OpenAIProblemPathEvaluator({
+      transport,
+      maxTransportRetries: 0,
+      metricRecorder: () => undefined,
+    });
+
+    const call = await evaluator.evaluate(informationRationaleInput());
+
+    expect(calls).toBe(2);
+    expect(call.result).toEqual(expect.objectContaining({
+      mode: 'ASSESS_SELECTION_RATIONALE',
+      optionStance: 'UNCLEAR',
+      stanceConsistency: 'UNCLEAR',
+      groundingAssessment: 'NOT_ENOUGH_EVIDENCE',
+      assessment: 'UNCERTAIN',
+    }));
+    expect(call.call.attempts.at(-1)?.errorType)
+      .toBe('semantic_stance_contradiction_fallback');
   });
 
   it('계약 오류는 원출력을 보존하고 재시도하지 않는다', async () => {

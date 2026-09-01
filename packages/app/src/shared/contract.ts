@@ -223,6 +223,7 @@ export interface ProblemChoiceView {
 
 export interface ProblemContentView {
   readonly questionId: string;
+  readonly questionNumber: number;
   readonly passageId: string;
   readonly title: string;
   readonly exam: string;
@@ -264,6 +265,9 @@ export interface ProblemSessionView {
   readonly phase: ProblemSessionPhase;
   readonly content: ProblemContentView;
   readonly selectedChoiceId: string | null;
+  readonly selectionCount: number;
+  readonly interventionCount: number;
+  readonly interventionCountForCurrentSelection: number;
   readonly action: ProblemStudentActionView | null;
   readonly reselectionPrompt: string | null;
   readonly transcript: readonly ProblemTranscriptEntryView[];
@@ -331,6 +335,13 @@ export interface ProblemSessionView {
       | 'DIRECT_COACHING'
       | 'STATIC_ANSWER_EXPLANATION';
     readonly answerExplanation: string | null;
+    readonly answerReveal: {
+      readonly answerChoiceId: string;
+      readonly lastChoiceId: string;
+      readonly lastChoiceExplanation: string;
+      readonly correctChoiceExplanation: string;
+      readonly groundingSummary: string;
+    } | null;
   } | null;
 }
 
@@ -339,6 +350,7 @@ export interface StartProblemRequest {
 }
 
 export interface ProblemInitialSubmissionRequest {
+  readonly transitionId?: string;
   readonly choiceId: string;
   readonly rationale?: string;
   readonly confidence?: number;
@@ -350,9 +362,10 @@ export interface ProblemInitialSubmissionRequest {
 }
 
 export interface ProblemRationaleRequest {
+  readonly transitionId?: string;
   readonly rationale: string;
 }
 
 export type ProblemActionResponseRequest =
-  | { readonly type: 'TEXT'; readonly text: string }
-  | { readonly type: 'RESELECT'; readonly choiceId: string; readonly rationale?: string };
+  | { readonly transitionId?: string; readonly type: 'TEXT'; readonly text: string }
+  | { readonly transitionId?: string; readonly type: 'RESELECT'; readonly choiceId: string; readonly rationale?: string };

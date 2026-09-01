@@ -30,12 +30,16 @@ const rawDiagnostic = JSON.parse(readFileSync(resolve(
 ), 'utf8'));
 
 function successfulCall(input: ProblemPathEvaluatorInput): ProblemPathEvaluatorCall {
-  const result = resolveProblemPathEvaluatorIds(rawDiagnostic, {
+  const rawOutput = {
+    ...structuredClone(rawDiagnostic),
+    basedOnObservationIds: input.observations.map((observation) => observation.observationId),
+  };
+  const result = resolveProblemPathEvaluatorIds(rawOutput, {
     turnSequence: input.sessionState.evaluationSequence,
   });
   return {
     result,
-    rawOutput: structuredClone(rawDiagnostic),
+    rawOutput,
     call: {
       provider: 'mock', model: 'fixed', effort: 'none',
       promptVersion: 'path-diagnostic-prompt-v3',
@@ -187,6 +191,45 @@ describe('problem solving server controller', () => {
     expect(calls).toBe(1);
   });
 
+  it('같은 전이 ID의 선택 제출과 응답 유실 재시도를 한 번만 반영한다', async () => {
+    let release: (() => void) | undefined;
+    let calls = 0;
+    const evaluator: ProblemPathEvaluator = {
+      evaluate(input) {
+        calls += 1;
+        return new Promise((resolveCall) => {
+          release = () => resolveCall(successfulCall(input));
+        });
+      },
+    };
+    const controller = new ProblemSolvingController({ evaluator });
+    const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+    const request = {
+      transitionId: 'transition-initial-c2',
+      choiceId: 'C2',
+      rationale: '속도 조절이 불균일을 만든다고 생각했습니다.',
+    } as const;
+    const first = controller.submitInitial(started.sessionId, request);
+    const duplicate = controller.submitInitial(started.sessionId, request);
+
+    expect(calls).toBe(1);
+    release?.();
+    const [firstResult, duplicateResult] = await Promise.all([first, duplicate]);
+    expect(duplicateResult).toEqual(firstResult);
+    expect(firstResult.selectionCount).toBe(1);
+    expect(firstResult.attemptQuestionBudget.used).toBe(1);
+    expect(firstResult.transcript.filter((entry) => entry.role === 'STUDENT'))
+      .toHaveLength(1);
+
+    const replayed = await controller.submitInitial(started.sessionId, request);
+    expect(replayed).toEqual(firstResult);
+    expect(calls).toBe(1);
+    await expect(controller.submitInitial(started.sessionId, {
+      ...request,
+      choiceId: 'C1',
+    })).rejects.toThrow(/같은 전이 ID/);
+  });
+
   it('evaluator 실패를 재개 가능한 상태로 보존하고 저장된 선택에서 한 번만 재개한다', async () => {
     let calls = 0;
     const evaluator: ProblemPathEvaluator = {
@@ -212,5 +255,87 @@ describe('problem solving server controller', () => {
     expect(resumed.phase).toBe('AWAITING_RESPONSE');
     expect(resumed.action?.kind).toBe('DIAGNOSTIC_QUESTION');
     expect(calls).toBe(2);
+  });
+
+  it('정답 재선택의 근거 평가가 실패해도 정답 결과를 UNCERTAIN으로 종결한다', async () => {
+    const calls: ProblemPathEvaluatorInput[] = [];
+    const evaluator: ProblemPathEvaluator = {
+      async evaluate(input) {
+        calls.push(structuredClone(input));
+        if (input.evaluationMode === 'ASSESS_SELECTION_RATIONALE') {
+          throw new Error('정답 근거 평가 일시 실패');
+        }
+        return successfulCall(input);
+      },
+    };
+    const controller = new ProblemSolvingController({ evaluator });
+    const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+    await controller.submitInitial(started.sessionId, {
+      choiceId: 'C2',
+      rationale: '속도와 균일도 관계가 잘 이해되지 않습니다.',
+    });
+    await controller.respond(started.sessionId, { type: 'TEXT', text: '첫 질문에도 잘 모르겠습니다.' });
+    await controller.respond(started.sessionId, { type: 'TEXT', text: '두 번째 질문에도 잘 모르겠습니다.' });
+    await controller.respond(started.sessionId, { type: 'TEXT', text: '확인했습니다.' });
+
+    const completed = await controller.respond(started.sessionId, {
+      type: 'RESELECT',
+      choiceId: 'C5',
+      rationale: '⑤의 소수성 약화와 입자 크기 감소는 지문에서 제시되지 않았습니다.',
+    });
+
+    expect(completed).toMatchObject({
+      phase: 'COMPLETED',
+      selectionCount: 2,
+      evaluation: { status: 'IDLE', message: null },
+      result: {
+        correct: true,
+        resolutionOutcome: 'SECOND_SELECTION_CORRECT_UNVERIFIED',
+        rationaleAssessment: 'UNCERTAIN',
+      },
+    });
+    expect(calls.at(-1)?.evaluationMode).toBe('ASSESS_SELECTION_RATIONALE');
+    expect(await controller.resume(started.sessionId)).toEqual(completed);
+  });
+
+  it('질문 2/2 소진 뒤 모델을 다시 호출하지 않고 결정론적 코칭과 재선택으로 이동한다', async () => {
+    const evaluator = new CountingEvaluator();
+    const controller = new ProblemSolvingController({ evaluator });
+    const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+    const firstQuestion = await controller.submitInitial(started.sessionId, {
+      choiceId: 'C2',
+      rationale: '어느 관계가 문제인지 잘 모르겠습니다.',
+    });
+    const secondQuestion = await controller.respond(started.sessionId, {
+      type: 'TEXT',
+      text: '첫 질문에도 잘 모르겠습니다.',
+    });
+    const coaching = await controller.respond(started.sessionId, {
+      type: 'TEXT',
+      text: '두 번째 질문에도 잘 모르겠습니다.',
+    });
+
+    expect(firstQuestion.action?.kind).toBe('DIAGNOSTIC_QUESTION');
+    expect(secondQuestion.action?.kind).toBe('DIAGNOSTIC_QUESTION');
+    expect(coaching).toMatchObject({
+      phase: 'AWAITING_RESPONSE',
+      selectionCount: 1,
+      interventionCountForCurrentSelection: 3,
+      action: { kind: 'COACHING' },
+      attemptQuestionBudget: { used: 2, maximum: 2 },
+      result: null,
+    });
+    expect(evaluator.calls).toHaveLength(2);
+
+    const reselecting = await controller.respond(started.sessionId, {
+      type: 'TEXT',
+      text: '확인했습니다.',
+    });
+    expect(reselecting).toMatchObject({
+      phase: 'AWAITING_RESELECTION',
+      selectionCount: 1,
+      result: null,
+    });
+    expect(evaluator.calls).toHaveLength(2);
   });
 });
