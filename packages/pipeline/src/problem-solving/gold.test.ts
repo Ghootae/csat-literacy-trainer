@@ -60,6 +60,23 @@ describe('problem-solving gold', () => {
     expect(() => ProblemQuestionGoldSchema.parse(raw)).toThrow(/정확히 일치/);
   });
 
+  it('정답 키 제약 추론만 예약 전제 ANSWER_KEY를 사용할 수 있다', () => {
+    const constrained = fixture('information-asymmetry-free-marketplace-q13.json') as any;
+    const inference = constrained.itemInferences[0];
+    inference.references = [];
+    inference.scenarioFactIds = [];
+    inference.visualAssertionIds = [];
+    inference.premiseRefs = ['ANSWER_KEY'];
+    inference.grounding = 'ANSWER_KEY_CONSTRAINED';
+
+    expect(() => ProblemQuestionGoldSchema.parse(constrained)).not.toThrow();
+
+    const sourceGrounded = fixture('information-asymmetry-free-marketplace-q13.json') as any;
+    sourceGrounded.itemInferences[0].premiseRefs.push('ANSWER_KEY');
+    expect(() => ProblemQuestionGoldSchema.parse(sourceGrounded))
+      .toThrow(/출처 기반 문항 추론은 ANSWER_KEY/);
+  });
+
   it('과도한 보기 사실 참조는 파싱을 막지 않고 warning으로 보고한다', () => {
     const raw = fixture('information-asymmetry-free-marketplace-q13.json') as any;
     const inference = raw.itemInferences[0];

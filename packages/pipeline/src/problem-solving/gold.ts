@@ -340,13 +340,24 @@ export const ProblemQuestionGoldSchema = z.object({
       ...inference.visualAssertionIds,
     ]);
     const premiseRefs = new Set(inference.premiseRefs);
+    const allowedPremiseRefs = new Set(evidenceRefs);
+    if (inference.grounding === 'ANSWER_KEY_CONSTRAINED') {
+      // 기존 골드는 출처 전제만으로 정답 키 제약을 표현한다. 새 골드는
+      // 예약 전제 ANSWER_KEY를 선택적으로 명시할 수 있도록 additive하게 허용한다.
+      if (premiseRefs.has('ANSWER_KEY')) allowedPremiseRefs.add('ANSWER_KEY');
+    } else if (premiseRefs.has('ANSWER_KEY')) {
+      issue(
+        ['itemInferences', index, 'premiseRefs'],
+        '출처 기반 문항 추론은 ANSWER_KEY를 전제로 사용할 수 없다.',
+      );
+    }
     if (
-      evidenceRefs.size !== premiseRefs.size ||
-      [...evidenceRefs].some((id) => !premiseRefs.has(id))
+      allowedPremiseRefs.size !== premiseRefs.size ||
+      [...allowedPremiseRefs].some((id) => !premiseRefs.has(id))
     ) {
       issue(
         ['itemInferences', index, 'premiseRefs'],
-        'premiseRefs는 기존 지문·보기·시각 근거 참조와 정확히 일치해야 한다.',
+        'premiseRefs는 기존 지문·보기·시각 근거와 허용된 ANSWER_KEY 전제에 정확히 일치해야 한다.',
       );
     }
     if (inference.grounding === 'SOURCE_ENTAILED' && inference.premiseRefs.length === 0) {
