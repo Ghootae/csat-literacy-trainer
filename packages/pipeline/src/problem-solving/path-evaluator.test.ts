@@ -23,10 +23,12 @@ import {
 } from './path-evaluator-input.js';
 import {
   DEFAULT_PROBLEM_PATH_OPENAI_MODEL,
+  DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
   DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL,
   createProblemPathProviderOutputJsonSchema,
   OpenAIProblemPathEvaluator,
   ProblemPathEvaluatorContractError,
+  ProblemPathEvaluatorFallbackError,
   ProblemPathTransportError,
   resolveSelectionRationaleProviderOutput,
   type ProblemPathEvaluatorTransport,
@@ -1093,6 +1095,126 @@ describe('problem path evaluator runtime boundary', () => {
 
     expect(evaluator.model).toBe('gpt-5.6-terra');
     expect(evaluator.rationaleModel).toBe('gpt-5.6-terra');
+    expect(evaluator.rationaleFallbackModel).toBe('gpt-5.6-terra');
+  });
+
+  it('Luna 근거 판정 실패 시 같은 입력을 Terra에 한 번만 폴백하고 경로를 감사한다', async () => {
+    const seen: Array<{ model: string; timeoutMs: number }> = [];
+    const transport: ProblemPathEvaluatorTransport = {
+      async parse(options) {
+        seen.push({ model: options.model, timeoutMs: options.timeoutMs });
+        if (options.model === DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL) {
+          throw new ProblemPathTransportError({
+            errorType: 'timeout', retryable: true,
+          });
+        }
+        return {
+          outputParsed: supportedInformationProviderOutput(),
+          usage: { inputTokens: 11, outputTokens: 7 },
+        };
+      },
+    };
+    const evaluator = new OpenAIProblemPathEvaluator({
+      transport,
+      rationaleTimeoutMs: 12_345,
+      maxTransportRetries: 2,
+      retryDelayMs: 0,
+      metricRecorder: () => undefined,
+    });
+
+    const call = await evaluator.evaluate(informationRationaleInput());
+
+    expect(seen).toEqual([
+      { model: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL, timeoutMs: 12_345 },
+      { model: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL, timeoutMs: 12_345 },
+    ]);
+    expect(call.call).toEqual(expect.objectContaining({
+      model: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
+      routing: {
+        primaryModel: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL,
+        fallbackModel: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
+        finalModel: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
+        fallbackUsed: true,
+        fallbackReason: 'timeout',
+      },
+      usage: { inputTokens: 11, outputTokens: 7 },
+    }));
+    expect(call.call.attempts).toEqual([
+      expect.objectContaining({
+        attempt: 1, model: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL,
+        route: 'PRIMARY', outcome: 'error', errorType: 'timeout',
+      }),
+      expect.objectContaining({
+        attempt: 2, model: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
+        route: 'FALLBACK', outcome: 'success',
+      }),
+    ]);
+  });
+
+  it('Luna와 Terra 근거 판정이 모두 실패하면 두 시도의 감사 정보를 오류에 보존한다', async () => {
+    const transport: ProblemPathEvaluatorTransport = {
+      async parse(options) {
+        throw new ProblemPathTransportError({
+          errorType: options.model === DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL
+            ? 'timeout'
+            : 'connection',
+          retryable: true,
+        });
+      },
+    };
+    const evaluator = new OpenAIProblemPathEvaluator({
+      transport,
+      maxTransportRetries: 3,
+      retryDelayMs: 0,
+      metricRecorder: () => undefined,
+    });
+
+    const error = await evaluator.evaluate(informationRationaleInput()).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(ProblemPathEvaluatorFallbackError);
+    expect(error.call.routing).toEqual({
+      primaryModel: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL,
+      fallbackModel: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
+      finalModel: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
+      fallbackUsed: true,
+      fallbackReason: 'timeout',
+    });
+    expect(error.call.attempts).toEqual([
+      expect.objectContaining({ route: 'PRIMARY', outcome: 'error', errorType: 'timeout' }),
+      expect.objectContaining({ route: 'FALLBACK', outcome: 'error', errorType: 'connection' }),
+    ]);
+  });
+
+  it('Luna 계약 실패에도 소비된 토큰을 Terra 성공 비용과 합산한다', async () => {
+    const transport: ProblemPathEvaluatorTransport = {
+      async parse(options) {
+        if (options.model === DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL) {
+          return {
+            outputParsed: { invalid: true },
+            usage: { inputTokens: 20, outputTokens: 3, cacheReadTokens: 12 },
+          };
+        }
+        return {
+          outputParsed: supportedInformationProviderOutput(),
+          usage: { inputTokens: 11, outputTokens: 7, cacheReadTokens: 5 },
+        };
+      },
+    };
+    const evaluator = new OpenAIProblemPathEvaluator({
+      transport,
+      metricRecorder: () => undefined,
+    });
+
+    const call = await evaluator.evaluate(informationRationaleInput());
+
+    expect(call.call.usage).toEqual({
+      inputTokens: 31, outputTokens: 10, cacheReadTokens: 17,
+    });
+    expect(call.call.attempts[0]).toEqual(expect.objectContaining({
+      model: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL,
+      errorType: 'contract_validation',
+      usage: { inputTokens: 20, outputTokens: 3, cacheReadTokens: 12 },
+    }));
   });
 
   it('검증된 전체 스냅샷의 local ID를 확정하고 호출 메타데이터를 반환한다', async () => {

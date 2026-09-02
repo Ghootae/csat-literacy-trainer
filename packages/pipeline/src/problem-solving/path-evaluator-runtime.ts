@@ -21,6 +21,7 @@ import {
 
 export const DEFAULT_PROBLEM_PATH_OPENAI_MODEL = 'gpt-5.6-terra';
 export const DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL = 'gpt-5.6-luna';
+export const DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL = 'gpt-5.6-terra';
 
 export type ProblemPathEvaluatorEffort =
   | 'none'
@@ -40,10 +41,24 @@ export interface ProblemPathEvaluatorCallMetadata {
   readonly durationMs: number;
   readonly attempts: readonly {
     readonly attempt: number;
+    readonly model?: string;
+    readonly route?: 'PRIMARY' | 'FALLBACK';
     readonly outcome: 'success' | 'error';
     readonly durationMs: number;
     readonly errorType?: string;
+    readonly usage?: {
+      readonly inputTokens: number;
+      readonly outputTokens: number;
+      readonly cacheReadTokens?: number;
+    };
   }[];
+  readonly routing?: {
+    readonly primaryModel: string;
+    readonly fallbackModel: string | null;
+    readonly finalModel: string;
+    readonly fallbackUsed: boolean;
+    readonly fallbackReason: string | null;
+  };
   readonly usage: {
     readonly inputTokens: number;
     readonly outputTokens: number;
@@ -182,13 +197,19 @@ class OpenAIProblemPathTransport implements ProblemPathEvaluatorTransport {
 
 export class ProblemPathEvaluatorContractError extends Error {
   readonly parsedOutput: unknown;
+  readonly usage: ParsedTransportResponse['usage'];
   override readonly cause: unknown;
 
-  constructor(cause: unknown, parsedOutput: unknown) {
+  constructor(
+    cause: unknown,
+    parsedOutput: unknown,
+    usage?: ParsedTransportResponse['usage'],
+  ) {
     super(cause instanceof Error ? cause.message : String(cause));
     this.name = 'ProblemPathEvaluatorContractError';
     this.cause = cause;
     this.parsedOutput = structuredClone(parsedOutput);
+    this.usage = usage === undefined ? undefined : structuredClone(usage);
   }
 }
 
@@ -209,6 +230,19 @@ export class ProblemPathTransportError extends Error {
     this.errorType = options.errorType;
     this.retryable = options.retryable;
     this.status = options.status;
+  }
+}
+
+/** 정답 근거의 주·폴백 모델이 모두 실패했을 때 감사 메타데이터를 보존한다. */
+export class ProblemPathEvaluatorFallbackError extends Error {
+  readonly call: ProblemPathEvaluatorCallMetadata;
+  override readonly cause: unknown;
+
+  constructor(cause: unknown, call: ProblemPathEvaluatorCallMetadata) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = 'ProblemPathEvaluatorFallbackError';
+    this.cause = cause;
+    this.call = structuredClone(call);
   }
 }
 
@@ -243,8 +277,12 @@ export interface OpenAIProblemPathEvaluatorOptions {
   readonly model?: string;
   /** 정답 근거 사전 판정에만 적용한다. model보다 우선한다. */
   readonly rationaleModel?: string;
+  /** 정답 근거 주 모델 실패 시 한 번만 호출한다. null이면 폴백을 끈다. */
+  readonly rationaleFallbackModel?: string | null;
   readonly effort?: ProblemPathEvaluatorEffort;
   readonly timeoutMs?: number;
+  /** 정답 근거 주 모델과 폴백 모델 각각의 호출 제한 시간. */
+  readonly rationaleTimeoutMs?: number;
   readonly maxTransportRetries?: number;
   readonly retryDelayMs?: number;
   readonly now?: () => Date;
@@ -291,8 +329,10 @@ export function resolveSelectionRationaleProviderOutput(
 export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
   readonly model: string;
   readonly rationaleModel: string;
+  readonly rationaleFallbackModel: string | null;
   readonly effort: ProblemPathEvaluatorEffort;
   private readonly timeoutMs: number;
+  private readonly rationaleTimeoutMs: number;
   private readonly maxTransportRetries: number;
   private readonly retryDelayMs: number;
   private readonly now: () => Date;
@@ -306,8 +346,14 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
       forcedModel ??
       process.env['PROBLEM_RATIONALE_OPENAI_MODEL'] ??
       DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL;
+    this.rationaleFallbackModel = options.rationaleFallbackModel === undefined
+      ? forcedModel ??
+        process.env['PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL'] ??
+        DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL
+      : options.rationaleFallbackModel;
     this.effort = options.effort ?? 'medium';
     this.timeoutMs = options.timeoutMs ?? 60_000;
+    this.rationaleTimeoutMs = options.rationaleTimeoutMs ?? 30_000;
     this.maxTransportRetries = options.maxTransportRetries ?? 1;
     this.retryDelayMs = options.retryDelayMs ?? 500;
     this.now = options.now ?? (() => new Date());
@@ -317,22 +363,39 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
 
   async evaluate(inputValue: ProblemPathEvaluatorInput): Promise<ProblemPathEvaluatorCall> {
     const input = ProblemPathEvaluatorInputSchema.parse(inputValue);
-    const model = input.evaluationMode === 'ASSESS_SELECTION_RATIONALE'
+    const primaryModel = input.evaluationMode === 'ASSESS_SELECTION_RATIONALE'
       ? this.rationaleModel
       : this.model;
+    const fallbackModel = input.evaluationMode === 'ASSESS_SELECTION_RATIONALE' &&
+      this.rationaleFallbackModel !== null &&
+      this.rationaleFallbackModel !== primaryModel
+      ? this.rationaleFallbackModel
+      : null;
+    const routes = fallbackModel === null
+      ? [{ model: primaryModel, route: 'PRIMARY' as const }]
+      : [
+          { model: primaryModel, route: 'PRIMARY' as const },
+          { model: fallbackModel, route: 'FALLBACK' as const },
+        ];
     const providerInput = projectProblemPathEvaluatorProviderInput(input);
     const calledAt = this.now().toISOString();
     const started = performance.now();
     const attempts: ProblemPathEvaluatorCallMetadata['attempts'][number][] = [];
-
+    const totalUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
+    let fallbackReason: string | null = null;
     let attempt = 0;
-    let transportRetriesUsed = 0;
-    while (true) {
-      attempt += 1;
-      const attemptStarted = performance.now();
-      try {
+
+    for (const route of routes) {
+      let transportRetriesUsed = 0;
+      const maxRetriesForRoute = input.evaluationMode === 'ASSESS_SELECTION_RATIONALE'
+        ? 0
+        : this.maxTransportRetries;
+      while (true) {
+        attempt += 1;
+        const attemptStarted = performance.now();
+        try {
         const response = await this.transport.parse({
-          model,
+          model: route.model,
           effort: this.effort,
           instructions: loadProblemPathDiagnosticPrompt(),
           input: JSON.stringify(providerInput),
@@ -341,12 +404,15 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
           allowedActionTargetKinds: input.sessionState.entryReason === 'WRONG_CHOICE'
             ? ['SELECTED_CHOICE']
             : ['ANSWER_RATIONALE'],
-          timeoutMs: this.timeoutMs,
+          timeoutMs: input.evaluationMode === 'ASSESS_SELECTION_RATIONALE'
+            ? this.rationaleTimeoutMs
+            : this.timeoutMs,
         });
         if (response.outputParsed === null) {
           throw new ProblemPathEvaluatorContractError(
             new Error('problem path evaluator: structured output parsing failed'),
             null,
+            response.usage,
           );
         }
         let result: ProblemPathEvaluatorOutput;
@@ -361,18 +427,35 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
               })
             : validated;
         } catch (error) {
-          throw new ProblemPathEvaluatorContractError(error, response.outputParsed);
+          throw new ProblemPathEvaluatorContractError(error, response.outputParsed, response.usage);
         }
         const durationMs = Math.round(performance.now() - attemptStarted);
+        const responseUsage = {
+          inputTokens: response.usage?.inputTokens ?? 0,
+          outputTokens: response.usage?.outputTokens ?? 0,
+          cacheReadTokens: response.usage?.cacheReadTokens ?? 0,
+        };
+        totalUsage.inputTokens += responseUsage.inputTokens;
+        totalUsage.outputTokens += responseUsage.outputTokens;
+        totalUsage.cacheReadTokens += responseUsage.cacheReadTokens;
         attempts.push({
           attempt,
+          model: route.model,
+          route: route.route,
           outcome: 'success',
           durationMs,
+          usage: {
+            inputTokens: responseUsage.inputTokens,
+            outputTokens: responseUsage.outputTokens,
+            ...(responseUsage.cacheReadTokens === 0
+              ? {}
+              : { cacheReadTokens: responseUsage.cacheReadTokens }),
+          },
         });
         this.metricRecorder({
           ts: this.now().toISOString(),
           op: 'problem-solving-evaluator',
-          model,
+          model: route.model,
           effort: this.effort,
           paragraphId: input.basicGold.passageId,
           inputTokens: response.usage?.inputTokens ?? 0,
@@ -388,42 +471,107 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
           rawOutput: structuredClone(response.outputParsed),
           call: {
             provider: 'openai',
-            model,
+            model: route.model,
             effort: this.effort,
             promptVersion: PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION,
             schemaVersion: PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION,
             calledAt,
             durationMs: Math.round(performance.now() - started),
             attempts,
+            routing: {
+              primaryModel,
+              fallbackModel,
+              finalModel: route.model,
+              fallbackUsed: route.route === 'FALLBACK',
+              fallbackReason,
+            },
             usage: {
-              inputTokens: response.usage?.inputTokens ?? 0,
-              outputTokens: response.usage?.outputTokens ?? 0,
-              ...(response.usage?.cacheReadTokens === undefined
+              inputTokens: totalUsage.inputTokens,
+              outputTokens: totalUsage.outputTokens,
+              ...(totalUsage.cacheReadTokens === 0
                 ? {}
-                : { cacheReadTokens: response.usage.cacheReadTokens }),
+                : { cacheReadTokens: totalUsage.cacheReadTokens }),
             },
           },
         };
-      } catch (error) {
-        const classified = transportError(error);
-        const durationMs = Math.round(performance.now() - attemptStarted);
-        attempts.push({ attempt, outcome: 'error', durationMs, errorType: classified.type });
-        this.metricRecorder({
-          ts: this.now().toISOString(),
-          op: 'problem-solving-evaluator',
-          model,
-          effort: this.effort,
-          paragraphId: input.basicGold.passageId,
-          inputTokens: 0,
-          outputTokens: 0,
-          ms: durationMs,
-          attempt,
-          error: classified,
-        });
-        if (!classified.retryable || transportRetriesUsed >= this.maxTransportRetries) throw error;
-        transportRetriesUsed += 1;
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, this.retryDelayMs));
+        } catch (error) {
+          const classified = transportError(error);
+          const durationMs = Math.round(performance.now() - attemptStarted);
+          const errorUsage = error instanceof ProblemPathEvaluatorContractError
+            ? error.usage
+            : undefined;
+          totalUsage.inputTokens += errorUsage?.inputTokens ?? 0;
+          totalUsage.outputTokens += errorUsage?.outputTokens ?? 0;
+          totalUsage.cacheReadTokens += errorUsage?.cacheReadTokens ?? 0;
+          attempts.push({
+            attempt,
+            model: route.model,
+            route: route.route,
+            outcome: 'error',
+            durationMs,
+            errorType: classified.type,
+            usage: {
+              inputTokens: errorUsage?.inputTokens ?? 0,
+              outputTokens: errorUsage?.outputTokens ?? 0,
+              ...(errorUsage?.cacheReadTokens === undefined || errorUsage.cacheReadTokens === 0
+                ? {}
+                : { cacheReadTokens: errorUsage.cacheReadTokens }),
+            },
+          });
+          this.metricRecorder({
+            ts: this.now().toISOString(),
+            op: 'problem-solving-evaluator',
+            model: route.model,
+            effort: this.effort,
+            paragraphId: input.basicGold.passageId,
+            inputTokens: errorUsage?.inputTokens ?? 0,
+            outputTokens: errorUsage?.outputTokens ?? 0,
+            ...(errorUsage?.cacheReadTokens === undefined
+              ? {}
+              : { cacheReadTokens: errorUsage.cacheReadTokens }),
+            ms: durationMs,
+            attempt,
+            error: classified,
+          });
+          if (classified.retryable && transportRetriesUsed < maxRetriesForRoute) {
+            transportRetriesUsed += 1;
+            await new Promise((resolveDelay) => setTimeout(resolveDelay, this.retryDelayMs));
+            continue;
+          }
+          if (route.route === 'PRIMARY' && fallbackModel !== null) {
+            fallbackReason = classified.type;
+            break;
+          }
+          if (route.route === 'FALLBACK') {
+            throw new ProblemPathEvaluatorFallbackError(error, {
+              provider: 'openai',
+              model: route.model,
+              effort: this.effort,
+              promptVersion: PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION,
+              schemaVersion: PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION,
+              calledAt,
+              durationMs: Math.round(performance.now() - started),
+              attempts,
+              routing: {
+                primaryModel,
+                fallbackModel,
+                finalModel: route.model,
+                fallbackUsed: true,
+                fallbackReason,
+              },
+              usage: {
+                inputTokens: totalUsage.inputTokens,
+                outputTokens: totalUsage.outputTokens,
+                ...(totalUsage.cacheReadTokens === 0
+                  ? {}
+                  : { cacheReadTokens: totalUsage.cacheReadTokens }),
+              },
+            });
+          }
+          throw error;
+        }
       }
     }
+    throw new Error('problem path evaluator가 결과 없이 종료되었습니다.');
   }
 }

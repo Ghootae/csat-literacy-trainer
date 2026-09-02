@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
+  ProblemPathEvaluatorFallbackError,
   resolveProblemPathEvaluatorIds,
   type ProblemPathEvaluator,
   type ProblemPathEvaluatorCall,
@@ -45,6 +46,39 @@ function successfulCall(input: ProblemPathEvaluatorInput): ProblemPathEvaluatorC
       promptVersion: 'path-diagnostic-prompt-v3',
       schemaVersion: 'problem-path-evaluator-output-v3',
       calledAt: '2026-08-27T00:00:00.000Z', durationMs: 1,
+      attempts: [{ attempt: 1, outcome: 'success', durationMs: 1 }],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    },
+  };
+}
+
+function rationaleCall(
+  assessment: 'SUPPORTED' | 'UNCERTAIN' | 'CLEAR_ERROR',
+): ProblemPathEvaluatorCall {
+  const groundingAssessment = assessment === 'SUPPORTED'
+    ? 'SUPPORTED' as const
+    : assessment === 'CLEAR_ERROR'
+      ? 'CONTRADICTED' as const
+      : 'NOT_ENOUGH_EVIDENCE' as const;
+  return {
+    result: {
+      schemaVersion: 'problem-path-evaluator-output-v3',
+      mode: 'ASSESS_SELECTION_RATIONALE',
+      optionStance: 'REJECTS_OPTION',
+      requiredStanceForSelection: 'REJECTS_OPTION',
+      stanceConsistency: 'CONSISTENT',
+      groundingAssessment,
+      assessment,
+      reason: '테스트 근거 판정',
+      evidence: [],
+      sourceRefs: [],
+    },
+    rawOutput: { assessment },
+    call: {
+      provider: 'mock', model: 'gpt-5.6-luna', effort: 'medium',
+      promptVersion: 'path-diagnostic-prompt-v3',
+      schemaVersion: 'problem-path-evaluator-output-v3',
+      calledAt: '2026-09-02T00:00:00.000Z', durationMs: 1,
       attempts: [{ attempt: 1, outcome: 'success', durationMs: 1 }],
       usage: { inputTokens: 1, outputTokens: 1 },
     },
@@ -296,6 +330,92 @@ describe('problem solving server controller', () => {
     });
     expect(calls.at(-1)?.evaluationMode).toBe('ASSESS_SELECTION_RATIONALE');
     expect(await controller.resume(started.sessionId)).toEqual(completed);
+  });
+
+  it.each([
+    ['SUPPORTED', 'INITIAL_CORRECT_VERIFIED', 'SUPPORTED_RATIONALE_CORRECT'],
+    ['UNCERTAIN', 'INITIAL_CORRECT_UNVERIFIED', 'UNVERIFIED_RATIONALE_CORRECT'],
+  ] as const)('정답 근거 %s를 추가 질문 없이 코드 소유 결과로 종결한다', async (
+    assessment,
+    resolutionOutcome,
+    outcome,
+  ) => {
+    const calls: ProblemPathEvaluatorInput[] = [];
+    const evaluator: ProblemPathEvaluator = {
+      async evaluate(input) {
+        calls.push(structuredClone(input));
+        return rationaleCall(assessment);
+      },
+    };
+    const controller = new ProblemSolvingController({ evaluator });
+    const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+
+    const completed = await controller.submitInitial(started.sessionId, {
+      choiceId: 'C5',
+      rationale: assessment === 'SUPPORTED'
+        ? '⑤의 소수성 약화와 입자 크기 감소는 제시되지 않았습니다.'
+        : '그냥 ⑤가 이상해 보였습니다.',
+    });
+
+    expect(completed).toMatchObject({
+      phase: 'COMPLETED',
+      selectedChoiceId: 'C5',
+      result: {
+        correct: true,
+        rationaleAssessment: assessment,
+        resolutionOutcome,
+        outcome,
+      },
+    });
+    expect(completed.action).toBeNull();
+    expect(completed.transcript.filter((entry) => entry.role === 'COACH')).toHaveLength(0);
+    expect(calls.map((input) => input.evaluationMode)).toEqual(['ASSESS_SELECTION_RATIONALE']);
+  });
+
+  it('Luna와 Terra가 모두 실패하면 시도 감사를 남기고 정답을 미검증으로 안전 종결한다', async () => {
+    const logger = new MemoryLogger();
+    const failureCall = {
+      provider: 'openai' as const,
+      model: 'gpt-5.6-terra',
+      effort: 'medium' as const,
+      promptVersion: 'path-diagnostic-prompt-v3' as const,
+      schemaVersion: 'problem-path-evaluator-output-v3' as const,
+      calledAt: '2026-09-02T00:00:00.000Z',
+      durationMs: 60_000,
+      attempts: [
+        { attempt: 1, model: 'gpt-5.6-luna', route: 'PRIMARY' as const, outcome: 'error' as const, durationMs: 30_000, errorType: 'timeout' },
+        { attempt: 2, model: 'gpt-5.6-terra', route: 'FALLBACK' as const, outcome: 'error' as const, durationMs: 30_000, errorType: 'timeout' },
+      ],
+      routing: {
+        primaryModel: 'gpt-5.6-luna', fallbackModel: 'gpt-5.6-terra',
+        finalModel: 'gpt-5.6-terra', fallbackUsed: true, fallbackReason: 'timeout',
+      },
+      usage: { inputTokens: 0, outputTokens: 0 },
+    };
+    const evaluator: ProblemPathEvaluator = {
+      async evaluate() {
+        throw new ProblemPathEvaluatorFallbackError(new Error('Terra도 시간 초과'), failureCall);
+      },
+    };
+    const controller = new ProblemSolvingController({ evaluator, logger });
+    const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+
+    const completed = await controller.submitInitial(started.sessionId, {
+      choiceId: 'C5',
+      rationale: '⑤의 연결은 지문에서 제시되지 않았습니다.',
+    });
+
+    expect(completed).toMatchObject({
+      phase: 'COMPLETED',
+      evaluation: { status: 'IDLE', message: null },
+      result: {
+        correct: true,
+        rationaleAssessment: 'UNCERTAIN',
+        resolutionOutcome: 'INITIAL_CORRECT_UNVERIFIED',
+      },
+    });
+    expect(logger.records).toHaveLength(1);
+    expect(logger.records[0]?.evaluatorCalls).toEqual([failureCall]);
   });
 
   it('질문 2/2 소진 뒤 모델을 다시 호출하지 않고 결정론적 코칭과 재선택으로 이동한다', async () => {

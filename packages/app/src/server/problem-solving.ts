@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   OpenAIProblemPathEvaluator,
+  ProblemPathEvaluatorFallbackError,
   adaptProblemPathDiagnosticOutput,
   applyAdaptedProblemEvaluatorTurn,
   applyCorrectRationaleAssessment,
@@ -50,7 +51,7 @@ interface ProblemRuntime {
   logged: boolean;
 }
 
-const CORRECT_RATIONALE_ASSESSMENT_TIMEOUT_MS = 30_000;
+const CORRECT_RATIONALE_ASSESSMENT_TOTAL_TIMEOUT_MS = 65_000;
 
 function withTimeout<T>(request: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -353,6 +354,9 @@ export class ProblemSolvingController {
         runtime.evaluationError = null;
       })
       .catch((error: unknown) => {
+        if (error instanceof ProblemPathEvaluatorFallbackError) {
+          runtime.evaluatorCalls.push(structuredClone(error.call));
+        }
         const current = this.requireProblemSession(runtime);
         if (current.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT') {
           // 정오는 이미 코드가 확정했다. 부가적인 근거 평가 실패가 정답 종결을
@@ -425,7 +429,7 @@ export class ProblemSolvingController {
       });
       const evaluationRequest = this.evaluator.evaluate(input);
       const evaluated = session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
-        ? await withTimeout(evaluationRequest, CORRECT_RATIONALE_ASSESSMENT_TIMEOUT_MS)
+        ? await withTimeout(evaluationRequest, CORRECT_RATIONALE_ASSESSMENT_TOTAL_TIMEOUT_MS)
         : await evaluationRequest;
       runtime.evaluatorCalls.push(structuredClone(evaluated.call));
       if (evaluated.result.mode === 'ASSESS_SELECTION_RATIONALE') {
