@@ -26,8 +26,16 @@
 - `studentRationale` 원문, 관찰 ID와 인용에 사용할 `sourceField`
 - 대상 선지와 관련된 출처 기반 `sourceFacts`
 - 대상 선지 판단에 필요한 승인 근거의 범위를 나타내는 `sourceCoverage`
+- 허용되는 충분 경로와 선택 결론 재진술 제외를 정한 `sufficiencyPolicy`
 
 블라인드 입력에는 정답 ID, 대상 선지가 정답인지 여부, 선지 번호, 다른 선지, 선지 판정, 기준 정답 경로, 대표 오답 경로와 공식 해설이 없다. 제공되지 않은 정답 정보를 추측하거나 기억에 의존해 복원하지 않는다.
+
+`ASSESS_SELECTION_RATIONALE`에서는 `sufficiencyPolicy`를 다음처럼 적용한다.
+
+- `humanReviewedSufficientGroundSets`의 각 항목은 서로 독립적인 충분 경로다. 한 집합의 `requiredSourceRefs`가 나타내는 핵심 사실을 학생이 정확히 제시하고 `conclusion` 방향에 연결하면 충분하다.
+- `allowedOmissionSourceRefs`는 그 경로에서 명시적으로 반복하지 않아도 된다. 다른 집합이나 대표 경로의 전제를 합쳐 추가 요구하지 않는다.
+- 배열이 비어 있으면 승인 `sourceFacts` 안에서 의미적으로 동등한 압축 인과와 승인된 완전 제거 경로를 허용하되, 연결 없는 관련 사실 하나와 일부 경쟁 선지 제거만으로는 충분하지 않다.
+- `selectionRestatement: NOT_EVIDENCE`이므로 선택 번호나 선택 결론만 다시 말한 부분은 독립 근거가 아니다.
 
 경로 진단에서 정답 키와 골드는 기준 판단 자료이지 학생의 내적 사고를 입증하는 근거가 아니다. 대표 오답 경로는 비교 후보이지 학생 가설의 근거가 아니다.
 

@@ -615,7 +615,7 @@ type ProblemSolvingNextAction =
 - [x] 기존 정확 근거 15회와 대표 오답 15회를 전체 골드·슬라이스로 A/B 실행해 양 군 30/30, 짝 판정 30/30 일치와 평균 입력 토큰 60.0% 절감을 확인한다.
 - [x] 대안 표현·혼합 근거·비결정 사실·복수 전제 누락·삼원 관계·슬라이스 밖 신규 근거의 위험 프로브 7개를 전체 골드와 슬라이스에서 각 3회 실행한다.
 - [x] 최종 assessment와 anchor별 관계·결정성·필수 source ref 동일성을 분리 집계하고, 근거 signature 14/21로 운영 전환 조건이 충족되지 않았음을 확인한다.
-- [ ] 사람이 검토한 명시적 `sufficientGroundSets`와 학생 언급 claim 기반 dependency 확장기를 구현한다.
+- [x] 사람이 검토한 명시적 `sufficientGroundSets`와 학생 언급 claim 기반 dependency 확장기를 구현한다.
 - [ ] 위험 프로브 42회에서 assessment·anchor 관계·필수 source ref 동일성 21/21을 확인한다.
 - [x] 원본 전체 골드에서 대안 source-grounded 경로와 압축된 핵심 인과를 허용하는 품질 비교 정책을 코드로 고정한다.
 - [x] 같은 위험 프로브 21개를 Terra medium과 Luna medium에 각각 실행해 품질·토큰·비용·지연을 비교한다.
@@ -626,8 +626,8 @@ type ProblemSolvingNextAction =
 - [x] 수소 C4 압축 근거를 사람이 `SUPPORTED`로 확정하고, 충분 근거 집합·동등한 압축 인과·승인된 완전 제거의 세 허용 경로와 네 단독 불인정 유형을 코드 계약으로 추가한다.
 - [x] 수소 C4 허용 2종·거부 3종과 FTA 승인 완전 제거를 Luna medium으로 각 3회 실행하되, v2 상세 13/18·오류 1건으로 경계 게이트 실패를 확인한다.
 - [x] 동일 corpus·프롬프트의 18개 경계 판정을 Terra medium으로 실행해 assessment 16/18, 오류 0건을 확인하고 Luna 고유 문제가 아님을 판정한다.
-- [ ] 동일 충분성 경계 18회에서 압축 인과와 완전 제거를 모두 3/3로 안정화한다.
-- [ ] 수소 신규 대안 경로 반복 확대와 기존 일반 30개 프로브의 Terra–Luna 비교를 통과한 뒤 운영 모델 전환을 결정한다.
+- [x] 동일 충분성 경계 18회에서 압축 인과와 완전 제거를 모두 3/3로 안정화한다.
+- [x] 수소 신규 대안 경로 반복 확대와 기존 일반 프로브의 Terra–Luna 비교를 통과한 뒤 정답 근거 사전 판정만 Luna medium으로 전환한다.
 - [ ] 후보 ExplanationAudit 벤치마크 31개 claim을 사람이 검토해 `human_reviewed`로 확정한다.
 - [ ] `BASE_GOLD` 미승인 claim의 의미적 역수입을 B 생성 직후 코드 계보로 차단한다.
 - [ ] 실제 `SUPPLEMENTAL` 항목이 있는 통제 사례에서 계보 보존율을 검증한다.
@@ -1241,3 +1241,13 @@ npm run test:e2e
 - 모델 교체만으로 원 C4가 해결되지 않으므로, 사람이 승인한 `MP3 + SF1 + SF3` 압축 경로와 허용 생략을 구조화해 evaluator 입력에 전달하는 작업을 다음 우선순위로 둔다.
 - 상세 보고서와 원출력은 `docs/experiments/problem-evaluator-support-route-boundary-probes-terra-v1-2026-09-02/`에 보존했다.
 - 타입 빌드, 관련 계약 테스트 8/8과 `git diff --check`가 통과했다. 전체 회귀는 649/650이 통과했고 유일한 실패는 기존 Hegel `.omc` 산출물 누락 테스트다.
+
+### 2026-09-02 — 사람 검토 충분 경로와 Luna medium 운영 라우팅
+
+- 골드에 사람이 검토한 `sufficientGroundSets`를 선택적으로 저장하고 대상 선지·claim·원문 근거 참조, 중복과 필수/생략 교집합을 결정적으로 검증한다.
+- 수소 C4에는 `MP3 + SF1 + SF3` 전환율·부반응 경로와 `MP3 + SF1 + MP4` 전환율·화학량론 경로를 독립적인 압축 충분 집합으로 명시했다. 각 집합에 대표 경로에서 반복하지 않아도 되는 근거를 별도로 기록했다.
+- 학생 원문에서 명시적으로 식별한 경쟁 선지 claim만 dependency closure로 확장해 선택 슬라이스에 추가하고, target 근거와 분리된 `studentMentionedContext`로 전달한다.
+- 프롬프트 v7과 Luna medium의 동일 충분성 경계 18회는 assessment·finding·상세 18/18, 오류 0건으로 통과했다.
+- 기본 20개 논리 프로브를 모델별 각 3회 비교한 결과 Luna는 상세 58/60·오류 0건으로 절대 게이트를 통과했고 Terra도 상세 58/60·오류 0건이었다. Luna 관측 비용은 `$0.090136`, Terra는 `$0.767970`이었다.
+- 운영 런타임은 `ASSESS_SELECTION_RATIONALE`만 `gpt-5.6-luna / medium`으로 라우팅하고 `DIAGNOSE_PATH`는 `gpt-5.6-terra / medium`을 유지한다. 기존 `PROBLEM_PATH_OPENAI_MODEL=gpt-5.6-terra` 전역 override가 즉시 롤백 경로다.
+- 집중 테스트 89/89와 타입 검사가 통과했다. 전체 회귀는 658/659가 통과했고 유일한 실패는 기존 Hegel `.omc` 실험 산출물 누락 테스트다.

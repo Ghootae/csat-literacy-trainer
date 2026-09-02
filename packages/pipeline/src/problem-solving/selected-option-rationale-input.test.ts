@@ -20,6 +20,15 @@ function fixture(name: string): ProblemQuestionGold {
   ), 'utf8')));
 }
 
+function auditedGoldFixture(name: string): ProblemQuestionGold {
+  return ProblemQuestionGoldSchema.parse(JSON.parse(readFileSync(resolve(
+    process.cwd(),
+    'docs/experiments/problem-gold-explanation-audit-cycle-2026-09-02/artifacts',
+    name,
+    'c-gold.json',
+  ), 'utf8')));
+}
+
 describe('selected option rationale input', () => {
   const rationale = 'pH가 높아져도 크기 감소는 지문에서 도출되지 않는다.';
 
@@ -183,6 +192,63 @@ describe('selected option rationale input', () => {
     expect(input.referencePolicy.selectionRestatement).toBe('NOT_EVIDENCE');
     expect(input.sufficiencyPolicy.rejectedAsStandaloneSupport)
       .toContain('SELECTION_CONCLUSION_RESTATEMENT');
+  });
+
+  it('선택 선지에 승인된 사람 검토 충분 경로와 생략 정책만 입력에 투영한다', () => {
+    const gold = auditedGoldFixture('hydrogen-production-q12');
+    const c4 = createSelectedOptionRationaleInput({
+      arm: 'BASELINE_FULL_GOLD',
+      gold,
+      selectedChoiceId: 'C4',
+      studentRationale: 'Ⓐ의 전환율은 0.9 이상이고 Ⓑ는 0.6이며 부반응 물질도 상당량 생긴다.',
+    }).input;
+    const c3 = createSelectedOptionRationaleInput({
+      arm: 'BASELINE_FULL_GOLD',
+      gold,
+      selectedChoiceId: 'C3',
+      studentRationale: 'Ⓑ의 전환율은 0.6이다.',
+    }).input;
+
+    expect(c4.sufficiencyPolicy.humanReviewedSufficientGroundSets).toHaveLength(2);
+    expect(c4.sufficiencyPolicy.humanReviewedSufficientGroundSets).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        setId: 'SGS-C4-CONVERSION-BYPRODUCT-COMPRESSED',
+        requiredSourceRefs: ['MP3', 'SF1', 'SF3'],
+        allowedOmissionSourceRefs: ['MP5', 'MP6'],
+      }),
+      expect.objectContaining({
+        setId: 'SGS-C4-CONVERSION-STOICHIOMETRY-COMPRESSED',
+        requiredSourceRefs: ['MP3', 'SF1', 'MP4'],
+        allowedOmissionSourceRefs: ['SF3', 'MP5', 'MP6'],
+      }),
+    ]));
+    expect(c4.sufficiencyPolicy.humanReviewedSufficientGroundSets.every(
+      (set) => !('choiceId' in set),
+    )).toBe(true);
+    expect(c3.sufficiencyPolicy.humanReviewedSufficientGroundSets).toEqual([]);
+  });
+
+  it('학생이 언급한 경쟁 선지 claim의 의존 근거를 선택 슬라이스에 확장한다', () => {
+    const { input } = createSelectedOptionRationaleInput({
+      arm: 'SELECTED_OPTION_COMPLETE',
+      gold: auditedGoldFixture('hydrogen-production-q12'),
+      selectedChoiceId: 'C4',
+      studentRationale: 'Ⓐ와 Ⓑ 모두 질소 기체를 생성하므로 ①은 틀렸다. 따라서 ④를 골랐다.',
+      experimentAuditId: 'EXPERIMENT-HYDROGEN-C4-MENTION',
+    });
+    expect(input.arm).toBe('SELECTED_OPTION_COMPLETE');
+    if (input.arm !== 'SELECTED_OPTION_COMPLETE') return;
+
+    expect(input.evidenceGold.studentMentionedContext).toMatchObject({
+      directlyMentionedClaimIds: ['OC1-1'],
+      expandedClaimIds: ['OC1-1'],
+    });
+    expect(input.evidenceGold.studentMentionedContext?.grounds.map((item) => item.inferenceId))
+      .toEqual(['I1']);
+    expect(input.evidenceGold.sourceEvidence.map((item) => item.id))
+      .toEqual(expect.arrayContaining(['MP1', 'MP2']));
+    expect(input.referencePolicy.allowedSourceRefs)
+      .toEqual(expect.arrayContaining(['OC1-1', 'I1', 'MP1', 'MP2']));
   });
 
   it('복수 전제 중 일부의 결정적 일치가 있어도 전체 충분 집합이 미완성이면 INSUFFICIENT를 허용한다', () => {

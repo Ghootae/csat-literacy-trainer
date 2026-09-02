@@ -21,7 +21,7 @@ const EFFORT = 'medium' as const;
 const REPEATS = 3;
 const CONCURRENCY = 3;
 const TIMEOUT_MS = 120_000;
-const PROMPT_VERSION = 'selected-option-model-quality-prompt-v6';
+const PROMPT_VERSION = 'selected-option-model-quality-prompt-v7';
 const CORPUS_PATH = resolve(
   'packages/pipeline/experiments/problem-solving/selected-option-basic-probes-v1.json',
 );
@@ -30,12 +30,13 @@ const PROMPT_PATHS = [
   'selected-option-model-quality-prompt-v4-addon.md',
   'selected-option-model-quality-prompt-v5-addon.md',
   'selected-option-model-quality-prompt-v6-addon.md',
+  'selected-option-model-quality-prompt-v7-addon.md',
 ].map((name) => resolve('packages/pipeline/experiments/problem-solving', name));
 const GOLD_ROOT = resolve(
   'docs/experiments/problem-gold-explanation-audit-cycle-2026-09-02/artifacts',
 );
 const OUTPUT_ROOT = resolve(
-  'docs/experiments/problem-evaluator-basic-probes-terra-luna-v2-2026-09-02',
+  'docs/experiments/problem-evaluator-basic-probes-terra-luna-v3-2026-09-02',
 );
 const PRICE_PER_MILLION = {
   [TERRA]: { input: 2, cachedInput: 0.2, output: 12 },
@@ -482,7 +483,7 @@ async function main(): Promise<void> {
     if (findingSignature(terra) === findingSignature(luna)) findingSignatureEquivalent += 1;
   }
   const summary = {
-    experiment: 'problem-evaluator-basic-probes-terra-luna-v2',
+    experiment: 'problem-evaluator-basic-probes-terra-luna-v3',
     corpusVersion: corpus.corpusVersion,
     corpusHash: sha256(JSON.stringify(corpus)),
     promptVersion: PROMPT_VERSION,

@@ -24,25 +24,25 @@ const TIMEOUT_MS = 120_000;
 const SUITE = process.env['BOUNDARY_PROBE_SUITE'] === 'support-route'
   ? 'support-route' as const
   : 'target' as const;
-const PROMPT_VERSION = 'selected-option-model-quality-prompt-v6';
+const PROMPT_VERSION = 'selected-option-model-quality-prompt-v7';
 const SUITE_CONFIG = SUITE === 'support-route' ? {
   corpusPath: resolve(
     'packages/pipeline/experiments/problem-solving/selected-option-support-route-boundary-probes-v1.json',
   ),
   outputRoot: resolve(MODEL === 'gpt-5.6-terra'
-    ? 'docs/experiments/problem-evaluator-support-route-boundary-probes-terra-v1-2026-09-02'
-    : 'docs/experiments/problem-evaluator-support-route-boundary-probes-v2-2026-09-02'),
+    ? 'docs/experiments/problem-evaluator-support-route-boundary-probes-terra-v2-2026-09-02'
+    : 'docs/experiments/problem-evaluator-support-route-boundary-probes-v4-2026-09-02'),
   experiment: MODEL === 'gpt-5.6-terra'
-    ? 'problem-evaluator-support-route-boundary-probes-terra-v1'
-    : 'problem-evaluator-support-route-boundary-probes-v2',
+    ? 'problem-evaluator-support-route-boundary-probes-terra-v2'
+    : 'problem-evaluator-support-route-boundary-probes-v4',
 } : {
   corpusPath: resolve(
     'packages/pipeline/experiments/problem-solving/selected-option-boundary-target-probes-v1.json',
   ),
   outputRoot: resolve(
-    'docs/experiments/problem-evaluator-boundary-target-probes-v6-2026-09-02',
+    'docs/experiments/problem-evaluator-boundary-target-probes-v7-2026-09-02',
   ),
-  experiment: 'problem-evaluator-boundary-target-probes-v6',
+  experiment: 'problem-evaluator-boundary-target-probes-v7',
 };
 const PROMPT_PATHS = [resolve(
   'packages/pipeline/experiments/problem-solving/selected-option-model-quality-prompt-v3.md',
@@ -52,6 +52,8 @@ const PROMPT_PATHS = [resolve(
   'packages/pipeline/experiments/problem-solving/selected-option-model-quality-prompt-v5-addon.md',
 ), resolve(
   'packages/pipeline/experiments/problem-solving/selected-option-model-quality-prompt-v6-addon.md',
+), resolve(
+  'packages/pipeline/experiments/problem-solving/selected-option-model-quality-prompt-v7-addon.md',
 )];
 const GOLD_ROOT = resolve(
   'docs/experiments/problem-gold-explanation-audit-cycle-2026-09-02/artifacts',
@@ -255,6 +257,29 @@ async function run(options: {
   }
 }
 
+function resultKey(result: Pick<Result, 'probeId' | 'iteration'>): string {
+  return `${result.probeId}:${result.iteration}`;
+}
+
+function regradeResult(result: Result, probesById: ReadonlyMap<string, Probe>): Result {
+  const probe = probesById.get(result.probeId);
+  if (probe === undefined || result.output === undefined || result.error !== undefined) return result;
+  const parsed = SelectedOptionRationaleOutputSchema.safeParse(result.output);
+  if (!parsed.success) return result;
+  const findingGrades = gradeFindings(parsed.data, probe);
+  const assessmentPassed = parsed.data.rationaleAssessment === probe.expectedAssessment;
+  const findingsPassed = findingGrades.every((grade) => grade.passed);
+  return {
+    ...result,
+    expectedAssessment: probe.expectedAssessment,
+    observedAssessment: parsed.data.rationaleAssessment,
+    assessmentPassed,
+    findingsPassed,
+    passed: assessmentPassed && findingsPassed,
+    findingGrades,
+  };
+}
+
 async function main(): Promise<void> {
   const corpus = CorpusSchema.parse(await readJson(SUITE_CONFIG.corpusPath));
   const prompt = (await Promise.all(PROMPT_PATHS.map((path) => readFile(path, 'utf8'))))
@@ -268,18 +293,31 @@ async function main(): Promise<void> {
       'c-gold.json',
     ))));
   }
+  const probesById = new Map(corpus.probes.map((probe) => [probe.probeId, probe] as const));
+  const partialPath = resolve(OUTPUT_ROOT, 'artifacts', 'results.partial.json');
+  let results: Result[] = [];
+  try {
+    results = (await readJson(partialPath) as Result[])
+      .map((result) => regradeResult(result, probesById));
+  } catch {
+    // 최초 실행에는 부분 결과가 없다.
+  }
+  const completed = new Set(results.map(resultKey));
   const jobs = corpus.probes.flatMap((probe) => Array.from({ length: REPEATS }, (_, index) => ({
     probe,
     iteration: index + 1,
     gold: goldByCase.get(probe.caseId)!,
+  }))).filter((job) => !completed.has(resultKey({
+    probeId: job.probe.probeId,
+    iteration: job.iteration,
   })));
-  const results: Result[] = [];
   for (let index = 0; index < jobs.length; index += CONCURRENCY) {
     results.push(...await Promise.all(jobs.slice(index, index + CONCURRENCY)
       .map((job) => run({ ...job, prompt }))));
-    await writeJson(resolve(OUTPUT_ROOT, 'artifacts', 'results.partial.json'), results);
-    process.stdout.write(`[${results.length}/${jobs.length}] completed\n`);
+    await writeJson(partialPath, results);
+    process.stdout.write(`[${results.length}/${corpus.probes.length * REPEATS}] completed\n`);
   }
+  await writeJson(partialPath, results);
   const byProbe = Object.fromEntries(corpus.probes.map((probe) => {
     const selected = results.filter((result) => result.probeId === probe.probeId);
     return [probe.probeId, {

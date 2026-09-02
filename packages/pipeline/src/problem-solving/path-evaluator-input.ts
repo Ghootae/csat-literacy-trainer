@@ -265,6 +265,28 @@ export const BlindRationaleProviderInputSchema = z.object({
       status: z.literal('COMPLETE_RELEVANT_SOURCE_FACTS_FOR_TARGET_OPTION'),
       description: z.string().min(1),
     }).strict(),
+    sufficiencyPolicy: z.object({
+      acceptedSupportRoutes: z.tuple([
+        z.literal('APPROVED_SUFFICIENT_GROUND_SET'),
+        z.literal('SEMANTICALLY_EQUIVALENT_COMPRESSED_CAUSAL_CHAIN'),
+        z.literal('APPROVED_COMPLETE_ELIMINATION_PATH'),
+      ]),
+      selectionRestatement: z.literal('NOT_EVIDENCE'),
+      humanReviewedSufficientGroundSets: z.array(z.object({
+        setId: z.string().min(1),
+        targetClaimIds: z.array(z.string().min(1)).min(1),
+        route: z.enum([
+          'APPROVED_SUFFICIENT_GROUND_SET',
+          'SEMANTICALLY_EQUIVALENT_COMPRESSED_CAUSAL_CHAIN',
+          'APPROVED_COMPLETE_ELIMINATION_PATH',
+        ]),
+        operator: z.literal('ALL_OF'),
+        requiredSourceRefs: z.array(z.string().min(1)).min(1),
+        allowedOmissionSourceRefs: z.array(z.string().min(1)),
+        conclusion: z.string().min(1),
+        reviewStatus: z.literal('human_reviewed'),
+      }).strict()),
+    }).strict(),
   }).strict(),
 }).strict();
 
@@ -304,6 +326,9 @@ export function projectProblemPathEvaluatorProviderInput(
     ? rationaleObservation.rationale
     : rationaleObservation.rawResponse;
   if (studentRationale === null) throw new Error('블라인드 근거 평가 학생 근거가 비어 있다.');
+  const humanReviewedSufficientGroundSets = (input.basicGold.sufficientGroundSets ?? [])
+    .filter((set) => set.choiceId === targetChoice.choiceId)
+    .map(({ choiceId: _choiceId, ...set }) => set);
 
   const requiredPropositionIds = new Set(
     targetChoice.requiredReferences.flatMap((reference) => reference.propositionIds),
@@ -371,6 +396,15 @@ export function projectProblemPathEvaluatorProviderInput(
       sourceCoverage: {
         status: 'COMPLETE_RELEVANT_SOURCE_FACTS_FOR_TARGET_OPTION',
         description: 'sourceFacts는 대상 선지의 관계를 판단하기 위해 승인 골드가 지정한 관련 지문·보기 사실 전체다.',
+      },
+      sufficiencyPolicy: {
+        acceptedSupportRoutes: [
+          'APPROVED_SUFFICIENT_GROUND_SET',
+          'SEMANTICALLY_EQUIVALENT_COMPRESSED_CAUSAL_CHAIN',
+          'APPROVED_COMPLETE_ELIMINATION_PATH',
+        ],
+        selectionRestatement: 'NOT_EVIDENCE',
+        humanReviewedSufficientGroundSets,
       },
     },
   });

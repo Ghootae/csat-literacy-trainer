@@ -20,6 +20,7 @@ import {
 } from './path-evaluator-input.js';
 
 export const DEFAULT_PROBLEM_PATH_OPENAI_MODEL = 'gpt-5.6-terra';
+export const DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL = 'gpt-5.6-luna';
 
 export type ProblemPathEvaluatorEffort =
   | 'none'
@@ -238,7 +239,10 @@ function transportError(error: unknown): { type: string; retryable: boolean; sta
 }
 
 export interface OpenAIProblemPathEvaluatorOptions {
+  /** 모든 평가 모드에 적용하는 명시적 운영 롤백/강제 모델. */
   readonly model?: string;
+  /** 정답 근거 사전 판정에만 적용한다. model보다 우선한다. */
+  readonly rationaleModel?: string;
   readonly effort?: ProblemPathEvaluatorEffort;
   readonly timeoutMs?: number;
   readonly maxTransportRetries?: number;
@@ -286,6 +290,7 @@ export function resolveSelectionRationaleProviderOutput(
 
 export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
   readonly model: string;
+  readonly rationaleModel: string;
   readonly effort: ProblemPathEvaluatorEffort;
   private readonly timeoutMs: number;
   private readonly maxTransportRetries: number;
@@ -295,9 +300,12 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
   private readonly metricRecorder: (metric: CallMetric) => void;
 
   constructor(options: OpenAIProblemPathEvaluatorOptions = {}) {
-    this.model = options.model ??
-      process.env['PROBLEM_PATH_OPENAI_MODEL'] ??
-      DEFAULT_PROBLEM_PATH_OPENAI_MODEL;
+    const forcedModel = options.model ?? process.env['PROBLEM_PATH_OPENAI_MODEL'];
+    this.model = forcedModel ?? DEFAULT_PROBLEM_PATH_OPENAI_MODEL;
+    this.rationaleModel = options.rationaleModel ??
+      forcedModel ??
+      process.env['PROBLEM_RATIONALE_OPENAI_MODEL'] ??
+      DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL;
     this.effort = options.effort ?? 'medium';
     this.timeoutMs = options.timeoutMs ?? 60_000;
     this.maxTransportRetries = options.maxTransportRetries ?? 1;
@@ -309,6 +317,9 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
 
   async evaluate(inputValue: ProblemPathEvaluatorInput): Promise<ProblemPathEvaluatorCall> {
     const input = ProblemPathEvaluatorInputSchema.parse(inputValue);
+    const model = input.evaluationMode === 'ASSESS_SELECTION_RATIONALE'
+      ? this.rationaleModel
+      : this.model;
     const providerInput = projectProblemPathEvaluatorProviderInput(input);
     const calledAt = this.now().toISOString();
     const started = performance.now();
@@ -321,7 +332,7 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
       const attemptStarted = performance.now();
       try {
         const response = await this.transport.parse({
-          model: this.model,
+          model,
           effort: this.effort,
           instructions: loadProblemPathDiagnosticPrompt(),
           input: JSON.stringify(providerInput),
@@ -361,7 +372,7 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
         this.metricRecorder({
           ts: this.now().toISOString(),
           op: 'problem-solving-evaluator',
-          model: this.model,
+          model,
           effort: this.effort,
           paragraphId: input.basicGold.passageId,
           inputTokens: response.usage?.inputTokens ?? 0,
@@ -377,7 +388,7 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
           rawOutput: structuredClone(response.outputParsed),
           call: {
             provider: 'openai',
-            model: this.model,
+            model,
             effort: this.effort,
             promptVersion: PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION,
             schemaVersion: PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION,
@@ -400,7 +411,7 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
         this.metricRecorder({
           ts: this.now().toISOString(),
           op: 'problem-solving-evaluator',
-          model: this.model,
+          model,
           effort: this.effort,
           paragraphId: input.basicGold.passageId,
           inputTokens: 0,

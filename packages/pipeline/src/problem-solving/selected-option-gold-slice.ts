@@ -20,6 +20,9 @@ const IncludedReasonSchema = z.enum([
   'TARGET_OPTION',
   'TARGET_CLAIM',
   'CLAIM_DEPENDENCY',
+  'STUDENT_MENTIONED_CLAIM',
+  'STUDENT_CLAIM_DEPENDENCY',
+  'STUDENT_CLAIM_GROUND',
   'DECISION_GROUND',
   'PREMISE_CLOSURE',
   'SCENARIO_DEPENDENCY',
@@ -69,6 +72,13 @@ const SelectedOptionClaimSchema = OptionClaimSchema.omit({
   supplementalUsePolicy: true,
 });
 
+const StudentMentionedContextSchema = z.object({
+  directlyMentionedClaimIds: z.array(z.string().min(1)).min(1),
+  expandedClaimIds: z.array(z.string().min(1)).min(1),
+  claims: z.array(SelectedOptionClaimSchema).min(1),
+  grounds: z.array(ItemInferenceSchema),
+}).strict();
+
 export const SelectedOptionGoldSliceSchema = z.object({
   sliceVersion: z.literal(SELECTED_OPTION_GOLD_SLICE_VERSION),
   sliceMode: z.literal('SELECTED_OPTION_COMPLETE'),
@@ -82,6 +92,7 @@ export const SelectedOptionGoldSliceSchema = z.object({
   }).strict(),
   targetClaims: z.array(SelectedOptionClaimSchema).min(1),
   approvedGrounds: z.array(ItemInferenceSchema).min(1),
+  studentMentionedContext: StudentMentionedContextSchema.nullable(),
   decisionRule: z.object({
     operator: z.literal('ANY_OF'),
     derivation: z.enum([
@@ -160,9 +171,44 @@ function unique<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
 }
 
+const CIRCLED_POSITIONS = ['', '①', '②', '③', '④', '⑤'] as const;
+
+/**
+ * 학생 원문에서 결정적으로 식별할 수 있는 선지·claim 언급만 골드 ID로 바꾼다.
+ * 의미 추측은 하지 않으며 호출자가 구조화한 claim ID를 추가로 전달할 수 있다.
+ */
+export function resolveStudentMentionedClaimIds(
+  goldInput: ProblemQuestionGold,
+  studentRationale: string,
+): string[] {
+  const gold = ProblemQuestionGoldSchema.parse(goldInput);
+  const mentionedChoiceIds = new Set<string>();
+  for (const choice of gold.choices) {
+    const circled = CIRCLED_POSITIONS[choice.position] ?? '';
+    const explicitPosition = new RegExp(`(^|[^0-9])${choice.position}\\s*번($|[^0-9])`, 'u');
+    const explicitId = new RegExp(`(^|[^A-Za-z0-9])${choice.choiceId}($|[^A-Za-z0-9])`, 'u');
+    if (
+      (circled !== '' && studentRationale.includes(circled)) ||
+      explicitPosition.test(studentRationale) ||
+      explicitId.test(studentRationale) ||
+      studentRationale.includes(choice.text)
+    ) {
+      mentionedChoiceIds.add(choice.choiceId);
+    }
+  }
+  return gold.optionClaims
+    .filter((claim) =>
+      mentionedChoiceIds.has(claim.choiceId) ||
+      studentRationale.includes(claim.claimId) ||
+      studentRationale.includes(claim.description))
+    .map((claim) => claim.claimId);
+}
+
 export function buildSelectedOptionGoldSlice(options: {
   readonly gold: ProblemQuestionGold;
   readonly selectedChoiceId: string;
+  readonly studentRationale?: string;
+  readonly studentMentionedClaimIds?: readonly string[];
   readonly coverageAudit?: {
     readonly auditId: string;
     readonly mode: 'PRODUCTION' | 'EXPERIMENT';
@@ -206,6 +252,50 @@ export function buildSelectedOptionGoldSlice(options: {
     throw new Error('선택 선지의 승인 추론 참조가 끊겼거나 비어 있다.');
   }
 
+  const directlyMentionedClaimIds = unique([
+    ...(options.studentRationale === undefined
+      ? []
+      : resolveStudentMentionedClaimIds(gold, options.studentRationale)),
+    ...(options.studentMentionedClaimIds ?? []),
+  ]);
+  const mentionedClaimIds = new Set<string>();
+  const mentionedPending = [...directlyMentionedClaimIds];
+  while (mentionedPending.length > 0) {
+    const claimId = mentionedPending.pop()!;
+    const claim = claimsById.get(claimId);
+    if (claim === undefined) throw new Error(`학생 언급 claim을 찾을 수 없다: ${claimId}`);
+    if (targetClaimIds.has(claimId) || mentionedClaimIds.has(claimId)) continue;
+    mentionedClaimIds.add(claimId);
+    for (const dependencyId of claim.dependsOnClaimIds) mentionedPending.push(dependencyId);
+  }
+  const mentionedClaims = gold.optionClaims.filter((claim) => mentionedClaimIds.has(claim.claimId));
+  const projectedMentionedClaims = mentionedClaims.map((claim) => {
+    const {
+      fallbackSupplementalInferenceIds: _withheldSupplementalIds,
+      supplementalUsePolicy: _withheldSupplementalPolicy,
+      ...projected
+    } = claim;
+    return projected;
+  });
+  const mentionedInferenceIds = new Set(
+    mentionedClaims.flatMap((claim) => claim.itemInferenceIds),
+  );
+  for (const inferenceId of inferenceIds) mentionedInferenceIds.delete(inferenceId);
+  const mentionedGrounds = gold.itemInferences.filter(
+    (inference) => mentionedInferenceIds.has(inference.inferenceId),
+  );
+  if (mentionedGrounds.length !== mentionedInferenceIds.size) {
+    throw new Error('학생 언급 claim의 승인 추론 참조가 끊겼다.');
+  }
+  const studentMentionedContext = mentionedClaims.length === 0
+    ? null
+    : {
+        directlyMentionedClaimIds: directlyMentionedClaimIds.filter((id) => !targetClaimIds.has(id)),
+        expandedClaimIds: mentionedClaims.map((claim) => claim.claimId),
+        claims: projectedMentionedClaims,
+        grounds: mentionedGrounds,
+      };
+
   const propositionIds = new Set<string>();
   const scenarioFactIds = new Set<string>();
   const visualAssertionIds = new Set<string>();
@@ -214,14 +304,19 @@ export function buildSelectedOptionGoldSlice(options: {
   }
   choice.scenarioFactIds.forEach((id) => scenarioFactIds.add(id));
   choice.visualAssertionIds.forEach((id) => visualAssertionIds.add(id));
-  for (const evidence of [...targetClaims, ...approvedGrounds]) {
+  for (const evidence of [
+    ...targetClaims,
+    ...approvedGrounds,
+    ...mentionedClaims,
+    ...mentionedGrounds,
+  ]) {
     for (const reference of evidence.references) {
       reference.propositionIds.forEach((id) => propositionIds.add(id));
     }
     evidence.scenarioFactIds.forEach((id) => scenarioFactIds.add(id));
     evidence.visualAssertionIds.forEach((id) => visualAssertionIds.add(id));
   }
-  for (const inference of approvedGrounds) {
+  for (const inference of [...approvedGrounds, ...mentionedGrounds]) {
     for (const premiseRef of inference.premiseRefs) {
       if (premiseRef === 'ANSWER_KEY') continue;
       if (
@@ -323,7 +418,17 @@ export function buildSelectedOptionGoldSlice(options: {
         ? 'TARGET_CLAIM' as const
         : 'CLAIM_DEPENDENCY' as const,
     })),
+    ...mentionedClaims.map((claim) => ({
+      id: claim.claimId,
+      reason: directlyMentionedClaimIds.includes(claim.claimId)
+        ? 'STUDENT_MENTIONED_CLAIM' as const
+        : 'STUDENT_CLAIM_DEPENDENCY' as const,
+    })),
     ...approvedGrounds.map((item) => ({ id: item.inferenceId, reason: 'DECISION_GROUND' as const })),
+    ...mentionedGrounds.map((item) => ({
+      id: item.inferenceId,
+      reason: 'STUDENT_CLAIM_GROUND' as const,
+    })),
     ...propositions.map((item) => ({ id: item.id, reason: 'PREMISE_CLOSURE' as const })),
     ...scenarioFacts.map((item) => ({ id: item.id, reason: 'SCENARIO_DEPENDENCY' as const })),
     ...visualAssertions.map((item) => ({ id: item.id, reason: 'VISUAL_DEPENDENCY' as const })),
@@ -333,6 +438,7 @@ export function buildSelectedOptionGoldSlice(options: {
   const graphForHash = {
     targetClaims: projectedTargetClaims,
     approvedGrounds,
+    studentMentionedContext,
     sufficientGroundSets,
     sourceEvidence,
   };
@@ -376,6 +482,7 @@ export function buildSelectedOptionGoldSlice(options: {
     targetOption: { choiceId: choice.choiceId, text: choice.text },
     targetClaims: projectedTargetClaims,
     approvedGrounds,
+    studentMentionedContext,
     decisionRule: {
       operator: 'ANY_OF' as const,
       derivation: explicitDecisiveClaims.length > 0

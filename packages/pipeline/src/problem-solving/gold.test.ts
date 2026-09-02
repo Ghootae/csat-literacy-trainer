@@ -14,6 +14,15 @@ function fixture(name = 'dopamine-motor-control-q13.json') {
   return JSON.parse(readFileSync(path, 'utf8')) as unknown;
 }
 
+function auditedGoldFixture(name: string) {
+  return JSON.parse(readFileSync(resolve(
+    process.cwd(),
+    'docs/experiments/problem-gold-explanation-audit-cycle-2026-09-02/artifacts',
+    name,
+    'c-gold.json',
+  ), 'utf8')) as unknown;
+}
+
 describe('problem-solving gold', () => {
   const sixQuestionFixtures = [
     'mrna-vaccine-lipid-nanoparticle-q19.json',
@@ -112,6 +121,39 @@ describe('problem-solving gold', () => {
       code: 'EXCESSIVE_SCENARIO_FACT_REFERENCES',
       inferenceId: 'II1',
     }));
+  });
+
+  it('사람이 검토한 압축 충분 경로의 필수 근거와 생략 허용 근거를 보존한다', () => {
+    const gold = ProblemQuestionGoldSchema.parse(auditedGoldFixture('hydrogen-production-q12'));
+
+    expect(gold.sufficientGroundSets).toHaveLength(2);
+    expect(gold.sufficientGroundSets).toEqual(expect.arrayContaining([expect.objectContaining({
+      setId: 'SGS-C4-CONVERSION-BYPRODUCT-COMPRESSED',
+      choiceId: 'C4',
+      targetClaimIds: ['OC4-1'],
+      requiredSourceRefs: ['MP3', 'SF1', 'SF3'],
+      allowedOmissionSourceRefs: ['MP5', 'MP6'],
+      reviewStatus: 'human_reviewed',
+    }), expect.objectContaining({
+      setId: 'SGS-C4-CONVERSION-STOICHIOMETRY-COMPRESSED',
+      requiredSourceRefs: ['MP3', 'SF1', 'MP4'],
+      allowedOmissionSourceRefs: ['SF3', 'MP5', 'MP6'],
+      reviewStatus: 'human_reviewed',
+    })]));
+  });
+
+  it('충분 경로의 끊긴 대상 claim·출처와 필수/생략 중복을 거부한다', () => {
+    const missingClaim = auditedGoldFixture('hydrogen-production-q12') as any;
+    missingClaim.sufficientGroundSets[0].targetClaimIds = ['OC3-1'];
+    expect(() => ProblemQuestionGoldSchema.parse(missingClaim)).toThrow(/해당 선지의 주장/);
+
+    const missingSource = auditedGoldFixture('hydrogen-production-q12') as any;
+    missingSource.sufficientGroundSets[0].requiredSourceRefs = ['MISSING'];
+    expect(() => ProblemQuestionGoldSchema.parse(missingSource)).toThrow(/존재하지 않는 원문/);
+
+    const overlap = auditedGoldFixture('hydrogen-production-q12') as any;
+    overlap.sufficientGroundSets[0].allowedOmissionSourceRefs.push('MP3');
+    expect(() => ProblemQuestionGoldSchema.parse(overlap)).toThrow(/겹칠 수 없다/);
   });
 
   it('실제 보기 적용 문항의 발문 극성, 선지 판단, 참조 경로를 검증한다', () => {

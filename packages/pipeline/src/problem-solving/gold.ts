@@ -153,6 +153,27 @@ export const SupplementalExplanationInferenceSchema = ReferencedEvidenceSchema.e
   reviewStatus: z.enum(['candidate', 'human_reviewed']),
 });
 
+/**
+ * 대표 itemInference와 다른 학생의 압축 경로를 사람이 충분하다고 확정한 계약이다.
+ * requiredSourceRefs는 학생이 실제로 연결해야 하는 핵심 근거이고,
+ * allowedOmissionSourceRefs는 대표 경로에는 있지만 다시 말하지 않아도 되는 근거다.
+ */
+export const HumanReviewedSufficientGroundSetSchema = z.object({
+  setId: z.string().min(1),
+  choiceId: z.string().min(1),
+  targetClaimIds: z.array(z.string().min(1)).min(1),
+  route: z.enum([
+    'APPROVED_SUFFICIENT_GROUND_SET',
+    'SEMANTICALLY_EQUIVALENT_COMPRESSED_CAUSAL_CHAIN',
+    'APPROVED_COMPLETE_ELIMINATION_PATH',
+  ]),
+  operator: z.literal('ALL_OF'),
+  requiredSourceRefs: z.array(z.string().min(1)).min(1),
+  allowedOmissionSourceRefs: z.array(z.string().min(1)),
+  conclusion: z.string().min(1),
+  reviewStatus: z.literal('human_reviewed'),
+}).strict();
+
 export const ProblemQuestionGoldSchema = z.object({
   schemaVersion: z.literal(PROBLEM_GOLD_VERSION),
   reviewStatus: z.enum(['candidate', 'human_reviewed']),
@@ -181,6 +202,7 @@ export const ProblemQuestionGoldSchema = z.object({
   supplementalExplanationInferences: z.array(
     SupplementalExplanationInferenceSchema,
   ),
+  sufficientGroundSets: z.array(HumanReviewedSufficientGroundSetSchema).optional(),
   optionClaims: z.array(OptionClaimSchema).min(2),
   choices: z.array(z.object({
     choiceId: z.string().min(1),
@@ -305,6 +327,51 @@ export const ProblemQuestionGoldSchema = z.object({
     gold.optionClaims.map((claim) => [claim.claimId, claim]),
   );
   if (duplicate(claimIds)) issue(['optionClaims'], '선지 주장 ID 중복');
+  const sourceRefIds = new Set([
+    ...propositionIds,
+    ...factIds,
+    ...visualAssertionIds,
+  ]);
+  const sufficientGroundSets = gold.sufficientGroundSets ?? [];
+  if (duplicate(sufficientGroundSets.map((set) => set.setId))) {
+    issue(['sufficientGroundSets'], '사람 검토 충분 근거 집합 ID 중복');
+  }
+  for (const [index, set] of sufficientGroundSets.entries()) {
+    if (!allowedChoiceIds.has(set.choiceId)) {
+      issue(['sufficientGroundSets', index, 'choiceId'], '존재하지 않는 choiceId');
+    }
+    if (duplicate(set.targetClaimIds)) {
+      issue(['sufficientGroundSets', index, 'targetClaimIds'], '대상 주장 ID 중복');
+    }
+    for (const claimId of set.targetClaimIds) {
+      const claim = claimsById.get(claimId);
+      if (claim === undefined || claim.choiceId !== set.choiceId) {
+        issue(
+          ['sufficientGroundSets', index, 'targetClaimIds'],
+          '충분 근거 집합은 해당 선지의 주장만 대상으로 삼아야 한다.',
+        );
+      }
+    }
+    if (duplicate(set.requiredSourceRefs) || duplicate(set.allowedOmissionSourceRefs)) {
+      issue(['sufficientGroundSets', index], '충분 근거 집합의 출처 참조가 중복됐다.');
+    }
+    if (set.requiredSourceRefs.some((id) => !sourceRefIds.has(id))) {
+      issue(['sufficientGroundSets', index, 'requiredSourceRefs'], '존재하지 않는 원문·보기·시각 근거 ID');
+    }
+    if (set.allowedOmissionSourceRefs.some((id) => !sourceRefIds.has(id))) {
+      issue(
+        ['sufficientGroundSets', index, 'allowedOmissionSourceRefs'],
+        '존재하지 않는 생략 허용 근거 ID',
+      );
+    }
+    const required = new Set(set.requiredSourceRefs);
+    if (set.allowedOmissionSourceRefs.some((id) => required.has(id))) {
+      issue(
+        ['sufficientGroundSets', index, 'allowedOmissionSourceRefs'],
+        '필수 근거와 생략 허용 근거는 겹칠 수 없다.',
+      );
+    }
+  }
   const referencePathStepIds = new Set(gold.referencePath.map((step) => step.stepId));
   if (
     gold.finalAnswerExplanation.referencePathStepIds

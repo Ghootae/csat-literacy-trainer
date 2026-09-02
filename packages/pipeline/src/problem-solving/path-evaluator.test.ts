@@ -22,6 +22,8 @@ import {
   validateProblemPathEvaluatorOutput,
 } from './path-evaluator-input.js';
 import {
+  DEFAULT_PROBLEM_PATH_OPENAI_MODEL,
+  DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL,
   createProblemPathProviderOutputJsonSchema,
   OpenAIProblemPathEvaluator,
   ProblemPathEvaluatorContractError,
@@ -51,6 +53,12 @@ const mohistsGold = JSON.parse(readFileSync(resolve(
 const informationGold = JSON.parse(readFileSync(resolve(
   process.cwd(),
   'packages/pipeline/fixtures/experiments/problem-solving/information-asymmetry-free-marketplace-q13.json',
+), 'utf8')) as ProblemQuestionGold;
+
+const hydrogenGold = JSON.parse(readFileSync(resolve(
+  process.cwd(),
+  'docs/experiments/problem-gold-explanation-audit-cycle-2026-09-02/artifacts',
+  'hydrogen-production-q12/c-gold.json',
 ), 'utf8')) as ProblemQuestionGold;
 
 const informationRationale =
@@ -803,9 +811,46 @@ describe('problem path evaluator input projection', () => {
     if (providerInput.evaluationMode === 'ASSESS_SELECTION_RATIONALE') {
       expect(providerInput.rationaleReview.targetOptionText).toContain('pH가 높아지면');
       expect(providerInput.rationaleReview.studentRationale.text).toContain('⑤가 틀립니다');
+      expect(providerInput.rationaleReview.sufficiencyPolicy).toMatchObject({
+        selectionRestatement: 'NOT_EVIDENCE',
+        humanReviewedSufficientGroundSets: [],
+      });
       expect(providerInput.rationaleReview.sourceFacts.map((fact) => fact.ref))
         .toEqual(expect.arrayContaining(['MP1', 'MP4', 'SF4']));
     }
+  });
+
+  it('사람 검토 충분 경로를 실제 블라인드 근거 판정 경계에 전달한다', () => {
+    const rationale = 'Ⓐ의 전환율은 0.9 이상이고 Ⓑ는 0.6이며 부반응 물질도 상당량 생긴다.';
+    const session = submitInitialProblemResponse(createProblemSolvingSession({
+      sessionId: 'S-HYDROGEN-RATIONALE',
+      questionId: hydrogenGold.questionId,
+      answerChoiceId: hydrogenGold.answerChoiceId,
+    }), { initialChoiceId: 'C4', rationale });
+    const input = createProblemPathEvaluatorInput({
+      evaluationMode: 'ASSESS_SELECTION_RATIONALE',
+      session,
+      gold: { ...hydrogenGold, reviewStatus: 'human_reviewed' },
+    });
+    const providerInput = projectProblemPathEvaluatorProviderInput(input);
+
+    expect(providerInput.evaluationMode).toBe('ASSESS_SELECTION_RATIONALE');
+    if (providerInput.evaluationMode !== 'ASSESS_SELECTION_RATIONALE') return;
+    expect(providerInput.rationaleReview.sufficiencyPolicy.humanReviewedSufficientGroundSets)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          setId: 'SGS-C4-CONVERSION-BYPRODUCT-COMPRESSED',
+          requiredSourceRefs: ['MP3', 'SF1', 'SF3'],
+          allowedOmissionSourceRefs: ['MP5', 'MP6'],
+        }),
+        expect.objectContaining({
+          setId: 'SGS-C4-CONVERSION-STOICHIOMETRY-COMPRESSED',
+          requiredSourceRefs: ['MP3', 'SF1', 'MP4'],
+          allowedOmissionSourceRefs: ['SF3', 'MP5', 'MP6'],
+        }),
+      ]));
+    expect(JSON.stringify(providerInput)).not.toContain('answerChoiceId');
+    expect(JSON.stringify(providerInput)).not.toContain('choiceId');
   });
 
   it('재선택 정답 근거도 선택 ID가 아닌 원문을 블라인드 평가 근거로 투영한다', () => {
@@ -1010,6 +1055,44 @@ describe('problem path evaluator runtime boundary', () => {
     expect(JSON.stringify(schema.properties.nextActionCandidate))
       .not.toContain('DIRECT_COACHING');
     expect(variants[0].properties.target.enum).toEqual(['SELECTED_CHOICE']);
+  });
+
+  it('근거 사전 판정만 Luna medium으로 라우팅하고 경로 진단은 Terra를 유지한다', async () => {
+    const seen: Array<{ mode: string; model: string; effort: string }> = [];
+    const transport: ProblemPathEvaluatorTransport = {
+      async parse(options) {
+        seen.push({ mode: options.mode, model: options.model, effort: options.effort });
+        return options.mode === 'ASSESS_SELECTION_RATIONALE'
+          ? { outputParsed: supportedInformationProviderOutput() }
+          : { outputParsed: diagnosticOutput() };
+      },
+    };
+    const evaluator = new OpenAIProblemPathEvaluator({
+      model: DEFAULT_PROBLEM_PATH_OPENAI_MODEL,
+      rationaleModel: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL,
+      transport,
+      metricRecorder: () => undefined,
+    });
+
+    const diagnosticCall = await evaluator.evaluate(evaluatorInput());
+    const rationaleCall = await evaluator.evaluate(informationRationaleInput());
+
+    expect(seen).toEqual([
+      { mode: 'DIAGNOSE_PATH', model: 'gpt-5.6-terra', effort: 'medium' },
+      { mode: 'ASSESS_SELECTION_RATIONALE', model: 'gpt-5.6-luna', effort: 'medium' },
+    ]);
+    expect(diagnosticCall.call.model).toBe('gpt-5.6-terra');
+    expect(rationaleCall.call.model).toBe('gpt-5.6-luna');
+  });
+
+  it('기존 전역 모델 override로 Luna 근거 라우팅까지 즉시 롤백할 수 있다', () => {
+    const evaluator = new OpenAIProblemPathEvaluator({
+      model: 'gpt-5.6-terra',
+      metricRecorder: () => undefined,
+    });
+
+    expect(evaluator.model).toBe('gpt-5.6-terra');
+    expect(evaluator.rationaleModel).toBe('gpt-5.6-terra');
   });
 
   it('검증된 전체 스냅샷의 local ID를 확정하고 호출 메타데이터를 반환한다', async () => {

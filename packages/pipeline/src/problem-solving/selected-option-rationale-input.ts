@@ -51,6 +51,20 @@ const CommonInputShape = {
       z.literal('MATCH_WITHOUT_SOURCE_REF'),
     ]),
     ancillaryClaims: z.literal('ASSESS_SEPARATELY'),
+    humanReviewedSufficientGroundSets: z.array(z.object({
+      setId: z.string().min(1),
+      targetClaimIds: z.array(z.string().min(1)).min(1),
+      route: z.enum([
+        'APPROVED_SUFFICIENT_GROUND_SET',
+        'SEMANTICALLY_EQUIVALENT_COMPRESSED_CAUSAL_CHAIN',
+        'APPROVED_COMPLETE_ELIMINATION_PATH',
+      ]),
+      operator: z.literal('ALL_OF'),
+      requiredSourceRefs: z.array(z.string().min(1)).min(1),
+      allowedOmissionSourceRefs: z.array(z.string().min(1)),
+      conclusion: z.string().min(1),
+      reviewStatus: z.literal('human_reviewed'),
+    }).strict()),
   }).strict(),
   referencePolicy: z.object({
     allowedSourceRefs: z.array(z.string().min(1)).min(1),
@@ -166,6 +180,9 @@ export function createSelectedOptionRationaleInput(options: {
   const gold = ProblemQuestionGoldSchema.parse(options.gold);
   const targetChoice = gold.choices.find((choice) => choice.choiceId === options.selectedChoiceId);
   if (targetChoice === undefined) throw new Error(`선택 선지를 찾을 수 없다: ${options.selectedChoiceId}`);
+  const humanReviewedSufficientGroundSets = (gold.sufficientGroundSets ?? [])
+    .filter((set) => set.choiceId === targetChoice.choiceId)
+    .map(({ choiceId: _choiceId, ...set }) => set);
   const common = {
     inputVersion: SELECTED_OPTION_RATIONALE_INPUT_VERSION,
     evaluationContext: deriveProblemPathEvaluationContext(gold, targetChoice.choiceId),
@@ -194,6 +211,7 @@ export function createSelectedOptionRationaleInput(options: {
         'MATCH_WITHOUT_SOURCE_REF',
       ] as const,
       ancillaryClaims: 'ASSESS_SEPARATELY' as const,
+      humanReviewedSufficientGroundSets,
     },
   } as const;
   if (options.arm === 'BASELINE_FULL_GOLD') {
@@ -218,6 +236,7 @@ export function createSelectedOptionRationaleInput(options: {
   const { slice, auditManifest } = buildSelectedOptionGoldSlice({
     gold,
     selectedChoiceId: targetChoice.choiceId,
+    studentRationale: options.studentRationale,
     ...(options.experimentAuditId === undefined
       ? {}
       : {
