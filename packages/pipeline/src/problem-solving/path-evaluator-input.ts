@@ -7,6 +7,7 @@ import {
 import {
   ProblemQuestionGoldSchema,
   SupplementalExplanationInferenceSchema,
+  targetClaimEffectForAssessment,
   type ProblemQuestionGold,
 } from './gold.js';
 import {
@@ -101,10 +102,79 @@ const SessionStateProjectionSchema = z.object({
   ])).min(1),
 }).strict();
 
+export const ProblemPathEvaluationProfileSchema = z.enum([
+  'CORRECT_ACCEPTED',
+  'CORRECT_REJECTED',
+  'WRONG_ACCEPTED',
+  'WRONG_REJECTED',
+]);
+
+export const ProblemPathEvaluationContextSchema = z.object({
+  profile: ProblemPathEvaluationProfileSchema,
+  selectionCorrect: z.boolean(),
+  choiceDecision: z.enum(['ACCEPTED', 'REJECTED']),
+  selectionIntent: z.enum(['ACCEPTS_OPTION', 'REJECTS_OPTION']),
+  targetClaimEffects: z.array(z.enum([
+    'SUPPORTS',
+    'CONTRADICTS',
+    'DOES_NOT_JUSTIFY',
+  ])),
+  rationaleRolePolicy: z.object({
+    selectionIntentSource: z.literal('BUTTON_AND_STEM'),
+    targetClaimRestatement: z.literal('EXCLUDE_FROM_EVIDENCE'),
+    evidenceClaims: z.literal('ASSESS_SEPARATELY'),
+  }).strict(),
+}).strict();
+
+export type ProblemPathEvaluationContext = z.infer<
+  typeof ProblemPathEvaluationContextSchema
+>;
+
+export function deriveProblemPathEvaluationContext(
+  goldValue: ProblemQuestionGold | z.infer<typeof BasicProblemGoldSchema>,
+  choiceId: string,
+): ProblemPathEvaluationContext {
+  const gold = goldValue;
+  const choice = gold.choices.find((candidate) => candidate.choiceId === choiceId);
+  if (choice === undefined) throw new Error(`판정 프로필 대상 선지를 찾을 수 없다: ${choiceId}`);
+  const selectionCorrect = choiceId === gold.answerChoiceId;
+  const choiceDecision = gold.stemPolarity === 'SELECT_CORRECT'
+    ? selectionCorrect ? 'ACCEPTED' as const : 'REJECTED' as const
+    : selectionCorrect ? 'REJECTED' as const : 'ACCEPTED' as const;
+  const profile = selectionCorrect
+    ? choiceDecision === 'ACCEPTED' ? 'CORRECT_ACCEPTED' : 'CORRECT_REJECTED'
+    : choiceDecision === 'ACCEPTED' ? 'WRONG_ACCEPTED' : 'WRONG_REJECTED';
+  const choiceClaimIds = new Set(choice.claimIds);
+  const inferenceEffects = gold.itemInferences
+    .filter((inference) => inference.targetClaimIds.some((id) => choiceClaimIds.has(id)))
+    .map((inference) => inference.targetClaimEffect);
+  const assessmentEffects = gold.optionClaims
+    .filter((claim) => choiceClaimIds.has(claim.claimId))
+    .flatMap((claim) => {
+      const effect = targetClaimEffectForAssessment(claim.assessment);
+      return effect === null ? [] : [effect];
+    });
+  return ProblemPathEvaluationContextSchema.parse({
+    profile,
+    selectionCorrect,
+    choiceDecision,
+    selectionIntent: gold.stemPolarity === 'SELECT_INCORRECT'
+      ? 'REJECTS_OPTION'
+      : 'ACCEPTS_OPTION',
+    targetClaimEffects: [...new Set([...inferenceEffects, ...assessmentEffects])],
+    rationaleRolePolicy: {
+      selectionIntentSource: 'BUTTON_AND_STEM',
+      targetClaimRestatement: 'EXCLUDE_FROM_EVIDENCE',
+      evidenceClaims: 'ASSESS_SEPARATELY',
+    },
+  });
+}
+
 export const ProblemPathEvaluatorInputSchema = z.object({
   promptVersion: z.literal(PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION),
   outputSchemaVersion: z.literal(PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION),
   evaluationMode: z.enum(['ASSESS_SELECTION_RATIONALE', 'DIAGNOSE_PATH']),
+  evaluationContext: ProblemPathEvaluationContextSchema,
   sessionState: SessionStateProjectionSchema,
   observations: z.array(ProjectedObservationSchema).min(1),
   basicGold: BasicProblemGoldSchema,
@@ -119,6 +189,13 @@ export const ProblemPathEvaluatorInputSchema = z.object({
     SupplementalExplanationInferenceSchema,
   ),
 }).strict().superRefine((input, context) => {
+  const expectedEvaluationContext = deriveProblemPathEvaluationContext(
+    input.basicGold,
+    input.sessionState.currentChoiceId,
+  );
+  if (JSON.stringify(input.evaluationContext) !== JSON.stringify(expectedEvaluationContext)) {
+    context.addIssue({ code: 'custom', path: ['evaluationContext'], message: '코드 판정 프로필이 현재 선택과 골드에 일치하지 않는다.' });
+  }
   if (
     input.evaluationMode === 'ASSESS_SELECTION_RATIONALE' &&
     input.sessionState.phase !== 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
@@ -130,6 +207,19 @@ export const ProblemPathEvaluatorInputSchema = z.object({
     input.sessionState.phase !== 'AWAITING_EVALUATION'
   ) {
     context.addIssue({ code: 'custom', path: ['sessionState', 'phase'], message: '경로 진단 모드와 세션 단계가 일치하지 않는다.' });
+  }
+  if (
+    input.evaluationMode === 'ASSESS_SELECTION_RATIONALE' &&
+    !input.evaluationContext.selectionCorrect
+  ) {
+    context.addIssue({ code: 'custom', path: ['evaluationContext', 'profile'], message: '정답 근거 판정에는 CORRECT 프로필이 필요하다.' });
+  }
+  if (
+    input.evaluationMode === 'DIAGNOSE_PATH' &&
+    input.sessionState.entryReason === 'WRONG_CHOICE' &&
+    input.evaluationContext.selectionCorrect
+  ) {
+    context.addIssue({ code: 'custom', path: ['evaluationContext', 'profile'], message: '오답 경로 진단에는 WRONG 프로필이 필요하다.' });
   }
   if (
     input.evaluationMode === 'ASSESS_SELECTION_RATIONALE' &&
@@ -151,6 +241,7 @@ export const BlindRationaleProviderInputSchema = z.object({
   promptVersion: z.literal(PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION),
   outputSchemaVersion: z.literal(PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION),
   evaluationMode: z.literal('ASSESS_SELECTION_RATIONALE'),
+  evaluationContext: ProblemPathEvaluationContextSchema,
   rationaleReview: z.object({
     stem: z.string().min(1),
     stemPolarity: z.enum(['SELECT_CORRECT', 'SELECT_INCORRECT']),
@@ -264,6 +355,7 @@ export function projectProblemPathEvaluatorProviderInput(
     promptVersion: input.promptVersion,
     outputSchemaVersion: input.outputSchemaVersion,
     evaluationMode: 'ASSESS_SELECTION_RATIONALE',
+    evaluationContext: input.evaluationContext,
     rationaleReview: {
       stem: input.basicGold.stem,
       stemPolarity: input.basicGold.stemPolarity,
@@ -539,6 +631,7 @@ export function createProblemPathEvaluatorInput(options: {
     promptVersion: PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION,
     outputSchemaVersion: PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION,
     evaluationMode: options.evaluationMode,
+    evaluationContext: deriveProblemPathEvaluationContext(gold, session.latestChoiceId),
     sessionState: {
       sessionId: session.sessionId,
       questionId: session.questionId,
@@ -725,11 +818,23 @@ export function validateProblemPathEvaluatorOutput(
     const providerInput = BlindRationaleProviderInputSchema.parse(
       projectProblemPathEvaluatorProviderInput(input),
     );
-    const requiredStance = providerInput.rationaleReview.stemPolarity === 'SELECT_INCORRECT'
-      ? 'REJECTS_OPTION'
-      : 'ACCEPTS_OPTION';
+    const requiredStance = providerInput.evaluationContext.selectionIntent;
     if (output.requiredStanceForSelection !== requiredStance) {
       throw new Error('발문 극성에 필요한 선지 태도 판정이 일치하지 않는다.');
+    }
+    if (
+      output.optionStance !== requiredStance ||
+      output.stanceConsistency !== 'CONSISTENT'
+    ) {
+      throw new Error('선택 의미와 태도 일관성은 발문·버튼으로 코드가 확정해야 한다.');
+    }
+    const expectedAssessment = output.groundingAssessment === 'SUPPORTED'
+      ? 'SUPPORTED'
+      : output.groundingAssessment === 'CONTRADICTED'
+        ? 'CLEAR_ERROR'
+        : 'UNCERTAIN';
+    if (output.assessment !== expectedAssessment) {
+      throw new Error('최종 근거 판정은 구조화된 근거 관계에서 코드로 파생해야 한다.');
     }
     const allowedSourceRefs = new Set(
       providerInput.rationaleReview.sourceFacts.map((fact) => fact.ref),

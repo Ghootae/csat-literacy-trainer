@@ -37,8 +37,8 @@ const migrations: Readonly<Record<string, Readonly<Record<string, InferenceMigra
     },
     II4: {
       premiseRefs: ['MP1', 'MP4', 'SF4'], operation: 'CHECK_JUSTIFICATION',
-      conclusion: 'pH 상승으로 이온화 지질이 중성화된다는 사실만으로 이 지질의 소수성이 약해진다는 변환은 기본 골드에서 정당화되지 않으므로 해당 주장을 기각한다.',
-      targetClaimEffect: 'CONTRADICTS', targetClaimIds: ['OC5-2'],
+      conclusion: 'pH 상승으로 이온화 지질이 중성화된다는 사실만으로 이 지질의 소수성이 약해진다는 주장이나 그 부정을 도출할 수 없으므로 해당 주장은 기본 골드에서 정당화되지 않는다.',
+      targetClaimEffect: 'DOES_NOT_JUSTIFY', targetClaimIds: ['OC5-2'],
     },
   },
   'gongsun-long-later-mohists-q12': {
@@ -204,6 +204,7 @@ function evidenceFromRefs(gold: any, premiseRefs: readonly string[]) {
 for (const [questionId, questionMigrations] of Object.entries(migrations)) {
   const path = resolve(root, `${questionId}.json`);
   const gold: any = JSON.parse(readFileSync(path, 'utf8'));
+  gold.schemaVersion = 'problem-solving-gold-v2';
   for (const inference of gold.itemInferences) {
     const migration = questionMigrations[inference.inferenceId];
     if (migration === undefined) throw new Error(`${questionId}/${inference.inferenceId} migration 누락`);

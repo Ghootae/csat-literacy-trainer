@@ -125,7 +125,7 @@ for (const config of configs) {
   const answerId = `C${config.answer}`;
   const polarity = question.stem.includes('적절하지 않은') ? 'SELECT_INCORRECT' : 'SELECT_CORRECT';
   const gold = {
-    schemaVersion: 'problem-solving-gold-v1', reviewStatus: 'human_reviewed',
+    schemaVersion: 'problem-solving-gold-v2', reviewStatus: 'human_reviewed',
     source: { sourceId: config.sourceId, exam: source.exam, questionNumber: config.questionNumber, sourcePath, sourceUrl: source.url },
     questionId: config.questionId, passageId: config.passageId, stem: question.stem, stemPolarity: polarity,
     scenario: { text: question.supplements[0].text, facts: config.facts.map((description, i) => ({ id: `SF${i + 1}`, description })) },

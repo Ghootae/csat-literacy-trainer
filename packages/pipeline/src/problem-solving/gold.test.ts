@@ -32,7 +32,8 @@ describe('problem-solving gold', () => {
         expect(inference.description).toBe(inference.conclusion);
         expect(inference.premiseRefs.length).toBeGreaterThan(0);
         expect(inference.targetClaimIds.length).toBeGreaterThan(0);
-        expect(['SUPPORTS', 'CONTRADICTS']).toContain(inference.targetClaimEffect);
+        expect(['SUPPORTS', 'CONTRADICTS', 'DOES_NOT_JUSTIFY'])
+          .toContain(inference.targetClaimEffect);
       }
       expect(auditProblemGoldWarnings(gold)).toEqual([]);
     }
@@ -51,6 +52,26 @@ describe('problem-solving gold', () => {
     raw.itemInferences.find((item: any) => item.inferenceId === 'II5').targetClaimEffect = 'SUPPORTS';
 
     expect(() => ProblemQuestionGoldSchema.parse(raw)).toThrow(/판정 방향이 모순/);
+  });
+
+  it('직접 모순과 비정당화를 서로 다른 효과로 강제한다', () => {
+    const unjustifiedAsContradiction = fixture(
+      'mrna-vaccine-lipid-nanoparticle-q19.json',
+    ) as any;
+    unjustifiedAsContradiction.itemInferences
+      .find((item: any) => item.inferenceId === 'II4')
+      .targetClaimEffect = 'CONTRADICTS';
+    expect(() => ProblemQuestionGoldSchema.parse(unjustifiedAsContradiction))
+      .toThrow(/판정 방향이 모순/);
+
+    const contradictionAsUnjustified = fixture(
+      'gongsun-long-later-mohists-q12.json',
+    ) as any;
+    contradictionAsUnjustified.itemInferences
+      .find((item: any) => item.inferenceId === 'II4')
+      .targetClaimEffect = 'DOES_NOT_JUSTIFY';
+    expect(() => ProblemQuestionGoldSchema.parse(contradictionAsUnjustified))
+      .toThrow(/판정 방향이 모순/);
   });
 
   it('기존 근거 참조와 premiseRefs가 다르면 거부한다', () => {
@@ -157,6 +178,23 @@ describe('problem-solving gold', () => {
         groundedness: 'PLAUSIBLE',
       }),
     ]);
+  });
+
+  it('mRNA ⑤의 비함의 추론을 DOES_NOT_JUSTIFY로 보존한다', () => {
+    const gold = ProblemQuestionGoldSchema.parse(
+      fixture('mrna-vaccine-lipid-nanoparticle-q19.json'),
+    );
+    const inference = gold.itemInferences.find((item) => item.inferenceId === 'II4');
+
+    expect(inference).toEqual(expect.objectContaining({
+      targetClaimEffect: 'DOES_NOT_JUSTIFY',
+      targetClaimIds: ['OC5-2'],
+    }));
+    expect(gold.optionClaims.find((claim) => claim.claimId === 'OC5-2'))
+      .toEqual(expect.objectContaining({
+        assessment: 'NOT_JUSTIFIED',
+        decision: 'REJECTED',
+      }));
   });
 
   it('⑤를 주장 사슬로 분해하고 최초 결정적 이탈만 정답 경로에 사용한다', () => {

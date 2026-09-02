@@ -25,6 +25,10 @@ export * from './dialogue-experiment/two-stage-evaluator.js';
 export * from './learning-session/handoff.js';
 // 문항 상세 골드와 기준 경로. 문단 PASS 계약과 분리한다.
 export * from './problem-solving/gold.js';
+export * from './problem-solving/gold-source-fidelity.js';
+// 공식 해설을 claim 단위로 분해해 기본·보충·제외 배치를 먼저 고정하는 계약.
+export * from './problem-solving/explanation-audit.js';
+export * from './problem-solving/explanation-audit-benchmark.js';
 export * from './problem-solving/headless-pilot.js';
 // 오답 선택 이후 관찰·가설·타깃별 충분성·단일 행동을 분리하는 진단 기록 계약.
 export * from './problem-solving/episode.js';
@@ -34,6 +38,8 @@ export * from './problem-solving/session.js';
 export * from './problem-solving/path-evaluator.js';
 export * from './problem-solving/path-evaluator-input.js';
 export * from './problem-solving/path-evaluator-runtime.js';
+export * from './problem-solving/selected-option-gold-slice.js';
+export * from './problem-solving/selected-option-rationale-input.js';
 export * from './problem-solving/diagnostic-turn-v2.js';
 export * from './problem-solving/path-probe.js';
 export * from './problem-solving/vertical-slice.js';

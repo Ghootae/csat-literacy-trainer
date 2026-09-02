@@ -725,6 +725,58 @@ export const SelectionRationaleEvaluationOutputSchema = z.object({
   }
 });
 
+export const SelectionRationaleEvidenceFindingSchema = z.object({
+  studentQuote: QuoteEvidenceSchema,
+  relationToGold: z.enum(['MATCHES', 'CONFLICTS', 'NOT_ESTABLISHED']),
+  sourceRefs: z.array(z.string().min(1)),
+}).strict().superRefine((finding, context) => {
+  if (
+    finding.relationToGold !== 'NOT_ESTABLISHED' &&
+    finding.sourceRefs.length === 0
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['sourceRefs'],
+      message: '골드와 일치하거나 충돌하는 근거 finding에는 출처 참조가 필요하다.',
+    });
+  }
+});
+
+/**
+ * 선택 의미와 정오는 코드가 소유한다. 공급자는 학생 근거와 승인 골드의 관계만 반환한다.
+ * 공개 세션 호환 형식은 런타임에서 SelectionRationaleEvaluationOutputSchema로 파생한다.
+ */
+export const SelectionRationaleProviderOutputSchema = z.object({
+  schemaVersion: z.literal(PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION),
+  mode: z.literal('ASSESS_SELECTION_RATIONALE'),
+  rationaleAssessment: z.enum(['SUPPORTED', 'CONTRADICTED', 'INSUFFICIENT']),
+  reason: z.string().min(1),
+  evidenceFindings: z.array(SelectionRationaleEvidenceFindingSchema).min(1),
+}).strict().superRefine((output, context) => {
+  const relations = new Set(output.evidenceFindings.map((finding) => finding.relationToGold));
+  if (output.rationaleAssessment === 'SUPPORTED' && !relations.has('MATCHES')) {
+    context.addIssue({
+      code: 'custom',
+      path: ['evidenceFindings'],
+      message: 'SUPPORTED 근거 판정에는 골드와 일치하는 finding이 필요하다.',
+    });
+  }
+  if (output.rationaleAssessment === 'CONTRADICTED' && !relations.has('CONFLICTS')) {
+    context.addIssue({
+      code: 'custom',
+      path: ['evidenceFindings'],
+      message: 'CONTRADICTED 근거 판정에는 골드와 충돌하는 finding이 필요하다.',
+    });
+  }
+  if (output.rationaleAssessment === 'INSUFFICIENT' && !relations.has('NOT_ESTABLISHED')) {
+    context.addIssue({
+      code: 'custom',
+      path: ['evidenceFindings'],
+      message: 'INSUFFICIENT 근거 판정에는 확인되지 않은 finding이 필요하다.',
+    });
+  }
+});
+
 export const ProblemPathEvaluatorOutputSchema = z.discriminatedUnion('mode', [
   SelectionRationaleEvaluationOutputSchema,
   ProblemPathDiagnosticOutputSchema,
@@ -735,5 +787,8 @@ export type EvaluatorTargetSnapshot = z.infer<typeof EvaluatorTargetSnapshotSche
 export type ProblemPathDiagnosticOutput = z.infer<typeof ProblemPathDiagnosticOutputSchema>;
 export type SelectionRationaleEvaluationOutput = z.infer<
   typeof SelectionRationaleEvaluationOutputSchema
+>;
+export type SelectionRationaleProviderOutput = z.infer<
+  typeof SelectionRationaleProviderOutputSchema
 >;
 export type ProblemPathEvaluatorOutput = z.infer<typeof ProblemPathEvaluatorOutputSchema>;

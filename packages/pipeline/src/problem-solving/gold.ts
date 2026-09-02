@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 
-export const PROBLEM_GOLD_VERSION = 'problem-solving-gold-v1' as const;
+export const PROBLEM_GOLD_VERSION = 'problem-solving-gold-v2' as const;
 
 export const CandidateDivergenceLayerSchema = z.enum([
   'PASSAGE_REPRESENTATION',
@@ -101,6 +101,23 @@ export const OptionClaimSchema = ReferencedEvidenceSchema.extend({
   ])),
 });
 
+export const TargetClaimEffectSchema = z.enum([
+  'SUPPORTS',
+  'CONTRADICTS',
+  'DOES_NOT_JUSTIFY',
+]);
+
+export type TargetClaimEffect = z.infer<typeof TargetClaimEffectSchema>;
+
+export function targetClaimEffectForAssessment(
+  assessment: unknown,
+): TargetClaimEffect | null {
+  if (assessment === 'SUPPORTED') return 'SUPPORTS';
+  if (assessment === 'CONTRADICTED') return 'CONTRADICTS';
+  if (assessment === 'NOT_JUSTIFIED') return 'DOES_NOT_JUSTIFY';
+  return null;
+}
+
 export const ItemInferenceSchema = ReferencedEvidenceSchema.extend({
   inferenceId: z.string().min(1),
   description: z.string().min(1),
@@ -116,7 +133,7 @@ export const ItemInferenceSchema = ReferencedEvidenceSchema.extend({
     'CHECK_JUSTIFICATION',
   ]),
   conclusion: z.string().min(1),
-  targetClaimEffect: z.enum(['SUPPORTS', 'CONTRADICTS']),
+  targetClaimEffect: TargetClaimEffectSchema,
   targetClaimIds: z.array(z.string().min(1)).min(1),
   grounding: z.enum([
     'SOURCE_EXPLICIT',
@@ -464,10 +481,9 @@ export const ProblemQuestionGoldSchema = z.object({
       }
       const compatible = inference.targetClaimEffect === 'SUPPORTS'
         ? claim.assessment === 'SUPPORTED' && claim.decision === 'ACCEPTED'
-        : (
-            claim.assessment === 'CONTRADICTED' ||
-            claim.assessment === 'NOT_JUSTIFIED'
-          ) && claim.decision === 'REJECTED';
+        : inference.targetClaimEffect === 'CONTRADICTS'
+          ? claim.assessment === 'CONTRADICTED' && claim.decision === 'REJECTED'
+          : claim.assessment === 'NOT_JUSTIFIED' && claim.decision === 'REJECTED';
       if (!compatible) {
         issue(
           ['itemInferences', index, 'targetClaimEffect'],

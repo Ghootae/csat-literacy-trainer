@@ -8,6 +8,7 @@ import {
   ProblemQuestionGoldSchema,
   type ProblemQuestionGold,
 } from './gold.js';
+import { injectProblemGoldSourceFidelity } from './gold-source-fidelity.js';
 import {
   PROBLEM_GOLD_GENERATION_PROMPT_VERSION,
   loadProblemGoldGenerationPrompt,
@@ -176,7 +177,11 @@ export async function generateProblemGoldCandidate(options: {
   } catch {
     // 최초 공급자 출력은 호출자가 원문 그대로 저장하고 검수한다.
   }
-  const validated = ProblemQuestionGoldSchema.safeParse(parsedOutput);
+  const fidelityInjectedOutput = injectProblemGoldSourceFidelity(
+    parsedOutput,
+    { source: options.source },
+  );
+  const validated = ProblemQuestionGoldSchema.safeParse(fidelityInjectedOutput);
 
   return {
     rawOutputText: response.output_text,

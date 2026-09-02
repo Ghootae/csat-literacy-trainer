@@ -4,6 +4,7 @@ import { z } from 'zod/v4';
 import { recordMetric, type CallMetric } from '../llm/client.js';
 import {
   SelectionRationaleEvaluationOutputSchema,
+  SelectionRationaleProviderOutputSchema,
   PROBLEM_PATH_DIAGNOSTIC_PROMPT_VERSION,
   PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION,
   ProblemPathDiagnosticOutputSchema,
@@ -93,7 +94,7 @@ export function createProblemPathProviderOutputJsonSchema(options: {
   readonly allowedActionTargetKinds?: readonly ('SELECTED_CHOICE' | 'MISSED_ANSWER' | 'ANSWER_RATIONALE')[];
 }) {
   const jsonSchema = options.mode === 'ASSESS_SELECTION_RATIONALE'
-    ? z.toJSONSchema(SelectionRationaleEvaluationOutputSchema)
+    ? z.toJSONSchema(SelectionRationaleProviderOutputSchema)
     : z.toJSONSchema(ProblemPathDiagnosticOutputSchema);
   if (options.mode !== 'DIAGNOSE_PATH') return jsonSchema;
 
@@ -241,106 +242,45 @@ export interface OpenAIProblemPathEvaluatorOptions {
   readonly effort?: ProblemPathEvaluatorEffort;
   readonly timeoutMs?: number;
   readonly maxTransportRetries?: number;
-  readonly maxSemanticContradictionRetries?: number;
   readonly retryDelayMs?: number;
   readonly now?: () => Date;
   readonly transport?: ProblemPathEvaluatorTransport;
   readonly metricRecorder?: (metric: CallMetric) => void;
 }
 
-type SelectionRationaleOutput = z.infer<typeof SelectionRationaleEvaluationOutputSchema>;
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-}
-
-function explicitTargetStance(
-  text: string,
-  targetMarkers: readonly string[],
-): 'ACCEPTS_OPTION' | 'REJECTS_OPTION' | 'CONTRADICTORY' | null {
-  const marker = targetMarkers.map(escapeRegExp).join('|');
-  if (marker === '') return null;
-  const targetThenReject = new RegExp(
-    `(?:${marker})[\\s\\S]{0,60}(?:틀(?:리|린|렸)|잘못|부적절|옳지\\s*않|맞지\\s*않|성립하지\\s*않|거부|결론의\\s*방향이\\s*반대)`,
-    'u',
-  );
-  const targetThenAccept = new RegExp(
-    `(?:${marker})[\\s\\S]{0,60}(?:맞는\\s*설명|맞다고|옳은|옳다고|적절하|성립한다|부합한다|받아들인)`,
-    'u',
-  );
-  const rejects = targetThenReject.test(text);
-  const accepts = targetThenAccept.test(text);
-  if (rejects && accepts) return 'CONTRADICTORY';
-  if (rejects) return 'REJECTS_OPTION';
-  if (accepts) return 'ACCEPTS_OPTION';
-  return null;
-}
-
-/** 모델 설명·인용이 명시한 대상 선지 태도와 구조화 enum의 의미 모순을 찾는다. */
-export function hasSelectionRationaleSemanticContradiction(
-  output: SelectionRationaleOutput,
+/** 공급자의 근거 판정만 사용하고 선택 의미·최종 라벨은 코드가 파생한다. */
+export function resolveSelectionRationaleProviderOutput(
+  outputValue: unknown,
   input: ProblemPathEvaluatorInput,
-): boolean {
-  if (input.evaluationMode !== 'ASSESS_SELECTION_RATIONALE') return false;
-  const targetChoice = input.basicGold.choices.find(
-    (choice) => choice.choiceId === input.sessionState.currentChoiceId,
-  );
-  if (targetChoice === undefined) return false;
-  const circled = ['⓪', '①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'][targetChoice.position] ?? '';
-  const markers = [
-    '대상 선지',
-    '해당 선지',
-    '이 선지',
-    targetChoice.choiceId,
-    `${targetChoice.position}번`,
-    circled,
-  ].filter((value) => value !== '');
-  const texts = [
-    output.reason,
-    ...output.evidence.flatMap((item) => item.kind === 'QUOTE' ? [item.quote] : []),
-  ];
-  const stances = texts
-    .map((text) => explicitTargetStance(text, markers))
-    .filter((stance): stance is NonNullable<typeof stance> => stance !== null);
-  if (stances.includes('CONTRADICTORY')) return true;
-  const explicit = new Set(stances);
-  if (explicit.size > 1) return true;
-  const [stance] = explicit;
-  return stance !== undefined &&
-    output.optionStance !== 'UNCLEAR' &&
-    stance !== output.optionStance;
-}
-
-function uncertainSemanticFallback(
-  input: ProblemPathEvaluatorInput,
-  providerInput: ReturnType<typeof projectProblemPathEvaluatorProviderInput>,
-): SelectionRationaleOutput {
-  if (
-    input.evaluationMode !== 'ASSESS_SELECTION_RATIONALE' ||
-    providerInput.evaluationMode !== 'ASSESS_SELECTION_RATIONALE' ||
-    !('rationaleReview' in providerInput)
-  ) {
-    throw new Error('빠른 근거 평가의 의미 모순 폴백은 블라인드 근거 판정에만 사용할 수 있다.');
+) {
+  if (input.evaluationMode !== 'ASSESS_SELECTION_RATIONALE') {
+    throw new Error('선택 근거 공급자 출력은 ASSESS_SELECTION_RATIONALE 입력에서만 해석할 수 있다.');
   }
-  const rationale = providerInput.rationaleReview.studentRationale;
+  const output = SelectionRationaleProviderOutputSchema.parse(outputValue);
+  const requiredStance = input.evaluationContext.selectionIntent;
+  const groundingAssessment = output.rationaleAssessment === 'SUPPORTED'
+    ? 'SUPPORTED' as const
+    : output.rationaleAssessment === 'CONTRADICTED'
+      ? 'CONTRADICTED' as const
+      : 'NOT_ENOUGH_EVIDENCE' as const;
+  const assessment = output.rationaleAssessment === 'SUPPORTED'
+    ? 'SUPPORTED' as const
+    : output.rationaleAssessment === 'CONTRADICTED'
+      ? 'CLEAR_ERROR' as const
+      : 'UNCERTAIN' as const;
+  const evidence = output.evidenceFindings.map((finding) => finding.studentQuote);
+  const sourceRefs = [...new Set(output.evidenceFindings.flatMap((finding) => finding.sourceRefs))];
   return SelectionRationaleEvaluationOutputSchema.parse({
     schemaVersion: PROBLEM_PATH_EVALUATOR_SCHEMA_VERSION,
     mode: 'ASSESS_SELECTION_RATIONALE',
-    optionStance: 'UNCLEAR',
-    requiredStanceForSelection: input.basicGold.stemPolarity === 'SELECT_INCORRECT'
-      ? 'REJECTS_OPTION'
-      : 'ACCEPTS_OPTION',
-    stanceConsistency: 'UNCLEAR',
-    groundingAssessment: 'NOT_ENOUGH_EVIDENCE',
-    assessment: 'UNCERTAIN',
-    reason: '두 차례의 빠른 근거 평가에서 자연어 설명과 구조화 선지 태도가 모순되어 안전하게 판정할 수 없다.',
-    evidence: [{
-      kind: 'QUOTE',
-      observationId: rationale.observationId,
-      sourceField: rationale.sourceField,
-      quote: rationale.text,
-    }],
-    sourceRefs: [],
+    optionStance: requiredStance,
+    requiredStanceForSelection: requiredStance,
+    stanceConsistency: 'CONSISTENT',
+    groundingAssessment,
+    assessment,
+    reason: output.reason,
+    evidence,
+    sourceRefs,
   });
 }
 
@@ -349,7 +289,6 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
   readonly effort: ProblemPathEvaluatorEffort;
   private readonly timeoutMs: number;
   private readonly maxTransportRetries: number;
-  private readonly maxSemanticContradictionRetries: number;
   private readonly retryDelayMs: number;
   private readonly now: () => Date;
   private readonly transport: ProblemPathEvaluatorTransport;
@@ -362,7 +301,6 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
     this.effort = options.effort ?? 'medium';
     this.timeoutMs = options.timeoutMs ?? 60_000;
     this.maxTransportRetries = options.maxTransportRetries ?? 1;
-    this.maxSemanticContradictionRetries = options.maxSemanticContradictionRetries ?? 1;
     this.retryDelayMs = options.retryDelayMs ?? 500;
     this.now = options.now ?? (() => new Date());
     this.transport = options.transport ?? new OpenAIProblemPathTransport();
@@ -378,7 +316,6 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
 
     let attempt = 0;
     let transportRetriesUsed = 0;
-    let semanticContradictionRetriesUsed = 0;
     while (true) {
       attempt += 1;
       const attemptStarted = performance.now();
@@ -403,7 +340,10 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
         }
         let result: ProblemPathEvaluatorOutput;
         try {
-          const validated = validateProblemPathEvaluatorOutput(response.outputParsed, input);
+          const resolvedOutput = input.evaluationMode === 'ASSESS_SELECTION_RATIONALE'
+            ? resolveSelectionRationaleProviderOutput(response.outputParsed, input)
+            : response.outputParsed;
+          const validated = validateProblemPathEvaluatorOutput(resolvedOutput, input);
           result = validated.mode === 'DIAGNOSE_PATH'
             ? resolveProblemPathEvaluatorIds(validated, {
                 turnSequence: input.sessionState.evaluationSequence,
@@ -412,42 +352,11 @@ export class OpenAIProblemPathEvaluator implements ProblemPathEvaluator {
         } catch (error) {
           throw new ProblemPathEvaluatorContractError(error, response.outputParsed);
         }
-        const semanticContradiction = result.mode === 'ASSESS_SELECTION_RATIONALE' &&
-          hasSelectionRationaleSemanticContradiction(result, input);
-        if (
-          semanticContradiction &&
-          semanticContradictionRetriesUsed < this.maxSemanticContradictionRetries
-        ) {
-          semanticContradictionRetriesUsed += 1;
-          const durationMs = Math.round(performance.now() - attemptStarted);
-          attempts.push({
-            attempt,
-            outcome: 'error',
-            durationMs,
-            errorType: 'semantic_stance_contradiction',
-          });
-          this.metricRecorder({
-            ts: this.now().toISOString(),
-            op: 'problem-solving-evaluator',
-            model: this.model,
-            effort: this.effort,
-            paragraphId: input.basicGold.passageId,
-            inputTokens: response.usage?.inputTokens ?? 0,
-            outputTokens: response.usage?.outputTokens ?? 0,
-            ms: durationMs,
-            attempt,
-            error: { type: 'semantic_stance_contradiction', retryable: true },
-          });
-          continue;
-        }
-        const semanticFallback = semanticContradiction;
-        if (semanticFallback) result = uncertainSemanticFallback(input, providerInput);
         const durationMs = Math.round(performance.now() - attemptStarted);
         attempts.push({
           attempt,
           outcome: 'success',
           durationMs,
-          ...(semanticFallback ? { errorType: 'semantic_stance_contradiction_fallback' } : {}),
         });
         this.metricRecorder({
           ts: this.now().toISOString(),

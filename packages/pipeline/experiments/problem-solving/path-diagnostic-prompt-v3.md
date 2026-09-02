@@ -10,6 +10,7 @@
 
 `DIAGNOSE_PATH` 입력에는 다음이 제공된다.
 
+- `evaluationContext`: 버튼 선택과 승인 골드로 코드가 확정한 4방향 판정 프로필
 - `sessionState`: 현재 단계, 선택, 질문 예산, 코드가 허용한 행동
 - `observations`: 최초 제출과 모든 후속 답변·재선택 원문
 - `basicGold`: 지문·보기·시각 정보·선지 주장·문항 추론·기준 경로
@@ -19,6 +20,7 @@
 
 `ASSESS_SELECTION_RATIONALE` 입력은 별도의 블라인드 projection이다. 다음만 제공된다.
 
+- `evaluationContext`: 코드가 확정한 `CORRECT_ACCEPTED` 또는 `CORRECT_REJECTED` 프로필과 선택 판단 방향
 - `stem`, `stemPolarity`
 - 익명화된 `targetOptionText`
 - `studentRationale` 원문, 관찰 ID와 인용에 사용할 `sourceField`
@@ -42,6 +44,8 @@
 코드만 다음을 확정한다.
 
 - 정오, 허용 행동과 질문 예산
+- `CORRECT_ACCEPTED`, `CORRECT_REJECTED`, `WRONG_ACCEPTED`, `WRONG_REJECTED` 판정 프로필
+- 버튼 선택과 발문 극성을 결합한 `selectionIntent`
 - 보충 해설 접근 권한
 - ID 영구 부여와 상태 변경
 - 재선택·직접 코칭·완료 조건
@@ -148,7 +152,7 @@ ID 공간을 섞지 않는다.
 
 `WRONG_CHOICE`에서는 다음을 독립적으로 평가한다.
 
-- `SELECTED_CHOICE`: 선택한 선지를 왜 부적절하다고 판단했는가?
+- `SELECTED_CHOICE`: 코드가 지정한 프로필에 따라 학생이 채택된 선지를 왜 기각했거나, 기각된 선지를 왜 채택했는가?
 - `MISSED_ANSWER`: 정답 선지를 왜 부적절하다고 판단하지 못했거나 검토하지 않았는가?
 
 한 발화가 한 타깃만 설명할 수 있다. 한 타깃이 충분해도 다른 타깃은 불충분하거나 미평가일 수 있다.
@@ -188,6 +192,30 @@ ID 공간을 섞지 않는다.
 정답 키와 다르다는 이유만으로 `CLEAR_ERROR`를 사용하지 않는다. `KEY_CONSTRAINED` 주장과 검수 메모가 있는 선지에서는 합리적 대안과 문항 한계를 우선 점검한다.
 
 합리적 이의 제기를 학생 오류로 바꾸어 정답 키를 방어하지 않는다.
+
+### 코드 소유 4방향 프로필
+
+`evaluationContext.profile`은 모델이 재판정할 대상이 아니다.
+
+- `CORRECT_ACCEPTED`: 채택되는 선지를 정답으로 선택했다. 최소 충분 근거가 하나라도 정확한지만 확인한다.
+- `CORRECT_REJECTED`: 기각되는 선지를 정답으로 선택했다. 결정적인 모순 또는 비정당화 이유 하나를 정확히 지적했는지만 확인한다.
+- `WRONG_ACCEPTED`: 부정 발문에서 실제로 채택되는 선지를 오답으로 골랐다. 학생이 그 선지를 왜 기각했는지 진단한다.
+- `WRONG_REJECTED`: 정발문에서 실제로 기각되는 선지를 오답으로 골랐다. 학생이 그 선지를 왜 채택했는지 진단한다.
+
+`choiceDecision`과 `selectionCorrect`를 학생 원문에서 다시 추론하거나 뒤집지 않는다.
+`targetClaimEffects`의 `DOES_NOT_JUSTIFY`는 주장과 부정 모두 도출되지 않는 비함의다.
+학생이 근거 없는 비약으로 해당 주장을 채택했다면 이는 `CLEAR_ERROR`일 수 있으며,
+`DOES_NOT_JUSTIFY`라는 이유만으로 `GOLD_OR_ITEM_LIMITATION`을 선택하지 않는다.
+
+학생 근거를 다음 역할로 분리해 읽는다.
+
+1. `targetClaimRestatement`: 선지 내용을 인용하거나 다시 적은 부분
+2. `evidenceClaims`: 학생이 실제 근거로 제시한 지문·보기·시각 명제
+3. `reasoningLink`: 근거에서 버튼 선택 판단으로 이어지는 연결
+
+선지 재기술은 학생의 독립 근거나 선지 수용 태도가 아니다. `rationaleRolePolicy`에 따라
+재기술을 근거에서 제외하고 실제 근거와 연결만 평가한다. 명시적으로 버튼 선택 판단을
+번복하는 문장이 있을 때만 선택 의도와의 충돌을 기록한다.
 
 ## 9. 타깃별 충분성
 
@@ -239,18 +267,21 @@ ID 공간을 섞지 않는다.
 
 ## 10. 선택 근거 블라인드 판정
 
-`ASSESS_SELECTION_RATIONALE`은 학생이 정답을 골랐는지 모르는 상태에서 다음을 함께 반환한다.
+`ASSESS_SELECTION_RATIONALE`은 코드가 정답 선택과 판단 방향을 확정한 상태에서 근거만 평가한다.
 
-- `optionStance`: 학생 근거가 대상 선지를 받아들이는지, 거부하는지, 불명확한지
-- `requiredStanceForSelection`: 발문 극성상 그 선지를 선택하려면 받아들여야 하는지, 거부해야 하는지
-- `stanceConsistency`: 두 태도가 일치하는지, 충돌하는지, 불명확한지
-- `groundingAssessment`: 학생 근거가 제공된 출처 사실에 의해 지지되는지, 충돌하는지, 판단하기 어려운지
+- `rationaleAssessment`: 학생 설명이 코드가 지정한 선택 판단을 뒷받침하는지 평가한다.
+- `evidenceFindings`: 학생 원문 인용, 승인 골드와의 관계, 사용한 출처 참조를 묶는다.
 
-최종 `assessment`는 다음 중 하나다.
+`rationaleAssessment`는 다음 중 하나다.
 
-- `SUPPORTED`: 선택에 필요한 태도와 학생 태도가 일치하고 근거가 제공된 출처 사실에 의해 지지된다.
-- `UNCERTAIN`: 모호·불완전하거나 안전하게 평가할 수 없다.
-- `CLEAR_ERROR`: 학생 태도가 선택에 필요한 태도와 충돌하거나 학생 근거가 출처 사실과 명백히 충돌한다.
+- `SUPPORTED`: 학생 설명이 라우팅된 선택 판단을 승인 골드로 뒷받침한다.
+- `CONTRADICTED`: 학생 설명이 승인 골드 또는 라우팅된 선택 판단과 명백히 충돌한다.
+- `INSUFFICIENT`: 설명이 모호·불완전해 어느 쪽도 확정할 수 없다.
+
+각 `evidenceFinding.relationToGold`는 `MATCHES | CONFLICTS | NOT_ESTABLISHED` 중 하나다.
+`MATCHES`와 `CONFLICTS`에는 제공된 `sourceFacts.ref`를 하나 이상 넣는다. 선택 의미,
+정오, 프로필과 최종 공개 라벨은 출력하지 않는다. 코드는 `evaluationContext`와
+`rationaleAssessment`를 결합해 공개 결과를 파생한다.
 
 `sourceCoverage.status`가 `COMPLETE_RELEVANT_SOURCE_FACTS_FOR_TARGET_OPTION`이면
 제공된 `sourceFacts`는 대상 선지 관계를 판단하기 위한 승인된 관련 사실 전체다.
@@ -265,9 +296,14 @@ ID 공간을 섞지 않는다.
 부정 방향이 있으면 이를 단순히 ‘해당 사례에 적용한다’는 긍정 방향으로 뒤집지 않는다.
 대상 선지의 주장과 이 결론이 같은 방향인지 반대 방향인지 문장 전체로 비교한다.
 
-`SELECT_INCORRECT` 발문에서 대상 선지를 선택하려면 그 선지를 거부해야 하고, `SELECT_CORRECT` 발문에서 선택하려면 그 선지를 받아들여야 한다. 예를 들어 부정 발문에서 대상 선지를 고른 학생이 “이 설명은 맞다”고 말하면 출처 사실 판정과 무관하게 `stanceConsistency: CONFLICT`, `assessment: CLEAR_ERROR`다.
+`SELECT_INCORRECT` 발문에서 대상 선지를 선택한 버튼 판단은 그 선지를 거부한 것이고,
+`SELECT_CORRECT` 발문에서는 받아들인 것이다. 이를 근거 문장에서 다시 추측하거나
+별도 태도 라벨로 출력하지 않는다. 학생 설명이 버튼 판단을 명시적으로 번복하면
+라우팅된 판단을 뒷받침하지 못하므로 `rationaleAssessment: CONTRADICTED`로 판정한다.
 
-선택 자체는 `SUPPORTED`의 근거가 아니다. 표현이 불완전하다는 이유만으로 `CLEAR_ERROR`를 사용하지 않는다. 모든 판정에는 학생 근거의 실제 `QUOTE`가 필요하다. 사실 충돌을 주장할 때만 제공된 `sourceFacts.ref`를 `sourceRefs`에 넣고, 태도 충돌만으로 판정할 때는 빈 배열일 수 있다.
+선택 자체는 `SUPPORTED`의 근거가 아니다. 표현이 불완전하다는 이유만으로
+`CONTRADICTED`를 사용하지 않는다. 모든 finding에는 학생 근거의 정확한 원문 인용이
+필요하다.
 
 한국어의 평가 주체와 인용 범위를 먼저 해소한다. “④가 두 표현을 같다고 잘못 본다”,
 “④만 … 잘못 봅니다”, “④의 전제가 틀렸다”는 학생이 대상 선지를 거부하는 표현이다.
@@ -275,12 +311,11 @@ ID 공간을 섞지 않는다.
 자신의 이전 판단 오류를 말한다. `잘못`, `틀리다`, `맞다` 같은 단어만 보고 태도를
 뒤집지 말고, 누가 무엇을 잘못 판단했다는 문장인지 대상 선지 전체와 함께 판정한다.
 대상 선지를 거부하는 근거가 `sourceFacts`의 관계와 의미상 일치하면 표면 어휘가
-다르더라도 `SUPPORTED`이며, 주체가 모호하면 `CLEAR_ERROR`가 아니라 `UNCERTAIN`이다.
-
-출력 직전에 `reason`과 원문 `QUOTE`가 대상 선지를 받아들인다고 설명하는지 거부한다고
-설명하는지를 `optionStance`와 다시 대조한다. 자연어 설명에서는 대상 선지가 틀렸다고
-하면서 `optionStance: ACCEPTS_OPTION`을 출력하거나, 맞다고 하면서
-`REJECTS_OPTION`을 출력하지 않는다.
+다르더라도 `SUPPORTED`이며, 주체가 모호하면 `CONTRADICTED`가 아니라 `INSUFFICIENT`다.
+“이 설명이 적절하지 않다”, “그런 내용은 적절하지 않다”처럼 평가 대상이 설명·내용으로
+명시된 종결 표현은 라우팅된 판단과 근거의 연결을 평가할 때 문장 전체로 읽는다.
+“지급을 거절할 수 없다”처럼 선지 내부 사실 관계에 포함된 거부 동사만으로 별도 태도를
+추정하지 않는다. 자연어 표현을 구조화 태도 라벨로 다시 변환하는 작업은 하지 않는다.
 
 정답 근거가 모호하면 이해 성공으로 확정하지 않지만, 명백한 오류도 없으므로 추가 진단을 강제하지 않는다. 코드는 이를 `UNVERIFIED_RATIONALE_CORRECT`로 기록할 수 있다.
 

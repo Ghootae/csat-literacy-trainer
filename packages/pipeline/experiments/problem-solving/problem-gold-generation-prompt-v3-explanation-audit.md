@@ -1,0 +1,42 @@
+# 문제 풀이 기본 골드 생성 - ExplanationAudit 조건
+
+이 프롬프트는 현재 기본 골드 생성 프롬프트의 모든 계약을 유지하면서 사전 `ExplanationAudit`이 제공되는 실험에 적용한다.
+
+공식 해설은 추론 경로를 발견하고 검수하기 위한 참고자료이며, 그 문장 자체는 기본 골드의 근거가 아니다. 생성 단계에는 해설 원문이 아니라 claim 단위로 분해된 `ExplanationAudit`을 전달한다.
+
+## ExplanationAudit 배치 계약
+
+- `BASE_GOLD`: 원문 근거와 연산을 독립적으로 다시 확인한 뒤에만 기본 골드에 반영한다.
+- `SUPPLEMENTAL`: `supplementalExplanationInferences`에만 둘 수 있으며 `sourceText`를 해당 audit claim의 `sourceText`와 정확히 일치시킨다.
+- `EXCLUDED`: 어떤 골드 필드의 생성 근거로도 사용하지 않는다.
+- `HUMAN_REVIEW`: 자동으로 기본·보충 골드에 승격하지 않는다.
+- 생성기가 audit의 `classification`이나 `placement`를 임의로 완화하지 않는다. 재분류가 필요하면 골드를 바꾸지 말고 사람 검토 위험으로 남긴다.
+
+## 처리 순서
+
+1. 먼저 지문·보기·그림만으로 기본 명제, 보기 사실, 시각 의미, 선지 주장과 문항 추론을 구성한다.
+2. 그다음 `ExplanationAudit`의 `BASE_GOLD` claim을 원문 전제에 다시 대조한다.
+3. 해설이 알려 준 연결이라도 원문 근거와 연산을 명시할 수 있을 때만 기본 문항 추론에 반영한다.
+4. 원문만으로 확정할 수 없는 해설 관계는 보충 층에 격리하거나 제외한다.
+
+## 출처 분류
+
+- 원문에 직접 있으면 `SOURCE_EXPLICIT`이다.
+- 원문 전제를 명시적인 연산으로 결합해 안전하게 도출되면 `SOURCE_ENTAILED`이다.
+- 정답 키나 출제 의도가 있어야 확정되면 `ANSWER_KEY_CONSTRAINED`이다.
+- 지문 밖 지식이거나 원문에서 안전하게 도출되지 않는 관계는 기본 `itemInference`로 승격하지 않는다. 필요하면 `supplementalExplanationInferences`에 `PLAUSIBLE` 또는 `EXTERNAL`로 격리한다.
+
+## 금지
+
+- 공식 해설의 문장을 `passageDetailGold.propositions`로 복사하거나 바꾸어 넣지 않는다.
+- 해설 출처 자체를 `premiseRefs`로 사용하지 않는다.
+- 공식 해설의 정답 결론을 근거로 선지 판정을 순환 논증하지 않는다.
+- 해설이 제공한 정답 판정에 불필요한 확장을 `REQUIRED`로 만들지 않는다.
+
+## 출력 전 자기 검사
+
+- 해설을 제거해도 모든 `SOURCE_EXPLICIT` 및 `SOURCE_ENTAILED` 추론을 원문 전제와 연산만으로 재구성할 수 있는가?
+- 새로 추가된 지문 명제가 실제 원문에 존재하거나 원문 자체에서 안전하게 복원되는가?
+- 해설에서만 얻은 관계가 기본 명제로 역수입되지 않았는가?
+- 각 해설 관계를 기본 골드, 보충 층, 제외 중 어디에 둘지 명시적으로 결정했는가?
+- 보충 관계를 사용하지 않아도 정답 판정이 가능한 경우, 그것을 운영상 필수 경로에서 제외했는가?

@@ -7,7 +7,9 @@ import OpenAI from 'openai';
 import {
   ProblemQuestionGoldSchema,
   auditProblemGoldWarnings,
+  targetClaimEffectForAssessment,
 } from '../problem-solving/gold.js';
+import { injectProblemGoldSourceFidelity } from '../problem-solving/gold-source-fidelity.js';
 import {
   DEFAULT_PROBLEM_GOLD_GENERATION_EFFORT,
   DEFAULT_PROBLEM_GOLD_GENERATION_MODEL,
@@ -32,9 +34,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** 문항별 지식 없이 반복적으로 관찰된 순수 계약 위반만 정규화한다. */
-export function normalizeCrossFieldContracts(input: unknown): unknown {
+export function normalizeCrossFieldContracts(input: unknown, sourceInput?: unknown): unknown {
   if (!isRecord(input)) return input;
-  const output = structuredClone(input);
+  const fidelityInjected = sourceInput === undefined
+    ? structuredClone(input)
+    : injectProblemGoldSourceFidelity(input, sourceInput);
+  if (!isRecord(fidelityInjected)) return fidelityInjected;
+  const output = structuredClone(fidelityInjected);
   if (!isRecord(output)) return output;
 
   const answerChoiceId = typeof output['answerChoiceId'] === 'string'
@@ -72,6 +78,18 @@ export function normalizeCrossFieldContracts(input: unknown): unknown {
   }
 
   if (Array.isArray(output['itemInferences'])) {
+    const targetEffects = new Map(
+      Array.isArray(output['optionClaims'])
+        ? output['optionClaims'].flatMap((claim) => (
+            isRecord(claim) && typeof claim['claimId'] === 'string'
+              ? [[
+                  claim['claimId'],
+                  targetClaimEffectForAssessment(claim['assessment']),
+                ] as const]
+              : []
+          ))
+        : [],
+    );
     for (const inference of output['itemInferences']) {
       if (!isRecord(inference)) continue;
       const propositionRefs = Array.isArray(inference['references'])
@@ -90,6 +108,17 @@ export function normalizeCrossFieldContracts(input: unknown): unknown {
         ...(Array.isArray(inference['visualAssertionIds']) ? inference['visualAssertionIds'] : []),
         ...(inference['grounding'] === 'ANSWER_KEY_CONSTRAINED' ? ['ANSWER_KEY'] : []),
       ].filter((id): id is string => typeof id === 'string'))];
+      const effects = new Set(
+        Array.isArray(inference['targetClaimIds'])
+          ? inference['targetClaimIds'].flatMap((claimId) => {
+              const effect = typeof claimId === 'string'
+                ? targetEffects.get(claimId)
+                : null;
+              return effect === null || effect === undefined ? [] : [effect];
+            })
+          : [],
+      );
+      if (effects.size === 1) inference['targetClaimEffect'] = [...effects][0];
     }
   }
 
@@ -117,8 +146,12 @@ export function normalizeCrossFieldContracts(input: unknown): unknown {
   return output;
 }
 
-async function writeNormalizedRepair(directory: string, responseText: string): Promise<boolean> {
-  const normalized = normalizeCrossFieldContracts(JSON.parse(responseText));
+async function writeNormalizedRepair(
+  directory: string,
+  responseText: string,
+  sourceInput: unknown,
+): Promise<boolean> {
+  const normalized = normalizeCrossFieldContracts(JSON.parse(responseText), sourceInput);
   const parsed = ProblemQuestionGoldSchema.safeParse(normalized);
   await writeFile(
     resolve(directory, 'repair-validation.json'),
@@ -165,6 +198,7 @@ async function repairCase(directory: string): Promise<void> {
       '최초 생성 골드의 장점은 보존하되 정적 검증 오류와 독립 의미 감사의 지적을 모두 수정한다.',
       '감사가 지적한 전제 과잉은 실제로 불필요한 ID만 제거하고 references/scenarioFactIds/visualAssertionIds/premiseRefs를 함께 동기화한다.',
       '선지의 가능성·부정·조건을 더 강하거나 약한 주장으로 바꾸지 않는다.',
+      'SUPPORTS는 주장을, CONTRADICTS는 주장의 부정을 도출할 때만 사용한다. 주장과 부정 모두 도출되지 않고 선지 주장에 근거가 부족하면 DOES_NOT_JUSTIFY를 사용한다.',
       '지문이나 보기에 없는 사실을 추가하지 않는다. 근거가 정답 키에만 의존하면 ANSWER_KEY_CONSTRAINED로 명시한다.',
       '공식 해설은 제공되지 않았으므로 supplementalExplanationInferences는 빈 배열로 유지한다.',
       '전체 ProblemQuestionGold 객체를 출력한다.',
@@ -191,7 +225,7 @@ async function repairCase(directory: string): Promise<void> {
     resolve(directory, 'repair-response.json'),
     `${response.output_text}\n`,
   );
-  await writeNormalizedRepair(directory, response.output_text);
+  await writeNormalizedRepair(directory, response.output_text, JSON.parse(sourceText));
   await writeFile(
     resolve(directory, 'repair-metadata.json'),
     `${JSON.stringify({
@@ -239,6 +273,7 @@ async function main(): Promise<void> {
       await writeNormalizedRepair(
         directory,
         await readFile(resolve(directory, 'repair-response.json'), 'utf8'),
+        JSON.parse(await readFile(resolve(directory, 'source-input.json'), 'utf8')),
       );
       process.stdout.write(`[normalized] ${basename(directory)}\n`);
       continue;

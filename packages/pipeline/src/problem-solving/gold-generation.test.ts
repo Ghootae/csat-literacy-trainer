@@ -12,6 +12,8 @@ describe('problem gold generation prompt', () => {
     expect(prompt).toContain('targetClaimIds');
     expect(prompt).toContain('SUPPORTS');
     expect(prompt).toContain('CONTRADICTS');
+    expect(prompt).toContain('DOES_NOT_JUSTIFY');
+    expect(prompt).toContain('대상 주장도 그 부정도 도출할 수 없지만');
     expect(prompt).toContain('같은 문장을 읽고 대상 주장을 지지한다고도, 반박한다고도 해석할 수 있는가');
     expect(prompt).toContain('보기 사실 전체를 모든 선지에 복사하지 않는다');
     expect(prompt).toContain('공식 해설');
