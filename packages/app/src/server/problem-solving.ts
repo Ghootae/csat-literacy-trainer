@@ -51,7 +51,7 @@ interface ProblemRuntime {
   logged: boolean;
 }
 
-const CORRECT_RATIONALE_ASSESSMENT_TOTAL_TIMEOUT_MS = 65_000;
+const CORRECT_RATIONALE_ASSESSMENT_TOTAL_TIMEOUT_MS = 30_000;
 
 function withTimeout<T>(request: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {

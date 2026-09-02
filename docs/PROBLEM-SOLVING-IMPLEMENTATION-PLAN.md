@@ -1255,8 +1255,8 @@ npm run test:e2e
 ### 2026-09-02 — 운영 세션 회귀와 Luna→Terra 안전 폴백
 
 - 실제 서버 상태 전이에서 정답+`SUPPORTED`는 `*_CORRECT_VERIFIED`, 정답+`INSUFFICIENT`는 추가 질문 없는 `*_CORRECT_UNVERIFIED`, 정답+`CONTRADICTED`는 정답 선택을 유지한 `CORRECT_RATIONALE_REVIEW`로만 이동하는 코드 소유 정책을 회귀로 고정했다. 오답 `DIAGNOSE_PATH`는 계속 Terra medium을 사용한다.
-- `ASSESS_SELECTION_RATIONALE`의 Luna 호출은 30초 제한과 1회 시도만 허용한다. 실패하면 동일한 블라인드 입력·프롬프트·스키마로 Terra를 최대 한 번 호출하며, Terra도 실패하면 근거를 `UNCERTAIN`으로 기록하고 정답 세션을 미검증 상태로 안전 종결한다.
-- 실제 OpenAI 호출 메타데이터에 주 모델·폴백 모델·최종 모델·폴백 사유와 시도별 모델·경로·오류·지연·토큰을 남긴다. 양쪽 실패도 별도 오류 객체가 같은 감사 정보를 보존해 완료 세션 로그에 기록한다.
+- `ASSESS_SELECTION_RATIONALE`은 Luna와 Terra가 하나의 30초 총예산을 공유한다. Luna가 시간 초과되면 Terra를 호출하지 않고 근거를 `UNCERTAIN`으로 기록해 정답 세션을 즉시 미검증 상태로 종결한다. Luna가 빠른 비시간 초과 오류를 반환하고 총예산이 8초 이상 남은 경우에만 Terra를 최대 한 번 호출하며, Terra에는 남은 시간만 허용한다.
+- 실제 OpenAI 호출 메타데이터에 주 모델·폴백 모델·최종 모델·폴백 사유, 총예산·남은 예산과 시도별 모델·경로·오류·지연·토큰을 남긴다. Luna 시간 초과나 폴백 여유 부족으로 Terra를 생략한 경우도 `PRIMARY_TIMEOUT` 또는 `INSUFFICIENT_TIME_REMAINING`으로 감사 로그에 기록한다.
 - `PROBLEM_PATH_OPENAI_MODEL=gpt-5.6-terra` 전역 override는 근거 주 모델과 폴백 모델을 모두 Terra로 맞추므로 중복 호출 없이 전체 Terra 롤백으로 동작한다. `PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL`로 근거 폴백 모델만 별도 지정할 수 있고, 런타임 옵션의 `null`로 폴백을 끌 수 있다.
-- 브라우저 E2E는 Luna 직접 성공, Luna 시간 초과 후 Terra 성공, 양쪽 실패 안전 종결, 오답 Terra 라우팅, 선택당 질문 2회 상한, 세 번째 오답에서만 정적 정답 공개되는 경로를 실제 서버 상태 머신까지 검증한다.
-- 전체 단위 회귀는 665/666이 통과했고 유일한 실패는 기존 Hegel `.omc` 입력 누락이다. 현재 저장소에는 사람이 검토한 문제 골드가 6문항뿐이므로 기존 문항과 겹치지 않는 20~30문항 블라인드 표본 실행은 신규 골드 유입 전까지 보류한다.
+- 브라우저 E2E는 Luna 직접 성공, 빠른 Luna API 오류 후 Terra 성공, Luna 시간 초과 시 Terra 생략, 양쪽 실패 안전 종결, 오답 Terra 라우팅, 선택당 질문 2회 상한, 세 번째 오답에서만 정적 정답 공개되는 경로를 실제 서버 상태 머신까지 검증한다.
+- 전체 단위 회귀는 668/669이 통과했고 유일한 실패는 기존 Hegel `.omc` 입력 누락이다. 현재 저장소에는 사람이 검토한 문제 골드가 6문항뿐이므로 기존 문항과 겹치지 않는 20~30문항 블라인드 표본 실행은 신규 골드 유입 전까지 보류한다.

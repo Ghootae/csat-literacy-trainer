@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   ProblemPathEvaluatorFallbackError,
@@ -381,14 +381,15 @@ describe('problem solving server controller', () => {
       promptVersion: 'path-diagnostic-prompt-v3' as const,
       schemaVersion: 'problem-path-evaluator-output-v3' as const,
       calledAt: '2026-09-02T00:00:00.000Z',
-      durationMs: 60_000,
+      durationMs: 9_000,
       attempts: [
-        { attempt: 1, model: 'gpt-5.6-luna', route: 'PRIMARY' as const, outcome: 'error' as const, durationMs: 30_000, errorType: 'timeout' },
-        { attempt: 2, model: 'gpt-5.6-terra', route: 'FALLBACK' as const, outcome: 'error' as const, durationMs: 30_000, errorType: 'timeout' },
+        { attempt: 1, model: 'gpt-5.6-luna', route: 'PRIMARY' as const, outcome: 'error' as const, durationMs: 1_000, errorType: 'connection' },
+        { attempt: 2, model: 'gpt-5.6-terra', route: 'FALLBACK' as const, outcome: 'error' as const, durationMs: 8_000, errorType: 'timeout' },
       ],
       routing: {
         primaryModel: 'gpt-5.6-luna', fallbackModel: 'gpt-5.6-terra',
-        finalModel: 'gpt-5.6-terra', fallbackUsed: true, fallbackReason: 'timeout',
+        finalModel: 'gpt-5.6-terra', fallbackUsed: true, fallbackReason: 'connection',
+        fallbackSkippedReason: null, totalBudgetMs: 30_000, remainingBudgetMs: 21_000,
       },
       usage: { inputTokens: 0, outputTokens: 0 },
     };
@@ -416,6 +417,38 @@ describe('problem solving server controller', () => {
     });
     expect(logger.records).toHaveLength(1);
     expect(logger.records[0]?.evaluatorCalls).toEqual([failureCall]);
+  });
+
+  it('근거 evaluator가 멈춰도 학생 세션은 전체 30초에 미검증 정답으로 닫는다', async () => {
+    vi.useFakeTimers();
+    try {
+      const evaluator: ProblemPathEvaluator = {
+        evaluate() {
+          return new Promise<ProblemPathEvaluatorCall>(() => undefined);
+        },
+      };
+      const controller = new ProblemSolvingController({ evaluator });
+      const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+      const pending = controller.submitInitial(started.sessionId, {
+        choiceId: 'C5',
+        rationale: '⑤의 연결은 지문에서 제시되지 않았습니다.',
+      });
+
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(controller.get(started.sessionId).phase).toBe('PROCESSING');
+      await vi.advanceTimersByTimeAsync(1);
+
+      await expect(pending).resolves.toMatchObject({
+        phase: 'COMPLETED',
+        result: {
+          correct: true,
+          rationaleAssessment: 'UNCERTAIN',
+          resolutionOutcome: 'INITIAL_CORRECT_UNVERIFIED',
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('질문 2/2 소진 뒤 모델을 다시 호출하지 않고 결정론적 코칭과 재선택으로 이동한다', async () => {

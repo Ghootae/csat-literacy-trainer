@@ -1098,16 +1098,19 @@ describe('problem path evaluator runtime boundary', () => {
     expect(evaluator.rationaleFallbackModel).toBe('gpt-5.6-terra');
   });
 
-  it('Luna 근거 판정 실패 시 같은 입력을 Terra에 한 번만 폴백하고 경로를 감사한다', async () => {
+  it('Luna가 빠르게 실패하면 남은 전체 예산만 Terra에 주고 경로를 감사한다', async () => {
+    let elapsedMs = 0;
     const seen: Array<{ model: string; timeoutMs: number }> = [];
     const transport: ProblemPathEvaluatorTransport = {
       async parse(options) {
         seen.push({ model: options.model, timeoutMs: options.timeoutMs });
         if (options.model === DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL) {
+          elapsedMs = 1_000;
           throw new ProblemPathTransportError({
-            errorType: 'timeout', retryable: true,
+            errorType: 'connection', retryable: true,
           });
         }
+        elapsedMs = 9_000;
         return {
           outputParsed: supportedInformationProviderOutput(),
           usage: { inputTokens: 11, outputTokens: 7 },
@@ -1116,33 +1119,38 @@ describe('problem path evaluator runtime boundary', () => {
     };
     const evaluator = new OpenAIProblemPathEvaluator({
       transport,
-      rationaleTimeoutMs: 12_345,
+      rationaleTotalTimeoutMs: 30_000,
+      rationaleMinimumFallbackTimeMs: 8_000,
       maxTransportRetries: 2,
       retryDelayMs: 0,
+      monotonicNow: () => elapsedMs,
       metricRecorder: () => undefined,
     });
 
     const call = await evaluator.evaluate(informationRationaleInput());
 
     expect(seen).toEqual([
-      { model: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL, timeoutMs: 12_345 },
-      { model: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL, timeoutMs: 12_345 },
+      { model: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL, timeoutMs: 30_000 },
+      { model: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL, timeoutMs: 29_000 },
     ]);
     expect(call.call).toEqual(expect.objectContaining({
       model: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
-      routing: {
+      routing: expect.objectContaining({
         primaryModel: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL,
         fallbackModel: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
         finalModel: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
         fallbackUsed: true,
-        fallbackReason: 'timeout',
-      },
+        fallbackReason: 'connection',
+        fallbackSkippedReason: null,
+        totalBudgetMs: 30_000,
+        remainingBudgetMs: 21_000,
+      }),
       usage: { inputTokens: 11, outputTokens: 7 },
     }));
     expect(call.call.attempts).toEqual([
       expect.objectContaining({
         attempt: 1, model: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL,
-        route: 'PRIMARY', outcome: 'error', errorType: 'timeout',
+        route: 'PRIMARY', outcome: 'error', errorType: 'connection',
       }),
       expect.objectContaining({
         attempt: 2, model: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
@@ -1151,12 +1159,76 @@ describe('problem path evaluator runtime boundary', () => {
     ]);
   });
 
-  it('Luna와 Terra 근거 판정이 모두 실패하면 두 시도의 감사 정보를 오류에 보존한다', async () => {
+  it('Luna 시간 초과에는 Terra를 호출하지 않고 생략 사유를 감사한다', async () => {
+    const seen: string[] = [];
     const transport: ProblemPathEvaluatorTransport = {
       async parse(options) {
+        seen.push(options.model);
+        throw new ProblemPathTransportError({
+          errorType: 'timeout', retryable: true,
+        });
+      },
+    };
+    const evaluator = new OpenAIProblemPathEvaluator({
+      transport,
+      metricRecorder: () => undefined,
+    });
+
+    const error = await evaluator.evaluate(informationRationaleInput()).catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(ProblemPathEvaluatorFallbackError);
+    expect(seen).toEqual([DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL]);
+    expect(error.call.routing).toEqual(expect.objectContaining({
+      finalModel: DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL,
+      fallbackUsed: false,
+      fallbackReason: 'timeout',
+      fallbackSkippedReason: 'PRIMARY_TIMEOUT',
+      totalBudgetMs: 30_000,
+    }));
+    expect(error.call.attempts).toHaveLength(1);
+  });
+
+  it('Luna의 늦은 비시간초과 오류는 잔여 예산이 작으면 Terra를 생략한다', async () => {
+    let elapsedMs = 0;
+    const seen: string[] = [];
+    const transport: ProblemPathEvaluatorTransport = {
+      async parse(options) {
+        seen.push(options.model);
+        elapsedMs = 23_000;
+        throw new ProblemPathTransportError({
+          errorType: 'server_error', retryable: true,
+        });
+      },
+    };
+    const evaluator = new OpenAIProblemPathEvaluator({
+      transport,
+      rationaleTotalTimeoutMs: 30_000,
+      rationaleMinimumFallbackTimeMs: 8_000,
+      monotonicNow: () => elapsedMs,
+      metricRecorder: () => undefined,
+    });
+
+    const error = await evaluator.evaluate(informationRationaleInput()).catch((caught) => caught);
+
+    expect(seen).toEqual([DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL]);
+    expect(error.call.routing).toEqual(expect.objectContaining({
+      fallbackUsed: false,
+      fallbackReason: 'server_error',
+      fallbackSkippedReason: 'INSUFFICIENT_TIME_REMAINING',
+      remainingBudgetMs: 7_000,
+    }));
+  });
+
+  it('빠른 Luna 오류 뒤 Terra도 실패하면 두 시도의 감사 정보를 보존한다', async () => {
+    let elapsedMs = 0;
+    const transport: ProblemPathEvaluatorTransport = {
+      async parse(options) {
+        elapsedMs = options.model === DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL
+          ? 1_000
+          : 9_000;
         throw new ProblemPathTransportError({
           errorType: options.model === DEFAULT_PROBLEM_RATIONALE_OPENAI_MODEL
-            ? 'timeout'
+            ? 'connection'
             : 'connection',
           retryable: true,
         });
@@ -1166,6 +1238,7 @@ describe('problem path evaluator runtime boundary', () => {
       transport,
       maxTransportRetries: 3,
       retryDelayMs: 0,
+      monotonicNow: () => elapsedMs,
       metricRecorder: () => undefined,
     });
 
@@ -1177,10 +1250,13 @@ describe('problem path evaluator runtime boundary', () => {
       fallbackModel: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
       finalModel: DEFAULT_PROBLEM_RATIONALE_FALLBACK_OPENAI_MODEL,
       fallbackUsed: true,
-      fallbackReason: 'timeout',
+      fallbackReason: 'connection',
+      fallbackSkippedReason: null,
+      totalBudgetMs: 30_000,
+      remainingBudgetMs: 21_000,
     });
     expect(error.call.attempts).toEqual([
-      expect.objectContaining({ route: 'PRIMARY', outcome: 'error', errorType: 'timeout' }),
+      expect.objectContaining({ route: 'PRIMARY', outcome: 'error', errorType: 'connection' }),
       expect.objectContaining({ route: 'FALLBACK', outcome: 'error', errorType: 'connection' }),
     ]);
   });

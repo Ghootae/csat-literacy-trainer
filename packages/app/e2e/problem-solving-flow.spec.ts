@@ -29,8 +29,8 @@ class FixedDiagnosticEvaluator implements ProblemPathEvaluator {
   calls = 0;
   readonly inputs: ProblemPathEvaluatorInput[] = [];
   readonly routes: Array<{ mode: string; model: string }> = [];
-  failLunaRationale = false;
-  failTerraRationale = false;
+  lunaRationaleFailure: 'connection' | 'timeout' | null = null;
+  terraRationaleFailure: 'connection' | 'timeout' | null = null;
   private activeInput: ProblemPathEvaluatorInput | null = null;
   private readonly runtime: OpenAIProblemPathEvaluator;
 
@@ -41,12 +41,12 @@ class FixedDiagnosticEvaluator implements ProblemPathEvaluator {
         if (input === null) throw new Error('E2E evaluator 입력이 없습니다.');
         this.routes.push({ mode: options.mode, model: options.model });
         if (options.mode === 'ASSESS_SELECTION_RATIONALE') {
-          if (
-            (options.model === 'gpt-5.6-luna' && this.failLunaRationale) ||
-            (options.model === 'gpt-5.6-terra' && this.failTerraRationale)
-          ) {
+          const failure = options.model === 'gpt-5.6-luna'
+            ? this.lunaRationaleFailure
+            : this.terraRationaleFailure;
+          if (failure !== null) {
             throw new ProblemPathTransportError({
-              errorType: 'timeout', retryable: true,
+              errorType: failure, retryable: true,
             });
           }
           const observation = input.observations.at(-1);
@@ -185,8 +185,8 @@ class FixedDiagnosticEvaluator implements ProblemPathEvaluator {
     this.calls = 0;
     this.inputs.splice(0);
     this.routes.splice(0);
-    this.failLunaRationale = false;
-    this.failTerraRationale = false;
+    this.lunaRationaleFailure = null;
+    this.terraRationaleFailure = null;
     this.activeInput = null;
   }
 
@@ -352,8 +352,8 @@ test('정답 근거는 Luna로 판정하고 SUPPORTED 결과를 검증 정답으
   ]);
 });
 
-test('Luna 시간 초과는 Terra 한 번으로 폴백해 검증 정답을 유지한다', async ({ page }) => {
-  evaluator.failLunaRationale = true;
+test('Luna의 빠른 API 오류는 Terra 한 번으로 폴백해 검증 정답을 유지한다', async ({ page }) => {
+  evaluator.lunaRationaleFailure = 'connection';
   await page.goto('/problem');
   await page.getByText(/^5$/).click();
   await page.getByLabel('선택 근거 (선택 사항)').fill(
@@ -368,9 +368,26 @@ test('Luna 시간 초과는 Terra 한 번으로 폴백해 검증 정답을 유�
   ]);
 });
 
+test('Luna 시간 초과는 Terra를 기다리지 않고 미검증 정답으로 종료한다', async ({ page }) => {
+  evaluator.lunaRationaleFailure = 'timeout';
+  await page.goto('/problem');
+  await page.getByText(/^5$/).click();
+  await page.getByLabel('선택 근거 (선택 사항)').fill(
+    '⑤의 소수성 약화와 입자 크기 감소 연결은 지문에서 제시되지 않았습니다.',
+  );
+  await page.getByRole('button', { name: '선택 제출' }).click();
+
+  await expect(page.getByText('정답입니다.')).toBeVisible();
+  await expect(page.getByText('최종 결과: INITIAL_CORRECT_UNVERIFIED')).toBeVisible();
+  await expect(page.getByText('최종 근거 검증: UNCERTAIN')).toBeVisible();
+  expect(evaluator.routes).toEqual([
+    { mode: 'ASSESS_SELECTION_RATIONALE', model: 'gpt-5.6-luna' },
+  ]);
+});
+
 test('Luna와 Terra가 모두 실패하면 질문 없이 미검증 정답으로 안전 종료한다', async ({ page }) => {
-  evaluator.failLunaRationale = true;
-  evaluator.failTerraRationale = true;
+  evaluator.lunaRationaleFailure = 'connection';
+  evaluator.terraRationaleFailure = 'timeout';
   await page.goto('/problem');
   await page.getByText(/^5$/).click();
   await page.getByLabel('선택 근거 (선택 사항)').fill(
