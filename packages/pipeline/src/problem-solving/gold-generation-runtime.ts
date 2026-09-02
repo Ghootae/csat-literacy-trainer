@@ -9,6 +9,7 @@ import {
   type ProblemQuestionGold,
 } from './gold.js';
 import { injectProblemGoldSourceFidelity } from './gold-source-fidelity.js';
+import { normalizeProblemGoldCrossFieldContracts } from './gold-cross-field-normalization.js';
 import {
   PROBLEM_GOLD_GENERATION_PROMPT_VERSION,
   loadProblemGoldGenerationPrompt,
@@ -66,8 +67,17 @@ export interface ProblemGoldGenerationCall {
   readonly rawOutputText: string;
   readonly parsedOutput: unknown;
   readonly validatedGold: ProblemQuestionGold | null;
+  readonly rawValidationErrors: readonly string[];
   readonly validationErrors: readonly string[];
+  readonly normalizationChanges: readonly string[];
   readonly metadata: ProblemGoldGenerationMetadata;
+}
+
+export interface ProblemGoldCandidateValidation {
+  readonly validatedGold: ProblemQuestionGold | null;
+  readonly rawValidationErrors: readonly string[];
+  readonly validationErrors: readonly string[];
+  readonly normalizationChanges: readonly string[];
 }
 
 export function canonicalProblemGoldSourceHash(
@@ -107,6 +117,22 @@ function normalizeProviderJsonSchema(value: unknown): unknown {
     normalized['required'] = Object.keys(normalized['properties'] as Record<string, unknown>);
   }
   return normalized;
+}
+
+export function validateProblemGoldCandidate(
+  parsedOutput: unknown,
+  source: ProblemGoldGenerationSource,
+): ProblemGoldCandidateValidation {
+  const fidelityInjectedOutput = injectProblemGoldSourceFidelity(parsedOutput, { source });
+  const rawValidated = ProblemQuestionGoldSchema.safeParse(fidelityInjectedOutput);
+  const normalized = normalizeProblemGoldCrossFieldContracts(fidelityInjectedOutput);
+  const validated = ProblemQuestionGoldSchema.safeParse(normalized.value);
+  return {
+    validatedGold: validated.success ? validated.data : null,
+    rawValidationErrors: rawValidated.success ? [] : formatValidationErrors(rawValidated.error),
+    validationErrors: validated.success ? [] : formatValidationErrors(validated.error),
+    normalizationChanges: normalized.changes,
+  };
 }
 
 export function createProblemGoldProviderJsonSchema(): Record<string, unknown> {
@@ -177,17 +203,15 @@ export async function generateProblemGoldCandidate(options: {
   } catch {
     // 최초 공급자 출력은 호출자가 원문 그대로 저장하고 검수한다.
   }
-  const fidelityInjectedOutput = injectProblemGoldSourceFidelity(
-    parsedOutput,
-    { source: options.source },
-  );
-  const validated = ProblemQuestionGoldSchema.safeParse(fidelityInjectedOutput);
+  const validation = validateProblemGoldCandidate(parsedOutput, options.source);
 
   return {
     rawOutputText: response.output_text,
     parsedOutput,
-    validatedGold: validated.success ? validated.data : null,
-    validationErrors: validated.success ? [] : formatValidationErrors(validated.error),
+    validatedGold: validation.validatedGold,
+    rawValidationErrors: validation.rawValidationErrors,
+    validationErrors: validation.validationErrors,
+    normalizationChanges: validation.normalizationChanges,
     metadata: {
       provider: 'openai',
       model,
