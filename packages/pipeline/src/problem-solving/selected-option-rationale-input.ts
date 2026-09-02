@@ -39,10 +39,22 @@ const CommonInputShape = {
       'NON_EXHAUSTIVE_ALLOW_SOURCE_GROUNDED_ALTERNATIVES',
       'EXHAUSTIVE_WITHIN_INCLUDED_SLICE',
     ]),
-    compressedCausalChain: z.literal(
-      'ALLOW_WHEN_CORE_RELATION_AND_DECISION_CONCLUSION_ARE_EXPLICIT',
-    ),
+    acceptedSupportRoutes: z.tuple([
+      z.literal('APPROVED_SUFFICIENT_GROUND_SET'),
+      z.literal('SEMANTICALLY_EQUIVALENT_COMPRESSED_CAUSAL_CHAIN'),
+      z.literal('APPROVED_COMPLETE_ELIMINATION_PATH'),
+    ]),
+    rejectedAsStandaloneSupport: z.tuple([
+      z.literal('SELECTION_CONCLUSION_RESTATEMENT'),
+      z.literal('UNCONNECTED_SINGLE_RELATED_FACT'),
+      z.literal('PARTIAL_COMPETITOR_ELIMINATION'),
+      z.literal('MATCH_WITHOUT_SOURCE_REF'),
+    ]),
     ancillaryClaims: z.literal('ASSESS_SEPARATELY'),
+  }).strict(),
+  referencePolicy: z.object({
+    allowedSourceRefs: z.array(z.string().min(1)).min(1),
+    selectionRestatement: z.literal('NOT_EVIDENCE'),
   }).strict(),
 } as const;
 
@@ -67,20 +79,24 @@ export type SelectedOptionRationaleInput = z.infer<
   typeof SelectedOptionRationaleInputSchema
 >;
 
-const RationaleEvidenceFindingSchema = z.object({
+const GroundedRationaleEvidenceFindingSchema = z.object({
   studentQuote: z.string().min(1),
-  relationToGold: z.enum(['MATCHES', 'CONFLICTS', 'NOT_ESTABLISHED']),
+  relationToGold: z.enum(['MATCHES', 'CONFLICTS']),
+  decisionRelevance: z.enum(['DECISIVE', 'NON_DECISIVE']),
+  sourceRefs: z.array(z.string().min(1)).min(1),
+}).strict();
+
+const NotEstablishedRationaleEvidenceFindingSchema = z.object({
+  studentQuote: z.string().min(1),
+  relationToGold: z.literal('NOT_ESTABLISHED'),
   decisionRelevance: z.enum(['DECISIVE', 'NON_DECISIVE']),
   sourceRefs: z.array(z.string().min(1)),
-}).strict().superRefine((finding, context) => {
-  if (finding.relationToGold !== 'NOT_ESTABLISHED' && finding.sourceRefs.length === 0) {
-    context.addIssue({
-      code: 'custom',
-      path: ['sourceRefs'],
-      message: '일치·충돌 finding에는 근거 ID가 필요하다.',
-    });
-  }
-});
+}).strict();
+
+const RationaleEvidenceFindingSchema = z.discriminatedUnion('relationToGold', [
+  GroundedRationaleEvidenceFindingSchema,
+  NotEstablishedRationaleEvidenceFindingSchema,
+]);
 
 export const SelectedOptionRationaleOutputSchema = z.object({
   outputVersion: z.literal('selected-option-rationale-output-v1'),
@@ -124,6 +140,18 @@ export type SelectedOptionRationaleOutput = z.infer<
   typeof SelectedOptionRationaleOutputSchema
 >;
 
+function baselineAllowedRefs(gold: z.infer<typeof BaselineFullGoldSchema>): string[] {
+  return [
+    ...gold.choices.map((item) => item.choiceId),
+    ...gold.optionClaims.map((item) => item.claimId),
+    ...gold.itemInferences.map((item) => item.inferenceId),
+    ...gold.passageDetailGold.propositions.map((item) => item.id),
+    ...(gold.scenario?.facts.map((item) => item.id) ?? []),
+    ...gold.visualAssertions.map((item) => item.id),
+    ...gold.mediaAssets.map((item) => item.mediaId),
+  ];
+}
+
 export function createSelectedOptionRationaleInput(options: {
   readonly arm: SelectedOptionRationaleInput['arm'];
   readonly gold: ProblemQuestionGold;
@@ -154,8 +182,17 @@ export function createSelectedOptionRationaleInput(options: {
       groundSetScope: options.arm === 'BASELINE_FULL_GOLD'
         ? 'NON_EXHAUSTIVE_ALLOW_SOURCE_GROUNDED_ALTERNATIVES' as const
         : 'EXHAUSTIVE_WITHIN_INCLUDED_SLICE' as const,
-      compressedCausalChain:
-        'ALLOW_WHEN_CORE_RELATION_AND_DECISION_CONCLUSION_ARE_EXPLICIT' as const,
+      acceptedSupportRoutes: [
+        'APPROVED_SUFFICIENT_GROUND_SET',
+        'SEMANTICALLY_EQUIVALENT_COMPRESSED_CAUSAL_CHAIN',
+        'APPROVED_COMPLETE_ELIMINATION_PATH',
+      ] as const,
+      rejectedAsStandaloneSupport: [
+        'SELECTION_CONCLUSION_RESTATEMENT',
+        'UNCONNECTED_SINGLE_RELATED_FACT',
+        'PARTIAL_COMPETITOR_ELIMINATION',
+        'MATCH_WITHOUT_SOURCE_REF',
+      ] as const,
       ancillaryClaims: 'ASSESS_SEPARATELY' as const,
     },
   } as const;
@@ -170,6 +207,10 @@ export function createSelectedOptionRationaleInput(options: {
         ...common,
         arm: 'BASELINE_FULL_GOLD',
         evidenceGold: baselineGold,
+        referencePolicy: {
+          allowedSourceRefs: baselineAllowedRefs(baselineGold),
+          selectionRestatement: 'NOT_EVIDENCE',
+        },
       }),
       auditManifest: null,
     };
@@ -191,6 +232,10 @@ export function createSelectedOptionRationaleInput(options: {
       ...common,
       arm: 'SELECTED_OPTION_COMPLETE',
       evidenceGold: slice,
+      referencePolicy: {
+        allowedSourceRefs: slice.includedManifest.map((item) => item.id),
+        selectionRestatement: 'NOT_EVIDENCE',
+      },
     }),
     auditManifest,
   };
@@ -200,19 +245,20 @@ export function allowedSelectedOptionRationaleRefs(
   inputValue: SelectedOptionRationaleInput,
 ): Set<string> {
   const input = SelectedOptionRationaleInputSchema.parse(inputValue);
+  const declared = new Set(input.referencePolicy.allowedSourceRefs);
   if (input.arm === 'SELECTED_OPTION_COMPLETE') {
-    return new Set(input.evidenceGold.includedManifest.map((item) => item.id));
+    const derived = new Set(input.evidenceGold.includedManifest.map((item) => item.id));
+    if (declared.size !== derived.size || [...declared].some((ref) => !derived.has(ref))) {
+      throw new Error('선언된 허용 골드 참조와 선택 선지 manifest가 일치하지 않는다.');
+    }
+    return derived;
   }
   const gold = input.evidenceGold;
-  return new Set([
-    ...gold.choices.map((item) => item.choiceId),
-    ...gold.optionClaims.map((item) => item.claimId),
-    ...gold.itemInferences.map((item) => item.inferenceId),
-    ...gold.passageDetailGold.propositions.map((item) => item.id),
-    ...(gold.scenario?.facts.map((item) => item.id) ?? []),
-    ...gold.visualAssertions.map((item) => item.id),
-    ...gold.mediaAssets.map((item) => item.mediaId),
-  ]);
+  const derived = new Set(baselineAllowedRefs(gold));
+  if (declared.size !== derived.size || [...declared].some((ref) => !derived.has(ref))) {
+    throw new Error('선언된 허용 골드 참조와 전체 골드 ID가 일치하지 않는다.');
+  }
+  return derived;
 }
 
 export function validateSelectedOptionRationaleOutput(

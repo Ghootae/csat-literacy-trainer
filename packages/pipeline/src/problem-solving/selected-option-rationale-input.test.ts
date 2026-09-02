@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { z } from 'zod/v4';
 import { describe, expect, it } from 'vitest';
 
 import { ProblemQuestionGoldSchema, type ProblemQuestionGold } from './gold.js';
 import {
   allowedSelectedOptionRationaleRefs,
   createSelectedOptionRationaleInput,
+  SelectedOptionRationaleOutputSchema,
   validateSelectedOptionRationaleOutput,
 } from './selected-option-rationale-input.js';
 
@@ -31,6 +33,17 @@ describe('selected option rationale input', () => {
     expect(input.arm).toBe('BASELINE_FULL_GOLD');
     expect(input.sufficiencyPolicy.groundSetScope)
       .toBe('NON_EXHAUSTIVE_ALLOW_SOURCE_GROUNDED_ALTERNATIVES');
+    expect(input.sufficiencyPolicy.acceptedSupportRoutes).toEqual([
+      'APPROVED_SUFFICIENT_GROUND_SET',
+      'SEMANTICALLY_EQUIVALENT_COMPRESSED_CAUSAL_CHAIN',
+      'APPROVED_COMPLETE_ELIMINATION_PATH',
+    ]);
+    expect(input.sufficiencyPolicy.rejectedAsStandaloneSupport).toContain(
+      'PARTIAL_COMPETITOR_ELIMINATION',
+    );
+    expect(input.referencePolicy.selectionRestatement).toBe('NOT_EVIDENCE');
+    expect(input.referencePolicy.allowedSourceRefs).toContain('OC5-1');
+    expect(input.referencePolicy.allowedSourceRefs).not.toContain('P4');
     expect(auditManifest).toBeNull();
     const serialized = JSON.stringify(input);
     expect(serialized).not.toContain('representativeWrongPaths');
@@ -49,6 +62,8 @@ describe('selected option rationale input', () => {
     expect(input.arm).toBe('SELECTED_OPTION_COMPLETE');
     expect(input.sufficiencyPolicy.groundSetScope)
       .toBe('EXHAUSTIVE_WITHIN_INCLUDED_SLICE');
+    expect(input.referencePolicy.allowedSourceRefs)
+      .toEqual(input.evidenceGold.includedManifest.map((item) => item.id));
     expect(input.evaluationContext.profile).toBe('CORRECT_REJECTED');
     expect(auditManifest?.excluded.some((item) => item.id === 'OC1-1')).toBe(true);
     const serialized = JSON.stringify(input);
@@ -92,6 +107,13 @@ describe('selected option rationale input', () => {
         sourceRefs: ['OC1-1'],
       }],
     }, input)).toThrow(/허용되지 않은 골드 참조/);
+    expect(() => validateSelectedOptionRationaleOutput(valid, {
+      ...input,
+      referencePolicy: {
+        ...input.referencePolicy,
+        allowedSourceRefs: [...input.referencePolicy.allowedSourceRefs, 'P4'],
+      },
+    })).toThrow(/허용 골드 참조/);
   });
 
   it('혼합 근거에서 결정적 충돌을 SUPPORTED로 덮지 못하게 한다', () => {
@@ -121,6 +143,46 @@ describe('selected option rationale input', () => {
         },
       ],
     }, input)).toThrow(/결정적 충돌/);
+  });
+
+  it('provider JSON Schema에서도 MATCHES와 CONFLICTS의 빈 sourceRefs를 금지한다', () => {
+    const schema = JSON.stringify(z.toJSONSchema(SelectedOptionRationaleOutputSchema));
+    expect(schema).toContain('"enum":["MATCHES","CONFLICTS"]');
+    expect(schema).toContain('"minItems":1');
+    expect(SelectedOptionRationaleOutputSchema.safeParse({
+      outputVersion: 'selected-option-rationale-output-v1',
+      rationaleAssessment: 'SUPPORTED',
+      reason: '출처 없는 일치다.',
+      evidenceFindings: [{
+        studentQuote: '근거라고 주장한다',
+        relationToGold: 'MATCHES',
+        decisionRelevance: 'DECISIVE',
+        sourceRefs: [],
+      }],
+    }).success).toBe(false);
+    expect(SelectedOptionRationaleOutputSchema.safeParse({
+      outputVersion: 'selected-option-rationale-output-v1',
+      rationaleAssessment: 'INSUFFICIENT',
+      reason: '양쪽 모두 확립되지 않았다.',
+      evidenceFindings: [{
+        studentQuote: '근거라고 주장한다',
+        relationToGold: 'NOT_ESTABLISHED',
+        decisionRelevance: 'DECISIVE',
+        sourceRefs: [],
+      }],
+    }).success).toBe(true);
+  });
+
+  it('선택 결론 재진술을 독립적인 SUPPORTED 근거에서 제외한다', () => {
+    const { input } = createSelectedOptionRationaleInput({
+      arm: 'BASELINE_FULL_GOLD',
+      gold: fixture('mrna-vaccine-lipid-nanoparticle-q19.json'),
+      selectedChoiceId: 'C5',
+      studentRationale: '⑤가 적절하다.',
+    });
+    expect(input.referencePolicy.selectionRestatement).toBe('NOT_EVIDENCE');
+    expect(input.sufficiencyPolicy.rejectedAsStandaloneSupport)
+      .toContain('SELECTION_CONCLUSION_RESTATEMENT');
   });
 
   it('복수 전제 중 일부의 결정적 일치가 있어도 전체 충분 집합이 미완성이면 INSUFFICIENT를 허용한다', () => {
