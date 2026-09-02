@@ -103,6 +103,11 @@
 
 ## 7. 사람 승인 절차
 
+원문, 문제, 공식 정답, 골드의 모든 판단 필드, 충분 근거 후보를 문항별로 이어 붙인 단일
+검수 문서는 `REVIEW-PACKET.md`이다. 문서 안의 체크박스와 메모란은 읽기 편의를 위한 것이며,
+실제 승인 계약은 아래 `human-review.json`에 기록한다. 원천이나 후보가 바뀌면
+`node docs/experiments/problem-gold-prospective-blind-2026-09-03/build-review-packet.mjs`로 다시 만든다.
+
 각 유효 문항의 `artifacts/<caseId>/human-review.json`에서 다음을 기록한다.
 
 1. 골드의 주장 방향, 최소 전제, 정답 키 제약, 시각 의미를 검토한다.
