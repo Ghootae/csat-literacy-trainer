@@ -16,6 +16,8 @@
 4. centralStory와 확정 축 범위 밖의 관계는 억지로 연결하지 않고 unmappedCoreRelationIds에 둔다.
 5. 축의 의미를 추적할 관계가 없다면 해당 axisMappings의 relationIds를 비워 두고 문제를 기록한다.
 6. required/error_only를 추측하거나 출력하지 않는다.
+7. centralStory의 각 독립 의미를 담당하는 축에 그 의미를 실제로 추적할 수 있는 core relation이 있는지 확인한다. 단어가 비슷하다는 이유만으로 방향·조건·대상이 다른 관계를 연결하지 않는다.
+8. core relation의 방향, 필수 조건, 적용 대상·범위가 축의 의미와 다르면 억지로 매핑하지 말고 문제로 기록한다.
 
 ## 판정
 

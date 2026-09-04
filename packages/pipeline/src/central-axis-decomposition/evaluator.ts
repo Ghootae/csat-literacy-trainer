@@ -97,6 +97,8 @@ export async function decomposeCentralStoryWithOpenAI(
   config: {
     readonly model: string;
     readonly effort: CentralAxisDecompositionEffort;
+    readonly serviceTier?: 'default';
+    readonly maxOutputTokens?: number;
     readonly client?: OpenAI;
   },
 ): Promise<CentralAxisDecompositionCallResult> {
@@ -104,10 +106,11 @@ export async function decomposeCentralStoryWithOpenAI(
   const started = performance.now();
   const response = await client.responses.parse({
     model: config.model,
+    ...(config.serviceTier === undefined ? {} : { service_tier: config.serviceTier }),
     instructions: loadCentralAxisDecompositionPrompt(),
     input: JSON.stringify(input, null, 2),
     reasoning: { effort: config.effort },
-    max_output_tokens: 5_000,
+    max_output_tokens: config.maxOutputTokens ?? 5_000,
     store: false,
     text: {
       format: zodTextFormat(

@@ -44,6 +44,7 @@ describe('central axis decomposition v2', () => {
     expect(prompt).toContain('정의만 별도 축으로 만들지 않고');
     expect(prompt).toContain('같은 통제 축에 묶는다');
     expect(prompt).toContain('coreRelations');
+    expect(prompt).toContain('장소 범위');
   });
 
   it('accepts a lossless READY decomposition', () => {

@@ -120,6 +120,8 @@ export async function mapRelationsToFixedAxesWithOpenAI(
   config: {
     readonly model: string;
     readonly effort: AxisRelationMappingEffort;
+    readonly serviceTier?: 'default';
+    readonly maxOutputTokens?: number;
     readonly client?: OpenAI;
   },
 ): Promise<AxisRelationMappingCallResult> {
@@ -127,10 +129,11 @@ export async function mapRelationsToFixedAxesWithOpenAI(
   const started = performance.now();
   const response = await client.responses.parse({
     model: config.model,
+    ...(config.serviceTier === undefined ? {} : { service_tier: config.serviceTier }),
     instructions: loadAxisRelationMappingPrompt(),
     input: JSON.stringify(input, null, 2),
     reasoning: { effort: config.effort },
-    max_output_tokens: 5_000,
+    max_output_tokens: config.maxOutputTokens ?? 5_000,
     store: false,
     text: {
       format: zodTextFormat(AxisRelationMappingResultSchema, 'axis_relation_mapping_result'),

@@ -1,0 +1,376 @@
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
+
+import { ParagraphDiagnosticGoldSchema } from '../dialogue-experiment/schema.js';
+import {
+  ParagraphPropositionBundleSchema,
+  artifactHash,
+} from '../paragraph-analysis/production.js';
+
+const projectRoot = process.cwd();
+const experimentRoot = resolve(
+  projectRoot,
+  'docs/experiments/prospective-paragraph-gold-24-2026-09-04',
+);
+const batch003Root = resolve(experimentRoot, 'batches/paragraph-gold-batch-003-three-passages');
+const batch004Root = resolve(experimentRoot, 'batches/paragraph-gold-batch-004-three-passages');
+const artifactsRoot = resolve(batch004Root, 'artifacts');
+
+const passages = [
+  {
+    sourceId: '69c006f178128b2a9bedd2f3',
+    title: '데이터의 결측치와 이상치 처리',
+    paragraphCount: 5,
+  },
+  {
+    sourceId: '69c0ad79fa5063deffe1e90b',
+    title: '유동성과 금리의 관계',
+    paragraphCount: 5,
+  },
+  {
+    sourceId: '69bffa62fa5063deffe19c88',
+    title: '법 모델과 임대차 보호 제도',
+    paragraphCount: 8,
+  },
+] as const;
+
+type JsonRecord = Record<string, unknown>;
+
+function readJson(path: string): JsonRecord {
+  return JSON.parse(readFileSync(path, 'utf8')) as JsonRecord;
+}
+
+function resultOf(path: string): JsonRecord {
+  const artifact = readJson(path);
+  const result = artifact['result'];
+  if (typeof result !== 'object' || result === null || Array.isArray(result)) {
+    throw new Error(`result가 없는 산출물: ${path}`);
+  }
+  return result as JsonRecord;
+}
+
+function relativeToBatch(path: string): string {
+  return relative(batch004Root, path);
+}
+
+function artifactInfo(path: string, kind: 'diagnostic' | 'bundle'): {
+  readonly path: string;
+  readonly hash: string;
+} {
+  if (!existsSync(path)) throw new Error(`산출물이 없다: ${path}`);
+  const value = kind === 'diagnostic'
+    ? ParagraphDiagnosticGoldSchema.parse(readJson(path))
+    : ParagraphPropositionBundleSchema.parse(readJson(path));
+  return { path: relativeToBatch(path), hash: artifactHash(value) };
+}
+
+function auditCounts(root: string, stage: '04-audit.json' | '06-reaudit.json') {
+  const decisions = new Map<string, number>();
+  const categories = new Map<string, number>();
+  let paragraphCount = 0;
+  for (const passage of passages) {
+    for (let position = 1; position <= passage.paragraphCount; position += 1) {
+      const path = resolve(root, 'artifacts', passage.sourceId, `${passage.sourceId}-p${position}`, stage);
+      if (!existsSync(path)) continue;
+      paragraphCount += 1;
+      const result = resultOf(path);
+      const decision = String(result['decision']);
+      decisions.set(decision, (decisions.get(decision) ?? 0) + 1);
+      const issues = Array.isArray(result['issues']) ? result['issues'] as JsonRecord[] : [];
+      for (const issue of issues) {
+        const category = String(issue['category']);
+        categories.set(category, (categories.get(category) ?? 0) + 1);
+      }
+    }
+  }
+  return {
+    paragraphCount,
+    decisions: Object.fromEntries([...decisions].sort()),
+    categories: Object.fromEntries([...categories].sort()),
+  };
+}
+
+function batch003AuditCounts(stage: '04-audit.json' | '06-reaudit.json') {
+  const decisions = new Map<string, number>();
+  const categories = new Map<string, number>();
+  let paragraphCount = 0;
+  const roots = [
+    resolve(batch003Root, 'artifacts/69c0186c78128b2a9bede0c8'),
+    resolve(batch003Root, 'artifacts/6a22950f86fd308968e11320'),
+    resolve(batch003Root, 'artifacts/69bcae308095df3b8c53d9a2'),
+  ];
+  for (const root of roots) {
+    if (!existsSync(root)) continue;
+    for (let position = 1; position <= 8; position += 1) {
+      const sourceId = root.split('/').at(-1)!;
+      const path = resolve(root, `${sourceId}-p${position}`, stage);
+      if (!existsSync(path)) continue;
+      paragraphCount += 1;
+      const result = resultOf(path);
+      const decision = String(result['decision']);
+      decisions.set(decision, (decisions.get(decision) ?? 0) + 1);
+      const issues = Array.isArray(result['issues']) ? result['issues'] as JsonRecord[] : [];
+      for (const issue of issues) {
+        const category = String(issue['category']);
+        categories.set(category, (categories.get(category) ?? 0) + 1);
+      }
+    }
+  }
+  return {
+    paragraphCount,
+    decisions: Object.fromEntries([...decisions].sort()),
+    categories: Object.fromEntries([...categories].sort()),
+  };
+}
+
+const paragraphRecords: JsonRecord[] = [];
+let directPass = 0;
+let repairedPass = 0;
+let reviewRequired = 0;
+
+for (const passage of passages) {
+  for (let position = 1; position <= passage.paragraphCount; position += 1) {
+    const paragraphId = `${passage.sourceId}-p${position}`;
+    const root = resolve(artifactsRoot, passage.sourceId, paragraphId);
+    const status = readJson(resolve(root, 'status.json'));
+    const initialAudit = resultOf(resolve(root, '04-audit.json'));
+    const initialDecision = String(initialAudit['decision']);
+    const finalStatus = String(status['status']);
+    const repaired = existsSync(resolve(root, '05-repair.json'));
+    const finalAuditPath = repaired ? resolve(root, '06-reaudit.json') : resolve(root, '04-audit.json');
+    const finalAudit = resultOf(finalAuditPath);
+    const finalDecision = String(finalAudit['decision']);
+    const diagnosticPath = resolve(
+      root,
+      repaired ? 'diagnostic-gold-repaired.json' : 'diagnostic-gold-candidate.json',
+    );
+    const bundlePath = resolve(
+      root,
+      repaired ? 'proposition-bundle-repaired.json' : 'proposition-bundle-candidate.json',
+    );
+    const diagnostic = artifactInfo(diagnosticPath, 'diagnostic');
+    const bundle = artifactInfo(bundlePath, 'bundle');
+    if (status['diagnosticGoldHash'] !== diagnostic.hash || status['propositionBundleHash'] !== bundle.hash) {
+      throw new Error(`${paragraphId}: status 해시와 실제 산출물 해시가 다르다.`);
+    }
+
+    let route: string;
+    if (initialDecision === 'PASS' && finalStatus === 'AGENT_AUDITED') {
+      directPass += 1;
+      route = 'DIRECT_AUDIT_PASS';
+    } else if (repaired && finalDecision === 'PASS' && finalStatus === 'AGENT_AUDITED') {
+      repairedPass += 1;
+      route = 'FIRST_REPAIR_PASS';
+    } else if (repaired && finalStatus === 'REVIEW_REQUIRED') {
+      reviewRequired += 1;
+      route = 'FIRST_REPAIR_REAUDIT_FAILED';
+    } else {
+      throw new Error(`${paragraphId}: 예상하지 못한 상태 전이 ${initialDecision} → ${finalDecision}`);
+    }
+    const finalIssues = Array.isArray(finalAudit['issues']) ? finalAudit['issues'] as JsonRecord[] : [];
+    paragraphRecords.push({
+      sourceId: passage.sourceId,
+      paragraphId,
+      status: finalStatus,
+      route,
+      productionEligible: status['productionEligible'],
+      currentDiagnosticGold: diagnostic,
+      currentPropositionBundle: bundle,
+      initialAuditPath: relativeToBatch(resolve(root, '04-audit.json')),
+      finalAuditPath: relativeToBatch(finalAuditPath),
+      finalIssueCategories: finalIssues.map((issue) => issue['category']),
+    });
+  }
+}
+
+const runSummary = readJson(resolve(batch004Root, 'run-summary.json'));
+const accumulatedUsage = runSummary['accumulatedUsage'] as JsonRecord;
+const initial004 = auditCounts(batch004Root, '04-audit.json');
+const reaudit004 = auditCounts(batch004Root, '06-reaudit.json');
+const initial003 = batch003AuditCounts('04-audit.json');
+const reaudit003 = batch003AuditCounts('06-reaudit.json');
+
+const passageRecords = passages.map((passage) => {
+  const records = paragraphRecords.filter((paragraph) => paragraph['sourceId'] === passage.sourceId);
+  const automaticAgentAudited = records.filter((paragraph) => paragraph['status'] === 'AGENT_AUDITED').length;
+  const passageReviewRequired = records.filter((paragraph) => paragraph['status'] === 'REVIEW_REQUIRED').length;
+  return {
+    ...passage,
+    automaticAgentAudited,
+    reviewRequired: passageReviewRequired,
+    passageComplete: passageReviewRequired === 0,
+  };
+});
+
+const manifest = {
+  artifactType: 'paragraph-gold-post-first-repair-manifest-v1',
+  batchId: 'paragraph-gold-batch-004-three-passages',
+  createdOn: '2026-09-04',
+  planHash: runSummary['planHash'],
+  policy: {
+    automaticRepairCycles: 1,
+    pauseAfterFirstReaudit: true,
+    collaborativeRepairStarted: false,
+  },
+  counts: {
+    passages: passages.length,
+    paragraphs: paragraphRecords.length,
+    directAuditPass: directPass,
+    firstRepairAttempted: repairedPass + reviewRequired,
+    firstRepairPass: repairedPass,
+    automaticAgentAudited: directPass + repairedPass,
+    reviewRequired,
+  },
+  usage: {
+    responseCount: accumulatedUsage['responseCount'],
+    costUsd: accumulatedUsage['costUsd'],
+    apiFailureCount: 0,
+    automaticRetryCount: 0,
+  },
+  passages: passageRecords,
+  paragraphs: paragraphRecords,
+};
+
+const comparison = {
+  artifactType: 'paragraph-gold-generalized-rule-observation-v1',
+  createdOn: '2026-09-04',
+  caution: '서로 다른 지문 표본이고 생성·감사·수리 프롬프트를 동시에 바꿨으므로 인과 효과가 아니라 관찰 비교다.',
+  baselineBatch003: {
+    paragraphCount: 16,
+    directAuditPass: 6,
+    firstRepairAttempted: 10,
+    firstRepairPass: 4,
+    automaticAgentAudited: 10,
+    reviewRequired: 6,
+    initialAudit: initial003,
+    reaudit: reaudit003,
+  },
+  promptedBatch004: {
+    paragraphCount: 18,
+    directAuditPass: directPass,
+    firstRepairAttempted: repairedPass + reviewRequired,
+    firstRepairPass: repairedPass,
+    automaticAgentAudited: directPass + repairedPass,
+    reviewRequired,
+    initialAudit: initial004,
+    reaudit: reaudit004,
+  },
+  conclusions: {
+    initialGeneration: 'NO_OBSERVED_IMPROVEMENT',
+    firstRepair: 'OBSERVED_IMPROVEMENT',
+    overallAutomaticCompletion: 'OBSERVED_IMPROVEMENT',
+    strongestEvidenceFor: 'PG-RULE-004_REPAIR_NEIGHBORHOOD_REGRESSION_CHECK',
+    notYetEstablished: [
+      'PG-RULE-001_EDGE_EVIDENCE_BEFORE_DIRECTION',
+      'PG-RULE-002_QUALIFIER_SCOPE_FIDELITY',
+      'PG-RULE-003_DIAGNOSTIC_COVERAGE_INVARIANT',
+    ],
+  },
+};
+
+writeFileSync(
+  resolve(batch004Root, 'post-first-repair-manifest-v1.json'),
+  `${JSON.stringify(manifest, null, 2)}\n`,
+  'utf8',
+);
+writeFileSync(
+  resolve(batch004Root, 'generalized-rule-observation-v1.json'),
+  `${JSON.stringify(comparison, null, 2)}\n`,
+  'utf8',
+);
+
+const report = `# 배치 004 일반화 규칙 적용 관찰 보고
+
+## 1. 전체 맥락
+
+앞선 42문단에서 반복된 문제를 네 가족으로 정리해 생성·중심축 분해·관계 매핑·독립 감사·수리
+프롬프트에 반영했다. 이번에는 아직 처리하지 않은 완전한 지문 세 개, 총 18문단을 같은 생산선으로
+처리해 실제 변화가 있는지 관찰했다.
+
+| 지문 | 문단 | 자동 통과 | 검토 필요 |
+|---|---:|---:|---:|
+| 데이터의 결측치와 이상치 처리 | 5 | 4 | 1 |
+| 유동성과 금리의 관계 | 5 | 5 | 0 |
+| 법 모델과 임대차 보호 제도 | 8 | 5 | 3 |
+| 합계 | 18 | 14 | 4 |
+
+## 2. 수행한 작업에 대한 목적
+
+이번 작업은 네 규칙을 프롬프트에 적었다는 사실만 확인하는 것이 아니라, 최초 생성과 한 번의 자동
+수리에서 실제 오류와 검토 대기 문단이 줄어드는지 확인하기 위한 관찰 실험이다. 서로 다른 지문을
+비교하므로 개선을 인과적으로 증명하는 실험은 아니며, 다음 배치에서 계속 확인할 신호를 얻는 것이
+목적이다.
+
+## 3. 작업 과정
+
+1. 배치 003의 16문단을 모두 승인하고 자동 성공 10개와 협업 성공 6개를 별도 라벨로 기록했다.
+2. 간선 근거, 조건·범위·양상, 진단 구조 coverage, 수리 후 인접 필드 점검 규칙을 각 단계의
+   프롬프트에 반영했다.
+3. 수정 프롬프트를 포함한 계획 해시를 고정하고 드라이런을 통과했다.
+4. 세 지문 18문단에 대해 문단당 3회의 최초 생성과 1회의 독립 감사를 수행했다.
+5. 감사에서 문제가 발견된 12문단만 한 번 수리하고 재감사했다. 추가 자동 수리는 하지 않았다.
+
+- 계획 해시: ${String(runSummary['planHash'])}
+- API 응답: ${String(accumulatedUsage['responseCount'])}회
+- 비용: ${Number(accumulatedUsage['costUsd']).toFixed(7)}달러
+- API 실패·자동 재시도: 0회
+
+## 4. 작업 결과
+
+### 전체 자동 처리 결과
+
+| 지표 | 배치 003: 규칙 반영 전 | 배치 004: 규칙 반영 후 |
+|---|---:|---:|
+| 최초 감사 바로 통과 | 6/16 (37.5%) | 6/18 (33.3%) |
+| 수리 대상 중 1차 수리 통과 | 4/10 (40.0%) | 8/12 (66.7%) |
+| 최종 자동 통과 | 10/16 (62.5%) | 14/18 (77.8%) |
+| 1차 수리 후 검토 대기 | 6/16 (37.5%) | 4/18 (22.2%) |
+
+최초 생성만 보면 개선되지 않았다. 바로 통과한 비율이 오히려 37.5%에서 33.3%로 조금 낮아졌다.
+반면 1차 수리 성공률은 40.0%에서 66.7%로 높아졌고, 최종 자동 통과율도 62.5%에서 77.8%로
+높아졌다.
+
+### 네 일반화 문제별 관찰
+
+1. **간선의 방향·유형 근거**: 최초 감사의 DIRECTION 이슈는 4건/16문단에서 5건/18문단으로
+   줄지 않았다. 수리 후 DIRECTION 표시는 사라졌지만, 결측치 5문단에는 절차를 목적-수단으로
+   과도하게 해석한 간선 두 개가 남았다. 생성 단계 개선은 확인되지 않았다.
+2. **조건·범위·양상 보존**: 최초 CONDITION_OR_SCOPE+MODALITY는 7건에서 8건으로 거의 같은
+   수준이었다. 수리 후 잔존은 4건에서 2건으로 줄었다. 생성보다 수리 단계에서 개선 신호가 있다.
+3. **진단 구조 coverage**: 최초 생성에서 coverage 관련 결함이 완전히 사라지지 않았고, 법 모델
+   6문단에서 원칙과 예외의 대비가 중심 이야기·축에 빠진 채 남았다. 다만 재감사 후 관련 잔존
+   이슈는 이전 배치보다 적었다.
+4. **수리 후 인접 필드 회귀 검사**: 수리한 문단 중 재감사 실패가 6/10에서 4/12로 줄었다.
+   현재 네 규칙 중 가장 분명한 개선 신호다.
+
+### 남은 검토 대상 4문단
+
+- 결측치·이상치 5문단: 순차적 절차를 목적-수단으로 과도하게 연결한 간선 두 개.
+- 법 모델 4문단: 원문에 없는 ‘차례로 등장’이라는 시간 순서를 centralStory가 추가함.
+- 법 모델 6문단: 계약 우선 원칙과 임차인 보호 예외의 대비가 centralStory·축·핵심 관계에서 누락됨.
+- 법 모델 8문단: 조정 절차 개시의 필수 합의 조건을 가능성으로 약화했고, 합의 불성립 시 재판으로
+  가는 조건 분기 간선이 누락됨.
+
+유동성과 금리 지문 5문단은 모두 자동 통과했다. 나머지 두 지문은 각각 1개와 3개의 검토 대기
+문단이 있어 아직 지문 단위 완료 상태가 아니다.
+
+## 5. 결과 해석
+
+결론은 **부분 개선**이다. 일반화 규칙을 넣었다고 해서 최초 생성 오류가 줄었다는 증거는 없다.
+오히려 최초 직접 통과율과 방향·조건 계열 이슈는 이전 배치와 비슷하거나 조금 나빴다. 따라서
+PG-RULE-001~003이 생성 단계에서 효과가 있다고 확정하면 안 된다.
+
+반면 한 번의 수리로 해결되는 비율과 최종 자동 통과율은 뚜렷하게 높아졌다. 특히 수리 후 관련
+필드를 함께 점검하도록 한 PG-RULE-004는 실제 개선 신호가 있다. 다만 생성·감사·수리 프롬프트를
+동시에 바꾸었고 지문 난이도도 다르므로, 감사기가 더 민감해진 효과와 수리기가 나아진 효과를
+완전히 분리할 수는 없다.
+
+따라서 현 시점의 안전한 판단은 다음과 같다. 네 규칙은 유지하되, 첫 세 규칙의 생성 단계 효과는
+다음 배치에서도 계속 관찰한다. 남은 4문단은 자동 수리를 반복하지 않고 협업 수리 대상으로 둔다.
+`;
+
+writeFileSync(resolve(batch004Root, 'GENERALIZATION-OBSERVATION-REPORT.md'), report, 'utf8');
+
+process.stdout.write(
+  `배치 004 보고 생성 완료: 직접 통과 ${directPass}, 1차 수리 통과 ${repairedPass}, 검토 대기 ${reviewRequired}\n`,
+);

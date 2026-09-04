@@ -25,6 +25,7 @@ export * from './dialogue-experiment/two-stage-evaluator.js';
 export * from './learning-session/handoff.js';
 // 문항 상세 골드와 기준 경로. 문단 PASS 계약과 분리한다.
 export * from './problem-solving/gold.js';
+export * from './problem-solving/solution-profile.js';
 export * from './problem-solving/gold-source-fidelity.js';
 // 공식 해설을 claim 단위로 분해해 기본·보충·제외 배치를 먼저 고정하는 계약.
 export * from './problem-solving/explanation-audit.js';
@@ -52,6 +53,9 @@ export * from './central-axis-decomposition/evaluator.js';
 export * from './central-axis-decomposition/schema.js';
 export * from './axis-relation-mapping/evaluator.js';
 export * from './axis-relation-mapping/schema.js';
+// 문제 골드 선행 입력으로 쓰는 문단 골드 생산·명제 보존·독립 감사 계약.
+export * from './paragraph-analysis/production.js';
+export * from './paragraph-analysis/production-runtime.js';
 // 중심축 확정 뒤 반사실적으로 required/error_only를 배정하는 별도 API 단계.
 export * from './diagnostic-roles/evaluator.js';
 export * from './diagnostic-roles/schema.js';

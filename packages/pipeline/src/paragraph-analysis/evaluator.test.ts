@@ -40,6 +40,9 @@ describe('paragraph analysis prompt versions', () => {
     expect(v31).not.toBe(v3);
     expect(v31).toContain('diagnosticRole을 생성하지 않는다');
     expect(v31).toContain('원리 → 적용 사례');
+    expect(v31).toContain('누적 사례 기반 관계·범위 검사');
+    expect(v31).toContain('단순 병렬·나열·시간적 연속만으로 인과 간선을 만들지 않는다');
+    expect(v31).toContain('장소 범위');
   });
 
   it('tracks eight reviewed v2 golds and four response levels per paragraph', () => {

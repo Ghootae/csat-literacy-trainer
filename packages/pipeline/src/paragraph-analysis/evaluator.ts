@@ -176,6 +176,8 @@ export async function analyzeParagraphWithOpenAI(
     readonly model: string;
     readonly effort: ParagraphAnalysisEffort;
     readonly promptVersion?: ParagraphAnalysisPromptVersion;
+    readonly serviceTier?: 'default';
+    readonly maxOutputTokens?: number;
     readonly client?: OpenAI;
   },
 ): Promise<ParagraphAnalysisCallResult> {
@@ -190,10 +192,11 @@ export async function analyzeParagraphWithOpenAI(
   const started = performance.now();
   const response = await client.responses.parse({
     model: config.model,
+    ...(config.serviceTier === undefined ? {} : { service_tier: config.serviceTier }),
     instructions: loadParagraphAnalysisPrompt(promptVersion),
     input: JSON.stringify(input, null, 2),
     reasoning: { effort: config.effort },
-    max_output_tokens: 20_000,
+    max_output_tokens: config.maxOutputTokens ?? 20_000,
     store: false,
     text: {
       format: zodTextFormat(resultSchema, 'paragraph_analysis_result'),

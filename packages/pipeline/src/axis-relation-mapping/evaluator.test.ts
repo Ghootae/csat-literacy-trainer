@@ -43,6 +43,7 @@ describe('fixed-axis relation mapping', () => {
     expect(prompt).toContain('수정·분할·병합하거나 새 축을 만들지 않는다');
     expect(prompt).toContain('관계 하나가 질문 하나를 뜻하지 않는다');
     expect(prompt).toContain('required/error_only');
+    expect(prompt).toContain('방향·조건·대상');
   });
 
   it('maps every fixed axis and relation', () => {
