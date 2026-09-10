@@ -78,7 +78,9 @@ Node 24. 채점 1건에 약 20초, $0.05가 든다.
 
 | 목적 | 파일 |
 |---|---|
-| 지금 무엇이 정해졌고 무엇이 미결인가 | `docs/NEXT.md` |
+| 지금 무엇이 정해졌고 무엇이 미결인가 | `memory/CURRENT_STATE.md` |
+| 왜 그렇게 결정했는가 | `memory/DECISIONS.md` |
+| 주제별 정책·실험·코드 원문 찾기 | `memory/INDEX.md` |
 | 학생이 겪는 흐름과 그 근거 | `docs/STUDENT-LOOP-DESIGN.md` |
 | 문단 → 명제 → 합성 → 질의가 만들어지는 과정 | `docs/DECOMPOSITION-PROCESS.md` 외 2편 |
 | 판정이 왜 이렇게 정해졌는가 | `docs/experiments/` (26편, 원시 로그 포함) |
