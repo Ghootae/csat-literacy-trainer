@@ -5,6 +5,7 @@
 
 ## 먼저 읽을 정본
 
+- 클로드·코덱스 업무 분장: [D-0092](./decisions/D-0092-claude-codex-work-division.md), [인계 문서 형식](../docs/handoffs/TEMPLATE.md). 확정 설계 실행은 코덱스에 인계, 충돌 시 중단·보고, 클로드가 diff 검토. `AGENTS.md`에 적용.
 - 현재 상태: [`CURRENT_STATE.md`](./CURRENT_STATE.md)
 - 결정: [`DECISIONS.md`](./DECISIONS.md)
 - 열린 질문: [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md)

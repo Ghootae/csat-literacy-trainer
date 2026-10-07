@@ -19,3 +19,4 @@
 - `rejected`: 검토했으나 채택하지 않음
 - `superseded`: 더 최신 결정이 대체함
 - `deprecated`: 역사적 호환 때문에 남아 있으나 새 작업에 적용하지 않음
+| [`D-0092`](./decisions/D-0092-claude-codex-work-division.md) | accepted | 클로드·코덱스 업무 분장 | 클로드=주 사고 파트너, 코덱스=명시 시 보조 논의·확정 설계 실행. 인계 문서·중단 보고·diff 검토 |
