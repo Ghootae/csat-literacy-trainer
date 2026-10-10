@@ -163,5 +163,15 @@
 | [`D-0106`](./decisions/D-0106-post-repair-choice-reselect-or-coaching.md) | accepted | 교정 성공 뒤 흐름 | 오답: [다시 선택]/[코칭 보기], 정답·틀린 근거: [설명 보기]/[마치기]. 교정 실패는 설명 후 종료. 구현 미착수 |
 
 | [`D-0107`](./decisions/D-0107-session-model-routing-repair-reselect-coaching.md) | accepted | 세션 안 모델 배정 | 모든 선택 판정은 그 선택의 정오(정답 luna·오답 sol), REPAIR는 luna 고정, 공개 코칭은 세션 정오 모델(오답 세션 sol은 별도 코칭 호출). 구현 미착수 |
+
+| [`D-0108`](./decisions/D-0108-repair-judges-local-error-only.md) | accepted | 교정 판정 범위 | 질문이 겨냥한 국소 오류만 판정, 전역 이해는 학생이 재선택 여부로 판단. 짧은·일부 칸 답과 '아니요'는 고쳤음, 새 오류는 기록만. 지시문·서버 미변경 |
+
+| [`D-0109`](./decisions/D-0109-trap-map-v0-external-rate-experiment.md) | accepted | 사고 추적기 함정 지도 실험 | 6문항 LLM 함정 지도(sol·luna 각3회, 상한3.5달러)를 메가스터디 선지별 선택 비율과 대조. 분석층 전용·모델은 비율 비공개. Codex 인계 |
+| [`D-0110`](./decisions/D-0110-public-coaching-format-haeyo-and-markdown.md) | accepted | 공개 설명 형식 | 정답 세션 설명은 luna가 해요체 지시문으로 따로 생성(36칸 형식·내용 문제 0). 코칭 마크다운은 유지하고 화면이 렌더링. 운영 미반영 |
+
+| [`D-0111`](./decisions/D-0111-thought-diagnosis-v0-experiment.md) | accepted | 사고 진단 v0 실험 | 가상 풀이 30개의 결과 유형·단계별 성공/실패·함정 유형 분류를 Claude·Codex 독립 라벨(불일치는 사용자 판정)과 대조. sol·luna 각3회, 상한4.5달러. Codex 인계 |
+| [`D-0112`](./decisions/D-0112-v5-developer-path-connection-end-states.md) | accepted | v5 개발자 경로 종료 상태 | 정답·교정 실패는 정답·근거 미확인+luna 설명만, 오답 모든 종료 지점에 sol 해요체 코칭(공식 해설 제거, 정답 번호 유지) |
 | [`D-0113`](./decisions/D-0113-work-tree-entry-map.md) | accepted | 메모리 진입점 | 제품 기능 단위 작업 수형도 `memory/WORK_TREE.md`를 작업 시작 때 먼저 읽고, 갈래 상태가 바뀐 작업 끝에 갱신. 검증기가 필수 파일·링크 검사 |
 | [`D-0114`](./decisions/D-0114-v5-current-composition-methods-without-gloss.md) | accepted | v5 실제 구성 | 현재 v5는 해석본 없는 methods(규칙+주장 분리+인용 규칙). D-0093의 해석본 사용은 luna·sol 기호 오독 확인 전까지 보류 |
+
+| [`D-0115`](./decisions/D-0115-thought-diagnosis-periodic-sol.md) | accepted | 사고 진단 운영 | 사고 진단은 주기 실행, 모델 sol 고정. 진단 결과는 실시간 판정기 입력 아님 |

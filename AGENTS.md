@@ -3,6 +3,19 @@
 This repository keeps durable project memory in `memory/`. Chat history and
 `.omc/project-memory.json` are not authoritative project memory.
 
+## 사용자 지시의 불명확한 부분 확인
+
+이 프로젝트에서 사용자의 작업 지시를 충분히 이해하지 못한 부분이 있다면,
+작업 수행 전에 반드시 다음 절차를 따른다.
+
+1. 이해하지 못한 부분을 목록으로 사용자에게 먼저 제시한다.
+2. 목록의 항목을 하나씩 질문하고 사용자 답변을 기다린다.
+3. 각 답변을 바탕으로 이해한 내용을 사용자에게 확인하고, 해당 질문이 충분히
+   해소됐는지 점검한다. 불충분하면 추가 질문한다.
+
+불명확한 부분을 임의의 가정으로 대체해 작업을 시작하지 않는다. 목록의 질문이
+충분히 해소된 뒤 작업을 수행한다. 근거: `memory/decisions/D-0069-clarify-user-instructions-before-work.md`.
+
 ## 클로드·코덱스 업무 분장
 
 근거: `memory/decisions/D-0092-claude-codex-work-division.md`.
