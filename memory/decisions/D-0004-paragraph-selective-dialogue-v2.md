@@ -1,12 +1,15 @@
 ---
 id: D-0004
-status: accepted
+status: superseded
 date: 2026-09-09
 scope: paragraph-dialogue
 supersedes: none
 ---
 
 # 문단 대화에 간결 판정과 선택적 상세 진단을 결합
+
+2026-09-18: 판정 범위와 자료 권한은 [D-0010](./D-0010-paragraph-axis-scope-v3.md)으로 대체.
+아래는 당시 결정 원문이며, 선택적 상세 진단 구조는 후속 결정에서도 유지된다.
 
 ## 결정
 

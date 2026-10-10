@@ -38,3 +38,7 @@ supersedes: none
 - [`문제 풀이 원문 직접 운영 정책`](../../docs/PROBLEM-SOLVING-SOURCE-DIRECT-OPERATIONAL-POLICY-2026-09-08.md)
 - [`15문항 세 입력 조건 비교`](../../docs/experiments/problem-evaluator-three-reference-combined-15-item-2026-09-06/REPORT.md)
 - [`대표 상태 canary`](../../docs/experiments/problem-source-direct-live-canary-2026-09-08/FINAL-REPORT.md)
+
+## 후속 결정
+
+- [D-0084](./D-0084-local-marker-gloss-direction.md)(2026-10-06): 기호·도표 지칭 해석 범위에 한해 문항별 해석본을 판정기 입력으로 쓰는 방향을 채택해 이 결정을 부분 대체한다. 나머지 범위는 유지하며 운영 연결 전이다.
