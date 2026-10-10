@@ -1,0 +1,33 @@
+{
+ "scope": "v5 원문 대입 확인 시험, 공손룡 12번, 응답 11개(S1~S8, X1~X3) × 조건 2(methods, methods_subst) × 3반복, 모델 3개(모두 effort medium). 의미 판정은 Claude(핵심 응답 전 건+정상 응답 선별) 먼저 고정 → GPT-6 Astra 모델별 66건 전 건 블라인드.",
+ "runs": {
+  "gpt-5.6-terra": {"dir": "docs/experiments/v5-substitution-check-gongsun-2026-10-07", "requests": 81, "estimatedUsdTerraRates": 1.87, "medianLatencySec": 17.7, "outputTokens": 130802,
+    "note": "methods_subst 7칸이 하네스 결함(대입 문장의 기호 문자 누락·두 괄호 거부)으로 평가 오류 → REVALIDATION-fixed-marker-normalization.json에서 첫 시도 출력으로 오프라인 복원(API 0)"},
+  "gpt-6.1-sol": {"dir": "docs/experiments/v5-substitution-check-v2-gpt-6.1-sol-gongsun-2026-10-07", "requests": 66, "estimatedUsdTerraRates": 1.52, "medianLatencySec": 27.4, "outputTokens": 107631, "note": "고친 대입 계약(v2) 사용. 실행 뒤 스크립트에 비용 상한 수정 기능이 추가되어 이 폴더의 FROZEN runnerHash와 현재 스크립트가 다름(결과 영향 없음)"},
+  "gpt-6-luna": {"dir": "docs/experiments/v5-substitution-check-v2-gpt-6-luna-gongsun-2026-10-07", "requests": 72, "estimatedUsdTerraRates": 2.88, "medianLatencySec": 27.8, "outputTokens": 217346, "note": "53칸에서 추정 비용 상한 2.5달러로 정지 → 사용자 승인으로 3.5달러로 올려 이어 실행(CAP-AMENDMENT.json)"},
+  "pricingCaveat": "비용은 모두 terra 단가로 계산한 추정치다. sol·luna의 실제 단가는 확인하지 못했다."
+ },
+ "results": {
+  "gpt-5.6-terra": {
+   "methods": {"labelS5": "1/3", "errorDetection": "12/12", "GPT_allPass": "28/33", "serious": "S5 과잉 교정 2(학생에게 '만' 귀속), X1 오류 설명의 ⓓ=빨간 옷 오독 1(맞는 '서로 다른 대상'을 오류로 지목)"},
+   "methods_subst": {"labelS5": "3/3", "errorDetection": "10/12", "GPT_allPass": "21/33", "serious": "S2 놓침 1(판정기 자신의 ⓓ=빨간 옷 오독), S7 놓침 1", "minor": "관계 주장을 대상 자리에 대입하고 PASS(S4 2건), reason의 전제 일치/불일치 서술 뒤바뀜 3건, X2 대입 확인 근거 부정확 2건"}
+  },
+  "gpt-6.1-sol": {
+   "methods": {"labelS5": "3/3", "errorDetection": "12/12", "GPT_allPass": "32/33", "serious": "없음. X2 1건 INSUFFICIENT(허용 범위 밖, 오류 교정으로 가지는 않음)"},
+   "methods_subst": {"labelS5": "3/3", "errorDetection": "12/12", "GPT_allPass": "33/33", "serious": "없음"}
+  },
+  "gpt-6-luna": {
+   "methods": {"labelS5": "3/3", "errorDetection": "12/12", "GPT_allPass": "29/33", "serious": "없음", "minor": "S5 '만' 기준 유보 1, reason 기호 오기(ⓒ) 1, ⓓ 뜻과 발화 의도를 섞은 서술 2"},
+   "methods_subst": {"labelS5": "3/3", "errorDetection": "12/12", "GPT_allPass": "31/33", "serious": "없음", "minor": "관계 주장을 대상 자리에 대입하고 PASS(S4 2건)"}
+  }
+ },
+ "judgeAgreement": "심각한 실패(라벨 실패, 판정기 자신의 ⓓ=빨간 옷 오독)는 Claude·GPT 판정이 일치했다(terra T24·T42·T53·T80·T75, sol·luna 0). GPT는 근거 서술의 국소 오류(전제와의 일치/불일치 표현, 대입 칸 오용 등)를 추가로 실패로 셌고 Claude는 대부분 경미로 분류하거나 선별 검토 범위 밖이었다. 두 번째 반론 호출은 하지 않았다.",
+ "findings": [
+  "S5 과잉 교정과 ⓓ=빨간 옷 오독은 gpt-5.6-terra에서만 나타났다. gpt-6.1-sol과 gpt-6-luna는 원문 대입 확인 없이도 S5를 3/3 허용했고 판정기 자신의 오독은 0건이었다.",
+  "terra에서 원문 대입 확인은 S5를 1/3 → 3/3으로 고쳤지만 실제 오류 2건을 놓쳤고(대입 확인 과정에서 판정기 자신이 ⓓ를 빨간 옷으로 읽음), 대입 칸을 관계 주장에 잘못 쓰는 등 근거 서술 오류가 늘었다.",
+  "sol·luna에서 원문 대입 확인은 판정 결과를 바꾸지 않았다(이득 없음, 손해도 거의 없음). luna는 대입 칸 오용 2건.",
+  "이 문항에서 판정 정확도는 프롬프트 장치보다 모델 차이가 더 컸다. sol이 가장 정확했고(GPT 기준 65/66) 출력 토큰도 가장 적었다. 응답 지연 중앙값은 sol·luna가 terra보다 약 10초 길다.",
+  "교정 질문 품질 문제(정답 후보를 양자택일로 제시, 예/아니요로 끝남, 이미 맞힌 부분을 다시 물음)는 세 모델 모두 남았다."
+ ],
+ "limitations": ["공손룡 12번 한 문항, 응답 11개, 반복 3회", "sol·luna 실제 단가 미확인", "Claude 검토는 정상 응답을 선별 검토했다", "사람 판정이 아니다"]
+}
