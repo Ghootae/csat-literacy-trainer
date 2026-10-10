@@ -7,6 +7,7 @@
 
 - 작업 지시 확인 절차: [D-0069](./decisions/D-0069-clarify-user-instructions-before-work.md), [적용 기록](./checkpoints/2026-10-02-user-instruction-clarification-rule.md). 이해 불충분한 부분은 작업 전에 목록으로 제시하고 하나씩 질문한 뒤 사용자 답변으로 해소 여부를 확인한다. `AGENTS.md`에 적용.
 - 클로드·코덱스 업무 분장: [D-0092](./decisions/D-0092-claude-codex-work-division.md), [인계 문서 형식](../docs/handoffs/TEMPLATE.md). 확정 설계 실행은 코덱스에 인계, 충돌 시 중단·보고, 클로드가 diff 검토. `AGENTS.md`에 적용.
+- 작업 수형도: [`WORK_TREE.md`](./WORK_TREE.md) — 제품 기능별 갈래·상태·다음 한 단계([D-0113](./decisions/D-0113-work-tree-entry-map.md))
 - 현재 상태: [`CURRENT_STATE.md`](./CURRENT_STATE.md)
 - 결정: [`DECISIONS.md`](./DECISIONS.md)
 - 열린 질문: [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md)

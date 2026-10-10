@@ -10,6 +10,7 @@ const requiredFiles = [
   'AGENTS.md',
   'memory/README.md',
   'memory/CURRENT_STATE.md',
+  'memory/WORK_TREE.md',
   'memory/DECISIONS.md',
   'memory/OPEN_QUESTIONS.md',
   'memory/INDEX.md',

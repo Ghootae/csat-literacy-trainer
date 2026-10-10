@@ -135,7 +135,7 @@
 | [`D-0090`](./decisions/D-0090-problem-evaluator-v5-naming.md) | accepted | 문제 판정기 명칭 | 'v3 기반 v4 후보'를 v5로 부름(대화·문서만). v4는 운영 후보로 쓰지 않음 |
 | [`D-0091`](./decisions/D-0091-v3-marker-phase-closed-port-to-v5.md) | accepted | 기호 실험 단계 | v3 기호 실험 마무리. 주장 분리·인용 규칙·승인 해석본을 v5로 옮김, 미해결 과제는 v5에서 |
 | [`D-0092`](./decisions/D-0092-claude-codex-work-division.md) | accepted | 클로드·코덱스 업무 분장 | 클로드=주 사고 파트너, 코덱스=명시 시 보조 논의·확정 설계 실행. 인계 문서·중단 보고·diff 검토 |
-| [`D-0093`](./decisions/D-0093-v5-composition-auto-gloss-pipeline.md) | accepted | v5 구성·자동 해석본 | v5 규칙 + 자동 중간안 해석본(독립 재도출 대조, 최대 3회차, 실패 시 해석본 없이) + v3 판정 방법. 사람 승인 해석본 미사용 |
+| [`D-0093`](./decisions/D-0093-v5-composition-auto-gloss-pipeline.md) | accepted | v5 구성·자동 해석본 | v5 규칙 + 자동 중간안 해석본(독립 재도출 대조, 최대 3회차, 실패 시 해석본 없이) + v3 판정 방법. 사람 승인 해석본 미사용. 해석본 사용(2번)은 [D-0114](./decisions/D-0114-v5-current-composition-methods-without-gloss.md)로 보류 |
 
 | [`D-0094`](./decisions/D-0094-source-jev-gold-flow-stopped.md) | accepted | 원문 분할·JEV 골드 흐름 중단 | 골드 생성 방향에서 제외·결과 보존. 최소2축(실질)·문단 기능·관계 기준은 새 방향으로 계승 |
 | [`D-0095`](./decisions/D-0095-central-story-two-stage-generation.md) | accepted | 중심 이야기 두 단계 생성 실험 | 보강(원문 대조·덧붙이기만·문장 배정)→축 생성(최소2축 우선), 25문단·최대50회·별도 실험, Codex 인계 |
@@ -163,3 +163,5 @@
 | [`D-0106`](./decisions/D-0106-post-repair-choice-reselect-or-coaching.md) | accepted | 교정 성공 뒤 흐름 | 오답: [다시 선택]/[코칭 보기], 정답·틀린 근거: [설명 보기]/[마치기]. 교정 실패는 설명 후 종료. 구현 미착수 |
 
 | [`D-0107`](./decisions/D-0107-session-model-routing-repair-reselect-coaching.md) | accepted | 세션 안 모델 배정 | 모든 선택 판정은 그 선택의 정오(정답 luna·오답 sol), REPAIR는 luna 고정, 공개 코칭은 세션 정오 모델(오답 세션 sol은 별도 코칭 호출). 구현 미착수 |
+| [`D-0113`](./decisions/D-0113-work-tree-entry-map.md) | accepted | 메모리 진입점 | 제품 기능 단위 작업 수형도 `memory/WORK_TREE.md`를 작업 시작 때 먼저 읽고, 갈래 상태가 바뀐 작업 끝에 갱신. 검증기가 필수 파일·링크 검사 |
+| [`D-0114`](./decisions/D-0114-v5-current-composition-methods-without-gloss.md) | accepted | v5 실제 구성 | 현재 v5는 해석본 없는 methods(규칙+주장 분리+인용 규칙). D-0093의 해석본 사용은 luna·sol 기호 오독 확인 전까지 보류 |
