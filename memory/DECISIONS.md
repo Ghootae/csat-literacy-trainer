@@ -175,3 +175,7 @@
 | [`D-0114`](./decisions/D-0114-v5-current-composition-methods-without-gloss.md) | accepted | v5 실제 구성 | 현재 v5는 해석본 없는 methods(규칙+주장 분리+인용 규칙). D-0093의 해석본 사용은 luna·sol 기호 오독 확인 전까지 보류 |
 
 | [`D-0115`](./decisions/D-0115-thought-diagnosis-periodic-sol.md) | accepted | 사고 진단 운영 | 사고 진단은 주기 실행, 모델 sol 고정. 진단 결과는 실시간 판정기 입력 아님 |
+| [`D-0116`](./decisions/D-0116-student-facing-tone-banmal.md) | accepted | 학생용 말투 | 고정 문구·교정 질문·종료 설명 모두 반말로 통일(D-0110 해요체 대체), 선지 조사 "①번을"(D-0112 3항 대체). 미반영 |
+| [`D-0117`](./decisions/D-0117-end-coaching-sectioned-sequence.md) | accepted | 마지막 설명 구조 | 선지별 칸 → 정답 이유 → 이해 확인, 코드 연결 문장+[다음], 시작 확인 뒤 백그라운드 생성, 자기 보고 이해는 증거 아님. 미반영 |
+| [`D-0118`](./decisions/D-0118-direct-correction-questions-and-highlight.md) | accepted | 교정 질문 직접성 | 학생 주장 직접 겨냥, 구체 사실로, 두 갈래 또는 짧은 직접 질문. 근거 구절 지문 표시. 미반영 |
+| [`D-0120`](./decisions/D-0120-omitted-conclusion-reconstruction.md) | accepted | 결론 생략 재구성 | 사실이 선지 핵심 전제를 직접 다루고 판정이 한 방향이면 결론 생략도 재구성(D-0054 보완). 미반영 |

@@ -15,6 +15,8 @@
 
 ## 문제 풀이 대화
 
+- v5 6문항·48개 가상 세션 실제 기록(2026-10-12): [작업 기록](./checkpoints/2026-10-12-v5-diverse-48-recorded.md), [문항별 전체 과정](../docs/experiments/v5-diverse-48-2026-10-12/REVIEW-INDEX.md), [보고서](../docs/experiments/v5-diverse-48-2026-10-12/REPORT.md). 정답·불충분 12개, 오답 36개를 수정·재선택·코칭까지 실행. 원응답·실패 보존, 3개 검토 항목 대기, 운영 변경 없음.
+
 - 기호 해석본·인용 형식(2026-10-06): [작업 기록](./checkpoints/2026-10-06-gongsun-marker-gloss-and-quote-format.md), [D-0084](./decisions/D-0084-local-marker-gloss-direction.md), [D-0085](./decisions/D-0085-relation-only-rationale-sufficient.md), [해석본](../packages/pipeline/fixtures/experiments/problem-solving/marker-glosses/gongsun-long-later-mohists-q12.json). Claude·GPT 공동 검토, 학생 주장 분리·응답 유형·세 조건·인용 형식 실험(총121요청). 해석본은 과잉 교정을 줄였고 귀속 대체 부작용은 인용 규칙으로 억제. 운영 미연결.
 - 기호 해석본 자동 생성(2026-10-07): [작업 기록](./checkpoints/2026-10-07-gongsun-auto-gloss-generation.md). 공통 생성기 v1·v2, 예시 포함 대 대상만, 자동 생성 두 형식 판정 비교(총148요청). 자동 생성본은 두 형식 모두 S5 과잉 교정을 막지 못함.
 - 문제 판정기 명칭(2026-10-07): [D-0090](./decisions/D-0090-problem-evaluator-v5-naming.md). v3 기반 v4 후보 = v5(운영 후보), v4 미사용, v3 학생용 기본값.
