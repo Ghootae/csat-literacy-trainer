@@ -86,7 +86,7 @@ async function replay(path: string, config: Config): Promise<Record<string, unkn
   const goldPath = resolve(config.goldRoot, `${session.paragraphId}.json`);
   const sourceGold = readFileSync(goldPath, 'utf8');
   const gold = ParagraphDiagnosticGoldSchema.parse(JSON.parse(sourceGold));
-  const evaluator = new TwoStageDialogueEvaluator();
+  const evaluator = new TwoStageDialogueEvaluator({ promptRevision: 'v3' });
   const prefixes = [];
   let previousSnapshot;
   let terminalAt: number | null = null;

@@ -5,6 +5,7 @@
  */
 
 import type {
+  AppCapabilitiesView,
   AttemptRequest,
   AttemptResponse,
   DialoguePassageSummary,
@@ -30,6 +31,10 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(body.error ?? `요청 실패 (${res.status})`);
   }
   return (await res.json()) as T;
+}
+
+export function fetchProblemInspection(sessionId: string): Promise<import('../shared/contract.js').ProblemDeveloperInspection> {
+  return jsonFetch(`/api/developer/problem-inspect?sessionId=${encodeURIComponent(sessionId)}`);
 }
 
 export function fetchPassage(paragraphId: string): Promise<PassageView> {
@@ -91,6 +96,27 @@ export function fetchDialoguePassages(): Promise<DialoguePassageSummary[]> {
   return jsonFetch<DialoguePassageSummary[]>('/api/dialogue/passages');
 }
 
+export function fetchAppCapabilities(): Promise<AppCapabilitiesView> {
+  return jsonFetch<AppCapabilitiesView>('/api/capabilities');
+}
+
+export function fetchDeveloperMap(): Promise<readonly import('../shared/contract.js').DialogueDeveloperPassage[]> {
+  return jsonFetch('/api/developer/map');
+}
+export function fetchDeveloperInspection(sessionId: string): Promise<import('../shared/contract.js').DialogueDeveloperInspection> {
+  return jsonFetch(`/api/developer/inspect?sessionId=${encodeURIComponent(sessionId)}`);
+}
+export function fetchStudentStateReport(context: 'student' | 'developer', days: 7 | 30 | 90): Promise<import('../shared/contract.js').StudentStateReportView> {
+  return jsonFetch(`/api/developer/student-state?context=${context}&days=${days}`);
+}
+export function fetchStudentPeriodicFeedback(days: 7 | 30 | 90): Promise<import('../shared/contract.js').StudentStateReportView> {
+  return jsonFetch(`/api/student-state?days=${days}`);
+}
+export function openDeveloperDialogue(passageId: string, paragraphIndex: number, sessionId?: string, fresh = false, mode: import('../shared/contract.js').DialogueMode = 'v4'): Promise<DialogueSessionView> {
+  return jsonFetch('/api/developer/open', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ passageId, paragraphIndex, sessionId, fresh, mode }) });
+}
+
 export function startDialogueSession(passageId: string): Promise<DialogueSessionView> {
   return jsonFetch<DialogueSessionView>('/api/dialogue/session', {
     method: 'POST',
@@ -118,6 +144,10 @@ export function advanceDialogueSession(sessionId: string): Promise<DialogueSessi
   return jsonFetch<DialogueSessionView>(`/api/dialogue/session/${sessionId}/advance`, {
     method: 'POST',
   });
+}
+
+export function requestDialogueQuestion(sessionId: string): Promise<DialogueSessionView> {
+  return jsonFetch<DialogueSessionView>(`/api/dialogue/session/${sessionId}/question`, { method: 'POST' });
 }
 
 export function navigateDialogueSession(

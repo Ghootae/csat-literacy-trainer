@@ -21,6 +21,7 @@ export const AxisRepresentationSchema = z.object({
   axisId: z.string().min(1),
   state: CentralAxisStateSchema,
   evidence: z.array(EvidenceSchema),
+  retractionEvidence: z.array(EvidenceSchema).optional(),
 });
 
 export const RelationRepresentationSchema = z.object({
@@ -57,16 +58,24 @@ export const ParagraphUnderstandingRecordSchema = z.object({
     diagnosticPromptVersion: z.string().min(1),
   }),
   dialogue: z.object({
-    outcome: z.enum(['PASS', 'UNRESOLVED', 'NOT_ATTEMPTED', 'ABORTED']),
+    outcome: z.enum(['PASS', 'UNRESOLVED', 'NOT_ATTEMPTED', 'ABORTED', 'SKIPPED']),
+    progression: z.enum(['STUDENT_CONTINUED']).optional(),
     questionsAnswered: z.number().int().nonnegative(),
     diagnosticQuestionCount: z.number().int().nonnegative(),
     correctiveQuestionCount: z.number().int().nonnegative(),
   }),
   currentRepresentation: z.object({
+    axisFeedback: StudentRepresentationSnapshotSchema.shape.axisFeedback,
     effectiveResponse: z.string().min(1).nullable(),
+    diagnosticRoute: z.enum(['ERROR', 'TARGETED_GAP', 'SPARSE_GAP']).nullable().optional(),
+    capturedAxisIds: z.array(z.string().min(1)).optional(),
+    unresolvedAxisIds: z.array(z.string().min(1)).optional(),
+    repairTargetRecovered: z.boolean().optional(),
+    summaryComplete: z.boolean().optional(),
     centralObjectRepresentation: z.string().nullable(),
     centralStoryRepresentation: z.string().nullable(),
     expressedClaims: StudentRepresentationSnapshotSchema.shape.expressedClaims,
+    claimLedger: StudentRepresentationSnapshotSchema.shape.claimLedger,
     axisStates: z.array(AxisRepresentationSchema),
     relationStates: z.array(RelationRepresentationSchema),
     explicitErrors: StudentRepresentationSnapshotSchema.shape.explicitErrors,
@@ -110,6 +119,7 @@ export type ParagraphUnderstandingHandoff = z.infer<
 >;
 
 export interface ParagraphUnderstandingRecordInput {
+  readonly progression?: 'STUDENT_CONTINUED';
   readonly paragraphId: string;
   readonly paragraphPosition: number;
   readonly goldRef: { readonly version: string; readonly hash: string };
@@ -119,10 +129,17 @@ export interface ParagraphUnderstandingRecordInput {
 
 function representation(snapshot: ReturnType<typeof emptySnapshot>) {
   return {
+    ...(snapshot.axisFeedback === undefined ? {} : { axisFeedback: structuredClone(snapshot.axisFeedback) }),
     effectiveResponse: snapshot.effectiveResponse ?? null,
+    diagnosticRoute: snapshot.diagnosticRoute ?? null,
+    capturedAxisIds: structuredClone(snapshot.capturedAxisIds ?? []),
+    unresolvedAxisIds: structuredClone(snapshot.unresolvedAxisIds ?? []),
+    repairTargetRecovered: snapshot.repairTargetRecovered ?? false,
+    summaryComplete: snapshot.summaryComplete ?? false,
     centralObjectRepresentation: snapshot.centralObjectRepresentation,
     centralStoryRepresentation: snapshot.centralStoryRepresentation,
     expressedClaims: structuredClone(snapshot.expressedClaims),
+    ...(snapshot.claimLedger === undefined ? {} : { claimLedger: structuredClone(snapshot.claimLedger) }),
     axisStates: structuredClone(snapshot.axisStates ?? []),
     relationStates: structuredClone(snapshot.relationStates),
     explicitErrors: structuredClone(snapshot.explicitErrors),
@@ -183,6 +200,7 @@ export function createParagraphUnderstandingRecord(
     goldRef: input.goldRef,
     evaluatorRef: input.evaluatorRef,
     dialogue: {
+      ...(input.progression === undefined ? {} : { progression: input.progression }),
       outcome: session?.finalStatus ?? 'NOT_ATTEMPTED',
       questionsAnswered: answeredTurns.length,
       diagnosticQuestionCount,

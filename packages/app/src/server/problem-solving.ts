@@ -1,48 +1,49 @@
 import { randomUUID } from 'node:crypto';
 
 import {
-  OpenAIProblemPathEvaluator,
-  ProblemPathEvaluatorFallbackError,
-  adaptProblemPathDiagnosticOutput,
-  applyAdaptedProblemEvaluatorTurn,
+  OpenAISourceDirectProblemEvaluator,
+  SourceDirectProblemEvaluatorError,
+  adaptSourceDirectDiagnosticOutput,
+  applySourceDirectProblemEvaluatorTurn,
   applyCorrectRationaleAssessment,
-  applyDeterministicExhaustedWrongAttemptCoaching,
-  createProblemPathEvaluatorInput,
-  exhaustedWrongAttemptSupplementalAccess,
-  failedCorrectionSupplementalAccess,
-  finalAttemptSupplementalAccess,
+  createSourceDirectProblemEvaluatorInput,
   createProblemSolvingSession,
+  problemEvidenceEvents,
   submitInitialProblemResponse,
   submitProblemActionResponse,
   submitProblemReselection,
-  type ProblemPathDiagnosticOutput,
-  type ProblemPathEvaluator,
-  type ProblemPathEvaluatorCallMetadata,
-  type ProblemQuestionGold,
   type ParagraphUnderstandingHandoff,
   type ProblemSolvingSession,
+  type SourceDirectDiagnosticOutput,
+  type SourceDirectProblemBundle,
+  type SourceDirectProblemEvaluator,
+  type SourceDirectProblemEvaluatorCallMetadata,
 } from '@csat/pipeline';
 
 import type {
   ProblemActionResponseRequest,
   ProblemContentView,
+  ProblemDeveloperInspection,
   ProblemInitialSubmissionRequest,
   ProblemSessionView,
   ProblemTranscriptEntryView,
 } from '../shared/contract.js';
 import { loadProblemSolvingBundle } from './content.js';
+import type { StudentEvidenceSink } from './student-state.js';
 
 interface ProblemRuntime {
   readonly sessionId: string;
   readonly learningSessionId: string;
   readonly content: ProblemContentView;
-  readonly gold: ProblemQuestionGold;
+  readonly source: SourceDirectProblemBundle;
   readonly paragraphHandoff: ParagraphUnderstandingHandoff | null;
+  readonly evidenceContext: 'STUDENT' | 'DEVELOPER';
   session: ProblemSolvingSession | null;
   pendingInitialSubmission: ProblemInitialSubmissionRequest | null;
-  previousDiagnosticState: ProblemPathDiagnosticOutput | null;
+  previousDiagnosticState: SourceDirectDiagnosticOutput | null;
   transcript: ProblemTranscriptEntryView[];
-  evaluatorCalls: ProblemPathEvaluatorCallMetadata[];
+  evaluatorCalls: SourceDirectProblemEvaluatorCallMetadata[];
+  evaluations: ProblemDeveloperInspection['evaluations'][number][];
   evaluationStatus: 'IDLE' | 'PROCESSING' | 'RETRYABLE_ERROR';
   evaluationError: string | null;
   evaluationPromise: Promise<void> | null;
@@ -74,12 +75,12 @@ export interface CompletedProblemSessionRecord {
   readonly savedAt: string;
   readonly learningSessionId: string;
   readonly session: ProblemSolvingSession;
-  readonly evaluatorCalls: readonly ProblemPathEvaluatorCallMetadata[];
+  readonly evaluatorCalls: readonly SourceDirectProblemEvaluatorCallMetadata[];
   readonly paragraphHandoffSummary: {
     readonly passageId: string;
     readonly paragraphs: readonly {
       readonly paragraphId: string;
-      readonly outcome: 'PASS' | 'UNRESOLVED' | 'NOT_ATTEMPTED' | 'ABORTED';
+      readonly outcome: 'PASS' | 'UNRESOLVED' | 'NOT_ATTEMPTED' | 'ABORTED' | 'SKIPPED';
     }[];
   } | null;
 }
@@ -89,38 +90,47 @@ export interface ProblemSessionLogger {
 }
 
 export interface ProblemSolvingControllerOptions {
-  readonly evaluator?: ProblemPathEvaluator;
+  readonly evaluator?: SourceDirectProblemEvaluator;
   readonly logger?: ProblemSessionLogger;
+  readonly evidenceSink?: StudentEvidenceSink;
+  readonly studentId?: string;
 }
 
 export class ProblemSolvingController {
-  private readonly evaluator: ProblemPathEvaluator;
+  private readonly evaluator: SourceDirectProblemEvaluator;
   private readonly logger: ProblemSessionLogger | null;
+  private readonly evidenceSink: StudentEvidenceSink | null;
+  private readonly studentId: string;
   private readonly sessions = new Map<string, ProblemRuntime>();
 
   constructor(options: ProblemSolvingControllerOptions = {}) {
-    this.evaluator = options.evaluator ?? new OpenAIProblemPathEvaluator();
+    this.evaluator = options.evaluator ?? new OpenAISourceDirectProblemEvaluator();
     this.logger = options.logger ?? null;
+    this.evidenceSink = options.evidenceSink ?? null;
+    this.studentId = options.studentId ?? 'local';
   }
 
   start(
     questionId: string,
     paragraphHandoff: ParagraphUnderstandingHandoff | null = null,
     learningSessionId: string | null = null,
+    evidenceContext: 'STUDENT' | 'DEVELOPER' = 'STUDENT',
   ): ProblemSessionView {
-    const { content, gold } = loadProblemSolvingBundle(questionId);
+    const { content, source } = loadProblemSolvingBundle(questionId);
     const sessionId = randomUUID();
     const runtime: ProblemRuntime = {
       sessionId,
       learningSessionId: learningSessionId ?? sessionId,
       content,
-      gold,
+      source,
       paragraphHandoff,
+      evidenceContext,
       session: null,
       pendingInitialSubmission: null,
       previousDiagnosticState: null,
       transcript: [],
       evaluatorCalls: [],
+      evaluations: [],
       evaluationStatus: 'IDLE',
       evaluationError: null,
       evaluationPromise: null,
@@ -134,6 +144,11 @@ export class ProblemSolvingController {
 
   get(sessionId: string): ProblemSessionView {
     return this.view(this.requireSession(sessionId));
+  }
+
+  inspect(sessionId: string): ProblemDeveloperInspection {
+    const runtime = this.requireSession(sessionId);
+    return { session: this.view(runtime), evaluations: structuredClone(runtime.evaluations) };
   }
 
   async submitInitial(
@@ -156,7 +171,7 @@ export class ProblemSolvingController {
     this.assertChoice(runtime, input.choiceId);
     this.assertInitialMetadata(runtime, input);
     const rationale = input.rationale?.trim() || null;
-    if (rationale === null && input.choiceId !== runtime.gold.answerChoiceId) {
+    if (rationale === null && input.choiceId !== runtime.source.answerChoiceId) {
       runtime.pendingInitialSubmission = structuredClone(input);
       return this.view(runtime);
     }
@@ -224,7 +239,7 @@ export class ProblemSolvingController {
       this.assertChoice(runtime, input.choiceId);
       const rationale = input.rationale?.trim() || null;
       const isThirdWrongSelection = session.selectionAttempt + 1 >= session.limits.maxSelectionAttempts &&
-        input.choiceId !== runtime.gold.answerChoiceId;
+        input.choiceId !== runtime.source.answerChoiceId;
       runtime.session = submitProblemReselection(session, {
         selectedChoiceId: input.choiceId,
         rationale,
@@ -270,8 +285,8 @@ export class ProblemSolvingController {
   private freshSession(runtime: ProblemRuntime): ProblemSolvingSession {
     return createProblemSolvingSession({
       sessionId: runtime.sessionId,
-      questionId: runtime.gold.questionId,
-      answerChoiceId: runtime.gold.answerChoiceId,
+      questionId: runtime.source.questionId,
+      answerChoiceId: runtime.source.answerChoiceId,
     });
   }
 
@@ -305,19 +320,17 @@ export class ProblemSolvingController {
       readonly groundingSummary: string;
     };
   } {
-    const answer = runtime.gold.choices.find((choice) => choice.choiceId === runtime.gold.answerChoiceId);
-    const lastChoice = runtime.gold.choices.find((choice) => choice.choiceId === lastChoiceId);
+    const answer = runtime.source.choices.find(
+      (choice) => choice.choiceId === runtime.source.answerChoiceId,
+    );
+    const lastChoice = runtime.source.choices.find((choice) => choice.choiceId === lastChoiceId);
     if (answer === undefined || lastChoice === undefined) throw new Error('정답 공개 선지 정보를 찾을 수 없습니다.');
-    const groundingSummary = runtime.gold.referencePath
-      .filter((step) => runtime.gold.finalAnswerExplanation.referencePathStepIds.includes(step.stepId))
-      .map((step) => step.description)
-      .join(' ')
-      .trim();
+    const groundingSummary = runtime.source.officialExplanation;
     const finalAnswerReveal = {
       answerChoiceId: answer.choiceId,
       lastChoiceId: lastChoice.choiceId,
-      lastChoiceExplanation: lastChoice.rationale,
-      correctChoiceExplanation: runtime.gold.finalAnswerExplanation.message,
+      lastChoiceExplanation: `마지막으로 선택한 ${lastChoice.position}번 선지는 “${lastChoice.text}”입니다.`,
+      correctChoiceExplanation: runtime.source.officialExplanation,
       groundingSummary,
     };
     if (Object.values(finalAnswerReveal).some((value) => value.trim() === '')) {
@@ -327,9 +340,8 @@ export class ProblemSolvingController {
       finalAnswerReveal,
       finalAnswerExplanation: [
         `정답은 ${answer.position}번입니다.`,
-        `마지막 선택 ${lastChoice.position}번: ${lastChoice.rationale}`,
-        runtime.gold.finalAnswerExplanation.message,
-        `근거 관계: ${groundingSummary}`,
+        `마지막 선택 ${lastChoice.position}번: ${lastChoice.text}`,
+        runtime.source.officialExplanation,
       ].join('\n'),
     };
   }
@@ -354,11 +366,16 @@ export class ProblemSolvingController {
         runtime.evaluationError = null;
       })
       .catch((error: unknown) => {
-        if (error instanceof ProblemPathEvaluatorFallbackError) {
+        if (error instanceof SourceDirectProblemEvaluatorError) {
           runtime.evaluatorCalls.push(structuredClone(error.call));
         }
         const current = this.requireProblemSession(runtime);
-        if (current.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT') {
+        const contractValidationFailure = error instanceof SourceDirectProblemEvaluatorError &&
+          error.call.attempts.at(-1)?.errorType === 'contract_validation';
+        if (
+          current.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT' &&
+          !contractValidationFailure
+        ) {
           // 정오는 이미 코드가 확정했다. 부가적인 근거 평가 실패가 정답 종결을
           // 막지 않도록 보수적인 UNCERTAIN 결과로 결정론적으로 닫는다.
           runtime.session = applyCorrectRationaleAssessment(current, 'UNCERTAIN');
@@ -367,7 +384,9 @@ export class ProblemSolvingController {
           return;
         }
         runtime.evaluationStatus = 'RETRYABLE_ERROR';
-        runtime.evaluationError = '후속 진단 상태 생성에 실패했습니다. 저장된 선택부터 다시 진행할 수 있습니다.';
+        runtime.evaluationError = contractValidationFailure
+          ? '평가 결과 검증에 실패했습니다. 저장된 학생 답변으로 다시 진행할 수 있습니다.'
+          : '후속 진단 상태 생성에 실패했습니다. 저장된 선택부터 다시 진행할 수 있습니다.';
         throw error;
       })
       .finally(() => {
@@ -385,64 +404,44 @@ export class ProblemSolvingController {
         session.phase !== 'AWAITING_EVALUATION' &&
         session.phase !== 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
       ) return;
-      if (
-        session.phase === 'AWAITING_EVALUATION' &&
-        session.entryReason === 'WRONG_CHOICE' &&
-        session.selectionCount < session.limits.maxSelectionAttempts &&
-        session.limits.questionsUsedThisAttempt >= session.limits.maxQuestionsPerWrongAttempt
-      ) {
-        const selectedChoice = runtime.gold.choices.find(
-          (choice) => choice.choiceId === session.latestChoiceId,
-        );
-        if (selectedChoice === undefined) throw new Error('현재 오답 선지의 결정론적 코칭 근거가 없습니다.');
-        runtime.session = applyDeterministicExhaustedWrongAttemptCoaching(
-          session,
-          `현재 선택한 ${selectedChoice.position}번에서 확인할 관계는 다음과 같습니다. ${selectedChoice.rationale}`,
-        );
-        this.addCoachAction(runtime);
-        return;
-      }
-      const supplementalAccess = session.requiredNextAction !== 'DIRECT_COACHING'
-        ? undefined
-        : session.selectionAttempt >= session.limits.maxSelectionAttempts
-          ? finalAttemptSupplementalAccess(
-              runtime.gold,
-              [session.latestChoiceId!, session.answerChoiceId],
-            )
-          : session.entryReason === 'CORRECT_RATIONALE_REVIEW'
-            ? failedCorrectionSupplementalAccess(runtime.gold, session.latestChoiceId!)
-            : session.requestReselectionAfterCoachingAcknowledgement
-              ? exhaustedWrongAttemptSupplementalAccess(
-                  runtime.gold,
-                  [session.latestChoiceId!, session.answerChoiceId],
-                )
-              : undefined;
-      const input = createProblemPathEvaluatorInput({
+      const input = createSourceDirectProblemEvaluatorInput({
         evaluationMode: session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
           ? 'ASSESS_SELECTION_RATIONALE'
           : 'DIAGNOSE_PATH',
         session,
-        gold: runtime.gold,
+        source: runtime.source,
         paragraphHandoff: runtime.paragraphHandoff,
         previousDiagnosticState: runtime.previousDiagnosticState,
-        ...(supplementalAccess === undefined ? {} : { supplementalAccess }),
       });
       const evaluationRequest = this.evaluator.evaluate(input);
       const evaluated = session.phase === 'AWAITING_CORRECT_RATIONALE_ASSESSMENT'
         ? await withTimeout(evaluationRequest, CORRECT_RATIONALE_ASSESSMENT_TOTAL_TIMEOUT_MS)
         : await evaluationRequest;
       runtime.evaluatorCalls.push(structuredClone(evaluated.call));
+      const diagnostic = evaluated.result.mode === 'DIAGNOSE_PATH' ? evaluated.result : null;
+      runtime.evaluations.push(structuredClone({
+        mode: evaluated.result.mode,
+        assessment: evaluated.result.assessment,
+        reason: evaluated.result.reason,
+        reconstructedPath: diagnostic?.reconstructedPath ?? null,
+        learningState: diagnostic?.learningState ?? null,
+        divergenceLayer: diagnostic?.divergenceLayer ?? null,
+        nextAction: diagnostic?.nextAction.type ?? null,
+        studentEvidence: evaluated.result.studentEvidence,
+        sourceEvidence: evaluated.result.sourceEvidence,
+        promptVersion: evaluated.call.promptVersion,
+      }));
       if (evaluated.result.mode === 'ASSESS_SELECTION_RATIONALE') {
         runtime.session = applyCorrectRationaleAssessment(session, evaluated.result.assessment);
         continue;
       }
       runtime.previousDiagnosticState = evaluated.result;
-      const adapted = adaptProblemPathDiagnosticOutput({
+      const adapted = adaptSourceDirectDiagnosticOutput({
         evaluatorInput: input,
         rawOutput: evaluated.rawOutput,
-        resolvedOutput: evaluated.result,
+        output: evaluated.result,
       });
-      runtime.session = applyAdaptedProblemEvaluatorTurn(session, adapted);
+      runtime.session = applySourceDirectProblemEvaluatorTurn(session, adapted);
       this.addCoachAction(runtime);
     }
     const current = this.requireProblemSession(runtime);
@@ -571,10 +570,11 @@ export class ProblemSolvingController {
   }
 
   private persistIfCompleted(runtime: ProblemRuntime): void {
-    if (runtime.logged || runtime.session?.phase !== 'COMPLETED' || this.logger === null) return;
-    this.logger.save({
+    if (runtime.logged || runtime.session?.phase !== 'COMPLETED') return;
+    const savedAt = new Date().toISOString();
+    this.logger?.save({
       schemaVersion: 'completed-problem-session-record-v1',
-      savedAt: new Date().toISOString(),
+      savedAt,
       learningSessionId: runtime.learningSessionId,
       session: structuredClone(runtime.session),
       evaluatorCalls: structuredClone(runtime.evaluatorCalls),
@@ -588,6 +588,15 @@ export class ProblemSolvingController {
             })),
           },
     });
+    this.evidenceSink?.save(problemEvidenceEvents({
+      studentId: this.studentId,
+      learningSessionId: runtime.learningSessionId,
+      passageId: runtime.paragraphHandoff?.passageId ?? null,
+      observedAt: savedAt,
+      evaluatorVersion: runtime.evaluatorCalls.at(-1)?.promptVersion ?? runtime.session.schemaVersion,
+      context: runtime.evidenceContext,
+      session: runtime.session,
+    }));
     runtime.logged = true;
   }
 

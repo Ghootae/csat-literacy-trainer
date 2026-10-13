@@ -128,6 +128,33 @@ function input(session: DialogueExperimentSession | null, position = 1) {
 }
 
 describe('paragraph understanding handoff', () => {
+  it('현재 주장과 수정 이력을 handoff에서도 분리해 보존한다', () => {
+    const session = completedSession('UNRESOLVED');
+    const prior = { description: '이전 주장', source: 'initial' as const, evidence: '예전 말', responseIndex: 0,
+      state: 'superseded' as const, revisionEvidence: [{ source: 'corrective' as const, evidence: '수정한 말', responseIndex: 1 }] };
+    session.finalSnapshot!.claimLedger = [prior];
+    session.finalSnapshot!.expressedClaims = [{ description: '새 주장', source: 'corrective', evidence: '수정한 말' }];
+    const record = createParagraphUnderstandingRecord(input(session));
+    expect(record.currentRepresentation.claimLedger).toEqual([prior]);
+    expect(record.currentRepresentation.expressedClaims).toEqual(session.finalSnapshot!.expressedClaims);
+    expect(record.currentRepresentation.expressedClaims.some((claim) => claim.evidence === '예전 말')).toBe(false);
+    expect(session.turns[0]?.studentAnswer).toBe('다시 보니 말초에서만 작용한다.');
+  });
+
+  it('축 문맥만 있는 오류 기록의 미지정 인용과 근거 출처를 보존한다', () => {
+    const session = completedSession('UNRESOLVED');
+    const error = {
+      description: '중심축 AX1의 왜곡', relatedRelationIds: [], evidence: null,
+      evidenceScope: 'axis_context' as const, axisId: 'AX1',
+      axisEvidence: [{ source: 'initial' as const, evidence: '맞는 주장과 오류가 섞인 축 근거' }],
+    };
+    session.finalSnapshot!.explicitErrors = [error];
+    const record = createParagraphUnderstandingRecord(input(session));
+    expect(record.currentRepresentation.explicitErrors).toEqual([error]);
+    expect(record.dialogue.outcome).toBe('UNRESOLVED');
+    expect(record.currentRepresentation.axisStates[0]?.state).toBe('distorted');
+  });
+
   it('PASS 세션에서 관찰과 최종 표상, 교정 궤적을 분리해 만든다', () => {
     const record = createParagraphUnderstandingRecord(input(completedSession('PASS')));
 
@@ -193,5 +220,20 @@ describe('paragraph understanding handoff', () => {
 
     expect(handoff.paragraphs.map((paragraph) => paragraph.paragraphPosition)).toEqual([1, 2]);
     expect(handoff.schemaVersion).toBe('paragraph-understanding-handoff-v1');
+  });
+
+  it('지정 오류 인용의 출처와 원장 참조를 handoff에 보존한다', () => {
+    const session = completedSession('UNRESOLVED');
+    const error = { axisId: 'AX1', claimIndex: 0, source: 'initial' as const, responseIndex: 0,
+      description: '작용 위치 오류', evidence: session.initialResponse,
+      evidenceScope: 'student_error_quote' as const, relatedRelationIds: [] };
+    session.finalSnapshot!.explicitErrors = [error];
+    session.finalSnapshot!.claimLedger = [{ description: '작용 위치', source: 'initial', responseIndex: 0,
+      evidence: session.initialResponse, state: 'current', revisionEvidence: [] }];
+    const record = createParagraphUnderstandingRecord(input(session));
+    expect(record.currentRepresentation.explicitErrors).toEqual([error]);
+    expect(record.currentRepresentation.claimLedger).toEqual(session.finalSnapshot!.claimLedger);
+    record.currentRepresentation.explicitErrors[0]!.description = 'changed copy';
+    expect(session.finalSnapshot!.explicitErrors[0]!.description).toBe('작용 위치 오류');
   });
 });

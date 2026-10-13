@@ -31,17 +31,22 @@
 - `dialogue-prompt-v7`은 required 관계 충족형 판정의 회귀 기준선으로 보존한다.
 - `dialogue-prompt-v8`은 한 호출 안에서 centralStory 판정과 관계 진단을 분리하려 한
   비교 기준선으로 보존한다.
-- 현재 UI는 `central-story-gate-prompt-v1`과 `dialogue-axis-diagnostic-prompt-v2`를
-  순차 사용하는 `axis-dialogue-v2` 기준선이다. 게이트에는 `centralStory`, 사람이 검토한
-  소수의 `centralAxes`, 누적 응답만 제공하며 모든 독립 축이 포착되어야 CAPTURED다.
-- 축 판정 우선순위는 왜곡된 축 → 완전히 빠진 축 → 부분적인 축이다. 한 질문은 선택된
-  중심 축 하나를 확인하며, 축 안의 관계 여러 개를 함께 다룰 수 있다.
-- 관계 단계는 매 턴 호출되어 마지막 답변으로 새로 확인·수정된 관계 상태를 갱신하고,
-  새 판단이 unknown인 관계만 이전 상태로 보완한다. 명시적 `contradicted` 관계가 발견되면
-  게이트의 CAPTURED 또는 UNCLEAR보다 ERROR가 우선하며, 그 밖에는 게이트 판정을 따른다.
+- 현재 UI는 `central-story-gate-prompt-v2`와 `dialogue-selective-feedback-prompt-v2`를
+  사용하는 `axis-dialogue-selective-v2`다. PASS는 1회 호출로 종료하고, 비통과는 중심축
+  판정 뒤 선택된 경로의 질문을 별도 호출로 만든다.
+- 게이트의 `centralAxes.description`은 정답 문장이 아니라 평가 범위 참조다. 핵심 관계가
+  보존되면 부수 수식어나 용어가 빠져도 CAPTURED이며, 단순 나열에는 원문의 관계를 보충하지
+  않는다.
+- 왜곡 축은 항상 먼저 선택한다. 그 밖에는 unknown과 partial 모두 질문 대상이 될 수 있고,
+  유효한 모델 선택을 코드가 덮어쓰지 않는다.
+- 축별 일반 이해 근거와 명시적 철회 근거를 분리한다. 모델 원출력, 코드 검증 결과와 보정
+  사유는 호출 메타데이터의 `decisionAudit`에 함께 보존한다.
 - 게이트는 최초 응답과 모든 질문–응답을 `effectiveResponse` 하나로 합성한다. 질문은 학생
   지식의 근거가 아니라 생략된 답변의 지시 대상과 의미 슬롯을 해석하는 담화 문맥으로만
   사용하며, 관계 단계도 원시 문답을 별도로 재해석하지 않고 같은 합성 응답을 사용한다.
+- 질문 생성기는 확인할 대상·비교 조건·본문 위치는 지정할 수 있지만, 학생이 아직 말하지 않은
+  정답의 방향·원인·조건·결론은 제공하지 않는다. 질문 범위는 구체적이어야 하며 질문 한도가
+  끝나면 별도 종료 피드백과 `nextQuestion=null`을 반환한다.
 - `coreRelations`와 `diagnosticRole`은 PASS 체크리스트나 질문 순서표가 아니라 선택된 축
   안의 표상과 오류 위치를 기록하는 하위 진단 자료다.
 - `centralAxes`는 확정된 centralStory의 의미를 추가·삭제하지 않고 독립 의미 구조로

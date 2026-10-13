@@ -10,6 +10,7 @@ import {
   submitProblemRationale,
 } from './api.js';
 import { recoverProblemMutation } from './problem-session-recovery.js';
+import { ProblemEvaluationDrawer } from './ProblemEvaluationDrawer.js';
 
 const DEFAULT_QUESTION_ID = 'mrna-vaccine-lipid-nanoparticle-q19';
 
@@ -54,6 +55,8 @@ export function ProblemApp(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [busySeconds, setBusySeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [evaluationOpen, setEvaluationOpen] = useState(false);
+  const evaluationTrigger = useRef<HTMLButtonElement>(null);
   const automaticResumeKeys = useRef(new Set<string>());
 
   useEffect(() => {
@@ -201,6 +204,10 @@ export function ProblemApp(): React.JSX.Element {
 
   const { content } = session;
   const dialogueSessionId = new URLSearchParams(window.location.search).get('dialogueSessionId');
+  const requestedReturn = new URLSearchParams(window.location.search).get('returnTo');
+  const developerReturn = requestedReturn !== null && /^\/dialogue\/dev(?:\?sessionId=[a-zA-Z0-9-]+)?$/.test(requestedReturn) ? requestedReturn : null;
+  const developerMode = developerReturn !== null || window.location.pathname === '/problem/dev';
+  const linkedLearningMode = dialogueSessionId !== null;
   const awaitingChoice = session.phase === 'AWAITING_INITIAL_CHOICE';
   const awaitingRationale = session.phase === 'AWAITING_RATIONALE';
   const awaitingResponse = session.phase === 'AWAITING_RESPONSE';
@@ -213,18 +220,19 @@ export function ProblemApp(): React.JSX.Element {
     <main className="problem-shell">
       <header className="problem-header">
         <div>
-          <p className="dialogue-kicker">{content.exam}</p>
+          <p className="dialogue-kicker">{linkedLearningMode ? '문단 이해 완료 · 연결 문제' : content.exam}</p>
           <h1>{content.title} · {content.questionNumber}번</h1>
         </div>
         <div className="dialogue-run-actions">
-          <span className="dialogue-progress">이번 선택 질문 {session.attemptQuestionBudget.used}/{session.attemptQuestionBudget.maximum}</span>
+          {developerMode && <button ref={evaluationTrigger} aria-haspopup="dialog" aria-expanded={evaluationOpen} onClick={() => setEvaluationOpen(true)}>응답 평가</button>}
+          {!linkedLearningMode && <span className="dialogue-progress">이번 선택 질문 {session.attemptQuestionBudget.used}/{session.attemptQuestionBudget.maximum}</span>}
           <span className="dialogue-progress">선택 {session.selectionProgress.current}/{session.selectionProgress.maximum}</span>
-          <span className="dialogue-progress">이번 선택 개입 {session.interventionCountForCurrentSelection}회</span>
+          {!linkedLearningMode && <span className="dialogue-progress">이번 선택 개입 {session.interventionCountForCurrentSelection}회</span>}
           <a
             className="problem-link"
-            href={dialogueSessionId === null ? '/problems' : `/dialogue?sessionId=${encodeURIComponent(dialogueSessionId)}`}
-          >{dialogueSessionId === null ? '문제 목록' : '문단 대화'}</a>
-          <button disabled={busy} onClick={restart}>새로 풀기</button>
+            href={developerReturn ?? (dialogueSessionId === null ? '/problems' : `/dialogue?sessionId=${encodeURIComponent(dialogueSessionId)}`)}
+          >{developerReturn ? '학습 맵으로 돌아가기' : dialogueSessionId === null ? '문제 목록' : '문단 다시 보기'}</a>
+          {!linkedLearningMode && <button disabled={busy} onClick={restart}>새로 풀기</button>}
         </div>
       </header>
 
@@ -232,6 +240,18 @@ export function ProblemApp(): React.JSX.Element {
         <section className="problem-passage" aria-label="지문">
           <h2>지문</h2>
           {content.passage.split('\n\n').map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+          {content.media
+            .filter((media) => media.placement.scope === 'PASSAGE')
+            .map((media) => (
+              <img
+                key={media.mediaId}
+                className="problem-source-media"
+                src={media.url}
+                alt={media.alt}
+                width={media.width}
+                height={media.height}
+              />
+            ))}
         </section>
 
         <section className="problem-workspace" aria-label="문제 풀이">
@@ -239,14 +259,19 @@ export function ProblemApp(): React.JSX.Element {
           <div className="problem-scenario">
             <strong>&lt;보기&gt;</strong>
             <p>{content.scenario}</p>
-            {content.image !== null && (
-              <img
-                src={content.image.url}
-                alt={content.image.alt}
-                width={content.image.width}
-                height={content.image.height}
-              />
-            )}
+            {content.media
+              .filter((media) => media.placement.scope === 'SCENARIO' &&
+                media.placement.supplementIndex === 0)
+              .map((media) => (
+                <img
+                  key={media.mediaId}
+                  className="problem-source-media"
+                  src={media.url}
+                  alt={media.alt}
+                  width={media.width}
+                  height={media.height}
+                />
+              ))}
           </div>
 
           <fieldset className="problem-choices" disabled={busy || awaitingRationale || awaitingResponse || processing || evaluationError || session.phase === 'COMPLETED'}>
@@ -262,6 +287,19 @@ export function ProblemApp(): React.JSX.Element {
                 />
                 <span>{choice.position}</span>
                 <p>{choice.text}</p>
+                {content.media
+                  .filter((media) => media.placement.scope === 'CHOICE' &&
+                    media.placement.choiceId === choice.choiceId)
+                  .map((media) => (
+                    <img
+                      key={media.mediaId}
+                      className="problem-source-media"
+                      src={media.url}
+                      alt={media.alt}
+                      width={media.width}
+                      height={media.height}
+                    />
+                  ))}
               </label>
             ))}
           </fieldset>
@@ -418,17 +456,21 @@ export function ProblemApp(): React.JSX.Element {
                   : '풀이를 종료했습니다.'}</strong>
               <p>최종 선택: {content.choices.find((choice) => choice.choiceId === session.result!.finalChoiceId)?.position}번</p>
               <p>선택 횟수: {session.result.selectionAttempt}회</p>
-              <p>최종 근거: {session.result.rationaleSubmission === 'PROVIDED' ? '제출됨' : '제출하지 않음'}</p>
-              <p>최종 근거 검증: {rationaleAssessmentLabel(session.result)}</p>
-              <p>학생 스스로 해결: {session.result.resolvedByStudent ? '예' : '아니요'}</p>
-              <p>정답 공개: {session.result.answerRevealed ? '예' : '아니요'}</p>
-              <p>최종 결과: {session.result.resolutionOutcome}</p>
-              <p>상세 결과 유형: {session.result.outcome}</p>
-              <p>해결 단계: {session.result.resolutionStage}</p>
-              <p>최종 유효 교정 경로: {session.result.effectiveRepairPath}</p>
-              <p>전체 개입 이력: {session.result.interventionHistory.length === 0
-                ? 'NONE'
-                : session.result.interventionHistory.join(' → ')}</p>
+              {!linkedLearningMode && (
+                <>
+                  <p>최종 근거: {session.result.rationaleSubmission === 'PROVIDED' ? '제출됨' : '제출하지 않음'}</p>
+                  <p>최종 근거 검증: {rationaleAssessmentLabel(session.result)}</p>
+                  <p>학생 스스로 해결: {session.result.resolvedByStudent ? '예' : '아니요'}</p>
+                  <p>정답 공개: {session.result.answerRevealed ? '예' : '아니요'}</p>
+                  <p>최종 결과: {session.result.resolutionOutcome}</p>
+                  <p>상세 결과 유형: {session.result.outcome}</p>
+                  <p>해결 단계: {session.result.resolutionStage}</p>
+                  <p>최종 유효 교정 경로: {session.result.effectiveRepairPath}</p>
+                  <p>전체 개입 이력: {session.result.interventionHistory.length === 0
+                    ? 'NONE'
+                    : session.result.interventionHistory.join(' → ')}</p>
+                </>
+              )}
               {session.result.answerReveal !== null && (
                 <div className="problem-answer-reveal">
                   <p><strong>정답</strong> {content.choices.find((choice) => choice.choiceId === session.result!.answerReveal!.answerChoiceId)?.position}번</p>
@@ -437,6 +479,7 @@ export function ProblemApp(): React.JSX.Element {
                   <p><strong>지문·보기 근거</strong> {session.result.answerReveal.groundingSummary}</p>
                 </div>
               )}
+              {linkedLearningMode && <a className="problem-finish-link" href="/dialogue">다른 지문 학습하기</a>}
             </div>
           )}
 
@@ -457,6 +500,10 @@ export function ProblemApp(): React.JSX.Element {
           )}
         </section>
       </div>
+      {developerMode && evaluationOpen && <ProblemEvaluationDrawer session={session} close={() => {
+        setEvaluationOpen(false);
+        window.requestAnimationFrame(() => evaluationTrigger.current?.focus());
+      }} />}
     </main>
   );
 }

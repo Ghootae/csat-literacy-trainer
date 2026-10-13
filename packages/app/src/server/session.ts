@@ -14,6 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, write
 import { dirname, resolve } from 'node:path';
 
 import type { RegionRecord } from './view.js';
+import type { FeedbackV4Record } from './problem-feedback-v4.js';
 import type {
   CompletedProblemSessionRecord,
   ProblemSessionLogger,
@@ -29,6 +30,13 @@ export class JsonlProblemSessionLogger implements ProblemSessionLogger {
     mkdirSync(dirname(this.path), { recursive: true });
     appendFileSync(this.path, `${JSON.stringify(record)}\n`, 'utf8');
   }
+}
+
+/** v4 headless audit is separate from operational/student evidence records. */
+export function appendFeedbackV4Record(record: FeedbackV4Record): void {
+  const file = resolve(process.env['CSAT_PROBLEM_FEEDBACK_V4_LOG'] ?? '.omc/logs/problem-feedback-v4/events.jsonl');
+  mkdirSync(dirname(file), { recursive: true });
+  appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
 }
 
 /**

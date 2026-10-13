@@ -1,23 +1,22 @@
 import OpenAI from 'openai';
 import { describe, expect, it, vi } from 'vitest';
 
-import type {
-  DialogueCallMetadata,
-  DialogueEvaluationCall,
-  DialogueEvaluationInput,
-  DialogueEvaluator,
-} from './evaluator.js';
-import { loadDialoguePrompt } from './evaluator.js';
+import type { DialogueCallMetadata, DialogueEvaluationInput } from './evaluator.js';
 import {
   OpenAICentralStoryGateEvaluator,
-  loadCentralStoryGatePrompt,
   type CentralStoryGateCall,
   type CentralStoryGateEvaluator,
   type CentralStoryGateResult,
 } from './gate.js';
 import { loadDiagnosticGold } from './gold.js';
-import type { EvaluationResult } from './schema.js';
+import type {
+  SelectiveFeedbackCall,
+  SelectiveFeedbackEvaluator,
+  SelectiveFeedbackInput,
+} from './selective-feedback.js';
+import { selectiveStudentFeedback } from './selective-feedback.js';
 import { TwoStageDialogueEvaluator } from './two-stage-evaluator.js';
+import { ExplicitErrorSchema, StudentRepresentationSnapshotSchema } from './schema.js';
 
 const loaded = loadDiagnosticGold();
 const input: DialogueEvaluationInput = {
@@ -40,7 +39,7 @@ function callMetadata(promptVersion: string, schemaVersion: string): DialogueCal
     schemaVersion,
     goldVersion: loaded.version,
     goldHash: loaded.hash,
-    calledAt: '2026-08-25T00:00:00.000Z',
+    calledAt: '2026-09-09T00:00:00.000Z',
     durationMs: 10,
     usage: { inputTokens: 100, outputTokens: 20 },
   };
@@ -52,172 +51,242 @@ class FixedGate implements CentralStoryGateEvaluator {
   async evaluate(): Promise<CentralStoryGateCall> {
     return {
       result: structuredClone(this.result),
-      call: callMetadata('central-story-gate-prompt-v1', 'central-story-gate-openai-v1'),
+      call: {
+        ...callMetadata('central-story-gate-prompt-v2', 'central-story-gate-openai-v3'),
+        decisionAudit: {
+          rawResult: structuredClone(this.result),
+          validatedResult: structuredClone(this.result),
+          normalizationEvents: [],
+        },
+      },
     };
   }
 }
 
-class RecordingDiagnostic implements DialogueEvaluator {
-  readonly inputs: DialogueEvaluationInput[] = [];
+class RecordingFeedback implements SelectiveFeedbackEvaluator {
+  readonly inputs: SelectiveFeedbackInput[] = [];
 
-  constructor(private readonly result: EvaluationResult) {}
-
-  async evaluate(value: DialogueEvaluationInput): Promise<DialogueEvaluationCall> {
+  async evaluate(value: SelectiveFeedbackInput): Promise<SelectiveFeedbackCall> {
     this.inputs.push(structuredClone(value));
     return {
-      result: structuredClone(this.result),
-      call: callMetadata('dialogue-diagnostic-prompt-v1', 'dialogue-evaluation-openai-v4'),
+      result: {
+        route: value.route,
+        targetAxisId: value.gateDecision.targetAxisId!,
+        selectedRelationId: value.selectedDetailedRelation?.id ?? null,
+        targetDescription: '확인할 중심 내용',
+        studentFeedback: selectiveStudentFeedback(
+          value.route,
+          value.dialogue.questionsAsked < value.dialogue.maxQuestions,
+        ),
+        nextQuestion: value.dialogue.questionsAsked >= value.dialogue.maxQuestions
+          ? null
+          : {
+            type: value.route === 'ERROR' ? 'CORRECTIVE' : 'DIAGNOSTIC',
+            text: '이 관계를 원문을 근거로 설명해 보세요.',
+          },
+      },
+      call: callMetadata(
+        'dialogue-selective-feedback-prompt-v2',
+        'dialogue-selective-feedback-openai-v2',
+      ),
     };
   }
 }
 
-function gateResult(status: 'CAPTURED' | 'UNCLEAR' | 'DISTORTED'): CentralStoryGateResult {
+function gateResult(
+  status: 'CAPTURED' | 'UNCLEAR' | 'DISTORTED',
+  states?: readonly ('captured' | 'partial' | 'unknown' | 'distorted')[],
+): CentralStoryGateResult {
   const targetAxis = loaded.gold.centralAxes[0]!;
-  return {
-    status,
-    effectiveResponse: '학생 응답을 문맥 독립적으로 합성한 내용',
-    centralObjectRepresentation: '중심 대상',
-    centralStoryRepresentation: '학생이 복원한 중심 이야기',
-    expressedClaims: [{ description: '주장', source: 'initial', evidence: '학생 응답' }],
-    axisStates: loaded.gold.centralAxes.map((axis, index) => ({
+  const defaultStates = loaded.gold.centralAxes.map((_, index) =>
+    index === 0 && status !== 'CAPTURED'
+      ? status === 'DISTORTED' ? 'distorted' as const : 'unknown' as const
+      : 'captured' as const
+  );
+  const axisStates = loaded.gold.centralAxes.map((axis, index) => {
+    const state = states?.[index] ?? defaultStates[index] ?? 'captured';
+    return {
       axisId: axis.id,
-      state: index === 0 && status !== 'CAPTURED'
-        ? status === 'DISTORTED' ? 'distorted' as const : 'unknown' as const
-        : 'captured' as const,
-      evidence: index === 0 && status !== 'CAPTURED'
+      state,
+      evidence: state === 'unknown'
         ? []
         : [{ source: 'initial' as const, evidence: '학생 응답' }],
-    })),
+      retractionEvidence: [],
+    };
+  });
+  return {
+    status,
+    responseInformationLevel: status === 'CAPTURED' || status === 'DISTORTED'
+      ? 'RELATIONAL'
+      : axisStates.every((axis) => axis.state === 'unknown') ? 'TOPIC_ONLY' : 'RELATIONAL',
+    effectiveResponse: '학생 응답을 문맥 독립적으로 합성한 내용',
+    centralObjectRepresentation: '중심 대상',
+    centralStoryRepresentation: status === 'CAPTURED' ? '복원한 중심 이야기' : null,
+    expressedClaims: [{ description: '주장', source: 'initial', evidence: '학생 응답' }],
+    axisStates,
+    missingAxisEvidence: axisStates.flatMap((axis) =>
+      axis.state === 'partial' || axis.state === 'unknown'
+        ? [{ axisId: axis.axisId, axisQuote: loaded.gold.centralAxes.find((item) => item.id === axis.axisId)!.description }]
+        : []),
     targetAxisId: status === 'CAPTURED' ? null : targetAxis.id,
     decisionSummary: `gate-${status}`,
   };
 }
 
-function diagnosticResult(status: 'PASS' | 'UNCLEAR' | 'ERROR'): EvaluationResult {
-  const target = loaded.gold.centralAxes[0]!.relationIds[0]!;
-  return {
-    status,
-    snapshot: {
-      turn: 1,
-      centralObjectRepresentation: '중심 대상',
-      centralStoryRepresentation: null,
-      expressedClaims: [],
-      relationStates: loaded.gold.coreRelations.map((relation, index) => ({
-        relationId: relation.id,
-        state: index === 0
-          ? status === 'ERROR' ? 'contradicted' : status === 'PASS' ? 'explicit' : 'unknown'
-          : 'unknown',
-        ...(index === 0 && status === 'ERROR'
-          ? { source: 'initial' as const, evidence: '잘못된 연결' }
-          : index === 0 && status === 'PASS'
-            ? { source: 'diagnostic' as const, evidence: '새로 확인한 관계' }
-            : {}),
-      })),
-      explicitErrors: [],
-      unresolvedQuestions: [],
-    },
-    decisionSummary: `diagnostic-${status}`,
-    targetIssue: status === 'PASS' ? null : { description: '대상 축', relatedRelationIds: [target] },
-    nextQuestion: status === 'PASS' ? null : {
-      type: status === 'ERROR' ? 'CORRECTIVE' : 'DIAGNOSTIC',
-      text: '중심 축을 설명해 보세요.',
-    },
-    studentFeedback: '조금 더 설명해 보세요.',
-  };
-}
-
-describe('two-stage dialogue evaluator', () => {
-  it('질문은 증거가 아니라 생략 답변 해석 문맥으로 쓰고 합성 응답을 두 단계가 공유한다', () => {
-    const gatePrompt = loadCentralStoryGatePrompt();
-    const diagnosticPrompt = loadDialoguePrompt('dialogue-axis-diagnostic-prompt-v2');
-
-    expect(gatePrompt).toContain('effectiveResponse');
-    expect(gatePrompt).toContain('담화 문맥');
-    expect(gatePrompt).toContain('질문 문구를 evidence로 인용하지 않는다');
-    expect(diagnosticPrompt).toContain('gateDecision.effectiveResponse');
-    expect(diagnosticPrompt).toContain('원시 문답을 서로 독립된 답변처럼 다시 분리해 해석하지 않는다');
-  });
-
-  it('게이트가 CAPTURED이면 판정을 고정하고 관계 표상 갱신 단계를 거쳐 PASS한다', async () => {
-    const diagnostic = new RecordingDiagnostic(diagnosticResult('PASS'));
+describe('selective two-stage dialogue evaluator', () => {
+  it('CAPTURED 판정은 게이트가 확정하고 피드백 호출 없이 PASS한다', async () => {
+    const feedback = new RecordingFeedback();
     const evaluator = new TwoStageDialogueEvaluator({
       gateEvaluator: new FixedGate(gateResult('CAPTURED')),
-      diagnosticEvaluator: diagnostic,
+      feedbackEvaluator: feedback,
     });
 
     const evaluated = await evaluator.evaluate(input);
 
     expect(evaluated.result.status).toBe('PASS');
     expect(evaluated.result.snapshot.axisStates).toEqual(gateResult('CAPTURED').axisStates);
-    expect(evaluated.result.snapshot.relationStates[0]?.state).toBe('explicit');
-    expect(diagnostic.inputs).toHaveLength(1);
-    expect(evaluated.call.stages?.map((stage) => stage.stage)).toEqual([
-      'central_story_gate',
-      'relation_diagnostic',
-    ]);
+    expect(evaluated.result.snapshot.relationStates).toHaveLength(loaded.gold.coreRelations.length);
+    expect(evaluated.result.snapshot.relationStates.every((item) => item.state === 'unknown')).toBe(true);
+    expect(feedback.inputs).toHaveLength(0);
+    expect(evaluated.call.stages?.map((stage) => stage.stage)).toEqual(['central_story_gate']);
+    expect(evaluated.call.decisionAudit).toEqual(expect.objectContaining({
+      rawResult: gateResult('CAPTURED'),
+      validatedResult: gateResult('CAPTURED'),
+      normalizationEvents: [],
+    }));
   });
 
-  it('UNCLEAR일 때만 관계 진단을 호출하고 게이트 판정을 전달한다', async () => {
-    const diagnostic = new RecordingDiagnostic(diagnosticResult('UNCLEAR'));
+  it('일부 축을 포착한 UNCLEAR는 TARGETED_GAP으로 보내고 상세 관계를 전달하지 않는다', async () => {
+    const states = loaded.gold.centralAxes.map((_, index) =>
+      index === 0 ? 'partial' as const : 'captured' as const
+    );
+    const feedback = new RecordingFeedback();
     const evaluator = new TwoStageDialogueEvaluator({
-      gateEvaluator: new FixedGate(gateResult('UNCLEAR')),
-      diagnosticEvaluator: diagnostic,
+      gateEvaluator: new FixedGate(gateResult('UNCLEAR', states)),
+      feedbackEvaluator: feedback,
     });
 
     const evaluated = await evaluator.evaluate(input);
 
     expect(evaluated.result.status).toBe('UNCLEAR');
-    expect(diagnostic.inputs[0]?.gateDecision).toEqual({
-      status: 'UNCLEAR',
-      decisionSummary: 'gate-UNCLEAR',
-      effectiveResponse: '학생 응답을 문맥 독립적으로 합성한 내용',
-      expressedClaims: [{ description: '주장', source: 'initial', evidence: '학생 응답' }],
-      targetAxisId: loaded.gold.centralAxes[0]!.id,
-      axisStates: loaded.gold.centralAxes.map((axis, index) => ({
-        axisId: axis.id,
-        state: index === 0 ? 'unknown' : 'captured',
-      })),
-    });
-    expect(evaluated.result.snapshot.effectiveResponse).toBe(
-      '학생 응답을 문맥 독립적으로 합성한 내용',
-    );
+    expect(feedback.inputs[0]?.route).toBe('TARGETED_GAP');
+    expect(feedback.inputs[0]?.selectedDetailedRelation).toBeNull();
+    expect(evaluated.result.targetIssue?.relatedRelationIds).toEqual([]);
     expect(evaluated.call.stages?.map((stage) => stage.stage)).toEqual([
       'central_story_gate',
-      'relation_diagnostic',
+      'selective_feedback',
     ]);
   });
 
-  it('명시적 오류가 없는데 관계 진단기가 게이트 판정을 변경하면 거부한다', async () => {
+  it('포착된 축 없이 여러 축이 unknown이면 SPARSE_GAP으로 상세 관계 하나만 선택한다', async () => {
+    const feedback = new RecordingFeedback();
+    const states = loaded.gold.centralAxes.map(() => 'unknown' as const);
+    const evaluator = new TwoStageDialogueEvaluator({
+      gateEvaluator: new FixedGate(gateResult('UNCLEAR', states)),
+      feedbackEvaluator: feedback,
+    });
+
+    const evaluated = await evaluator.evaluate(input);
+    const selected = feedback.inputs[0]?.selectedDetailedRelation;
+
+    expect(feedback.inputs[0]?.route).toBe('SPARSE_GAP');
+    expect(selected).not.toBeNull();
+    expect(evaluated.result.targetIssue?.relatedRelationIds).toEqual([selected?.id]);
+  });
+
+  it('DISTORTED는 상세 관계 판정 없이 ERROR 교정 경로로 고정한다', async () => {
+    const feedback = new RecordingFeedback();
     const evaluator = new TwoStageDialogueEvaluator({
       gateEvaluator: new FixedGate(gateResult('DISTORTED')),
-      diagnosticEvaluator: new RecordingDiagnostic(diagnosticResult('UNCLEAR')),
-    });
-
-    await expect(evaluator.evaluate(input)).rejects.toThrow(/expected ERROR/);
-  });
-
-  it('게이트가 UNCLEAR여도 관계 진단에서 명시적 오류가 발견되면 ERROR가 우선한다', async () => {
-    const evaluator = new TwoStageDialogueEvaluator({
-      gateEvaluator: new FixedGate(gateResult('UNCLEAR')),
-      diagnosticEvaluator: new RecordingDiagnostic(diagnosticResult('ERROR')),
+      feedbackEvaluator: feedback,
     });
 
     const evaluated = await evaluator.evaluate(input);
 
     expect(evaluated.result.status).toBe('ERROR');
-    expect(evaluated.result.snapshot.relationStates[0]?.state).toBe('contradicted');
+    expect(feedback.inputs[0]?.route).toBe('ERROR');
+    expect(feedback.inputs[0]?.selectedDetailedRelation).toBeNull();
     expect(evaluated.result.nextQuestion?.type).toBe('CORRECTIVE');
+    expect(evaluated.result.snapshot.explicitErrors).toHaveLength(1);
   });
 
-  it('게이트가 CAPTURED여도 명시적 오류가 발견되면 PASS하지 않는다', async () => {
+  it.each([
+    ['correct-first', [
+      { source: 'initial' as const, evidence: 'mRNA 주입→바이러스 단백질 합성→면역' },
+      { source: 'initial' as const, evidence: '백신 접종 자체로 바이러스에 감염될 위험이 있다' },
+    ]],
+    ['error-first', [
+      { source: 'initial' as const, evidence: '백신 접종 자체로 바이러스에 감염될 위험이 있다' },
+      { source: 'corrective' as const, evidence: 'mRNA 주입→바이러스 단백질 합성→면역' },
+    ]],
+    ['single-quote', [{ source: 'initial' as const, evidence: '학생 응답' }]],
+    ['no-quote', []],
+  ] as const)('오류 축 근거를 임의의 오류 인용으로 승격하지 않는다: %s', async (_, evidence) => {
+    // Reproduces the mixed correct/incorrect axis evidence observed in the mRNA live trial.
+    const decision = gateResult('DISTORTED');
+    decision.axisStates[0]!.evidence = structuredClone([...evidence]);
+    const original = structuredClone(decision);
+    const feedback = new RecordingFeedback();
+    const evaluated = await new TwoStageDialogueEvaluator({
+      gateEvaluator: new FixedGate(decision), feedbackEvaluator: feedback,
+    }).evaluate(input);
+
+    expect(evaluated.result.snapshot.explicitErrors).toEqual([{
+      description: `중심축 ${decision.axisStates[0]!.axisId}의 관계를 학생이 명시적으로 왜곡했다.`,
+      relatedRelationIds: [],
+      evidence: null,
+      evidenceScope: 'axis_context',
+      axisId: decision.axisStates[0]!.axisId,
+      axisEvidence: evidence,
+    }]);
+    expect(StudentRepresentationSnapshotSchema.parse(evaluated.result.snapshot))
+      .toEqual(evaluated.result.snapshot);
+    expect(evaluated.result.status).toBe('ERROR');
+    expect(evaluated.result.nextQuestion?.type).toBe('CORRECTIVE');
+    expect(feedback.inputs[0]?.gateDecision).toEqual(original);
+    expect(evaluated.call.decisionAudit?.rawResult).toEqual(original);
+    expect(evaluated.result.snapshot.axisStates).toEqual(original.axisStates);
+    expect(evaluated.call.schemaVersion).toBe('axis-dialogue-selective-openai-v4');
+    expect(decision).toEqual(original);
+    const stored = evaluated.result.snapshot.explicitErrors[0]!;
+    if ('axisEvidence' in stored && stored.axisEvidence.length > 0) {
+      stored.axisEvidence[0]!.evidence = 'changed stored context';
+      expect(evaluated.result.snapshot.axisStates).toEqual(original.axisStates);
+      expect(feedback.inputs[0]?.gateDecision).toEqual(original);
+    }
+  });
+
+  it('기존 오류 인용은 호환되며 미지정 인용에는 축 문맥 표기가 필요하다', () => {
+    const legacy = { description: '오류', relatedRelationIds: ['MR1'], evidence: '직접 인용' };
+    expect(ExplicitErrorSchema.parse(legacy)).toEqual(legacy);
+    expect(ExplicitErrorSchema.safeParse({ ...legacy, evidence: null }).success).toBe(false);
+    expect(ExplicitErrorSchema.safeParse({ ...legacy, evidence: '' }).success).toBe(false);
+  });
+
+  it.each(['CAPTURED', 'UNCLEAR'] as const)('%s에는 축 오류 기록을 만들지 않는다', async (status) => {
+    const evaluated = await new TwoStageDialogueEvaluator({
+      gateEvaluator: new FixedGate(gateResult(status)),
+      feedbackEvaluator: new RecordingFeedback(),
+    }).evaluate(input);
+    expect(evaluated.result.snapshot.explicitErrors).toEqual([]);
+  });
+
+  it('질문 기회를 모두 쓴 비통과 응답에는 종료 피드백과 null 질문을 반환한다', async () => {
+    const states = loaded.gold.centralAxes.map((_, index) =>
+      index === 0 ? 'partial' as const : 'captured' as const
+    );
+    const feedback = new RecordingFeedback();
     const evaluator = new TwoStageDialogueEvaluator({
-      gateEvaluator: new FixedGate(gateResult('CAPTURED')),
-      diagnosticEvaluator: new RecordingDiagnostic(diagnosticResult('ERROR')),
+      gateEvaluator: new FixedGate(gateResult('UNCLEAR', states)),
+      feedbackEvaluator: feedback,
     });
 
-    const evaluated = await evaluator.evaluate(input);
+    const evaluated = await evaluator.evaluate({ ...input, questionsAsked: 3, maxQuestions: 3 });
 
-    expect(evaluated.result.status).toBe('ERROR');
+    expect(evaluated.result.nextQuestion).toBeNull();
+    expect(evaluated.result.studentFeedback).toBe(
+      '이번 답변만으로는 문단의 핵심 이해를 충분히 확인하지 못했습니다.',
+    );
   });
 
   it('중심 이야기 게이트 API 입력에는 centralAxes만 있고 coreRelations는 포함되지 않는다', async () => {
@@ -238,31 +307,55 @@ describe('two-stage dialogue evaluator', () => {
 
     const request = parse.mock.calls[0]?.[0] as { input: string };
     const sent = JSON.parse(request.input) as Record<string, unknown>;
-    expect(sent).toHaveProperty('centralStory', loaded.gold.centralStory);
-    expect(sent).toHaveProperty('centralAxes', loaded.gold.centralAxes);
+    expect(sent).not.toHaveProperty('centralStory');
+    expect(sent).toHaveProperty('centralAxes', loaded.gold.centralAxes.map(({ id, description }) => ({ id, description })));
     expect(JSON.stringify(sent)).not.toMatch(/coreRelations|diagnosticRole|keyMappings/);
   });
 
   it('마지막 답변의 새 근거 없이 이전 partial 축을 captured로 승격하지 않는다', async () => {
-    const parse = vi.fn(async () => ({
-      output_parsed: gateResult('CAPTURED'),
-      usage: {
-        input_tokens: 100,
-        output_tokens: 20,
-        input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
-      },
-    }));
+    const retryStates = loaded.gold.centralAxes.map((_, index) =>
+      index === 0 ? 'partial' as const : 'captured' as const
+    );
+    const parse = vi.fn()
+      .mockResolvedValueOnce({
+        output_parsed: gateResult('CAPTURED'),
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+        },
+      })
+      .mockResolvedValueOnce({
+        output_parsed: gateResult('UNCLEAR', retryStates),
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
+        },
+      });
     const evaluator = new OpenAICentralStoryGateEvaluator({
       client: { responses: { parse } } as unknown as OpenAI,
       maxTransportRetries: 0,
+      maxContractRetries: 1,
+      retryDelayMs: 0,
     });
     const previousSnapshot = {
-      ...diagnosticResult('UNCLEAR').snapshot,
+      turn: 1,
+      effectiveResponse: '이전 합성 응답',
+      centralObjectRepresentation: null,
+      centralStoryRepresentation: null,
+      expressedClaims: [],
       axisStates: loaded.gold.centralAxes.map((axis, index) => ({
         axisId: axis.id,
         state: index === 0 ? 'partial' as const : 'captured' as const,
         evidence: [{ source: 'initial' as const, evidence: '최초 응답의 근거' }],
       })),
+      relationStates: loaded.gold.coreRelations.map((relation) => ({
+        relationId: relation.id,
+        state: 'unknown' as const,
+      })),
+      explicitErrors: [],
+      unresolvedQuestions: [],
     };
 
     const evaluated = await evaluator.evaluate({
@@ -279,5 +372,7 @@ describe('two-stage dialogue evaluator', () => {
     expect(evaluated.result.status).toBe('UNCLEAR');
     expect(evaluated.result.axisStates[0]?.state).toBe('partial');
     expect(evaluated.result.targetAxisId).toBe(loaded.gold.centralAxes[0]!.id);
+    expect(parse).toHaveBeenCalledTimes(2);
+    expect(evaluated.call.decisionAudit?.contractFailures).toHaveLength(1);
   });
 });

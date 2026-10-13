@@ -24,9 +24,12 @@ export const DEFAULT_DIALOGUE_LOG_PATH = resolve(
   '.omc/logs/dialogue-experiment/sessions.jsonl',
 );
 
-export type DialogueFinalStatus = 'PASS' | 'UNRESOLVED' | 'ABORTED';
+export type DialogueFinalStatus = 'PASS' | 'UNRESOLVED' | 'ABORTED' | 'SKIPPED';
 
 export interface DialogueTurnRecord {
+  readonly questionCall?: DialogueCallMetadata;
+  /** 선택적 보완 질문을 만들기 전의 판정과 학생용 피드백. 대화 기록에서 교체하지 않는다. */
+  readonly evaluationBeforeQuestion?: EvaluationResult;
   readonly evaluation: EvaluationResult;
   readonly call: DialogueCallMetadata;
   readonly questionShown: string | null;
@@ -56,6 +59,25 @@ export class JsonlDialogueSessionLogger implements DialogueSessionLogger {
   save(session: DialogueExperimentSession): void {
     mkdirSync(dirname(this.path), { recursive: true });
     appendFileSync(this.path, `${JSON.stringify(session)}\n`, 'utf8');
+  }
+}
+
+export interface DialogueProgressionEvent {
+  readonly sessionId: string;
+  readonly paragraphSessionId: string;
+  readonly paragraphId: string;
+  readonly action: 'STUDENT_CONTINUED';
+  readonly outcome: 'SKIPPED' | 'UNRESOLVED' | 'PASS';
+  readonly evaluationStatus: EvaluationStatus | null;
+  readonly at: string;
+}
+
+export class JsonlDialogueProgressionLogger {
+  constructor(private readonly path: string) {}
+
+  save(event: DialogueProgressionEvent): void {
+    mkdirSync(dirname(this.path), { recursive: true });
+    appendFileSync(this.path, `${JSON.stringify(event)}\n`, 'utf8');
   }
 }
 
@@ -123,6 +145,11 @@ export class DialogueSessionEngine {
     return this.finalStatus !== undefined;
   }
 
+  /** Read-only in-progress records for transcript/inspection; never completes a session. */
+  get dialogueRecord(): { initialResponse: string; turns: readonly DialogueTurnRecord[] } {
+    return { initialResponse: this.initialResponse ?? '', turns: structuredClone(this.turns) };
+  }
+
   get pendingQuestion(): { readonly type: QuestionType; readonly text: string } | null {
     const last = this.turns.at(-1);
     if (last?.questionShown === null || last?.studentAnswer !== null) return null;
@@ -144,7 +171,12 @@ export class DialogueSessionEngine {
     const trimmed = response.trim();
     if (trimmed === '') throw new Error('자유 응답이 비어 있습니다.');
     this.initialResponse = trimmed;
-    return this.evaluateCurrentEvidence();
+    try {
+      return await this.evaluateCurrentEvidence();
+    } catch (error) {
+      this.initialResponse = undefined;
+      throw error;
+    }
   }
 
   async submitFollowUp(answer: string): Promise<DialogueStep> {
@@ -157,7 +189,48 @@ export class DialogueSessionEngine {
     const trimmed = answer.trim();
     if (trimmed === '') throw new Error('후속 답변이 비어 있습니다.');
     pending.studentAnswer = trimmed;
-    return this.evaluateCurrentEvidence();
+    try {
+      return await this.evaluateCurrentEvidence();
+    } catch (error) {
+      pending.studentAnswer = null;
+      throw error;
+    }
+  }
+
+  get canRequestQuestion(): boolean {
+    const last = this.turns.at(-1);
+    if (last?.evaluation.routing) return !this.isTerminal && this.evaluator.requestQuestion !== undefined &&
+      this.pendingQuestion === null && this.history().length < this.maxQuestions &&
+      last.evaluation.routing.accepted && last.evaluation.routing.axes.some((a) => a.route === 'OPTIONAL_REPAIR');
+    return !this.isTerminal && this.evaluator.requestQuestion !== undefined &&
+      this.pendingQuestion === null && this.history().length < this.maxQuestions &&
+      last?.evaluation.snapshot.axisFeedback?.some((axis) => axis.status === 'UNCLEAR_OK') === true &&
+      last.evaluation.snapshot.axisFeedback.every((axis) => axis.status === 'PASS' || axis.status === 'UNCLEAR_OK');
+  }
+
+  async requestQuestion(): Promise<DialogueStep> {
+    if (!this.canRequestQuestion || !this.evaluator.requestQuestion) throw new Error('보완 질문을 요청할 수 없습니다.');
+    const last = this.turns.at(-1)!;
+    const response = await this.evaluator.requestQuestion(this.evaluationInput(this.turns.length), {
+      result: last.evaluation, call: last.call,
+    });
+    if (response.result.nextQuestion === null) throw new Error('보완 질문이 생성되지 않았습니다.');
+    const record: DialogueTurnRecord = {
+      ...last,
+      evaluationBeforeQuestion: last.evaluationBeforeQuestion ?? last.evaluation,
+      evaluation: response.result, questionCall: response.call,
+      questionShown: response.result.nextQuestion.text,
+    };
+    this.turns[this.turns.length - 1] = record;
+    this.finalSnapshot = cloneSnapshot(response.result.snapshot);
+    return { evaluation: record.evaluation, call: record.call, questionShown: record.questionShown, terminal: false, finalStatus: null };
+  }
+
+  continueWithoutRevision(): DialogueExperimentSession {
+    if (this.isTerminal) return this.completedSession();
+    this.finalStatus = this.turns.at(-1)?.evaluation.routing?.accepted ? 'PASS' : 'SKIPPED';
+    this.finalSnapshot = cloneSnapshot(this.finalSnapshot ?? emptySnapshot());
+    return this.persistCompletedSession();
   }
 
   abort(): DialogueExperimentSession {
@@ -173,14 +246,17 @@ export class DialogueSessionEngine {
     return this.turns.flatMap((turn) => {
       const question = turn.evaluation.nextQuestion;
       if (question === null || turn.questionShown === null || turn.studentAnswer === null) return [];
-      return [{ question, answer: turn.studentAnswer }];
+      return [{
+        question,
+        answer: turn.studentAnswer,
+        targetRelationIds: turn.evaluation.targetIssue?.relatedRelationIds ?? [],
+      }];
     });
   }
 
-  private async evaluateCurrentEvidence(): Promise<DialogueStep> {
+  private evaluationInput(turn: number): DialogueEvaluationInput {
     const history = this.history();
-    const turn = this.turns.length + 1;
-    const input: DialogueEvaluationInput = {
+    return {
       gold: this.gold,
       goldVersion: this.goldVersion,
       goldHash: this.goldHash,
@@ -189,10 +265,20 @@ export class DialogueSessionEngine {
       turn,
       questionsAsked: history.length,
       maxQuestions: this.maxQuestions,
+      shownSourceGuides: this.turns.flatMap((record, index) => record.evaluation.sourceGuide
+        ? [{ axisId: record.evaluation.sourceGuide.axisId, quote: record.evaluation.sourceGuide.quote, turn: index + 1 }] : []),
+      revealedAxisContent: this.turns.flatMap((record, index) =>
+        (record.evaluation.snapshot.axisFeedback ?? []).flatMap((axis) => axis.revealedText === null
+          ? [] : [{ axisId: axis.axisId, text: axis.revealedText, turn: index + 1 }])),
       ...(this.finalSnapshot === undefined
         ? {}
         : { previousSnapshot: cloneSnapshot(this.finalSnapshot) }),
     };
+  }
+
+  private async evaluateCurrentEvidence(): Promise<DialogueStep> {
+    const input = this.evaluationInput(this.turns.length + 1);
+    const history = this.history();
     const evaluated = await this.evaluator.evaluate(input);
     const result = evaluated.result;
 
@@ -269,7 +355,7 @@ export function feedbackLead(status: EvaluationStatus): string {
 /** 학생 화면에는 structured output이나 내부 상태명이 아니라 이 두 필드만 노출한다. */
 export function formatStudentStep(step: DialogueStep): string {
   if (step.evaluation.status === 'PASS') return PASS_STUDENT_FEEDBACK;
-  const lead = step.finalStatus === 'UNRESOLVED' ? '' : feedbackLead(step.evaluation.status);
+  const lead = step.finalStatus === 'UNRESOLVED' || step.evaluation.routing?.accepted ? '' : feedbackLead(step.evaluation.status);
   const lines = [lead, step.evaluation.studentFeedback]
     .filter((line) => line.trim() !== '');
   if (step.questionShown !== null) lines.push(step.questionShown);

@@ -1,0 +1,83 @@
+import type { ProblemChoiceView } from './contract.js';
+
+export interface FeedbackV4MediaView {
+  mediaId: string; url: string; mimeType: string; width: number; height: number;
+  contentHash?: string | undefined;
+  placement: { scope: 'PASSAGE'; elementIndex?: number | undefined }
+    | { scope: 'SCENARIO'; supplementIndex: number; elementIndex?: number | undefined }
+    | { scope: 'CHOICE'; choiceId: string; elementIndex?: number | undefined };
+}
+
+export interface FeedbackV4TextAnnotationView {
+  location: 'PASSAGE' | 'SCENARIO'; marker: string; style: 'underline' | 'box' | 'label';
+  /** UTF-16 offsets into passageText or scenarioText, end exclusive. */
+  start: number; end: number; text: string;
+}
+
+// No evaluator/pipeline imports: client-safe contracts.
+export type FeedbackV4Rationale = { mode: 'PROVIDED'; text: string } | { mode: 'OMITTED' };
+export interface FeedbackV4Request {
+  transitionId: string;
+  expectedRevision: number;
+  command: { type: 'SELECT'; choiceId: string; rationale: FeedbackV4Rationale }
+    | { type: 'RATIONALE'; rationale: FeedbackV4Rationale }
+    | { type: 'CORRECT'; errorId: string; text: string }
+    | { type: 'RESELECT' } | { type: 'REQUEST_EXPLANATION' } | { type: 'FINISH' }
+    | { type: 'END_START'; accept: boolean } | { type: 'UNDERSTOOD'; answer: boolean }
+    | { type: 'RESUME' };
+}
+export interface FeedbackV4View {
+  version: 'problem-feedback-v4';
+  sessionId: string;
+  revision: number;
+  phase: 'AWAITING_SELECTION' | 'AWAITING_RATIONALE' | 'AWAITING_EVALUATION'
+    | 'AWAITING_END_START' | 'AWAITING_UNDERSTANDING' | 'AWAITING_CORRECTION' | 'AWAITING_POST_REPAIR_CHOICE' | 'AWAITING_RESELECTION' | 'ITEM_REVIEW' | 'COMPLETED';
+  question: { questionId: string; passageText: string; stem: string; scenarioText: string;
+    choices: ProblemChoiceView[]; media: FeedbackV4MediaView[];
+    textAnnotations: FeedbackV4TextAnnotationView[] };
+  message: string;
+  correctionHighlights: { location: 'PASSAGE' | 'SCENARIO'; start: number; end: number; text: string }[];
+  activeErrorId: string | null;
+  postRepairOptions: ('RESELECT' | 'REQUEST_EXPLANATION' | 'FINISH')[] | null;
+  selectionCount: number;
+  maxSelections: number;
+  questionsAsked: number;
+  questionTargets: number;
+  penaltyEligibleSelections: number;
+  pointsDeducted: number;
+  evaluationStatus: 'IDLE' | 'PROCESSING' | 'RETRYABLE_ERROR';
+  evaluationError: string | null;
+  result: {
+    outcome: 'VERIFIED_CORRECT' | 'UNVERIFIED_CORRECT' | 'COACHING_TERMINATED';
+    selectedChoiceId: string;
+    choiceCorrect: boolean;
+    selectionCount: number;
+    rationaleVerified: boolean;
+    correctionSucceeded: boolean;
+    answerRevealed: boolean;
+    resolvedByStudent: boolean;
+    selfReportedUnderstanding: 'YES' | 'NO' | null;
+    answer: { choiceId: string; position: number; text: string } | null;
+  } | null;
+}
+
+export interface FeedbackV4Message {
+  sequence?: 'INSTANT' | 'GATE' | 'CONNECTOR' | 'SECTION' | 'QUESTION' | 'CLOSING';
+  id: string; role: 'STUDENT' | 'COACH'; text: string; phase: FeedbackV4View['phase'];
+}
+export interface FeedbackV4WorkbenchView extends FeedbackV4View {
+  title: string; exam: string; questionNumber: number;
+  selectedChoiceId: string | null;
+  transcript: FeedbackV4Message[];
+}
+export interface FeedbackV4Inspection {
+  revision: number;
+  choiceImpliedVerdict: 'VALID' | 'INVALID';
+  comparisons: { observationId: string; choiceImpliedVerdict: string; rationaleImpliedVerdict: string; selectionRationaleConsistency: string }[];
+  assessments: { mode: 'SELECTION' | 'REPAIR'; reason: string; reconstructedPath: string[];
+    verdict: string | null; contentAssessment: string | null;
+    studentEvidence: { observationId: string; quote: string }[];
+    repairs: { errorId: string; status: string }[]; raw: unknown }[];
+  errors: { errorId: string; description: string; kind: string; status: string; asked: boolean; skipped: boolean }[];
+  additionalErrors: { errorId: string; description: string; status: string }[];
+}

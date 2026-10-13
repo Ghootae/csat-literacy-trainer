@@ -1,204 +1,147 @@
-import { readFileSync } from 'node:fs';
 import type { Server } from 'node:http';
-import { resolve } from 'node:path';
 
 import {
-  OpenAIProblemPathEvaluator,
-  ProblemPathTransportError,
   type DialogueEvaluationCall,
   type DialogueEvaluationInput,
   type DialogueEvaluator,
   type EvaluationResult,
-  type ProblemPathDiagnosticOutput,
-  type ProblemPathEvaluator,
-  type ProblemPathEvaluatorCall,
-  type ProblemPathEvaluatorInput,
-  type ProblemPathEvaluatorTransport,
+  type SourceDirectProblemEvaluator,
+  type SourceDirectProblemEvaluatorCall,
+  type SourceDirectProblemEvaluatorInput,
 } from '@csat/pipeline';
 import { expect, test } from '@playwright/test';
 
 import { createLearningServer } from '../src/server/index.js';
 import type { ProblemSessionView } from '../src/shared/contract.js';
 
-const rawDiagnostic = JSON.parse(readFileSync(resolve(
-  process.cwd(),
-  'packages/pipeline/fixtures/experiments/problem-solving/probes/mrna-c2-vague-evaluator-output.json',
-), 'utf8')) as ProblemPathDiagnosticOutput;
-
-class FixedDiagnosticEvaluator implements ProblemPathEvaluator {
-  calls = 0;
-  readonly inputs: ProblemPathEvaluatorInput[] = [];
-  readonly routes: Array<{ mode: string; model: string }> = [];
-  lunaRationaleFailure: 'connection' | 'timeout' | null = null;
-  terraRationaleFailure: 'connection' | 'timeout' | null = null;
-  private activeInput: ProblemPathEvaluatorInput | null = null;
-  private readonly runtime: OpenAIProblemPathEvaluator;
-
-  constructor() {
-    const transport: ProblemPathEvaluatorTransport = {
-      parse: async (options) => {
-        const input = this.activeInput;
-        if (input === null) throw new Error('E2E evaluator 입력이 없습니다.');
-        this.routes.push({ mode: options.mode, model: options.model });
-        if (options.mode === 'ASSESS_SELECTION_RATIONALE') {
-          const failure = options.model === 'gpt-5.6-luna'
-            ? this.lunaRationaleFailure
-            : this.terraRationaleFailure;
-          if (failure !== null) {
-            throw new ProblemPathTransportError({
-              errorType: failure, retryable: true,
-            });
-          }
-          const observation = input.observations.at(-1);
-          const rationale = observation?.kind === 'INITIAL_SUBMISSION'
-            ? observation.rationale
-            : observation?.kind === 'RESELECTION'
-              ? observation.rawResponse
-              : null;
-          if (rationale === null || rationale === undefined) {
-            throw new Error('근거 판정 E2E 입력에 학생 근거가 없습니다.');
-          }
-          return {
-            outputParsed: {
-              schemaVersion: 'problem-path-evaluator-output-v3',
-              mode: 'ASSESS_SELECTION_RATIONALE',
-              rationaleAssessment: 'SUPPORTED',
-              reason: '학생 근거가 승인된 지문 관계와 일치한다.',
-              evidenceFindings: [{
-                studentQuote: {
-                  kind: 'QUOTE',
-                  observationId: observation.observationId,
-                  sourceField: observation.kind === 'INITIAL_SUBMISSION' ? 'rationale' : 'rawResponse',
-                  quote: rationale,
-                },
-                relationToGold: 'MATCHES',
-                sourceRefs: ['MP4'],
-              }],
-            },
-            usage: { inputTokens: 10, outputTokens: 5 },
-          };
-        }
-        const output = structuredClone(rawDiagnostic);
-        output.basedOnObservationIds = input.observations.map(
-          (observation) => observation.observationId,
-        );
-        const selectedChoiceId = input.sessionState.currentChoiceId;
-        const selectedChoice = input.basicGold.choices.find(
-          (choice) => choice.choiceId === selectedChoiceId,
-        );
-        output.targets[0]!.choiceId = selectedChoiceId;
-        const choiceEvidence = output.targets[0]!.pathSteps[0]?.evidence[0];
-        const latestSelection = [...input.observations].reverse().find(
-          (observation) => observation.kind === 'RESELECTION' || observation.kind === 'INITIAL_SUBMISSION',
-        );
-        if (choiceEvidence?.kind === 'STRUCTURED_VALUE' && latestSelection !== undefined) {
-          choiceEvidence.observationId = latestSelection.observationId;
-          choiceEvidence.field = 'selectedChoiceId';
-          choiceEvidence.value = selectedChoiceId;
-        }
-        const relationRef = selectedChoice?.claimIds[0];
-        if (relationRef !== undefined && output.nextActionCandidate.questionIntent !== null) {
-          output.nextActionCandidate.questionIntent.targetRelationRefs = [relationRef];
-        }
-        if (input.sessionState.allowedActionTypes.includes('ASK_DIAGNOSTIC')) {
-          if (selectedChoiceId !== 'C2') {
-            output.nextActionCandidate.questionText = `${selectedChoice?.position ?? selectedChoiceId}번의 설명에서 어떤 부분이 가장 이상하다고 판단했나요?`;
-          }
-        } else if (input.sessionState.allowedActionTypes.includes('ASK_CORRECTIVE')) {
-          const rationaleObservation = [...input.observations].reverse().find(
-            (observation) => observation.kind === 'RESELECTION',
-          );
-          if (rationaleObservation === undefined || relationRef === undefined) {
-            throw new Error('교정 질문 E2E 입력의 재선택 근거가 없습니다.');
-          }
-          const target = output.targets[0]!;
-          target.errorAssessment = 'CLEAR_ERROR';
-          target.sufficiency = {
-            choiceExplained: { satisfied: true, reason: '선택 근거가 직접 제시됐다.' },
-            interventionPointLocalized: { satisfied: true, reason: '오류 관계를 특정했다.' },
-            safeInterventionAvailable: { satisfied: true, reason: '교정 질문이 가능하다.' },
-            actionRelevantAlternativesControlled: { satisfied: true, reason: '대안이 통제됐다.' },
-            sufficient: true,
-          };
-          target.hypotheses = [{
-            identity: { existingId: null, localId: 'LH1' },
-            kind: 'STUDENT_ERROR',
-            description: '현재 선지 판단의 관계를 잘못 적용했다.',
-            epistemicStatus: 'SUPPORTED_INFERENCE',
-            plausibility: 'ACTIVE',
-            candidateDivergenceLayers: ['INFERENCE_TRANSFORMATION'],
-            intervention: {
-              targetKind: 'SELECTED_CHOICE',
-              divergenceLayer: 'INFERENCE_TRANSFORMATION',
-              targetRelationRefs: [relationRef],
-              interventionType: 'REVISE_INFERENCE',
-            },
-            evidence: [{
-              kind: 'QUOTE', observationId: rationaleObservation.observationId,
-              sourceField: 'rawResponse', quote: rationaleObservation.rawResponse,
-            }],
-            goldRefs: { optionClaimIds: [relationRef], representativeWrongPathIds: [] },
-          }];
-          output.diagnosticDecision.targetHypothesisRefs = ['LH1'];
-          output.diagnosticDecision.unresolvedStepRefs = [];
-          output.nextActionCandidate = {
-            type: 'ASK_CORRECTIVE',
-            target: 'SELECTED_CHOICE',
-            questionIntent: {
-              kind: 'CORRECTIVE',
-              purpose: '현재 선지 판단의 오류 관계를 바로잡는다.',
-              targetedHypothesisRefs: ['LH1'],
-              targetRelationRefs: [relationRef],
-              interventionStrength: 'INDIRECT',
-            },
-            questionText: `${selectedChoice.position}번 판단에 사용한 관계를 다시 확인해 볼까요?`,
-            studentMessage: null,
-            supplementalInferenceIds: [],
-          };
-        } else {
-          output.nextActionCandidate = {
-            type: 'DIRECT_COACHING',
-            target: 'SELECTED_CHOICE',
-            reason: input.sessionState.selectionAttempt >= input.sessionState.maxSelectionAttempts
-              ? 'FINAL_ATTEMPT'
-              : 'MAX_DIAGNOSTIC_TURNS',
-            questionIntent: null,
-            questionText: null,
-            studentMessage: `${selectedChoice?.position ?? selectedChoiceId}번의 판단 관계를 직접 설명합니다.`,
-            supplementalInferenceIds: [],
-          };
-        }
-        return {
-          outputParsed: output,
-          usage: { inputTokens: 10, outputTokens: 5 },
-        };
-      },
+function quotedObservation(input: SourceDirectProblemEvaluatorInput) {
+  const observation = input.observations.at(-1)!;
+  if (observation.kind === 'INITIAL_SUBMISSION') {
+    return {
+      observationId: observation.observationId,
+      quote: observation.rationale ?? observation.strategy ?? observation.runnerUp?.rationale ?? observation.selectedChoiceId,
     };
-    this.runtime = new OpenAIProblemPathEvaluator({
-      transport,
-      metricRecorder: () => undefined,
-      maxTransportRetries: 0,
-    });
   }
+  return { observationId: observation.observationId, quote: observation.rawResponse };
+}
+
+class FixedDiagnosticEvaluator implements SourceDirectProblemEvaluator {
+  calls = 0;
+  readonly inputs: SourceDirectProblemEvaluatorInput[] = [];
+  readonly routes: Array<{ mode: string; model: string }> = [];
+  rationaleFailure: 'connection' | 'timeout' | null = null;
 
   reset(): void {
     this.calls = 0;
     this.inputs.splice(0);
     this.routes.splice(0);
-    this.lunaRationaleFailure = null;
-    this.terraRationaleFailure = null;
-    this.activeInput = null;
+    this.rationaleFailure = null;
   }
 
-  async evaluate(input: ProblemPathEvaluatorInput): Promise<ProblemPathEvaluatorCall> {
+  async evaluate(input: SourceDirectProblemEvaluatorInput): Promise<SourceDirectProblemEvaluatorCall> {
     this.calls += 1;
     this.inputs.push(structuredClone(input));
-    this.activeInput = input;
-    try {
-      return await this.runtime.evaluate(input);
-    } finally {
-      this.activeInput = null;
+    this.routes.push({ mode: input.evaluationMode, model: 'gpt-5.6-terra' });
+    if (input.evaluationMode === 'ASSESS_SELECTION_RATIONALE' && this.rationaleFailure !== null) {
+      throw new Error(`mock ${this.rationaleFailure}`);
     }
+    const studentEvidence = [quotedObservation(input)];
+    const rawOutput = input.evaluationMode === 'ASSESS_SELECTION_RATIONALE'
+      ? {
+          schemaVersion: 'source-direct-problem-evaluator-output-v2' as const,
+          mode: 'ASSESS_SELECTION_RATIONALE' as const,
+          assessment: 'SUPPORTED' as const,
+          reason: '학생 근거가 원문 및 공식 해설과 일치한다.',
+          studentEvidence,
+          sourceEvidence: [{
+            kind: 'TEXT' as const,
+            source: 'OFFICIAL_EXPLANATION' as const,
+            quote: input.source.officialExplanation,
+          }],
+        }
+      : this.diagnosticOutput(input, studentEvidence);
+    return {
+      result: rawOutput,
+      rawOutput,
+      call: {
+        provider: 'mock', model: 'gpt-5.6-terra', effort: 'medium',
+        promptVersion: 'source-direct-problem-dialogue-prompt-v3',
+        schemaVersion: 'source-direct-problem-evaluator-output-v2',
+        calledAt: '2026-09-08T00:00:00.000Z', durationMs: 1,
+        attempts: [{ attempt: 1, outcome: 'success', durationMs: 1 }],
+        usage: { inputTokens: 10, outputTokens: 5 },
+      },
+    };
+  }
+
+  private diagnosticOutput(
+    input: SourceDirectProblemEvaluatorInput,
+    studentEvidence: ReturnType<typeof quotedObservation>[],
+  ) {
+    const selectedChoice = input.source.choices.find(
+      (choice) => choice.choiceId === input.sessionState.currentChoiceId,
+    )!;
+    const circledPosition = ['', '①', '②', '③', '④', '⑤'][selectedChoice.position] ??
+      `${selectedChoice.position}번`;
+    const common = {
+      schemaVersion: 'source-direct-problem-evaluator-output-v2' as const,
+      mode: 'DIAGNOSE_PATH' as const,
+      basedOnObservationIds: input.observations.map((observation) => observation.observationId),
+      divergenceLayer: null,
+      reconstructedPath: '학생이 현재 선지의 일부 표현을 근거로 선택했다.',
+      studentEvidence,
+    };
+    if (input.sessionState.allowedActionTypes.includes('ASK_DIAGNOSTIC')) {
+      return {
+        ...common,
+        assessment: 'INSUFFICIENT_EVIDENCE' as const,
+        learningState: 'PATH_UNCLEAR' as const,
+        reason: '학생 근거만으로 판단 관계를 확정할 수 없다.',
+        sourceEvidence: [],
+        nextAction: {
+          type: 'ASK_DIAGNOSTIC' as const,
+          question: `${circledPosition}의 설명에서 어떤 부분이 가장 이상하다고 판단했나요?`,
+          purpose: '학생이 적용한 판단 관계를 확인한다.',
+        },
+      };
+    }
+    if (input.sessionState.allowedActionTypes.includes('ASK_CORRECTIVE')) {
+      return {
+        ...common,
+        assessment: 'CLEAR_ERROR' as const,
+        learningState: 'PATH_CLARIFIED' as const,
+        divergenceLayer: 'INFERENCE_TRANSFORMATION' as const,
+        reason: '현재 선지 판단에 사용한 관계가 원문과 어긋난다.',
+        sourceEvidence: [{
+          kind: 'TEXT' as const,
+          source: 'CHOICE' as const,
+          quote: selectedChoice.text,
+        }],
+        nextAction: {
+          type: 'ASK_CORRECTIVE' as const,
+          question: `${selectedChoice.position}번 판단에 사용한 관계를 다시 확인해 볼까요?`,
+          purpose: '현재 선지 판단의 오류 관계를 바로잡는다.',
+        },
+      };
+    }
+    return {
+      ...common,
+      assessment: 'INSUFFICIENT_EVIDENCE' as const,
+      learningState: 'PATH_UNCLEAR' as const,
+      reason: '질문 한도 안에서 오류 경로가 확인되지 않았다.',
+      sourceEvidence: [{
+        kind: 'TEXT' as const,
+        source: 'CHOICE' as const,
+        quote: selectedChoice.text,
+      }],
+      nextAction: {
+        type: 'DIRECT_COACHING' as const,
+        message: `현재 선택한 ${selectedChoice.position}번에서 확인할 관계는 “${selectedChoice.text}”입니다.`,
+        reason: input.sessionState.selectionAttempt >= input.sessionState.maxSelectionAttempts
+          ? 'FINAL_ATTEMPT' as const
+          : 'MAX_DIAGNOSTIC_TURNS' as const,
+      },
+    };
   }
 }
 
@@ -268,6 +211,15 @@ test.beforeEach(() => {
   evaluator.reset();
 });
 
+test('루트 진입은 최신 학생용 연결 학습 화면으로 정규화한다', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page).toHaveURL(/\/dialogue$/);
+  await expect(page.getByRole('heading', {
+    name: '읽은 내용을 설명하고, 이어서 문제를 풀어보세요.',
+  })).toBeVisible();
+});
+
 test('문제 전용 목록에서 6개 문항을 선택해 바로 연다', async ({ page }) => {
   await page.goto('/problems');
 
@@ -285,17 +237,18 @@ test('문제 전용 목록에서 6개 문항을 선택해 바로 연다', async 
 test('5문단 PASS 기록을 유지한 채 19번 판정기로 이어진다', async ({ page }) => {
   await page.goto('/dialogue');
   const card = page.locator('.dialogue-passage-card').filter({ hasText: 'mRNA 백신과 지질 나노 입자' });
-  await card.getByRole('button', { name: '시작' }).click();
+  await card.getByRole('button', { name: '학습 시작' }).click();
 
   for (let position = 1; position <= 5; position += 1) {
     await page.getByRole('textbox').fill(`${position}문단의 중심 관계를 이해했습니다.`);
     await page.getByRole('button', { name: '제출' }).click();
     if (position < 5) await page.getByRole('button', { name: '다음 문단' }).click();
   }
-  await expect(page.getByText('전체 지문을 완료했습니다.')).toBeVisible();
-  await page.getByRole('button', { name: '이 이해 기록으로 19번 풀기' }).click();
+  await expect(page.getByText('문단 학습을 마쳤습니다.')).toBeVisible();
+  await page.getByRole('button', { name: '19번 문제 풀기' }).click();
   await expect(page).toHaveURL(/\/problem\?sessionId=/);
   await expect(page.getByRole('heading', { name: /mRNA 백신과 지질 나노 입자/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: /Y자 미세관/ })).toBeVisible();
 
   await page.getByText(/^2$/).click();
   await page.getByLabel('선택 근거 (선택 사항)').fill('속도를 조절하면 균일하지 않을 것 같았습니다.');
@@ -306,6 +259,11 @@ test('5문단 PASS 기록을 유지한 채 19번 판정기로 이어진다', asy
   expect(input?.paragraphHandoff?.passageId).toBe('mrna-vaccine-lipid-nanoparticle');
   expect(input?.paragraphHandoff?.paragraphs).toHaveLength(5);
   expect(input?.paragraphHandoff?.paragraphs.every((paragraph) => paragraph.dialogue.outcome === 'PASS')).toBe(true);
+  expect(input?.source.media).toEqual([expect.objectContaining({
+    mediaId: 'MEDIA1',
+    placement: { scope: 'SCENARIO', supplementIndex: 0 },
+  })]);
+  expect(JSON.stringify(input?.source.media)).not.toContain('Y자 미세관');
 });
 
 test('mRNA 19번 공개 DTO와 독립 정답 완료 상태를 새로고침 후에도 복원한다', async ({ page }) => {
@@ -336,7 +294,7 @@ test('mRNA 19번 공개 DTO와 독립 정답 완료 상태를 새로고침 후�
   await expect(page.getByText('상세 결과 유형: INDEPENDENT_CORRECT')).toBeVisible();
 });
 
-test('정답 근거는 Luna로 판정하고 SUPPORTED 결과를 검증 정답으로 종료한다', async ({ page }) => {
+test('정답 근거는 원문 직접 판정하고 SUPPORTED 결과를 검증 정답으로 종료한다', async ({ page }) => {
   await page.goto('/problem');
   await page.getByText(/^5$/).click();
   await page.getByLabel('선택 근거 (선택 사항)').fill(
@@ -348,12 +306,12 @@ test('정답 근거는 Luna로 판정하고 SUPPORTED 결과를 검증 정답으
   await expect(page.getByText('최종 결과: INITIAL_CORRECT_VERIFIED')).toBeVisible();
   await expect(page.getByText('최종 근거 검증: SUPPORTED')).toBeVisible();
   expect(evaluator.routes).toEqual([
-    { mode: 'ASSESS_SELECTION_RATIONALE', model: 'gpt-5.6-luna' },
+    { mode: 'ASSESS_SELECTION_RATIONALE', model: 'gpt-5.6-terra' },
   ]);
 });
 
-test('Luna의 빠른 API 오류는 Terra 한 번으로 폴백해 검증 정답을 유지한다', async ({ page }) => {
-  evaluator.lunaRationaleFailure = 'connection';
+test('원문 직접 근거 판정의 연결 오류는 질문 없이 미검증 정답으로 안전 종료한다', async ({ page }) => {
+  evaluator.rationaleFailure = 'connection';
   await page.goto('/problem');
   await page.getByText(/^5$/).click();
   await page.getByLabel('선택 근거 (선택 사항)').fill(
@@ -361,15 +319,15 @@ test('Luna의 빠른 API 오류는 Terra 한 번으로 폴백해 검증 정답�
   );
   await page.getByRole('button', { name: '선택 제출' }).click();
 
-  await expect(page.getByText('최종 결과: INITIAL_CORRECT_VERIFIED')).toBeVisible();
+  await expect(page.getByText('최종 결과: INITIAL_CORRECT_UNVERIFIED')).toBeVisible();
+  await expect(page.getByText('최종 근거 검증: UNCERTAIN')).toBeVisible();
   expect(evaluator.routes).toEqual([
-    { mode: 'ASSESS_SELECTION_RATIONALE', model: 'gpt-5.6-luna' },
     { mode: 'ASSESS_SELECTION_RATIONALE', model: 'gpt-5.6-terra' },
   ]);
 });
 
-test('Luna 시간 초과는 Terra를 기다리지 않고 미검증 정답으로 종료한다', async ({ page }) => {
-  evaluator.lunaRationaleFailure = 'timeout';
+test('원문 직접 근거 판정의 시간 초과는 미검증 정답으로 종료한다', async ({ page }) => {
+  evaluator.rationaleFailure = 'timeout';
   await page.goto('/problem');
   await page.getByText(/^5$/).click();
   await page.getByLabel('선택 근거 (선택 사항)').fill(
@@ -381,13 +339,12 @@ test('Luna 시간 초과는 Terra를 기다리지 않고 미검증 정답으로 
   await expect(page.getByText('최종 결과: INITIAL_CORRECT_UNVERIFIED')).toBeVisible();
   await expect(page.getByText('최종 근거 검증: UNCERTAIN')).toBeVisible();
   expect(evaluator.routes).toEqual([
-    { mode: 'ASSESS_SELECTION_RATIONALE', model: 'gpt-5.6-luna' },
+    { mode: 'ASSESS_SELECTION_RATIONALE', model: 'gpt-5.6-terra' },
   ]);
 });
 
-test('Luna와 Terra가 모두 실패하면 질문 없이 미검증 정답으로 안전 종료한다', async ({ page }) => {
-  evaluator.lunaRationaleFailure = 'connection';
-  evaluator.terraRationaleFailure = 'timeout';
+test('원문 직접 근거 판정 실패 시 확인 질문을 새로 만들지 않는다', async ({ page }) => {
+  evaluator.rationaleFailure = 'connection';
   await page.goto('/problem');
   await page.getByText(/^5$/).click();
   await page.getByLabel('선택 근거 (선택 사항)').fill(
@@ -400,7 +357,6 @@ test('Luna와 Terra가 모두 실패하면 질문 없이 미검증 정답으로 
   await expect(page.getByText('최종 근거 검증: UNCERTAIN')).toBeVisible();
   await expect(page.getByText('확인 질문', { exact: true })).not.toBeVisible();
   expect(evaluator.routes).toEqual([
-    { mode: 'ASSESS_SELECTION_RATIONALE', model: 'gpt-5.6-luna' },
     { mode: 'ASSESS_SELECTION_RATIONALE', model: 'gpt-5.6-terra' },
   ]);
 });
@@ -408,14 +364,14 @@ test('Luna와 Terra가 모두 실패하면 질문 없이 미검증 정답으로 
 test('묵가 지문 5문단 PASS 뒤 12번으로 연결하고 문제별 세션을 분리한다', async ({ page }) => {
   await page.goto('/dialogue');
   const card = page.locator('.dialogue-passage-card').filter({ hasText: '공손룡과 후기 묵가의 명실론' });
-  await card.getByRole('button', { name: '시작' }).click();
+  await card.getByRole('button', { name: '학습 시작' }).click();
 
   for (let position = 1; position <= 5; position += 1) {
     await page.getByRole('textbox').fill(`${position}문단의 중심 관계를 이해했습니다.`);
     await page.getByRole('button', { name: '제출' }).click();
     if (position < 5) await page.getByRole('button', { name: '다음 문단' }).click();
   }
-  await page.getByRole('button', { name: '이 이해 기록으로 12번 풀기' }).click();
+  await page.getByRole('button', { name: '12번 문제 풀기' }).click();
   await expect(page).toHaveURL(/\/problem\?sessionId=/);
   await expect(page.getByRole('heading', { name: /공손룡과 후기 묵가의 명실론 · 12번/ })).toBeVisible();
   await expect(page.getByText(/ⓐ옷이 없어/)).toBeVisible();
@@ -536,7 +492,7 @@ test('오답은 근거를 받은 뒤 내부 스냅샷 없이 확인 질문 하�
   expect(body).not.toContain('answerChoiceId');
 });
 
-test('질문 2/2 소진 뒤 결정론적 코칭을 거쳐 복구 없이 재선택한다', async ({ page }) => {
+test('질문 2/2 소진 뒤 원문 직접 코칭을 거쳐 복구 없이 재선택한다', async ({ page }) => {
   await page.goto('/problem');
   await page.getByText(/^2$/).click();
   await page.getByLabel('선택 근거 (선택 사항)').fill('어느 관계가 문제인지 잘 모르겠습니다.');
@@ -554,13 +510,13 @@ test('질문 2/2 소진 뒤 결정론적 코칭을 거쳐 복구 없이 재선�
   })).toBeVisible();
   await expect(page.getByText('이번 선택 개입 3회')).toBeVisible();
   await expect(page.getByText('정답 공개: 예')).not.toBeVisible();
-  expect(evaluator.calls).toBe(2);
+  expect(evaluator.calls).toBe(3);
 
   await page.getByRole('button', { name: '확인' }).click();
   await expect(page.getByRole('button', { name: '다시 선택' })).toBeVisible();
   await expect(page.getByText('선택 1/3')).toBeVisible();
   await expect(page.getByText('진행을 다시 시작할 수 있습니다')).not.toBeVisible();
-  expect(evaluator.calls).toBe(2);
+  expect(evaluator.calls).toBe(3);
 });
 
 test('세 번째 선택도 오답일 때만 정적 정답 공개로 종료한다', async ({ page }) => {
@@ -596,6 +552,8 @@ test('세 번째 선택도 오답일 때만 정적 정답 공개로 종료한다
   await expect(page.getByText('학생 스스로 해결: 아니요')).toBeVisible();
   await expect(page.getByText(/^정답 5번$/)).toBeVisible();
   expect(evaluator.routes.map((route) => route.model)).toEqual([
+    'gpt-5.6-terra',
+    'gpt-5.6-terra',
     'gpt-5.6-terra',
     'gpt-5.6-terra',
     'gpt-5.6-terra',

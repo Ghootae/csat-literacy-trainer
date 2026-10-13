@@ -1,14 +1,12 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  ProblemPathEvaluatorFallbackError,
-  resolveProblemPathEvaluatorIds,
-  type ProblemPathEvaluator,
-  type ProblemPathEvaluatorCall,
-  type ProblemPathEvaluatorInput,
+  SourceDirectProblemEvaluatorError,
+  type SourceDirectDiagnosticOutput,
+  type SourceDirectProblemEvaluator,
+  type SourceDirectProblemEvaluatorCall,
+  type SourceDirectProblemEvaluatorInput,
+  type StudentEvidenceEvent,
 } from '@csat/pipeline';
 
 import {
@@ -16,6 +14,7 @@ import {
   type CompletedProblemSessionRecord,
   type ProblemSessionLogger,
 } from './problem-solving.js';
+import type { StudentEvidenceSink } from './student-state.js';
 
 class MemoryLogger implements ProblemSessionLogger {
   readonly records: CompletedProblemSessionRecord[] = [];
@@ -25,26 +24,100 @@ class MemoryLogger implements ProblemSessionLogger {
   }
 }
 
-const rawDiagnostic = JSON.parse(readFileSync(resolve(
-  process.cwd(),
-  'packages/pipeline/fixtures/experiments/problem-solving/probes/mrna-c2-vague-evaluator-output.json',
-), 'utf8'));
-
-function successfulCall(input: ProblemPathEvaluatorInput): ProblemPathEvaluatorCall {
-  const rawOutput = {
-    ...structuredClone(rawDiagnostic),
-    basedOnObservationIds: input.observations.map((observation) => observation.observationId),
-  };
-  const result = resolveProblemPathEvaluatorIds(rawOutput, {
-    turnSequence: input.sessionState.evaluationSequence,
+describe('developer problem inspection', () => {
+  it('reads evaluation history without new calls or student payload leakage', async () => {
+    const evaluate = vi.fn(async (input: SourceDirectProblemEvaluatorInput) => successfulCall(input));
+    const controller = new ProblemSolvingController({ evaluator: { evaluate } });
+    const initial = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+    expect(controller.inspect(initial.sessionId).evaluations).toEqual([]);
+    const first = await controller.submitInitial(initial.sessionId, { choiceId: 'C2', rationale: '이 관계가 맞는 것 같아요.' });
+    const inspection = controller.inspect(initial.sessionId);
+    expect(inspection.session).toEqual(first);
+    expect(inspection.evaluations).toHaveLength(1);
+    expect(inspection.evaluations[0]).toMatchObject({ assessment: 'INSUFFICIENT_EVIDENCE', reason: '학생 근거만으로 오류 경로를 확정할 수 없다.' });
+    expect(inspection.evaluations[0]?.studentEvidence[0]?.quote).toBe('이 관계가 맞는 것 같아요.');
+    expect(controller.get(initial.sessionId)).not.toHaveProperty('evaluations');
+    await controller.respond(initial.sessionId, { type: 'TEXT', text: '추가로 생각한 근거입니다.' });
+    expect(controller.inspect(initial.sessionId).evaluations).toHaveLength(2);
+    expect(inspection.evaluations).toHaveLength(1);
+    expect(evaluate).toHaveBeenCalledTimes(2);
   });
+});
+
+class MemoryEvidenceSink implements StudentEvidenceSink {
+  readonly events: StudentEvidenceEvent[] = [];
+  save(events: readonly StudentEvidenceEvent[]): void { this.events.push(...structuredClone(events)); }
+}
+
+function observationQuote(input: SourceDirectProblemEvaluatorInput): {
+  readonly observationId: string;
+  readonly quote: string;
+} {
+  const observation = input.observations.at(-1)!;
+  if (observation.kind === 'INITIAL_SUBMISSION') {
+    return {
+      observationId: observation.observationId,
+      quote: observation.rationale ?? observation.strategy ?? observation.runnerUp?.rationale ?? 'C2',
+    };
+  }
+  return { observationId: observation.observationId, quote: observation.rawResponse };
+}
+
+function successfulCall(input: SourceDirectProblemEvaluatorInput): SourceDirectProblemEvaluatorCall {
+  const coaching = input.sessionState.allowedActionTypes.includes('DIRECT_COACHING') &&
+    !input.sessionState.allowedActionTypes.includes('ASK_DIAGNOSTIC') &&
+    !input.sessionState.allowedActionTypes.includes('ASK_CORRECTIVE');
+  const selectedChoice = input.source.choices.find(
+    (choice) => choice.choiceId === input.sessionState.currentChoiceId,
+  )!;
+  const wrongChoiceCoaching = input.sessionState.entryReason !== 'CORRECT_RATIONALE_REVIEW' &&
+    input.sessionState.selectionAttempt < input.sessionState.maxSelectionAttempts;
+  const coachingMessage = wrongChoiceCoaching
+    ? `현재 선택한 ${selectedChoice.position}번의 문장과 지문 근거를 다시 비교해 보세요: ${selectedChoice.text}`
+    : input.source.officialExplanation;
+  const coachingEvidence = wrongChoiceCoaching
+    ? { kind: 'TEXT' as const, source: 'CHOICE' as const, quote: selectedChoice.text }
+    : {
+        kind: 'TEXT' as const,
+        source: 'OFFICIAL_EXPLANATION' as const,
+        quote: input.source.officialExplanation,
+      };
+  const rawOutput = {
+    schemaVersion: 'source-direct-problem-evaluator-output-v2' as const,
+    mode: 'DIAGNOSE_PATH' as const,
+    basedOnObservationIds: input.observations.map((observation) => observation.observationId),
+    assessment: coaching ? 'INSUFFICIENT_EVIDENCE' as const : 'INSUFFICIENT_EVIDENCE' as const,
+    learningState: 'PATH_UNCLEAR' as const,
+    divergenceLayer: null,
+    reason: coaching ? '질문 한도 안에서 경로가 확인되지 않았다.' : '학생 근거만으로 오류 경로를 확정할 수 없다.',
+    reconstructedPath: '현재 선택 이유의 방향이 아직 드러나지 않았다.',
+    studentEvidence: [observationQuote(input)],
+    sourceEvidence: coaching
+      ? [coachingEvidence]
+      : [],
+    nextAction: coaching
+      ? {
+          type: 'DIRECT_COACHING' as const,
+          message: coachingMessage,
+          reason: input.sessionState.selectionAttempt >= input.sessionState.maxSelectionAttempts
+            ? 'FINAL_ATTEMPT' as const
+            : input.sessionState.entryReason === 'CORRECT_RATIONALE_REVIEW'
+              ? 'FAILED_CORRECTION' as const
+              : 'MAX_DIAGNOSTIC_TURNS' as const,
+        }
+      : {
+          type: 'ASK_DIAGNOSTIC' as const,
+          question: '어떤 관계를 근거로 이 선지를 선택했나요?',
+          purpose: '학생이 적용한 판단 관계를 확인한다.',
+        },
+  };
   return {
-    result,
+    result: rawOutput,
     rawOutput,
     call: {
       provider: 'mock', model: 'fixed', effort: 'none',
-      promptVersion: 'path-diagnostic-prompt-v3',
-      schemaVersion: 'problem-path-evaluator-output-v3',
+      promptVersion: 'source-direct-problem-dialogue-prompt-v3',
+      schemaVersion: 'source-direct-problem-evaluator-output-v2',
       calledAt: '2026-08-27T00:00:00.000Z', durationMs: 1,
       attempts: [{ attempt: 1, outcome: 'success', durationMs: 1 }],
       usage: { inputTokens: 1, outputTokens: 1 },
@@ -53,31 +126,30 @@ function successfulCall(input: ProblemPathEvaluatorInput): ProblemPathEvaluatorC
 }
 
 function rationaleCall(
+  input: SourceDirectProblemEvaluatorInput,
   assessment: 'SUPPORTED' | 'UNCERTAIN' | 'CLEAR_ERROR',
-): ProblemPathEvaluatorCall {
-  const groundingAssessment = assessment === 'SUPPORTED'
-    ? 'SUPPORTED' as const
-    : assessment === 'CLEAR_ERROR'
-      ? 'CONTRADICTED' as const
-      : 'NOT_ENOUGH_EVIDENCE' as const;
+): SourceDirectProblemEvaluatorCall {
+  const rawOutput = {
+    schemaVersion: 'source-direct-problem-evaluator-output-v2' as const,
+    mode: 'ASSESS_SELECTION_RATIONALE' as const,
+    assessment,
+    reason: '테스트 근거 판정',
+    studentEvidence: [observationQuote(input)],
+    sourceEvidence: assessment === 'CLEAR_ERROR'
+      ? [{
+          kind: 'TEXT' as const,
+          source: 'OFFICIAL_EXPLANATION' as const,
+          quote: input.source.officialExplanation,
+        }]
+      : [],
+  };
   return {
-    result: {
-      schemaVersion: 'problem-path-evaluator-output-v3',
-      mode: 'ASSESS_SELECTION_RATIONALE',
-      optionStance: 'REJECTS_OPTION',
-      requiredStanceForSelection: 'REJECTS_OPTION',
-      stanceConsistency: 'CONSISTENT',
-      groundingAssessment,
-      assessment,
-      reason: '테스트 근거 판정',
-      evidence: [],
-      sourceRefs: [],
-    },
-    rawOutput: { assessment },
+    result: rawOutput,
+    rawOutput,
     call: {
       provider: 'mock', model: 'gpt-5.6-luna', effort: 'medium',
-      promptVersion: 'path-diagnostic-prompt-v3',
-      schemaVersion: 'problem-path-evaluator-output-v3',
+      promptVersion: 'source-direct-problem-dialogue-prompt-v3',
+      schemaVersion: 'source-direct-problem-evaluator-output-v2',
       calledAt: '2026-09-02T00:00:00.000Z', durationMs: 1,
       attempts: [{ attempt: 1, outcome: 'success', durationMs: 1 }],
       usage: { inputTokens: 1, outputTokens: 1 },
@@ -85,10 +157,34 @@ function rationaleCall(
   };
 }
 
-class CountingEvaluator implements ProblemPathEvaluator {
-  calls: ProblemPathEvaluatorInput[] = [];
+function diagnosticCall(
+  input: SourceDirectProblemEvaluatorInput,
+  output: Omit<SourceDirectDiagnosticOutput, 'schemaVersion' | 'mode' | 'basedOnObservationIds'>,
+): SourceDirectProblemEvaluatorCall {
+  const rawOutput: SourceDirectDiagnosticOutput = {
+    schemaVersion: 'source-direct-problem-evaluator-output-v2',
+    mode: 'DIAGNOSE_PATH',
+    basedOnObservationIds: input.observations.map((observation) => observation.observationId),
+    ...output,
+  };
+  return {
+    result: rawOutput,
+    rawOutput,
+    call: {
+      provider: 'mock', model: 'gpt-5.6-terra', effort: 'medium',
+      promptVersion: 'source-direct-problem-dialogue-prompt-v3',
+      schemaVersion: 'source-direct-problem-evaluator-output-v2',
+      calledAt: '2026-09-08T00:00:00.000Z', durationMs: 1,
+      attempts: [{ attempt: 1, outcome: 'success', durationMs: 1 }],
+      usage: { inputTokens: 1, outputTokens: 1 },
+    },
+  };
+}
 
-  async evaluate(input: ProblemPathEvaluatorInput): Promise<ProblemPathEvaluatorCall> {
+class CountingEvaluator implements SourceDirectProblemEvaluator {
+  calls: SourceDirectProblemEvaluatorInput[] = [];
+
+  async evaluate(input: SourceDirectProblemEvaluatorInput): Promise<SourceDirectProblemEvaluatorCall> {
     this.calls.push(structuredClone(input));
     return successfulCall(input);
   }
@@ -98,7 +194,8 @@ describe('problem solving server controller', () => {
   it('최초 정답과 근거 없음은 모델 호출 없이 코드가 종료한다', async () => {
     const evaluator = new CountingEvaluator();
     const logger = new MemoryLogger();
-    const controller = new ProblemSolvingController({ evaluator, logger });
+    const evidenceSink = new MemoryEvidenceSink();
+    const controller = new ProblemSolvingController({ evaluator, logger, evidenceSink, studentId: 'student-1' });
     const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
     const completed = await controller.submitInitial(started.sessionId, { choiceId: 'C5' });
 
@@ -118,6 +215,11 @@ describe('problem solving server controller', () => {
     }));
     expect(evaluator.calls).toHaveLength(0);
     expect(logger.records).toHaveLength(1);
+    expect(evidenceSink.events).toHaveLength(1);
+    expect(evidenceSink.events[0]).toMatchObject({
+      studentId: 'student-1', dimension: 'GROUNDED_PROBLEM_SOLVING', judgment: 'INDETERMINATE',
+      observation: { kind: 'PROBLEM_INITIAL_GROUNDING', initialChoiceWasCorrect: true, rationaleAssessment: 'NOT_PROVIDED' },
+    });
     expect(logger.records[0]).toMatchObject({
       schemaVersion: 'completed-problem-session-record-v1',
       learningSessionId: started.learningSessionId,
@@ -127,6 +229,7 @@ describe('problem solving server controller', () => {
     });
     controller.get(started.sessionId);
     expect(logger.records).toHaveLength(1);
+    expect(evidenceSink.events).toHaveLength(1);
   });
 
   it('근거 없는 오답은 서버 내부 정답을 보내지 않고 근거 입력 단계로 이동한다', async () => {
@@ -193,7 +296,7 @@ describe('problem solving server controller', () => {
   it('선택 저장 직후 evaluator가 끝나지 않아도 PROCESSING placeholder를 공개한다', async () => {
     let release: (() => void) | undefined;
     let calls = 0;
-    const evaluator: ProblemPathEvaluator = {
+    const evaluator: SourceDirectProblemEvaluator = {
       evaluate(input) {
         calls += 1;
         return new Promise((resolveCall) => {
@@ -228,7 +331,7 @@ describe('problem solving server controller', () => {
   it('같은 전이 ID의 선택 제출과 응답 유실 재시도를 한 번만 반영한다', async () => {
     let release: (() => void) | undefined;
     let calls = 0;
-    const evaluator: ProblemPathEvaluator = {
+    const evaluator: SourceDirectProblemEvaluator = {
       evaluate(input) {
         calls += 1;
         return new Promise((resolveCall) => {
@@ -264,12 +367,32 @@ describe('problem solving server controller', () => {
     })).rejects.toThrow(/같은 전이 ID/);
   });
 
-  it('evaluator 실패를 재개 가능한 상태로 보존하고 저장된 선택에서 한 번만 재개한다', async () => {
+  it.each([
+    '원문 자료와 일치하지 않는 인용: PASSAGE',
+    '현재 상태에서 허용되지 않는 다음 행동: COMPLETE',
+  ])('계약 검증 실패(%s) 뒤 학생 답변을 보존하고 저장된 상태에서 한 번만 재개한다', async (
+    validationMessage,
+  ) => {
     let calls = 0;
-    const evaluator: ProblemPathEvaluator = {
+    const evaluator: SourceDirectProblemEvaluator = {
       async evaluate(input) {
         calls += 1;
-        if (calls === 1) throw new Error('일시적 evaluator 실패');
+        if (calls === 1) {
+          const failedCall = successfulCall(input).call;
+          throw new SourceDirectProblemEvaluatorError(
+            new Error(validationMessage),
+            {
+              ...failedCall,
+              attempts: [{
+                attempt: 1,
+                outcome: 'error',
+                durationMs: 1,
+                errorType: 'contract_validation',
+              }],
+            },
+            { invalid: 'quote' },
+          );
+        }
         return successfulCall(input);
       },
     };
@@ -278,22 +401,84 @@ describe('problem solving server controller', () => {
     await controller.submitInitial(started.sessionId, { choiceId: 'C2' });
 
     await expect(controller.submitRationale(started.sessionId, '그냥 이상해 보여요.'))
-      .rejects.toThrow(/일시적 evaluator 실패/);
-    expect(controller.get(started.sessionId)).toMatchObject({
+      .rejects.toThrow(validationMessage);
+    const failed = controller.get(started.sessionId);
+    expect(failed).toMatchObject({
       phase: 'EVALUATION_ERROR',
       selectedChoiceId: 'C2',
       evaluation: { status: 'RETRYABLE_ERROR' },
     });
+    expect(failed.transcript.filter((entry) => entry.role === 'STUDENT')).toEqual([
+      expect.objectContaining({ text: '그냥 이상해 보여요.' }),
+    ]);
 
     const resumed = await controller.resume(started.sessionId);
     expect(resumed.phase).toBe('AWAITING_RESPONSE');
     expect(resumed.action?.kind).toBe('DIAGNOSTIC_QUESTION');
     expect(calls).toBe(2);
+    expect(resumed.transcript.filter((entry) => entry.role === 'STUDENT')).toEqual([
+      expect.objectContaining({ text: '그냥 이상해 보여요.' }),
+    ]);
+  });
+
+  it('정답 근거의 계약 검증 실패도 미검증 종료하지 않고 저장된 근거로 재개한다', async () => {
+    let calls = 0;
+    const evaluator: SourceDirectProblemEvaluator = {
+      async evaluate(input) {
+        calls += 1;
+        if (calls === 1) {
+          const failedCall = rationaleCall(input, 'SUPPORTED').call;
+          throw new SourceDirectProblemEvaluatorError(
+            new Error('현재 상태에서 허용되지 않는 다음 행동: COMPLETE'),
+            {
+              ...failedCall,
+              attempts: [{
+                attempt: 1,
+                outcome: 'error',
+                durationMs: 1,
+                errorType: 'contract_validation',
+              }],
+            },
+            { invalid: 'state' },
+          );
+        }
+        return rationaleCall(input, 'SUPPORTED');
+      },
+    };
+    const controller = new ProblemSolvingController({ evaluator });
+    const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+    const rationale = '⑤의 연결은 지문에서 제시되지 않았습니다.';
+
+    await expect(controller.submitInitial(started.sessionId, {
+      choiceId: 'C5',
+      rationale,
+    })).rejects.toThrow(/허용되지 않는 다음 행동/);
+    const failed = controller.get(started.sessionId);
+    expect(failed).toMatchObject({
+      phase: 'EVALUATION_ERROR',
+      selectedChoiceId: 'C5',
+      evaluation: { status: 'RETRYABLE_ERROR' },
+    });
+    expect(failed.transcript).toContainEqual(expect.objectContaining({
+      role: 'STUDENT',
+      text: rationale,
+    }));
+
+    const resumed = await controller.resume(started.sessionId);
+    expect(resumed).toMatchObject({
+      phase: 'COMPLETED',
+      result: {
+        correct: true,
+        rationaleAssessment: 'SUPPORTED',
+        resolutionOutcome: 'INITIAL_CORRECT_VERIFIED',
+      },
+    });
+    expect(calls).toBe(2);
   });
 
   it('정답 재선택의 근거 평가가 실패해도 정답 결과를 UNCERTAIN으로 종결한다', async () => {
-    const calls: ProblemPathEvaluatorInput[] = [];
-    const evaluator: ProblemPathEvaluator = {
+    const calls: SourceDirectProblemEvaluatorInput[] = [];
+    const evaluator: SourceDirectProblemEvaluator = {
       async evaluate(input) {
         calls.push(structuredClone(input));
         if (input.evaluationMode === 'ASSESS_SELECTION_RATIONALE') {
@@ -340,11 +525,11 @@ describe('problem solving server controller', () => {
     resolutionOutcome,
     outcome,
   ) => {
-    const calls: ProblemPathEvaluatorInput[] = [];
-    const evaluator: ProblemPathEvaluator = {
+    const calls: SourceDirectProblemEvaluatorInput[] = [];
+    const evaluator: SourceDirectProblemEvaluator = {
       async evaluate(input) {
         calls.push(structuredClone(input));
-        return rationaleCall(assessment);
+        return rationaleCall(input, assessment);
       },
     };
     const controller = new ProblemSolvingController({ evaluator });
@@ -372,30 +557,104 @@ describe('problem solving server controller', () => {
     expect(calls.map((input) => input.evaluationMode)).toEqual(['ASSESS_SELECTION_RATIONALE']);
   });
 
-  it('Luna와 Terra가 모두 실패하면 시도 감사를 남기고 정답을 미검증으로 안전 종결한다', async () => {
+  it('정답 근거의 명시적 오류는 원문 직접 교정 질문 1회 뒤 실제 수정으로 종료한다', async () => {
+    const calls: SourceDirectProblemEvaluatorInput[] = [];
+    const evaluator: SourceDirectProblemEvaluator = {
+      async evaluate(input) {
+        calls.push(structuredClone(input));
+        if (input.evaluationMode === 'ASSESS_SELECTION_RATIONALE') {
+          return rationaleCall(input, 'CLEAR_ERROR');
+        }
+        const latest = observationQuote(input);
+        if (input.observations.length === 1) {
+          return diagnosticCall(input, {
+            assessment: 'CLEAR_ERROR',
+            learningState: 'PATH_CLARIFIED',
+            divergenceLayer: 'INFERENCE_TRANSFORMATION',
+            reason: '높은 pH에서 양전하가 강해진다는 학생 관계가 원문과 반대다.',
+            reconstructedPath: 'pH 상승이 양전하를 강화한다고 해석했다.',
+            studentEvidence: [latest],
+            sourceEvidence: [{
+              kind: 'TEXT',
+              source: 'OFFICIAL_EXPLANATION',
+              quote: input.source.officialExplanation,
+            }],
+            nextAction: {
+              type: 'ASK_CORRECTIVE',
+              question: '높은 pH에서 이온화 지질은 양전하인가요, 중성인가요?',
+              purpose: '반대로 적용한 pH 관계를 교정한다.',
+            },
+          });
+        }
+        return diagnosticCall(input, {
+          assessment: 'NO_ERROR_DETECTED',
+          learningState: 'CORRECTED',
+          divergenceLayer: null,
+          reason: '학생이 높은 pH에서 중성이라는 관계로 실제 수정했다.',
+          reconstructedPath: 'pH 상승 시 이온화 지질이 중성이 된다는 관계로 바로잡았다.',
+          studentEvidence: [latest],
+          sourceEvidence: [{
+            kind: 'TEXT',
+            source: 'OFFICIAL_EXPLANATION',
+            quote: input.source.officialExplanation,
+          }],
+          nextAction: { type: 'COMPLETE', message: '근거의 관계를 올바르게 수정했습니다.' },
+        });
+      },
+    };
+    const controller = new ProblemSolvingController({ evaluator });
+    const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
+
+    const corrective = await controller.submitInitial(started.sessionId, {
+      choiceId: 'C5',
+      rationale: 'pH가 높아지면 이온화 지질의 양전하가 더 강해집니다.',
+    });
+    expect(corrective).toMatchObject({
+      phase: 'AWAITING_RESPONSE',
+      action: { kind: 'CORRECTIVE_QUESTION' },
+    });
+
+    const completed = await controller.respond(started.sessionId, {
+      type: 'TEXT',
+      text: '아니요. 높은 pH에서는 이온화 지질이 중성이 됩니다.',
+    });
+    expect(completed).toMatchObject({
+      phase: 'COMPLETED',
+      result: {
+        correct: true,
+        rationaleAssessment: 'SUPPORTED',
+        outcome: 'RATIONALE_CORRECTED',
+        resolutionOutcome: 'INITIAL_CORRECT_VERIFIED',
+        resolvedByStudent: true,
+        answerRevealed: false,
+      },
+    });
+    expect(calls.map((input) => input.evaluationMode)).toEqual([
+      'ASSESS_SELECTION_RATIONALE',
+      'DIAGNOSE_PATH',
+      'DIAGNOSE_PATH',
+    ]);
+  });
+
+  it('원문 직접 evaluator 재시도가 모두 실패하면 감사를 남기고 정답을 미검증으로 안전 종결한다', async () => {
     const logger = new MemoryLogger();
     const failureCall = {
       provider: 'openai' as const,
       model: 'gpt-5.6-terra',
       effort: 'medium' as const,
-      promptVersion: 'path-diagnostic-prompt-v3' as const,
-      schemaVersion: 'problem-path-evaluator-output-v3' as const,
+      promptVersion: 'source-direct-problem-dialogue-prompt-v3' as const,
+      schemaVersion: 'source-direct-problem-evaluator-output-v2' as const,
       calledAt: '2026-09-02T00:00:00.000Z',
       durationMs: 9_000,
       attempts: [
-        { attempt: 1, model: 'gpt-5.6-luna', route: 'PRIMARY' as const, outcome: 'error' as const, durationMs: 1_000, errorType: 'connection' },
-        { attempt: 2, model: 'gpt-5.6-terra', route: 'FALLBACK' as const, outcome: 'error' as const, durationMs: 8_000, errorType: 'timeout' },
+        { attempt: 1, outcome: 'error' as const, durationMs: 1_000, errorType: 'connection' },
+        { attempt: 2, outcome: 'error' as const, durationMs: 8_000, errorType: 'timeout' },
       ],
-      routing: {
-        primaryModel: 'gpt-5.6-luna', fallbackModel: 'gpt-5.6-terra',
-        finalModel: 'gpt-5.6-terra', fallbackUsed: true, fallbackReason: 'connection',
-        fallbackSkippedReason: null, totalBudgetMs: 30_000, remainingBudgetMs: 21_000,
-      },
       usage: { inputTokens: 0, outputTokens: 0 },
     };
-    const evaluator: ProblemPathEvaluator = {
+    const evaluator: SourceDirectProblemEvaluator = {
       async evaluate() {
-        throw new ProblemPathEvaluatorFallbackError(new Error('Terra도 시간 초과'), failureCall);
+        throw new SourceDirectProblemEvaluatorError(new Error('Terra도 시간 초과'), failureCall);
       },
     };
     const controller = new ProblemSolvingController({ evaluator, logger });
@@ -422,9 +681,9 @@ describe('problem solving server controller', () => {
   it('근거 evaluator가 멈춰도 학생 세션은 전체 30초에 미검증 정답으로 닫는다', async () => {
     vi.useFakeTimers();
     try {
-      const evaluator: ProblemPathEvaluator = {
+      const evaluator: SourceDirectProblemEvaluator = {
         evaluate() {
-          return new Promise<ProblemPathEvaluatorCall>(() => undefined);
+          return new Promise<SourceDirectProblemEvaluatorCall>(() => undefined);
         },
       };
       const controller = new ProblemSolvingController({ evaluator });
@@ -451,7 +710,7 @@ describe('problem solving server controller', () => {
     }
   });
 
-  it('질문 2/2 소진 뒤 모델을 다시 호출하지 않고 결정론적 코칭과 재선택으로 이동한다', async () => {
+  it('질문 2/2 소진 뒤 원문 직접 코칭과 재선택으로 이동한다', async () => {
     const evaluator = new CountingEvaluator();
     const controller = new ProblemSolvingController({ evaluator });
     const started = controller.start('mrna-vaccine-lipid-nanoparticle-q19');
@@ -478,7 +737,7 @@ describe('problem solving server controller', () => {
       attemptQuestionBudget: { used: 2, maximum: 2 },
       result: null,
     });
-    expect(evaluator.calls).toHaveLength(2);
+    expect(evaluator.calls).toHaveLength(3);
 
     const reselecting = await controller.respond(started.sessionId, {
       type: 'TEXT',
@@ -489,6 +748,6 @@ describe('problem solving server controller', () => {
       selectionCount: 1,
       result: null,
     });
-    expect(evaluator.calls).toHaveLength(2);
+    expect(evaluator.calls).toHaveLength(3);
   });
 });

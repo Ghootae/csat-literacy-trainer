@@ -19,10 +19,13 @@ export * from './llm/query-gen.js';
 export * from './dialogue-experiment/evaluator.js';
 export * from './dialogue-experiment/gate.js';
 export * from './dialogue-experiment/schema.js';
+export * from './dialogue-experiment/selective-feedback.js';
 export * from './dialogue-experiment/session.js';
 export * from './dialogue-experiment/two-stage-evaluator.js';
 // 문단 대화와 문제 풀이가 공유하는 상위 학습 세션 전달 계약.
 export * from './learning-session/handoff.js';
+// 문단·문제의 관측을 능력 점수로 과장하지 않고 증거 기반 학생 프로필로 집계한다.
+export * from './student-state/model.js';
 // 문항 상세 골드와 기준 경로. 문단 PASS 계약과 분리한다.
 export * from './problem-solving/gold.js';
 export * from './problem-solving/solution-profile.js';
@@ -39,6 +42,11 @@ export * from './problem-solving/session.js';
 export * from './problem-solving/path-evaluator.js';
 export * from './problem-solving/path-evaluator-input.js';
 export * from './problem-solving/path-evaluator-runtime.js';
+// 학생용 문제 풀이 운영 경로. 정답·공식 해설을 포함한 원자료만 사용하고 문제 골드는 배제한다.
+export * from './problem-solving/source-direct-evaluator.js';
+export * from './problem-solving/source-direct-evaluator-runtime.js';
+export * from './problem-solving/feedback-v4.js';
+export * from './problem-solving/feedback-v4-evaluator.js';
 export * from './problem-solving/selected-option-gold-slice.js';
 export * from './problem-solving/selected-option-rationale-input.js';
 export * from './problem-solving/diagnostic-turn-v2.js';
@@ -59,3 +67,4 @@ export * from './paragraph-analysis/production-runtime.js';
 // 중심축 확정 뒤 반사실적으로 required/error_only를 배정하는 별도 API 단계.
 export * from './diagnostic-roles/evaluator.js';
 export * from './diagnostic-roles/schema.js';
+export * from './dialogue-experiment/conditional-meta.js';

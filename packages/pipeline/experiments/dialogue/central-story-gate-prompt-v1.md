@@ -60,6 +60,14 @@ centralAxes는 배경·사례·중간 단계를 모두 확인하는 체크리스
 - unknown: 그 축을 판단할 학생 표현이 사실상 없다.
 - distorted: 학생이 축의 방향, 귀속, 주체, 원인·결과 또는 대조를 명시적으로 잘못 말했다.
 
+학생의 누적 발화 정보량을 별도로 판정한다.
+
+- RELATIONAL: 적어도 하나의 주체–행위, 원인–결과, 조건–결론, 대조, 방향 또는 역할 관계를 학생이 표현했다.
+- TOPIC_ONLY: 관련 대상·용어·사람·제도·과정만 나열하거나 “~에 관한 내용”이라고 했을 뿐, 그 사이의 관계를 표현하지 않았다.
+- NONE: 문단과 관련된 판단 가능한 내용이 없다.
+
+관련 용어나 대상이 중심축 description에 등장한다는 이유만으로 TOPIC_ONLY를 RELATIONAL로 올리지 않는다. 이 정보량 판정은 축별 partial 여부와 별개다.
+
 단순 세부 누락은 partial이나 distorted의 근거가 아니다. 축을 자기 말로 압축해도 핵심 구조가 유지되면 captured다.
 
 ## 전체 판정과 질문 대상 축
@@ -88,6 +96,7 @@ CAPTURED이면 targetAxisId는 null이다. 미통과이면 다음 우선순위�
 ## 출력
 
 - status: CAPTURED, UNCLEAR, DISTORTED 중 하나
+- responseInformationLevel: RELATIONAL, TOPIC_ONLY, NONE 중 하나
 - effectiveResponse: 위 규칙에 따라 문맥 독립적인 하나의 응답으로 합성한 학생의 누적 의미
 - centralObjectRepresentation: 학생이 표현한 중심 대상. 확인할 수 없으면 null
 - centralStoryRepresentation: 학생의 누적 중심 이야기 표상. 모든 축이 충분히 복원되지 않았으면 null일 수 있다.

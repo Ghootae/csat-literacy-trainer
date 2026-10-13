@@ -31,9 +31,14 @@ export interface DialogueHistoryEntry {
     readonly text: string;
   };
   readonly answer: string;
+  /** 선택적 상세 진단에서 같은 관계를 반복 선택하지 않기 위한 내부 메타데이터. */
+  readonly targetRelationIds?: readonly string[];
 }
 
 export interface DialogueEvaluationInput {
+  readonly shownSourceGuides?: readonly { axisId: string; quote: string; turn: number }[];
+  /** Displayed reference feedback is context, never independent student evidence. */
+  readonly revealedAxisContent?: readonly { axisId: string; text: string; turn: number }[];
   readonly gold: ParagraphDiagnosticGold;
   readonly goldVersion: string;
   readonly goldHash: string;
@@ -77,8 +82,25 @@ export interface DialogueCallMetadata {
     readonly cacheWriteTokens?: number;
     readonly cacheReadTokens?: number;
   };
+  /** 1차 판정기의 원출력과 결정론적 보정 결과를 구분해 남기는 감사 자료. */
+  readonly decisionAudit?: {
+    readonly rawResult: unknown;
+    readonly validatedResult: unknown;
+    readonly contractFailures?: readonly {
+      readonly attempt: number;
+      readonly validationError: string;
+      readonly rawResult: unknown;
+    }[];
+    readonly normalizationEvents: readonly {
+      readonly field: string;
+      readonly before: unknown;
+      readonly after: unknown;
+      readonly reason: string;
+    }[];
+  };
   readonly stages?: readonly {
-    readonly stage: 'central_story_gate' | 'relation_diagnostic';
+    readonly decisionAudit?: DialogueCallMetadata['decisionAudit'];
+    readonly stage: 'central_story_gate' | 'relation_diagnostic' | 'selective_feedback' | 'conditional_meta';
     readonly promptVersion: string;
     readonly schemaVersion: string;
     readonly durationMs: number;
@@ -110,6 +132,7 @@ export interface DialogueEvaluationCall {
 
 export interface DialogueEvaluator {
   evaluate(input: DialogueEvaluationInput): Promise<DialogueEvaluationCall>;
+  requestQuestion?(input: DialogueEvaluationInput, prior: DialogueEvaluationCall): Promise<DialogueEvaluationCall>;
 }
 
 export interface OpenAIDialogueEvaluatorOptions {

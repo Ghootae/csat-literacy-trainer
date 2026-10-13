@@ -116,7 +116,7 @@ test.afterAll(async () => {
 });
 
 test('photosynthesis-p4 학습 루프를 저장·복원하고 다음 단락으로 이동한다', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/legacy');
   await page.getByRole('button', { name: /C3 식물의 한계와 C4 연구/ }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('C3 식물의 한계와 C4 연구');
 

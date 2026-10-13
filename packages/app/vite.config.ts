@@ -13,7 +13,11 @@ export default defineConfig({
     allowedHosts: true,
     // 대상도 127.0.0.1로 못박는다. `localhost`로 두면 Node 24의 Happy Eyeballs가
     // 이중 스택(tcp46) 리스너를 상대로 멈춰서 /api 요청이 응답 없이 매달린다.
-    proxy: { '/api': `http://127.0.0.1:${process.env['CSAT_API_PORT'] ?? 5174}` },
+    proxy: {
+      // Keep paragraph/student sessions alive when the developer problem API is restarted.
+      '/api/developer/problem-feedback-v4': `http://127.0.0.1:${process.env['CSAT_PROBLEM_V4_API_PORT'] ?? process.env['CSAT_API_PORT'] ?? 5175}`,
+      '/api': `http://127.0.0.1:${process.env['CSAT_API_PORT'] ?? 5174}`,
+    },
   },
   build: { outDir: 'dist-client' },
 });

@@ -14,6 +14,13 @@ export type DialoguePromptVersion = (typeof DIALOGUE_PROMPT_VERSIONS)[number];
 export const DIALOGUE_GOLD_VERSION = 'paragraph-diagnostic-gold-v1';
 export const DiagnosticRoleSchema = z.enum(['required', 'error_only']);
 export const CentralAxisStateSchema = z.enum(['captured', 'partial', 'unknown', 'distorted']);
+export const AxisFeedbackSchema = z.object({
+  axisId: z.string().min(1),
+  status: z.enum(['PASS', 'UNCLEAR_OK', 'UNCLEAR_SERIOUS', 'ERROR']),
+  revealedText: z.string().nullable(),
+  reason: z.string().min(1),
+});
+export type AxisFeedback = z.infer<typeof AxisFeedbackSchema>;
 export const CentralAxisSchema = z.object({
   id: z.string().min(1),
   description: z.string().min(1),
@@ -64,6 +71,36 @@ export type ParagraphDiagnosticGold = z.infer<typeof ParagraphDiagnosticGoldSche
 export const EvidenceSourceSchema = z.enum(['initial', 'diagnostic', 'corrective']);
 export type EvidenceSource = z.infer<typeof EvidenceSourceSchema>;
 
+export const SourceGuideSchema = z.object({
+  axisId: z.string().min(1), quote: z.string().min(1),
+  start: z.number().int().nonnegative(), end: z.number().int().positive(),
+});
+export type SourceGuide = z.infer<typeof SourceGuideSchema>;
+
+export const ClaimLedgerEntrySchema = z.object({
+  description: z.string().min(1),
+  source: EvidenceSourceSchema,
+  evidence: z.string().min(1),
+  responseIndex: z.number().int().nonnegative(),
+  state: z.enum(['current', 'superseded', 'retracted']),
+  revisionEvidence: z.array(z.object({
+    source: EvidenceSourceSchema,
+    evidence: z.string().min(1),
+    responseIndex: z.number().int().positive(),
+  })),
+});
+export type ClaimLedgerEntry = z.infer<typeof ClaimLedgerEntrySchema>;
+
+export const ErrorClaimSchema = z.object({
+  axisId: z.string().min(1),
+  claimIndex: z.number().int().nonnegative(),
+  description: z.string().min(1),
+  evidence: z.string().min(1),
+  source: EvidenceSourceSchema,
+  responseIndex: z.number().int().nonnegative(),
+});
+export type ErrorClaim = z.infer<typeof ErrorClaimSchema>;
+
 export const RelationStateSchema = z.enum([
   'explicit',
   'entailed',
@@ -72,9 +109,41 @@ export const RelationStateSchema = z.enum([
 ]);
 export type RelationState = z.infer<typeof RelationStateSchema>;
 
+// An axis verdict does not identify which of its (possibly mixed) quotes is wrong.
+// Keep legacy quoted records readable, without treating them as newly verified citations.
+export const ExplicitErrorSchema = z.union([
+  ErrorClaimSchema.extend({
+    evidenceScope: z.literal('student_error_quote'),
+    relatedRelationIds: z.array(z.string()),
+  }),
+  z.object({
+    description: z.string().min(1),
+    relatedRelationIds: z.array(z.string()),
+    evidence: z.string().min(1),
+  }).strict(),
+  z.object({
+    description: z.string().min(1),
+    relatedRelationIds: z.array(z.string()),
+    evidence: z.null(),
+    evidenceScope: z.literal('axis_context'),
+    axisId: z.string().min(1),
+    axisEvidence: z.array(z.object({
+      source: EvidenceSourceSchema,
+      evidence: z.string().min(1),
+    })),
+  }),
+]);
+
 export const StudentRepresentationSnapshotSchema = z.object({
   turn: z.number().int().nonnegative(),
+  claimLedger: z.array(ClaimLedgerEntrySchema).optional(),
+  axisFeedback: z.array(AxisFeedbackSchema).optional(),
   effectiveResponse: z.string().min(1).optional(),
+  diagnosticRoute: z.enum(['ERROR', 'TARGETED_GAP', 'SPARSE_GAP']).nullable().optional(),
+  capturedAxisIds: z.array(z.string().min(1)).optional(),
+  unresolvedAxisIds: z.array(z.string().min(1)).optional(),
+  repairTargetRecovered: z.boolean().optional(),
+  summaryComplete: z.boolean().optional(),
   centralObjectRepresentation: z.string().nullable(),
   centralStoryRepresentation: z.string().nullable(),
   expressedClaims: z.array(
@@ -91,6 +160,10 @@ export const StudentRepresentationSnapshotSchema = z.object({
       source: EvidenceSourceSchema,
       evidence: z.string().min(1),
     })),
+    retractionEvidence: z.array(z.object({
+      source: EvidenceSourceSchema,
+      evidence: z.string().min(1),
+    })).optional(),
   })).optional(),
   relationStates: z.array(
     z.object({
@@ -100,13 +173,7 @@ export const StudentRepresentationSnapshotSchema = z.object({
       evidence: z.string().optional(),
     }),
   ),
-  explicitErrors: z.array(
-    z.object({
-      description: z.string().min(1),
-      relatedRelationIds: z.array(z.string()),
-      evidence: z.string().min(1),
-    }),
-  ),
+  explicitErrors: z.array(ExplicitErrorSchema),
   unresolvedQuestions: z.array(z.string()),
 });
 
@@ -121,6 +188,17 @@ export const QuestionTypeSchema = z.enum(['DIAGNOSTIC', 'CORRECTIVE']);
 export type QuestionType = z.infer<typeof QuestionTypeSchema>;
 
 export const EvaluationResultOutputSchema = z.object({
+  /** Experimental policy projection. Never overwrites raw L1 axisStates/axisFeedback. */
+  routing: z.object({
+    version: z.literal('conditional-meta-v1'),
+    accepted: z.boolean(),
+    axes: z.array(z.object({
+      axisId: z.string(),
+      route: z.enum(['SILENT_PASS', 'OPTIONAL_REPAIR', 'ASK', 'ERROR_QUESTION']),
+      metaFulfilled: z.boolean().nullable(),
+    })),
+  }).optional(),
+  sourceGuide: SourceGuideSchema.nullable().optional(),
   status: EvaluationStatusSchema,
   snapshot: StudentRepresentationSnapshotSchema,
   decisionSummary: z.string().min(1),

@@ -162,6 +162,7 @@ export interface AttemptResponse {
 export type DialogueStatus = 'ACTIVE' | 'AWAITING_NEXT' | 'COMPLETED' | 'UNRESOLVED';
 export type DialogueEvaluationStatus = 'PASS' | 'UNCLEAR' | 'ERROR';
 export type DialogueQuestionType = 'DIAGNOSTIC' | 'CORRECTIVE';
+export type DialogueMode = 'v4' | 'conditional-meta-v1';
 
 export interface DialoguePassageSummary {
   readonly passageId: string;
@@ -180,6 +181,8 @@ export interface DialogueParagraphView {
 }
 
 export interface DialogueStepView {
+  readonly policyAccepted?: boolean;
+  readonly sourceGuide?: { readonly axisId: string; readonly quote: string; readonly start: number; readonly end: number } | null;
   readonly status: DialogueEvaluationStatus;
   readonly feedback: string;
   readonly question: string | null;
@@ -187,9 +190,25 @@ export interface DialogueStepView {
   readonly questionsAnswered: number;
   readonly maxQuestions: number;
   readonly durationMs: number;
+  readonly effectiveResponse?: string | null;
+}
+
+export interface DialogueAxisBox {
+  readonly policyRoute?: 'SILENT_PASS' | 'OPTIONAL_REPAIR' | 'ASK' | 'ERROR_QUESTION';
+  readonly axisId: string;
+  readonly status: 'PENDING' | 'PASS' | 'UNCLEAR_OK' | 'UNCLEAR_SERIOUS' | 'ERROR';
+  readonly revealedText: string | null;
 }
 
 export interface DialogueSessionView {
+  readonly mode?: DialogueMode;
+  readonly transcript?: readonly {
+    readonly answer: string;
+    readonly step: DialogueStepView;
+    /** 선택적 보완 질문을 만들기 전에 이미 화면에 제시된 피드백. */
+    readonly feedbackStep?: DialogueStepView;
+  }[];
+  readonly progress?: readonly { readonly paragraphId: string; readonly position: number; readonly outcome: 'UNSTARTED' | 'ACTIVE' | 'PASS' | 'UNRESOLVED' | 'SKIPPED'; readonly studentContinued: boolean }[];
   readonly sessionId: string;
   readonly passageId: string;
   readonly title: string;
@@ -199,8 +218,81 @@ export interface DialogueSessionView {
   readonly paragraphCount: number;
   readonly visibleParagraphs: readonly DialogueParagraphView[];
   readonly step: DialogueStepView | null;
-  /** 전체 문단 PASS 뒤에만 서버가 공개한다. */
+  readonly axisBoxes?: readonly DialogueAxisBox[];
+  readonly canRequestQuestion?: boolean;
+  readonly canRespond?: boolean;
+  readonly currentOutcome?: 'ACTIVE' | 'PASS' | 'UNRESOLVED' | 'SKIPPED';
+  readonly studentContinued?: boolean;
+  /** 이해 확인과 학생의 진행 선택을 구분한 상태로 문단을 모두 마친 뒤 공개. */
   readonly nextProblemQuestionId: string | null;
+}
+
+/** Only the explicitly enabled personal developer endpoints send these fields. */
+export interface DialogueDeveloperPassage extends DialoguePassageSummary {
+  readonly paragraphs: readonly { readonly paragraphId: string; readonly position: number }[];
+  readonly questionIds: readonly string[];
+  readonly sessions: readonly { readonly sessionId: string; readonly mode?: DialogueMode; readonly currentParagraphIndex: number; readonly progress: NonNullable<DialogueSessionView['progress']> }[];
+}
+
+export interface DialogueDeveloperInspection {
+  readonly mode?: DialogueMode;
+  readonly metaAxes?: readonly {readonly id: string; readonly metaAxis: string}[];
+  readonly gold: {
+    readonly paragraphId: string; readonly paragraphText: string; readonly centralStory: string;
+    readonly centralAxes: readonly { readonly id: string; readonly description: string; readonly relationIds: readonly string[] }[];
+    readonly coreRelations: readonly { readonly id: string; readonly description: string }[];
+  };
+  readonly goldRef: { readonly version: string; readonly hash: string };
+  readonly turns: readonly {
+    readonly answer: string;
+    readonly evaluation: unknown;
+    readonly evaluationBeforeQuestion?: unknown;
+    readonly call: unknown;
+    readonly questionCall?: unknown;
+  }[];
+}
+
+export interface StudentStateReportView {
+  readonly profile: {
+    readonly schemaVersion: 'student-profile-v1';
+    readonly studentId: string;
+    readonly context: 'STUDENT' | 'DEVELOPER' | 'HISTORICAL_UNKNOWN';
+    readonly generatedAt: string;
+    readonly requestedWindow: { readonly from: string; readonly to: string } | null;
+    readonly evidenceWindow: { readonly firstObservedAt: string | null; readonly lastObservedAt: string | null };
+    readonly dimensions: readonly {
+      readonly dimension: 'CORE_COMPREHENSION' | 'GROUNDED_PROBLEM_SOLVING' | 'REPAIR_RECOVERY' | 'SELF_MONITORING';
+      readonly positive: number;
+      readonly negative: number;
+      readonly indeterminate: number;
+      readonly distinctContentCount: number;
+      readonly determinateDistinctContentCount: number;
+      readonly reliability: 'INSUFFICIENT' | 'EARLY_PATTERN' | 'REPEATED_PATTERN';
+      readonly assistanceCounts: Readonly<Record<'INDEPENDENT' | 'DIAGNOSTIC' | 'CORRECTIVE' | 'COACHING' | 'ANSWER_REVEALED', number>>;
+    }[];
+    readonly selfMonitoring: {
+      readonly observationCount: number;
+      readonly distinctContentCount: number;
+      readonly meanAbsoluteError: number | null;
+      readonly meanSquaredError: number | null;
+      readonly reliability: 'INSUFFICIENT' | 'EARLY_PATTERN' | 'REPEATED_PATTERN';
+    };
+    readonly limitations: readonly string[];
+  };
+  readonly feedback: {
+    readonly schemaVersion: 'periodic-feedback-v1';
+    readonly studentId: string;
+    readonly generatedAt: string;
+    readonly headline: string;
+    readonly strengths: readonly string[];
+    readonly focusAreas: readonly string[];
+    readonly nextAction: string;
+    readonly caveats: readonly string[];
+  };
+}
+
+export interface AppCapabilitiesView {
+  readonly studentFeedbackEnabled: boolean;
 }
 
 export interface StartDialogueRequest {
@@ -221,6 +313,41 @@ export interface ProblemChoiceView {
   readonly text: string;
 }
 
+export type ProblemMediaPlacementView =
+  | { readonly scope: 'PASSAGE'; readonly elementIndex?: number }
+  | {
+      readonly scope: 'SCENARIO';
+      readonly supplementIndex: number;
+      readonly elementIndex?: number;
+    }
+  | {
+      readonly scope: 'CHOICE';
+      readonly choiceId: string;
+      readonly elementIndex?: number;
+    };
+
+export interface ProblemMediaView {
+  readonly mediaId: string;
+  readonly url: string;
+  readonly mimeType: string;
+  readonly alt: string;
+  readonly width: number;
+  readonly height: number;
+  readonly contentHash?: string;
+  readonly placement: ProblemMediaPlacementView;
+}
+
+export interface ProblemTextAnnotationView {
+  readonly location: 'PASSAGE' | 'SCENARIO';
+  readonly marker: string;
+  readonly style: 'underline' | 'box' | 'label';
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+  readonly contextBefore: string;
+  readonly contextAfter: string;
+}
+
 export interface ProblemContentView {
   readonly questionId: string;
   readonly questionNumber: number;
@@ -230,12 +357,8 @@ export interface ProblemContentView {
   readonly passage: string;
   readonly stem: string;
   readonly scenario: string;
-  readonly image: {
-    readonly url: string;
-    readonly alt: string;
-    readonly width: number;
-    readonly height: number;
-  } | null;
+  readonly textAnnotations?: readonly ProblemTextAnnotationView[];
+  readonly media: readonly ProblemMediaView[];
   readonly choices: readonly ProblemChoiceView[];
 }
 
@@ -343,6 +466,23 @@ export interface ProblemSessionView {
       readonly groundingSummary: string;
     } | null;
   } | null;
+}
+
+/** Read-only, developer-gated inspection; never included in student session responses. */
+export interface ProblemDeveloperInspection {
+  readonly session: ProblemSessionView;
+  readonly evaluations: readonly {
+    readonly mode: string;
+    readonly assessment: string;
+    readonly reason: string;
+    readonly reconstructedPath: string | null;
+    readonly learningState: string | null;
+    readonly divergenceLayer: string | null;
+    readonly nextAction: string | null;
+    readonly studentEvidence: readonly { readonly observationId: string; readonly quote: string }[];
+    readonly sourceEvidence: unknown;
+    readonly promptVersion: string;
+  }[];
 }
 
 export interface StartProblemRequest {

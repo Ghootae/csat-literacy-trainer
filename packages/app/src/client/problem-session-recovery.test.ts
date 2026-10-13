@@ -10,7 +10,7 @@ function view(phase: ProblemSessionView['phase']): ProblemSessionView {
     phase,
     content: {
       questionId: 'Q1', questionNumber: 1, passageId: 'P1', exam: '시험', title: '제목', passage: '지문',
-      stem: '발문', scenario: '보기', image: null, choices: [],
+      stem: '발문', scenario: '보기', media: [], choices: [],
     },
     selectedChoiceId: 'C2',
     selectionCount: 0,

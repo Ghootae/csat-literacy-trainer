@@ -1,0 +1,46 @@
+import { readFileSync, writeFileSync, statSync } from 'node:fs';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { DialogueSessionEngine } from '../packages/pipeline/dist/dialogue-experiment/session.js';
+import { TwoStageDialogueEvaluator } from '../packages/pipeline/dist/dialogue-experiment/two-stage-evaluator.js';
+import { OpenAICentralStoryGateEvaluator } from '../packages/pipeline/dist/dialogue-experiment/gate.js';
+
+// No real client is created. Capture and stop before transport, parsing or metrics.
+const root='docs/experiments/axis-expression-recheck-corporate-p2-2026-09-29';
+const read=p=>JSON.parse(readFileSync(p,'utf8'));
+const snapshot=read('docs/experiments/question-actionability-corporate-p2-2026-09-29/source-snapshot.json');
+const jobs=read(`${root}/requests.json`);
+const c1=read(`${root}/cases.json`).find(c=>c.id==='C1');
+const originalCall=snapshot.turns[0].call;
+const sentinel=new Error('OFFLINE_CAPTURE_ONLY');
+const captures=[];
+const gate=new OpenAICentralStoryGateEvaluator({promptRevision:'v4',model:originalCall.model,effort:originalCall.effort,maxTransportRetries:0,maxContractRetries:0,client:{responses:{parse:async(body,options)=>{captures.push({body:JSON.parse(JSON.stringify(body)),options});throw sentinel;}}}});
+const engine=new DialogueSessionEngine({gold:snapshot.gold,goldVersion:snapshot.goldRef.version,goldHash:snapshot.goldRef.hash,maxQuestions:3,evaluator:new TwoStageDialogueEvaluator({gateEvaluator:gate,feedbackEvaluator:{evaluate:async()=>{throw new Error('Unexpected feedback call');}}}),logger:{save:()=>{throw new Error('Unexpected session write');}}});
+try{await engine.submitInitial(snapshot.turns[0].answer);assert.fail('Capture should stop execution');}catch(error){assert.equal(error,sentinel);}
+assert.equal(captures.length,1);
+const ui=captures[0].body;
+const experiment=jobs.find(j=>j.id==='C1-baseline-1').request;
+const uiPayload=JSON.parse(ui.input), experimentPayload=JSON.parse(experiment.input);
+assert.deepEqual(uiPayload.revealedAxisContent,[]);
+assert.ok(!Object.hasOwn(experimentPayload,'revealedAxisContent'));
+const stripped=structuredClone(uiPayload);delete stripped.revealedAxisContent;
+assert.deepEqual(stripped,experimentPayload);
+const withoutInput=({input,...rest})=>rest;
+assert.deepEqual(withoutInput(ui),withoutInput(experiment));
+assert.deepEqual(c1.input.gold,snapshot.gold);
+assert.equal(c1.input.initialResponse,snapshot.turns[0].answer);
+assert.equal(c1.input.goldHash,originalCall.goldHash);
+const logs=readFileSync('.omc/logs/dialogue-experiment/sessions.jsonl','utf8').trim().split('\n').map(JSON.parse);
+const recorded=logs.filter(s=>s.paragraphId==='corporate-law-p2'&&s.turns[0].call.calledAt===originalCall.calledAt);
+assert.equal(recorded.length,1);
+assert.equal(recorded[0].initialResponse,snapshot.turns[0].answer);
+assert.deepEqual(recorded[0].turns[0].call.decisionAudit,originalCall.decisionAudit);
+const metrics=readFileSync('.omc/metrics/llm.jsonl','utf8').trim().split('\n').map(JSON.parse).filter(m=>m.op==='dialogue-experiment'&&m.paragraphId==='corporate-law-p2'&&m.ts>=originalCall.calledAt&&m.ts<=new Date(Date.parse(originalCall.calledAt)+originalCall.durationMs).toISOString());
+const rows=readFileSync(`${root}/results.jsonl`,'utf8').trim().split('\n').map(JSON.parse);
+const sha=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
+const repeated=['baseline','candidate'].map(arm=>{const jj=jobs.filter(j=>j.caseId==='C1'&&j.arm===arm);assert.equal(new Set(jj.map(j=>j.requestHash)).size,1);return{arm,requestHash:jj[0].requestHash,statuses:jj.map(j=>rows.find(r=>r.id===j.id).raw.axisFeedback.find(a=>a.axisId==='AX3').status)};});
+const paths=['packages/pipeline/experiments/dialogue/central-story-gate-prompt-v4.md','packages/pipeline/experiments/dialogue/current-claims-recording-v1.md','packages/pipeline/experiments/dialogue/error-claims-recording-v1.md','packages/pipeline/dist/dialogue-experiment/gate.js','packages/pipeline/dist/dialogue-experiment/session.js','packages/pipeline/dist/dialogue-experiment/two-stage-evaluator.js'];
+const audit={auditedAt:new Date().toISOString(),method:'Current built UI engine request captured by a throwing fake client; no external call',historicalRequestBodySaved:false,historicalParagraphSessionId:recorded[0].sessionId,originalCallAt:originalCall.calledAt,originalPromptVersion:originalCall.stages[0].promptVersion,originalSchemaVersion:originalCall.stages[0].schemaVersion,originalStatus:originalCall.decisionAudit.rawResult.axisFeedback.find(a=>a.axisId==='AX3').status,exactRequestMatch:false,differences:[{path:'JSON.parse(input).revealedAxisContent',reconstructedUi:[],experiment:'absent'}],allOtherRequestFieldsEqual:true,studentTextAndGoldEqual:true,reconstructedUiRequestHash:sha(ui),experimentRequestHash:sha(experiment),originalInputTokens:originalCall.usage.inputTokens,experimentInputTokens:rows.filter(r=>r.caseId==='C1'&&r.arm==='baseline').map(r=>r.response.usage.input_tokens),originalRawAndValidatedAxisStatusEqual:originalCall.decisionAudit.rawResult.axisFeedback.every((a,i)=>a.status===originalCall.decisionAudit.validatedResult.axisFeedback[i].status),metricsInOriginalWindow:metrics.map(({ts,model,effort,inputTokens,outputTokens,attempt})=>({ts,model,effort,inputTokens,outputTokens,attempt})),repeated,files:paths.map(path=>({path,mtime:statSync(path).mtime.toISOString(),predatesUiCall:statSync(path).mtimeMs<Date.parse(originalCall.calledAt)})),additionalPaidCalls:0};
+writeFileSync(`${root}/reconstructed-ui-request.json`,JSON.stringify(ui,null,2)+'\n');
+writeFileSync(`${root}/request-comparison-audit.json`,JSON.stringify(audit,null,2)+'\n');
+console.log(JSON.stringify(audit,null,2));

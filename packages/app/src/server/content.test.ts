@@ -5,7 +5,25 @@ import {
   loadContent,
   loadPassageManifest,
   loadProblemSolvingBundle,
+  loadDialoguePassages,
 } from './content.js';
+
+describe('연결 문항의 원자료 기호 메타데이터', () => {
+  it('6문항의 공개 콘텐츠와 서버 판정 번들 모두 검증된 범위를 보존한다', () => {
+    const ids = loadDialoguePassages().flatMap(p => p.problemQuestionId ? [p.problemQuestionId] : []);
+    expect(ids).toHaveLength(6);
+    let count = 0;
+    for (const id of ids) {
+      const { content, source } = loadProblemSolvingBundle(id);
+      expect(source.textAnnotations).toEqual(content.textAnnotations);
+      count += source.textAnnotations!.length;
+      for (const a of source.textAnnotations!) {
+        expect((a.location === 'PASSAGE' ? source.passage : source.scenario).slice(a.start, a.end)).toBe(a.text);
+      }
+    }
+    expect(count).toBe(29);
+  });
+});
 
 describe('광합성 전체 지문 앱 등록', () => {
   it('p1~p6을 빠짐없이 원문 순서로 제공한다', () => {
@@ -45,13 +63,23 @@ describe('광합성 전체 지문 앱 등록', () => {
 });
 
 describe('mRNA 19번 공개 문제 콘텐츠', () => {
-  it('공개 원문·선지와 승인 골드의 식별자가 일치하고 판정 정보는 공개 콘텐츠에 없다', () => {
-    const { content, gold } = loadProblemSolvingBundle('mrna-vaccine-lipid-nanoparticle-q19');
-    expect(content.questionId).toBe(gold.questionId);
-    expect(content.passageId).toBe(gold.passageId);
+  it('공개 원문과 서버 전용 원문 직접 참조가 일치하고 판정 정보는 공개 콘텐츠에 없다', () => {
+    const { content, source } = loadProblemSolvingBundle('mrna-vaccine-lipid-nanoparticle-q19');
+    expect(content.questionId).toBe(source.questionId);
+    expect(content.passageId).toBe(source.passageId);
     expect(content.choices.map((choice) => choice.choiceId)).toEqual(
-      gold.choices.map((choice) => choice.choiceId),
+      source.choices.map((choice) => choice.choiceId),
     );
+    expect(content.media).toEqual([expect.objectContaining({
+      mediaId: 'MEDIA1',
+      alt: expect.stringContaining('Y자 미세관'),
+      placement: { scope: 'SCENARIO', supplementIndex: 0 },
+    })]);
+    expect(source.media).toEqual([expect.objectContaining({
+      mediaId: 'MEDIA1',
+      placement: { scope: 'SCENARIO', supplementIndex: 0 },
+    })]);
+    expect(JSON.stringify(source.media)).not.toContain('alt');
     const serialized = JSON.stringify(content);
     expect(serialized).not.toContain('answerChoiceId');
     expect(serialized).not.toContain('judgment');
@@ -60,18 +88,18 @@ describe('mRNA 19번 공개 문제 콘텐츠', () => {
 });
 
 describe('공손룡과 후기 묵가 12번 공개 문제 콘텐츠', () => {
-  it('승인 골드와 공개 콘텐츠를 문제 ID로 함께 로드한다', () => {
-    const { content, gold } = loadProblemSolvingBundle('gongsun-long-later-mohists-q12');
+  it('원문 직접 참조와 공개 콘텐츠를 문제 ID로 함께 로드한다', () => {
+    const { content, source } = loadProblemSolvingBundle('gongsun-long-later-mohists-q12');
     expect(content).toMatchObject({
       questionId: 'gongsun-long-later-mohists-q12',
       questionNumber: 12,
       passageId: 'gongsun-long-later-mohists',
-      image: null,
+      media: [],
     });
-    expect(gold.reviewStatus).toBe('human_reviewed');
-    expect(gold.answerChoiceId).toBe('C4');
+    expect(source.schemaVersion).toBe('source-direct-problem-bundle-v2');
+    expect(source.answerChoiceId).toBe('C4');
     expect(content.choices.map((choice) => choice.text)).toEqual(
-      gold.choices.map((choice) => choice.text),
+      source.choices.map((choice) => choice.text),
     );
   });
 
@@ -89,19 +117,18 @@ describe('확장 적용형 문제 콘텐츠', () => {
     ['dopamine-motor-control-q13', 13, 'C2'],
   ] as const;
 
-  it.each(cases)('%s 공개 콘텐츠와 승인 골드가 일치한다', (questionId, questionNumber, answerChoiceId) => {
-    const { content, gold } = loadProblemSolvingBundle(questionId);
+  it.each(cases)('%s 공개 콘텐츠와 원문 직접 참조가 일치한다', (questionId, questionNumber, answerChoiceId) => {
+    const { content, source } = loadProblemSolvingBundle(questionId);
     expect(content.questionNumber).toBe(questionNumber);
-    expect(gold.reviewStatus).toBe('human_reviewed');
-    expect(gold.answerChoiceId).toBe(answerChoiceId);
+    expect(source.answerChoiceId).toBe(answerChoiceId);
+    expect(source.officialExplanation.length).toBeGreaterThan(0);
     expect(content.choices.map((choice) => choice.text)).toEqual(
-      gold.choices.map((choice) => choice.text),
+      source.choices.map((choice) => choice.text),
     );
     expect(JSON.stringify(content)).not.toContain('answerChoiceId');
-    const answerClaim = gold.optionClaims.find((claim) => claim.choiceId === answerChoiceId);
-    expect(answerClaim?.decisionCritical).toBe(true);
-    expect(answerClaim?.assessment).toBe(
-      gold.stemPolarity === 'SELECT_CORRECT' ? 'SUPPORTED' : 'CONTRADICTED',
-    );
+    const serializedSource = JSON.stringify(source);
+    expect(serializedSource).not.toContain('optionClaims');
+    expect(serializedSource).not.toContain('itemInferences');
+    expect(serializedSource).not.toContain('referencePath');
   });
 });

@@ -11,11 +11,14 @@ import { resolve } from 'node:path';
 
 import {
   ParagraphDiagnosticGoldSchema,
-  ProblemQuestionGoldSchema,
+  ConditionalMetaGoldSchema,
+  type ConditionalMetaGold,
+  SourceDirectProblemBundleSchema,
+  SourceDirectProblemReferenceCatalogSchema,
   type Gold,
   type GeneratedQuerySet,
   type ParagraphDiagnosticGold,
-  type ProblemQuestionGold,
+  type SourceDirectProblemBundle,
 } from '@csat/pipeline';
 import type {
   PassageSummary,
@@ -32,6 +35,10 @@ const DIALOGUE_ROOT = resolve(
 const PROBLEM_ROOT = resolve(
   process.cwd(),
   'packages/pipeline/fixtures/experiments/problem-solving',
+);
+const SOURCE_DIRECT_REFERENCE_PATH = resolve(
+  PROBLEM_ROOT,
+  'source-direct-runtime-v1.json',
 );
 
 export interface DialoguePassageParagraph {
@@ -74,37 +81,68 @@ export function loadDialogueGold(goldPath: string): {
   };
 }
 
+/** 개발자 실험 자산은 기존 골드와 분리하고 원본 계보를 확인한 뒤 투영한다. */
+export function loadConditionalMetaGold(loaded: ReturnType<typeof loadDialogueGold>): {
+  readonly gold: ParagraphDiagnosticGold;
+  readonly goldHash: string;
+  readonly metaGold: ConditionalMetaGold;
+} {
+  const paragraphId = loaded.gold.paragraphId;
+  if (!/^[a-z0-9-]+$/u.test(paragraphId)) throw new Error('등록되지 않은 문단입니다.');
+  const path = resolve(process.cwd(), 'packages/pipeline/fixtures/experiments/dialogue/conditional-meta-v1', `${paragraphId}.json`);
+  const metaGold = ConditionalMetaGoldSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+  if (metaGold.paragraphId !== paragraphId || `sha256:${metaGold.sourceGoldHash}` !== loaded.goldHash || metaGold.centralStory !== loaded.gold.centralStory) {
+    throw new Error('실험 골드의 원본 버전이 다릅니다. 축 자산을 확인해 주세요.');
+  }
+  // 새 축에 과거 MR의 ID를 임의 연결하지 않는다. L1과 질문은 구체 축만 사용한다.
+  const gold = { ...loaded.gold, centralAxes: metaGold.axes.map(({ id, description }) => ({ id, description, relationIds: [] })), coreRelations: [], keyMappings: [], supportingConcepts: [] };
+  const goldHash = `sha256:${createHash('sha256').update(JSON.stringify({ gold, metaGold })).digest('hex')}`;
+  return { gold, goldHash, metaGold };
+}
+
 export function loadProblemSolvingBundle(questionId: string): {
   readonly content: ProblemContentView;
-  readonly gold: ProblemQuestionGold;
+  readonly source: SourceDirectProblemBundle;
 } {
   if (!/^[a-z0-9-]+$/u.test(questionId)) throw new Error('등록되지 않은 문제입니다.');
   const contentPath = resolve(PROBLEM_ROOT, 'public', `${questionId}.json`);
-  const goldPath = resolve(PROBLEM_ROOT, `${questionId}.json`);
-  if (!existsSync(contentPath) || !existsSync(goldPath)) {
+  if (!existsSync(contentPath) || !existsSync(SOURCE_DIRECT_REFERENCE_PATH)) {
     throw new Error('등록되지 않은 문제입니다.');
   }
   const content = JSON.parse(readFileSync(
     contentPath, 'utf8',
   )) as ProblemContentView;
-  const gold = ProblemQuestionGoldSchema.parse(JSON.parse(readFileSync(
-    goldPath, 'utf8',
+  const catalog = SourceDirectProblemReferenceCatalogSchema.parse(JSON.parse(readFileSync(
+    SOURCE_DIRECT_REFERENCE_PATH, 'utf8',
   )));
-  if (gold.reviewStatus !== 'human_reviewed') {
-    throw new Error('사람 검토를 완료하지 않은 문제입니다.');
-  }
-  if (content.questionId !== gold.questionId || content.passageId !== gold.passageId) {
-    throw new Error('공개 문제 콘텐츠와 골드가 일치하지 않습니다.');
-  }
-  if (
-    content.choices.length !== gold.choices.length ||
-    content.choices.some((choice, index) =>
-      choice.choiceId !== gold.choices[index]?.choiceId ||
-      choice.text !== gold.choices[index]?.text)
-  ) {
-    throw new Error('공개 선지와 골드 선지가 일치하지 않습니다.');
-  }
-  return { content: structuredClone(content), gold };
+  const reference = catalog.questions.find((candidate) => candidate.questionId === questionId);
+  if (reference === undefined) throw new Error('원문 직접 참조가 등록되지 않은 문제입니다.');
+  const source = SourceDirectProblemBundleSchema.parse({
+    schemaVersion: 'source-direct-problem-bundle-v2',
+    questionId: content.questionId,
+    questionNumber: content.questionNumber,
+    passageId: content.passageId,
+    title: content.title,
+    exam: content.exam,
+    passage: content.passage,
+    stem: content.stem,
+    scenario: content.scenario,
+    ...(content.textAnnotations === undefined ? {} : { textAnnotations: structuredClone(content.textAnnotations) }),
+    choices: structuredClone(content.choices),
+    media: content.media.map((media) => ({
+      mediaId: media.mediaId,
+      url: media.url,
+      mimeType: media.mimeType,
+      width: media.width,
+      height: media.height,
+      ...(media.contentHash === undefined ? {} : { contentHash: media.contentHash }),
+      placement: structuredClone(media.placement),
+    })),
+    stemPolarity: reference.stemPolarity,
+    answerChoiceId: reference.answerChoiceId,
+    officialExplanation: reference.officialExplanation,
+  });
+  return { content: structuredClone(content), source };
 }
 
 export interface Passage extends PassageView {

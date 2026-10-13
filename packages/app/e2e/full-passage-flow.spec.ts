@@ -100,7 +100,7 @@ test.afterAll(async () => {
 
 test('photosynthesis p1~p6을 완주하고 지문 표제를 저장·복원한다', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.goto('/');
+  await page.goto('/legacy');
   const earlyTitle = await page.request.post(
     `/api/passage-title/${fixture.passageId}/unfinished-passage`,
     { data: { text: fixture.wholePassageTitle } },

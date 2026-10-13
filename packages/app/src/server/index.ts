@@ -18,7 +18,9 @@ import {
   type Gold,
   type EvaluateResponseOptions,
   type DialogueEvaluator,
-  type ProblemPathEvaluator,
+  type ConditionalMetaGold,
+  type SourceDirectProblemEvaluator,
+  type FeedbackEvaluator,
   evaluateResponse,
   propositionEvidenceEvaluator,
   warmResponsePrefix,
@@ -41,6 +43,7 @@ import type {
 } from '../shared/contract.js';
 import { DialogueController } from './dialogue.js';
 import { ProblemSolvingController } from './problem-solving.js';
+import { ProblemFeedbackV4Controller, type FeedbackV4Record } from './problem-feedback-v4.js';
 import {
   findPassageManifestForParagraph,
   listPassages,
@@ -61,6 +64,7 @@ import {
 } from './session.js';
 import { bestOf, isBlocked, toRecord, toRegionViews, viewsFromRecords } from './view.js';
 import { restoreTitleView, toTitleView } from './title-view.js';
+import { JsonlStudentEvidenceStore } from './student-state.js';
 
 const OWNER = 'local'; // D4 — 리포지토리는 처음부터 ownerId를 받는다. 로컬은 고정.
 
@@ -108,14 +112,23 @@ type ResponseEvaluator = (
 ) => Promise<EvaluatedResponse>;
 
 export interface LearningServerOptions {
+  readonly developerMode?: boolean;
+  readonly problemFeedbackV4Public?: boolean;
   readonly port?: number;
   readonly budget?: number;
   /** E2E가 실제 API 대신 결정론적 결과를 주입하는 유일한 경계다. */
   readonly responseEvaluator?: ResponseEvaluator;
   readonly warmer?: typeof warmResponsePrefix;
   readonly dialogueEvaluator?: DialogueEvaluator;
+  readonly conditionalDialogueEvaluatorFactory?: (assets: ConditionalMetaGold) => DialogueEvaluator;
   readonly dialoguePassageRoot?: string;
-  readonly problemPathEvaluator?: ProblemPathEvaluator;
+  readonly dialogueLogDirectory?: string;
+  readonly problemPathEvaluator?: SourceDirectProblemEvaluator;
+  readonly problemFeedbackV4Evaluator?: FeedbackEvaluator;
+  readonly problemFeedbackV4Save?: (record: FeedbackV4Record) => void;
+  readonly studentEvidencePath?: string;
+  readonly studentFeedbackEnabled?: boolean;
+  readonly studentFeedbackPublic?: boolean;
 }
 
 /**
@@ -124,6 +137,10 @@ export interface LearningServerOptions {
  */
 export function createLearningServer(options: LearningServerOptions = {}): ReturnType<typeof createServer> {
   const port = options.port ?? Number(process.env['PORT'] ?? 5174);
+  const developerMode = options.developerMode ?? process.env['CSAT_DEVELOPER_MODE'] === '1';
+  const problemFeedbackV4Public = options.problemFeedbackV4Public ?? process.env['CSAT_PROBLEM_V4_PUBLIC'] === '1';
+  const studentFeedbackEnabled = options.studentFeedbackEnabled ?? process.env['CSAT_STUDENT_FEEDBACK_ENABLED'] === '1';
+  const studentFeedbackPublic = options.studentFeedbackPublic ?? process.env['CSAT_STUDENT_FEEDBACK_PUBLIC'] === '1';
   // 인증 없는 터널 노출 시 API 비용을 직접 제한한다. 캐시 히트는 호출하지 않으므로 세지 않는다.
   const budget = options.budget ?? Number(process.env['EVAL_BUDGET'] ?? 60);
   const evalCache = resolve(process.env['CSAT_SESSION_ROOT'] ?? resolve(process.cwd(), 'sessions'), '.eval-cache');
@@ -132,13 +149,24 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
   );
   const runEvaluation = options.responseEvaluator ?? evaluateResponse;
   const warm = options.warmer ?? warmResponsePrefix;
+  const studentEvidence = new JsonlStudentEvidenceStore(options.studentEvidencePath);
   const dialogue = new DialogueController({
+    ...(options.conditionalDialogueEvaluatorFactory === undefined ? {} : { conditionalEvaluatorFactory: options.conditionalDialogueEvaluatorFactory }),
     ...(options.dialogueEvaluator === undefined ? {} : { evaluator: options.dialogueEvaluator }),
     ...(options.dialoguePassageRoot === undefined ? {} : { passageRoot: options.dialoguePassageRoot }),
+    ...(options.dialogueLogDirectory === undefined ? {} : { logDirectory: options.dialogueLogDirectory }),
+    evidenceSink: studentEvidence,
+    studentId: OWNER,
   });
   const problemSolving = new ProblemSolvingController({
     ...(options.problemPathEvaluator === undefined ? {} : { evaluator: options.problemPathEvaluator }),
     logger: new JsonlProblemSessionLogger(),
+    evidenceSink: studentEvidence,
+    studentId: OWNER,
+  });
+  const problemFeedbackV4 = new ProblemFeedbackV4Controller({
+    ...(options.problemFeedbackV4Evaluator === undefined ? {} : { evaluator: options.problemFeedbackV4Evaluator }),
+    ...(options.problemFeedbackV4Save === undefined ? {} : { save: options.problemFeedbackV4Save }),
   });
   let spent = 0;
   const lastWarm = new Map<string, number>();
@@ -147,7 +175,66 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
   void (async () => {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`);
 
+    const feedbackWindowDays = (): number | null => {
+      const days = Number(url.searchParams.get('days') ?? 30);
+      return Number.isInteger(days) && days >= 1 && days <= 365 ? days : null;
+    };
+    const hostname = (() => {
+      try { return new URL(`http://${req.headers.host ?? ''}`).hostname; } catch { return ''; }
+    })();
+    const loopbackRequest = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+    const studentFeedbackAvailable = studentFeedbackEnabled && (studentFeedbackPublic || loopbackRequest);
+
     if (req.method === 'OPTIONS') return json(res, 204, {});
+
+    if (req.method === 'GET' && url.pathname === '/api/capabilities') {
+      return json(res, 200, { studentFeedbackEnabled: studentFeedbackAvailable });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/student-state') {
+      if (!studentFeedbackAvailable) return json(res, 404, { error: '학생용 정기 피드백이 아직 활성화되지 않았습니다.' });
+      const windowDays = feedbackWindowDays();
+      if (windowDays === null) return json(res, 400, { error: '피드백 기간은 1~365일의 정수여야 합니다.' });
+      return json(res, 200, studentEvidence.report(OWNER, new Date().toISOString(), 'STUDENT', windowDays));
+    }
+
+    if (url.pathname.startsWith('/api/developer/')) {
+      if (!developerMode) return json(res, 403, { error: '개발자 API가 비활성화돼 있습니다. 개인 테스트 서버에서 CSAT_DEVELOPER_MODE=1로 실행하세요.' });
+      if (url.pathname.startsWith('/api/developer/problem-feedback-v4/')) {
+        // Existing public developer tunnels must not automatically expose a new paid evaluator.
+        if (!loopbackRequest && !(problemFeedbackV4Public && hostname === 'dialogue.cogaxis.net')) return json(res, 404, { error: '문제 피드백 API가 이 주소에 공개되지 않았습니다.' });
+        if (req.method === 'POST' && url.pathname === '/api/developer/problem-feedback-v4/session') {
+          const body = await readBody(req) as { questionId?: unknown };
+          if (typeof body.questionId !== 'string' || !body.questionId.trim()) return json(res, 400, { error: 'questionId가 필요합니다.' });
+          return json(res, 200, problemFeedbackV4.start(body.questionId));
+        }
+        const match = /^\/api\/developer\/problem-feedback-v4\/session\/([^/]+)$/u.exec(url.pathname);
+        const inspection = /^\/api\/developer\/problem-feedback-v4\/session\/([^/]+)\/inspect$/u.exec(url.pathname);
+        if (inspection && req.method === 'GET') return json(res, 200, problemFeedbackV4.inspect(inspection[1]!));
+        if (match) {
+          if (req.method === 'GET') return json(res, 200, problemFeedbackV4.get(match[1]!));
+          if (req.method === 'POST') return json(res, 200, await problemFeedbackV4.submit(match[1]!, await readBody(req)));
+        }
+        return json(res, 404, { error: '등록되지 않은 문제 피드백 API입니다.' });
+      }
+      if (req.method === 'GET' && url.pathname === '/api/developer/map') return json(res, 200, dialogue.developerMap());
+      if (req.method === 'GET' && url.pathname === '/api/developer/problem-inspect') return json(res, 200, problemSolving.inspect(url.searchParams.get('sessionId') ?? ''));
+      if (req.method === 'GET' && url.pathname === '/api/developer/inspect') return json(res, 200, dialogue.inspect(url.searchParams.get('sessionId') ?? ''));
+      if (req.method === 'GET' && url.pathname === '/api/developer/student-state') {
+        const context = url.searchParams.get('context') === 'developer' ? 'DEVELOPER' as const : 'STUDENT' as const;
+        if (context === 'STUDENT' && !studentFeedbackAvailable) {
+          return json(res, 404, { error: '학생 학습 상태는 현재 요청 범위에서 사용할 수 없습니다.' });
+        }
+        const windowDays = feedbackWindowDays();
+        if (windowDays === null) return json(res, 400, { error: '피드백 기간은 1~365일의 정수여야 합니다.' });
+        return json(res, 200, studentEvidence.report(OWNER, new Date().toISOString(), context, windowDays));
+      }
+      if (req.method === 'POST' && url.pathname === '/api/developer/open') {
+        const body = (await readBody(req)) as { passageId: string; paragraphIndex: number; sessionId?: string; fresh?: boolean; mode?: import('../shared/contract.js').DialogueMode };
+        return json(res, 200, dialogue.openDeveloper(body.passageId, body.paragraphIndex, body.sessionId, body.fresh === true, body.mode));
+      }
+      return json(res, 404, { error: '등록되지 않은 개발자 API입니다.' });
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/dialogue/passages') {
       return json(res, 200, dialogue.listPassages());
@@ -214,13 +301,18 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
       if (req.method === 'POST' && action === 'advance') {
         return json(res, 200, dialogue.advance(sessionId));
       }
+      if (req.method === 'POST' && action === 'question') {
+        if (spent >= budget) return json(res, 429, { error: '채점 예산을 다 썼습니다.' });
+        spent += 1;
+        return json(res, 200, await dialogue.requestQuestion(sessionId));
+      }
       if (req.method === 'POST' && action === 'navigate') {
         const body = (await readBody(req)) as { paragraphIndex: number };
         return json(res, 200, dialogue.navigate(sessionId, body.paragraphIndex));
       }
       if (req.method === 'POST' && action === 'problem') {
         const linked = dialogue.createProblemHandoff(sessionId);
-        return json(res, 200, problemSolving.start(linked.questionId, linked.handoff, sessionId));
+        return json(res, 200, problemSolving.start(linked.questionId, linked.handoff, sessionId, linked.evidenceContext));
       }
     }
 
