@@ -178,4 +178,9 @@
 | [`D-0116`](./decisions/D-0116-student-facing-tone-banmal.md) | accepted | 학생용 말투 | 고정 문구·교정 질문·종료 설명 모두 반말로 통일(D-0110 해요체 대체), 선지 조사 "①번을"(D-0112 3항 대체). 미반영 |
 | [`D-0117`](./decisions/D-0117-end-coaching-sectioned-sequence.md) | accepted | 마지막 설명 구조 | 선지별 칸 → 정답 이유 → 이해 확인, 코드 연결 문장+[다음], 시작 확인 뒤 백그라운드 생성, 자기 보고 이해는 증거 아님. 미반영 |
 | [`D-0118`](./decisions/D-0118-direct-correction-questions-and-highlight.md) | accepted | 교정 질문 직접성 | 학생 주장 직접 겨냥, 구체 사실로, 두 갈래 또는 짧은 직접 질문. 근거 구절 지문 표시. 미반영 |
+| [`D-0119`](./decisions/D-0119-answer-path-elements-and-depth.md) | accepted | 문항 지도 정답 경로 | 요구 요소 E1~E10·선지별 연산 사슬(깊이) 추가, sol 1회 생성·동결. 채점: 정답=사슬 전체 성공, 오답=끊긴 고리 기록, 확인 질문 없음. 정답·오답 지표 분리. 실행 보류 |
 | [`D-0120`](./decisions/D-0120-omitted-conclusion-reconstruction.md) | accepted | 결론 생략 재구성 | 사실이 선지 핵심 전제를 직접 다루고 판정이 한 방향이면 결론 생략도 재구성(D-0054 보완). 미반영 |
+| [`D-0121`](./decisions/D-0121-answer-path-layers-and-failed-operation.md) | accepted | 정답 경로 깊이·오답 지표 | D-0119 일부 대체: 깊이=의존 층수(READ/LINK/APPLY), 오답=실패 노드 종류(위치 % 폐지), 정답 꼬리표(찍음·근거 오류), 오답 분모, 독립 재채점 일관성 |
+| [`D-0122`](./decisions/D-0122-answer-path-depth-node-count.md) | accepted | 정답 경로 깊이 | D-0121 깊이 정의 대체: 깊이=선지 노드 수(READ+LINK+APPLY). 층은 지도 구조로만, 지표 아님 |
+| [`D-0123`](./decisions/D-0123-answer-path-explicit-misstatement-priority.md) | accepted | 오답 실패 종류 귀속 | 지문과 어긋나는 사실 진술이 있으면 그 사실의 READ 노드 실패로 기록, 없을 때만 LINK·APPLY |
+| [`D-0124`](./decisions/D-0124-answer-path-element-override-on-evidence.md) | accepted | 오답 실패 요소 | 기본은 실패 노드 요소, 풀이에 다른 요소 오류가 말로 드러날 때만 덮어쓰고 원래 요소·인용 보존 |

@@ -1,0 +1,308 @@
+{
+  "id": "resp_02eb79f26272f3fa006ace3f8a887887d081de84b42cff564b",
+  "object": "response",
+  "created_at": 1791901578,
+  "status": "completed",
+  "access_programs": null,
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1791901594,
+  "error": null,
+  "frequency_penalty": 0,
+  "incomplete_details": null,
+  "instructions": "동결된 sol 문항 지도와 원문으로 학생 풀이 하나를 독립 채점한다. 출력 스키마에 따라 JSON만 반환한다. 지도는 변경하지 않는다. caseId와 selectedChoiceId는 입력 그대로다. CORRECT의 depth는 정답 선지의 노드 수, 다른 결과의 depth는 null이다. CORRECT 실패 필드와 nodeElement·overrideQuote는 모두 null이다. WRONG_NO_RATIONALE 실패 필드도 모두 null이다. POLARITY_FAILURE는 failedElement E1, 다른 실패 필드 null이다. WRONG 미확정은 failedOperation UNDETERMINED, failedNodeId·failedElement null, candidates에 후보를 남긴다. 확정 WRONG은 선택 선지의 노드 ID·종류·요소를 사용한다. 덮어쓰지 않으면 nodeElement와 overrideQuote는 null이다. 덮어쓰면 nodeElement는 원래 노드 요소, overrideQuote는 풀이 원문 인용이다. tags는 CORRECT에만 쓰고 중복 없이 출력한다. studentQuote는 판단에 쓴 풀이의 부분 문자열 그대로, 없으면 null이다. 후보는 UNDETERMINED에만 남긴다.\n\n## 어휘\n\n| 코드 | 요소 | 해냈다는 것은 | 짝 함정 |\n|---|---|---|---|\n| E1 | 발문 유지 | 발문의 방향(적절한/않은)과 조건(〈보기〉 관점 등)을 끝까지 지켜 선택한다 | POLARITY |\n| E2 | 지시 대상 확정 | 기호·ⓐ·대명사·\"이것\"이 가리키는 대상을 지문에서 확정한다 | REFERENT |\n| E3 | 입장·지위 구분 | 누구의 주장인지, 그것이 사실·현행인지 주장·제안·가정인지 구분한다 | ATTRIBUTION |\n| E4 | 관계 방향 파악 | 인과·증감·비례·대립의 방향을 바르게 읽는다 | DIRECTION |\n| E5 | 조건·범위 대조 | 한정어·조건·범위를 선지와 지문에서 맞춰 본다 | CONDITION, SCOPE |\n| E6 | 사례 대응 | 〈보기〉의 인물·현상을 지문 개념의 요건에 하나씩 대응시킨다 | MAPPING |\n| E7 | 의미 동일성 판별 | 표현이 달라도 같은 뜻, 표현이 같아도 다른 뜻을 가려낸다 | PARAPHRASE_DISTANCE, SURFACE_MATCH |\n| E8 | 근거 결합 | 둘 이상의 문장·문단 근거를 이어 하나의 결론을 낸다 | MULTI_STEP |\n| E9 | 지문 근거 고수 | 상식·배경지식이 아니라 지문 근거로 판정한다 | OUTSIDE_KNOWLEDGE |\n| E10 | 사실 정확 포착 | 값·속성·동일성 같은 사실 정보를 정확히 읽는다 | MISREAD_FACT |\n\n## v0.1 개정 규칙 (D-0121)\n\n### 문항 지도: 층 구조\n\n- **노드** = 선지 판정에 필요한 연산 하나. 종류는 셋이다.\n  - `READ` 근거 읽기: 지문·〈보기〉에 적힌 사실·관계·입장·지시 대상을 확정한다. 〈보기〉 대상이 지문의 어느 개념에 해당하는지의 단순 확인도 포함한다. 기호(ⓐ 등) 확정은 항상 별도 `READ` 노드(E2).\n  - `LINK` 연결: 확정한 근거 둘 이상을 결합하거나, 하나를 변환(함축·방향 뒤집기·계산)해 지문에 직접 적히지 않은 중간 결론을 얻는다.\n  - `APPLY` 적용·판정: 중간 결론을 선지에 대어 적절/부적절을 판정한다. 선지당 정확히 1개, 최상층. 선지와의 최종 대조는 별도 노드로 세지 않고 여기에 포함한다.\n- **필요한 노드만**: 부적절 선지는 틀린 부분 판정에 필요한 노드만, 적절 선지는 선지의 모든 진술 확인에 필요한 노드를 넣는다. 해설용 부가 설명은 넣지 않는다.\n- **층**: 노드마다 의존하는 노드를 적는다. 의존이 없으면 1층, 아니면 의존 노드 최대 층 + 1. 같은 층 안에는 순서가 없다.\n- ~~**깊이** = 최상층(`APPLY`) 층수.~~ → **D-0122로 대체: 깊이 = 선지의 노드 수**(`READ` + `LINK` + `APPLY`). 층은 지도 구조(의존 관계 표시)로만 남기고 지표로 쓰지 않는다. 파일럿 2차에서 10개 선지 중 9개가 3층으로 수렴해 변별력이 없었다.\n- **요소**: 노드마다 요소 0~1개. E6은 〈보기〉의 대상·상황을 지문 개념의 요건에 대응시키는 연산에만 붙인다. 어휘에 맞는 요소가 없으면(예: 계산) `null`과 `outsideVocabulary` 메모를 남긴다(어휘는 바꾸지 않는다). 선지 요소 개수 상한(1~3)은 폐지하고, 핵심 요소 하나만 표시한다.\n\n### 채점\n\n- **정답**: 근거와 무관하게 정답 선지의 모든 노드·요소 성공, 깊이 = 정답 선지 노드 수(D-0122). 풀이에 이미 드러난 문제는 꼬리표로만 남긴다: `GUESS_STATED`(찍음 명시), `RATIONALE_ERROR`(근거 오류, 인용 포함). 꼬리표는 성공 집계를 바꾸지 않는다.\n- **오답(근거 있음)**: 위치(%) 대신 오류가 드러난 **노드 종류**(`READ`/`LINK`/`APPLY`)와 요소를 기록한다. 앞선 노드의 성공은 보충하지 않는다. 하나로 정할 수 없으면 `UNDETERMINED`와 후보를 남기고 종류 집계에서 뺀다.\n- **명시적 오진술 우선(D-0123)**: 오답 풀이에 지문·〈보기〉와 어긋나는 사실 진술(과잉 일반화·방향 뒤집기·주체 바꾸기 포함)이 있으면, 그 사실을 확정하는 `READ` 노드의 실패로 기록한다. 그런 진술이 없고 읽은 사실은 맞는데 잇거나 적용하는 데서 틀렸을 때만 `LINK`·`APPLY`로 기록한다. 오진술이 여러 개면 판정에 직접 쓰인 것을 고른다.\n- **실패 요소 덮어쓰기(D-0124)**: 실패 요소의 기본값은 실패 노드에 붙은 요소다. 풀이에 다른 요소의 오류가 **말로 드러날 때만** 그 요소로 바꿔 기록한다(예: \"말이 안 되니까\", \"상식적으로\", \"당연히\" → E9). 덮어쓸 때는 `failedElement`에 새 요소, `nodeElement`에 원래 노드 요소, `overrideQuote`에 근거 인용을 남긴다. 실패 노드·종류는 바꾸지 않는다. 드러난 증거가 없으면 덮어쓰지 않는다.\n- **오답(근거 없음)**, **극성 실패**: v0과 같다(극성 실패는 E1 실패, 종류 없음).\n\n### 누적 지표\n\n| 지표 | 계산 | 문구 예 |\n|---|---|---|\n| 깊이별 정답 | 정답 선지 노드 수별 풀이 수·정답 수 | \"근거·연결 3~4개 문항 10개 중 8개, 7개 문항 6개 중 2개\" |\n| 정답 꼬리표 | 정답 중 `GUESS_STATED`·`RATIONALE_ERROR` 수 | \"맞힌 14개 중 찍음 2, 근거 오류 1\" |\n| 오답 분모 | 전체 오답, 종류 관측, 미확정, 근거 없음, 극성 실패 | \"오답 12개 중 원인 관측 8개\" |\n| 실패 종류 분포 | 종류 관측 오답의 `READ`/`LINK`/`APPLY` 수 | \"적용·판정 5 · 연결 2 · 근거 읽기 1\" |\n| 요소별 성공·실패 | 위 규칙으로 센 횟수 | \"사례 대응 4/6\" |\n\n리포트에서 \"실제로 n단계까지 사고했다\", \"사슬의 n% 지점까지 도달했다\"는 표현은 쓰지 않는다.\n\n### 일관성 확인\n\n문항 지도는 동결하므로 실행 간 차이가 없다. 채점은 같은 풀이를 독립적으로 두 번 채점해 결과·실패 종류·요소·꼬리표가 같은지 확인한다. 어휘·규칙 버전이 바뀌면 과거 풀이를 새 버전으로 다시 채점해야 변화 비교가 성립한다.\n",
+  "max_output_tokens": 3500,
+  "max_tool_calls": null,
+  "model": "gpt-6.1-sol",
+  "moderation": null,
+  "output": [
+    {
+      "id": "rs_02eb79f26272f3fa006ace3f900dd087d086b0ec7d841f4ebe",
+      "type": "reasoning",
+      "content": [],
+      "encrypted_content": "gAAAAABqzj-b7ibmobfoC9vG7z9kR0PMUZyr4ZbjcRljb1Bse8QPfUhVkpaoMQ_JJ1Ep2pNc_mz-qOh60IzjbHuRo5IcIF9md_Of_QgljgzOCDfXBvbjD0TTK6eCCOgUWblf4mci0AoTdNvvgfK8a7kq3TcoT2l4cXBwKIMvJmkeaN1VE0DCEA-lzC4ljhCq7djpPTyIfXX0zTfnt_zZ-yBOTk3qP_MDAdidUWKExHurk_fiNtspaDeVkzk99B5WBptcjhhZsAZ3loVg_eRtco44SCYipFRkmuSuxO1IcJzrdDYuRiTVr5Rc2WzKt_-_J9mkOeZo6FZPEUE1LQPGFwoES3E3RilkdchrllTlGhqFoihuEjjFjyz7TdhtfUUvxe45fBngXmrjxCeYZJQXcc6LwlaskdXW3ukFMFum_pLOe9YEh7HKN7CAqnBjzAW-AFwB1LU1wZsX_zyzCdBgiC-kOMDB3zfGDT9D5MBWCg3VOB_jhuITxYlCTuzgrP090I_l97HUiYaqhV0oHHDaa_4z9KFgLEj1xH84fzpt3M0MdoEINv-25QGVFItzDtI_B_zpSbVZ6bFOz5niKgylePhqHG3cVPLxWc1B_uZG4Di1-cgwEhfV9ObXqUmUtIXrcvO-xAKQyJuoZ_6WAdVxqIJTDFYCteP_c-6uKUm4LTPYzbMu6Hmr_6_lml878KJ9tpSzCw0O8TwuG276JWGahwq8CkhLCSJljw_PNNsqkFjVedsRC9rNo5T0K_lpoiCUA3BiDlTG8x4miJc-FZGHrs8VZevnCTkqhAvN3eL7hihw2ctl1P21LbE5ef-vfHZZYq9ibyMy-u4TG84Yx29xZMf0s1Mr5CC5ANFjN4Tv2aGBgR7BwSU3Tfeb0qZleJy2bDsPjWgkKUdmsi17LhCgU1-y29iiYJhZ4FepsZY61VtYVR7IEeG5mLfbUWmQ8hK1Qz7ObR0LFX8Tqx7bqGF59PYFi6sl5wWzEr6wpezVTDSQJEgBgrjdzdgUB8Skw_OJV0LnLkz5flkO7RcODWW5nsxf20hBGqegg960CFcfzcVQ48hvKA9X4cJsv9toi2T92_iC8FklRgvPSmAVQf84-PAbVaHvk-IjBWAyo1GdUMdzi4TZof7W0RmQPk0kGKgp2QanWHIG3BLjghBz1obN0cfNgLjZzuyFYMQomirWV_PnvMJZZXmFXooW65bdp1mFK5eFuS1G_XgB7BfkMhR6v91VHpoxKn1LmgU77LWq2XbslOrBfP54OYtvnI0ohxdMEqoV-YupCfei7aFwi0tOrWcWsFYCI6_WxckRg_Wfy2mQX0ns7WyPD186Sq7lrnK-xCkYdUY3X0u5XXnvYviAvLsbK-GBEVj80AcRNWbMa9BcxnIXgCoN00NrD9fY7gP1nqwH6QJOjoRM5zSkFk6JON6Umxegi3Fel-Up3yLpzmScmvMejdMaqbnXoTjtcTeNLyXOrDnXZYa7jPSyUVtAGfoGmidwbZMu_qWwzxoUl6Er4JHfhtLI0vNz4bfPiaR8Yg3KtaZVoBjG3aMQEPpIwJKxWcXxsSC47fC2KGMkR_za4H2hsCBFxmaxl0pg2rqBfqZQfKYLYtAeNU0McwxCPXsD-81V4d_JYEUFgCaQPJzJUgTeCpi0fnZ36J32phmnrJ4OTe6fpIWHl-wHsf38nCHp07vQM78dR4UCk389rQqSssVNebuhjm7yh-cOVyVWGduNdn_zxyhTuuPWVKoavWM_0gM-hWM_P0oFw0cyFSDtOjna5khNffZHe9SuK6LnarxdpnFhZMcVivV4eWpBlTTnMgs9DYfJ0qI849K5UFguZZMXR34iXY0cmK3Cu6-a0nYKplP4dcv0ksx-87L-mcqAlB_k2psbC5tB4XrObbzz9nIoTS_uj2u0lKV-tic9Dql4N1UUkgP8W5s8ltI0n9kHdQx2FF6IQ7C6Tmbpyr8DIhoHe_CvxsErMMfRz5KCJylH3lNf4H_Q7t1vYX2Ip_0_sJA4IZNk5DxJ8KWlvg-4JelGfkhSOjWfyqF2GZKtrjRuLOK-5OeEFKrerMeGoZwqa1xaFHq1baWBvSvzN7XYxwGgYqbZ-RnytdJcVcN0kOprn7ryw8AdWC95G2ya1oSAU9Rjy5TQasjH_8PxlOvBX4B7leehpa_JLcKNScS7Sen_lgHnFqrcqEHcLWZaqKaSsFukPgxj-7XEvN7gEyqdePAv1fABWsCRZi0xer6iF9uiFOi4ighHVbQrcp2t9Rzy5BAUrZ2-DhAH385azhPhrzj17rwfqR4w_awp9a6we-rTo33wHiQM9QbxtASbXBF8DSuIBief9MU9IFYOjrn4knE8M_bTda6MEpcH1AHTK4MoQAMuB2h_8_GcKYaupw_I7vBTUO9TZNcSdwQ2TM5FXFoempjDDqN3mUw6WDUjMHGkj10raHvmRjiqC1MrChSBfVfFC_nLRc4jjhAsodzUYQMKKeqMmRx4D1zLG3yGej55G0HGEaMzFiEo5WbSi-zuefBpa9nXuf6W2iry0HDPRxzJdJd51fZWL3kYLJWMjFndWz-7EHz-CmufiEancO06bk4WdF0kHz1u6Yvy3eNFZuv8w_Yr3vrpsuxzvdgG4Yx_GVpZrqmoceUntQuNKHDS6CW1au6pFxL1pT8FonVGqHczdzAkzqt4wFjRE1oPkwm8rCm1LBLurkW31wb22bZSJq-x5FgGObfmf7IjqqzRDTy5NgIg8wtr2WoDRjkg7GW1jjcBZU9ePO7KyZNRwlm39HYdtdcRm53ThGDlRoGMG2GeWawOxtwDqcmlJyS5bD-tDVuIXzeLqGMFOSc0OhcQfrkDWYzycydAl6s3Uzp-m_iEdmqtTqpqHaE2E3ajCBrQX3vrvB3mHv8NmYWJmv2NLe6rrSNkVndCiQir6RxAZcWEaNt_6SOnvKgB5cGve2nIzjPhzMzOPTpalle1GTRReWnozEOqL89YdTJ7BHAno4qDpzwNFAr9e9u9uCsrW55_KKNAMSfyj4Vbx4kNAHLvbPxVXZoF7Qi9DP0Hiq4dkUz7bk09AsW8gYowZHZWU0RluWLOMHv33X3KKluZx7WAOnKJVseRxYnNKUZP5Kkgu1F_RSgT2qmP9RIf2-SyU_4Y4LIxBkvQyD6p8slV2qDASBR1r3Y21Lhp_tL4vsLmI0vidMuyv_G4PgU1TFNOJIIT7iTWJJdn4p1BVSYnQ5ga157KEAyhd4seAzF0OZ8K4_kZoaQQxyCDezMJKLven3P5I-O--yv7_TLvbb-Hyten2icLNVx7CZHuHe_TKx9G8Yq-V2rD6qJj-RX8WIezAZwT7Zp_75xGoT7xd_1YRO2enK-g9POOKkT8npVXvnVdeuPGPwejyPze_NSINLN3eY8ZyRRsImzjKN0LHYphR0gEf55mrkg3Hn0_XB4CYtFthrAFKAjXoqz3HwdJKwneVyYakr86TXiImMD-l2UDUAjSG6A33Vl2Y-NF__4MxHa2yJEOujN_XlTxwmNuvmzB5StrP64mA_uEbia0NbZdbR8Dc1_72E8Kyi1pGkVAN-RWt6Frms8S4Rp--hUjOvkxnniv_kHos6oFldFClTsUfX0BBteRxziFIRB6TbfRMqhUfhUutMrhbMiPJEJ5RI9fdeR22hrzCZ9-XgF4jsazdEBXyKxGGUYbOBm1uOJnBFMR4zABHnHibWlHbksTWmtT7ut-kRCj8VEcrdJ2i_542subUIgWTiKSEDeszQtsHiPn5uXawsGNBsMcdf0UBBHz9xel9HdwGeDLrKI5OFE7kimJ9xZ_QpEUdaUoe-0OYZGUvE5IMLjV0x6R_B6xfHEwuExumnd-IIp0_z2l-IVM3A-xSDkTCs9ap8uf-nuKjQkmQ7ElJl0bRWT_qYUfrGNfmqb8F4LIBsgtEqmEEj5cz9ygBftWNbagrbhqJgsyqClcQ2XgelIneZeGV_H-hliWiy-1D0SKjoQG0sFhIcLtFgxAr0rHJgWb7Q==",
+      "summary": []
+    },
+    {
+      "id": "msg_02eb79f26272f3fa006ace3f95f21487d0a76ae20ea2665c1d",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\"caseId\":\"S5\",\"selectedChoiceId\":\"C4\",\"result\":\"WRONG\",\"depth\":null,\"tags\":[],\"failedOperation\":\"UNDETERMINED\",\"failedNodeId\":null,\"failedElement\":null,\"nodeElement\":null,\"overrideQuote\":null,\"candidates\":[{\"nodeId\":\"C4-R1\",\"type\":\"READ\",\"element\":\"E6\",\"reason\":\"파란색 잉크의 구입 당시와 두 달 후 상태를 어떻게 읽었는지 드러나지 않는다.\"},{\"nodeId\":\"C4-L1\",\"type\":\"LINK\",\"element\":\"E8\",\"reason\":\"잉크 상태의 불변과 오네소르게 수의 적정 범위 유지를 연결했는지 확인할 수 없다.\"},{\"nodeId\":\"C4-A1\",\"type\":\"APPLY\",\"element\":\"E5\",\"reason\":\"적정 범위를 벗어났다는 선지 진술을 어떻게 판정했는지 드러나지 않는다.\"}],\"studentQuote\":\"표면 장력 때문에 물방울이 구의 형태가 돼요.\",\"reason\":\"풀이에 근거 진술은 있으나 선택한 C4의 판정과 무관하다. 명시적 오진술이나 연결·적용 과정이 드러나지 않아 실패 노드를 확정할 수 없다.\"}"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": "24h",
+  "reasoning": {
+    "context": "all_turns",
+    "effort": "medium",
+    "mode": "standard",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "description": null,
+      "name": "answer_path_run",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string"
+          },
+          "selectedChoiceId": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "CORRECT",
+              "WRONG",
+              "WRONG_NO_RATIONALE",
+              "POLARITY_FAILURE"
+            ]
+          },
+          "depth": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "GUESS_STATED",
+                "RATIONALE_ERROR"
+              ]
+            }
+          },
+          "failedOperation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "READ",
+                  "LINK",
+                  "APPLY",
+                  "UNDETERMINED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failedNodeId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failedElement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "E1",
+                  "E2",
+                  "E3",
+                  "E4",
+                  "E5",
+                  "E6",
+                  "E7",
+                  "E8",
+                  "E9",
+                  "E10"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nodeElement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "E1",
+                  "E2",
+                  "E3",
+                  "E4",
+                  "E5",
+                  "E6",
+                  "E7",
+                  "E8",
+                  "E9",
+                  "E10"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overrideQuote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "nodeId": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "READ",
+                    "LINK",
+                    "APPLY"
+                  ]
+                },
+                "element": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "E1",
+                        "E2",
+                        "E3",
+                        "E4",
+                        "E5",
+                        "E6",
+                        "E7",
+                        "E8",
+                        "E9",
+                        "E10"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "nodeId",
+                "type",
+                "element",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "studentQuote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "caseId",
+          "selectedChoiceId",
+          "result",
+          "depth",
+          "tags",
+          "failedOperation",
+          "failedNodeId",
+          "failedElement",
+          "nodeElement",
+          "overrideQuote",
+          "candidates",
+          "studentQuote",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tool_usage": {
+    "image_gen": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "web_search": {
+      "num_requests": 0
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 6956,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 6953
+    },
+    "output_tokens": 489,
+    "output_tokens_details": {
+      "reasoning_tokens": 202
+    },
+    "total_tokens": 7445
+  },
+  "user": null,
+  "metadata": {},
+  "output_text": "{\"caseId\":\"S5\",\"selectedChoiceId\":\"C4\",\"result\":\"WRONG\",\"depth\":null,\"tags\":[],\"failedOperation\":\"UNDETERMINED\",\"failedNodeId\":null,\"failedElement\":null,\"nodeElement\":null,\"overrideQuote\":null,\"candidates\":[{\"nodeId\":\"C4-R1\",\"type\":\"READ\",\"element\":\"E6\",\"reason\":\"파란색 잉크의 구입 당시와 두 달 후 상태를 어떻게 읽었는지 드러나지 않는다.\"},{\"nodeId\":\"C4-L1\",\"type\":\"LINK\",\"element\":\"E8\",\"reason\":\"잉크 상태의 불변과 오네소르게 수의 적정 범위 유지를 연결했는지 확인할 수 없다.\"},{\"nodeId\":\"C4-A1\",\"type\":\"APPLY\",\"element\":\"E5\",\"reason\":\"적정 범위를 벗어났다는 선지 진술을 어떻게 판정했는지 드러나지 않는다.\"}],\"studentQuote\":\"표면 장력 때문에 물방울이 구의 형태가 돼요.\",\"reason\":\"풀이에 근거 진술은 있으나 선택한 C4의 판정과 무관하다. 명시적 오진술이나 연결·적용 과정이 드러나지 않아 실패 노드를 확정할 수 없다.\"}"
+}

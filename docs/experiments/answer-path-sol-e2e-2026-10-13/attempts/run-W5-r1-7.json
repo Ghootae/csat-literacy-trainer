@@ -1,0 +1,308 @@
+{
+  "id": "resp_0173bb8233ca3e02006ace3d34175c87d0bcbf4ae3eb4c15ee",
+  "object": "response",
+  "created_at": 1791900980,
+  "status": "completed",
+  "access_programs": null,
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1791900993,
+  "error": null,
+  "frequency_penalty": 0,
+  "incomplete_details": null,
+  "instructions": "동결된 sol 문항 지도와 원문으로 학생 풀이 하나를 독립 채점한다. 출력 스키마에 따라 JSON만 반환한다. 지도는 변경하지 않는다. caseId와 selectedChoiceId는 입력 그대로다. CORRECT의 depth는 정답 선지의 노드 수, 다른 결과의 depth는 null이다. CORRECT 실패 필드와 nodeElement·overrideQuote는 모두 null이다. WRONG_NO_RATIONALE 실패 필드도 모두 null이다. POLARITY_FAILURE는 failedElement E1, 다른 실패 필드 null이다. WRONG 미확정은 failedOperation UNDETERMINED, failedNodeId·failedElement null, candidates에 후보를 남긴다. 확정 WRONG은 선택 선지의 노드 ID·종류·요소를 사용한다. 덮어쓰지 않으면 nodeElement와 overrideQuote는 null이다. 덮어쓰면 nodeElement는 원래 노드 요소, overrideQuote는 풀이 원문 인용이다. tags는 CORRECT에만 쓰고 중복 없이 출력한다. studentQuote는 판단에 쓴 풀이의 부분 문자열 그대로, 없으면 null이다. 후보는 UNDETERMINED에만 남긴다.\n\n## 어휘\n\n| 코드 | 요소 | 해냈다는 것은 | 짝 함정 |\n|---|---|---|---|\n| E1 | 발문 유지 | 발문의 방향(적절한/않은)과 조건(〈보기〉 관점 등)을 끝까지 지켜 선택한다 | POLARITY |\n| E2 | 지시 대상 확정 | 기호·ⓐ·대명사·\"이것\"이 가리키는 대상을 지문에서 확정한다 | REFERENT |\n| E3 | 입장·지위 구분 | 누구의 주장인지, 그것이 사실·현행인지 주장·제안·가정인지 구분한다 | ATTRIBUTION |\n| E4 | 관계 방향 파악 | 인과·증감·비례·대립의 방향을 바르게 읽는다 | DIRECTION |\n| E5 | 조건·범위 대조 | 한정어·조건·범위를 선지와 지문에서 맞춰 본다 | CONDITION, SCOPE |\n| E6 | 사례 대응 | 〈보기〉의 인물·현상을 지문 개념의 요건에 하나씩 대응시킨다 | MAPPING |\n| E7 | 의미 동일성 판별 | 표현이 달라도 같은 뜻, 표현이 같아도 다른 뜻을 가려낸다 | PARAPHRASE_DISTANCE, SURFACE_MATCH |\n| E8 | 근거 결합 | 둘 이상의 문장·문단 근거를 이어 하나의 결론을 낸다 | MULTI_STEP |\n| E9 | 지문 근거 고수 | 상식·배경지식이 아니라 지문 근거로 판정한다 | OUTSIDE_KNOWLEDGE |\n| E10 | 사실 정확 포착 | 값·속성·동일성 같은 사실 정보를 정확히 읽는다 | MISREAD_FACT |\n\n## v0.1 개정 규칙 (D-0121)\n\n### 문항 지도: 층 구조\n\n- **노드** = 선지 판정에 필요한 연산 하나. 종류는 셋이다.\n  - `READ` 근거 읽기: 지문·〈보기〉에 적힌 사실·관계·입장·지시 대상을 확정한다. 〈보기〉 대상이 지문의 어느 개념에 해당하는지의 단순 확인도 포함한다. 기호(ⓐ 등) 확정은 항상 별도 `READ` 노드(E2).\n  - `LINK` 연결: 확정한 근거 둘 이상을 결합하거나, 하나를 변환(함축·방향 뒤집기·계산)해 지문에 직접 적히지 않은 중간 결론을 얻는다.\n  - `APPLY` 적용·판정: 중간 결론을 선지에 대어 적절/부적절을 판정한다. 선지당 정확히 1개, 최상층. 선지와의 최종 대조는 별도 노드로 세지 않고 여기에 포함한다.\n- **필요한 노드만**: 부적절 선지는 틀린 부분 판정에 필요한 노드만, 적절 선지는 선지의 모든 진술 확인에 필요한 노드를 넣는다. 해설용 부가 설명은 넣지 않는다.\n- **층**: 노드마다 의존하는 노드를 적는다. 의존이 없으면 1층, 아니면 의존 노드 최대 층 + 1. 같은 층 안에는 순서가 없다.\n- ~~**깊이** = 최상층(`APPLY`) 층수.~~ → **D-0122로 대체: 깊이 = 선지의 노드 수**(`READ` + `LINK` + `APPLY`). 층은 지도 구조(의존 관계 표시)로만 남기고 지표로 쓰지 않는다. 파일럿 2차에서 10개 선지 중 9개가 3층으로 수렴해 변별력이 없었다.\n- **요소**: 노드마다 요소 0~1개. E6은 〈보기〉의 대상·상황을 지문 개념의 요건에 대응시키는 연산에만 붙인다. 어휘에 맞는 요소가 없으면(예: 계산) `null`과 `outsideVocabulary` 메모를 남긴다(어휘는 바꾸지 않는다). 선지 요소 개수 상한(1~3)은 폐지하고, 핵심 요소 하나만 표시한다.\n\n### 채점\n\n- **정답**: 근거와 무관하게 정답 선지의 모든 노드·요소 성공, 깊이 = 정답 선지 노드 수(D-0122). 풀이에 이미 드러난 문제는 꼬리표로만 남긴다: `GUESS_STATED`(찍음 명시), `RATIONALE_ERROR`(근거 오류, 인용 포함). 꼬리표는 성공 집계를 바꾸지 않는다.\n- **오답(근거 있음)**: 위치(%) 대신 오류가 드러난 **노드 종류**(`READ`/`LINK`/`APPLY`)와 요소를 기록한다. 앞선 노드의 성공은 보충하지 않는다. 하나로 정할 수 없으면 `UNDETERMINED`와 후보를 남기고 종류 집계에서 뺀다.\n- **명시적 오진술 우선(D-0123)**: 오답 풀이에 지문·〈보기〉와 어긋나는 사실 진술(과잉 일반화·방향 뒤집기·주체 바꾸기 포함)이 있으면, 그 사실을 확정하는 `READ` 노드의 실패로 기록한다. 그런 진술이 없고 읽은 사실은 맞는데 잇거나 적용하는 데서 틀렸을 때만 `LINK`·`APPLY`로 기록한다. 오진술이 여러 개면 판정에 직접 쓰인 것을 고른다.\n- **실패 요소 덮어쓰기(D-0124)**: 실패 요소의 기본값은 실패 노드에 붙은 요소다. 풀이에 다른 요소의 오류가 **말로 드러날 때만** 그 요소로 바꿔 기록한다(예: \"말이 안 되니까\", \"상식적으로\", \"당연히\" → E9). 덮어쓸 때는 `failedElement`에 새 요소, `nodeElement`에 원래 노드 요소, `overrideQuote`에 근거 인용을 남긴다. 실패 노드·종류는 바꾸지 않는다. 드러난 증거가 없으면 덮어쓰지 않는다.\n- **오답(근거 없음)**, **극성 실패**: v0과 같다(극성 실패는 E1 실패, 종류 없음).\n\n### 누적 지표\n\n| 지표 | 계산 | 문구 예 |\n|---|---|---|\n| 깊이별 정답 | 정답 선지 노드 수별 풀이 수·정답 수 | \"근거·연결 3~4개 문항 10개 중 8개, 7개 문항 6개 중 2개\" |\n| 정답 꼬리표 | 정답 중 `GUESS_STATED`·`RATIONALE_ERROR` 수 | \"맞힌 14개 중 찍음 2, 근거 오류 1\" |\n| 오답 분모 | 전체 오답, 종류 관측, 미확정, 근거 없음, 극성 실패 | \"오답 12개 중 원인 관측 8개\" |\n| 실패 종류 분포 | 종류 관측 오답의 `READ`/`LINK`/`APPLY` 수 | \"적용·판정 5 · 연결 2 · 근거 읽기 1\" |\n| 요소별 성공·실패 | 위 규칙으로 센 횟수 | \"사례 대응 4/6\" |\n\n리포트에서 \"실제로 n단계까지 사고했다\", \"사슬의 n% 지점까지 도달했다\"는 표현은 쓰지 않는다.\n\n### 일관성 확인\n\n문항 지도는 동결하므로 실행 간 차이가 없다. 채점은 같은 풀이를 독립적으로 두 번 채점해 결과·실패 종류·요소·꼬리표가 같은지 확인한다. 어휘·규칙 버전이 바뀌면 과거 풀이를 새 버전으로 다시 채점해야 변화 비교가 성립한다.\n",
+  "max_output_tokens": 3500,
+  "max_tool_calls": null,
+  "model": "gpt-6.1-sol",
+  "moderation": null,
+  "output": [
+    {
+      "id": "rs_0173bb8233ca3e02006ace3d38d2d487d099a60153b37494ca",
+      "type": "reasoning",
+      "content": [],
+      "encrypted_content": "gAAAAABqzj1BFKYgeMKatoJN6dh8K1sUydwrku9Qi7QLaC7wQ-ow2oJmJA6T-FHKQWMkSMzJxS8D1yPy9206938cIbMUMTH-8epYPpg49l6NjSOO_c4HU-M4ye-byAPgXqu8tPCUbRIvYQPAA8PvMN-7-LidaNVYrbeFfjFy-gWuIU0KE4-LJgX3ENobPjkCS3WcKeOE7t9XC_1uT9VvZnJgZBa19so6E4aF7faY6w64_9EcapU1ZzGWlSkPHZKL10ygYA3jpvA0UwEbEb-eDHsyycANgZeeyuHLwI8N0C8BULz3fUZ1QnfNOpxSBlefKWqGo1nbjDVi-c4bOMsAmMgn-siMAEmpVPxKTKbSzYE7wCO5gXsAYPSBrGfxB6OU7cS4vK2cMMHgTlVO3GfudhbpnqXwGRrMt9LWKOWLWMkU8jNINXZhCkUxi84jQ-HUpCg3N37wO4HH3DwfghOsRQRAYqyKvSXvQ6ZPHXpSVNvkEnQ3JXwPoYUfqpEIBxyN9nflpOTiFn4DnOzVLKzs23-qIpcvk87bWhUUxxB3BpQWhY5OsdAH_L9fXyO-_bUQHWNhr0NBunwcCODh1jA3ap_7X3bG_Z23Y0EXsWo1-GBe8w0LinBO-vv69bf2MHPx4nRoI4RvwARzPdSqhgwiVyY2JYCndFrM58AmIOODVIm4suIrQK4KRjvDYFbQJv_75u9TRLFS5HA9T9LXZghXRhvycZtXNCDcXPs0Hgb4mQ4lDe_9Mcajl0Pf1WwegUXAOBPU7aPuWswjmiepZiWmSmQ42HklUiIZYvmNw1jlnN1aArlJAAhc5Hv2s0nRpzL31eiI-tx3Apg6lEppkKfl5OIjWA4iTK7y2fMXMowag-L95aRrPDO-jZln9IKIInAyUPZbIOROSmBNWpMmw8VoBdXZr3kg7zU0tKj5IL5wqhfprPfKS1WBuhFcoYFGlzEqFgODdf2un_jpDS-gGAhsq1cAhcDRFcxCAzKyL2PyCjEahEk2AYusutR0-Pdld3UUSWpcatH9FivyTmUoeYqdQrIB_blWebf58Im41ZUDNahGyaQF36q0rLU07CNWzOxb94dnYemn43uEPGq5P1EyDQF33zlapxPV3ayw7er1ilwhufJF2G6Va3KOeFJ2LeCZZ9H3KPNRvUv8EsvtvXpsgiB9wj15J4DgtlrzUKmD6XNXVZmbAh1TCiE8g77-LB9R63Z40kktiF3Edn1DLPOZEp_8GtegIocPHuDiiVmDUw9S_LrysiHX4wezpCk0I5XQh82cC6w5Za5ynBthv5D2tvXYQzYybPYJGBK1tcQkgOaM_sdvXtB5p-4NvgleV9ZGgJqz8HpFg9xZzPTEbzaop_b6Ng1Ul-jGc3SHpGim7rLuD_9KW134x1Hz5iCbJblfekTYLiD2ppdxO5-fOVIj8vEwk3v-JwBxsuD0lXaJSy7F4mKgvH6Sq1qrTCAucohpQWJjGQ1FNXAmjXMK1-8v6RIjgTzPs7BUlePqwKyE-12UVymJvnnVl_ydO5_glApM1oBDheibd09kfEjYh3WUjb5bcIZnLoJ_X3RR73RaQ2yjR23z5WoOmne5UO17IxHBFl2RlKppwWWrw6us02IouF0OMQrn0_mPx4kAwYFFLk1lygrLE1kk2PNbXxhABWURUxrQfyKHTTt4B48MCY4V0GYsK1CXKgQSTrOYjaUy_J9ZTO30U0Mwr06rYU9GCM_ho1tDcq8ZFD12AHg_S1KUZwwi0t5z3agstO0uDzWAM5t2EDOD8ZRhBBKogPWkSCay127LHsNjaDZcVyQ_ImI7MH4fEdEY-RA4qw_uzeZ1QwxeKEzOWPll2lyEYmXbYcRRxgCcEXFPfGtsGHLdAmPPo4aSl4QDsIy6H2gjLoubtzlFJRCPUVtoyK1AmXjwVpomnliiyYYAbfddpxeRrfL3KjoFuMA3qxyMaM2XCjmR0uM9VODZjT0zrWhXU2zhsBAfzfDj5odJc0tBQIFjmOOwZq4Iy_l1WrG3pII4j5F8vcDRSdGuFt6syyCsPXWLWQVi6WF1WxmFuLkLNVuVoOTISG-K7mViEZ_cB1WxUcEXxRYjCYtUJ5u9a1n_V2b9p-P8kszW46l_BlKH0bDxpYYkram9n8SjRwy8C1Kl_QGNGoJkWUiTU4iIKwPwlxzPhcYdJI4StIWKrxfmqd5keCdbuGz8Y2uOmLOXyM-BJz-flH9LGfG0q3swfXnVNkDMFuI9su31sFLDdo56MzVzk-8iPZKSkfccc2UhuSt5IcTQGQpnIPu7dVah2s_egjSmiRZn3nKJ_1CkOH3-2ShCBvO6nDcRgrzMBCbfXRvJ_3_qflSCMldZ-FdDcLHQc2CtKv4-dqRv-H3QqfmZyhI18P2OhN2Wk1qjzWLLz2ZiCUgjikb2HcQWaVD_McoDJ3R6axMyEKy2dSzvaSVYzoSVZ0oQnjdeBKfxmeB3L-d1TMn92ZrBO8luE3KX6Q8e-SC2b0eaginsE8kLoVrSUTmI6WQ5wJZ6eYaiI-w2qf0nvF8ECMPYFmDkYHOd0EapVXfIYeBNCGadw8b2rcrWydAMg5kF9NInf5_707E3RT41cdcGaVVLQIjq8OqHh-ow77PbUGrZCOd9LSK_muVMmw6CaeaCTZwmxbGbIa-xRq96Hv4c3ee3Jhsyevwx9Qi87wBC9dkfisDORtrnQTCgAfUr8VJtjHgOfY9yZjGd_DbHOpe6ur76CyTO6baLslNW3s7e49v_SjTrF0h4pPGXtmpZfupJ9G_loUYwK1HGoVmqseONjMF-rGLd13uytHsDtvgeUVW3c_Dn2TwzsP0TJ4ymQ5UW-izfE9m-428wGkx9h-hEHxGncwd1nDNrzIpqz4_eWwUQVK8SinxEblarM4ueiFenVM0yEmX_H-H7smUllG1hO-CxKcjP29KBMV-__gk6mSVt0UVF4aV39D5k0uZAgTfS7IcRcs13vSOM2nfGnzvayza3ZlCxIUO5-kWbY1BqhPkzZycW28VVVABt5C2Z6j__NaVYyPJujv-G4XNb_Djbk4G6joDDuY5pqtsDDuSSNXhlQzyFHcN9QkrFAD1UsSp_TEWkdXTx0SdSNUOz95jYFJz-ccbwjB64WmEmrKbzhfND0jEEY5dz1kOvrUsomeOjSSztc0yArC8LKQq4oS6mgyTDGTJZ7hcO1ZbDr5xN4PATI6I6siUTKgXQh4bb-3DKcU_2Vqd8HhTJCZhW3XHN0xV9xkHuAl3k8VzfAiJi_Y-tdSzxSXnY5SQICzt3xn01EnNzO0cRDOWlWj1qXmQozYVEtNYrpAExRgN_Bhs5EQeP_VnE55pM0KKNniJW9_Hwcp9EQrC1rwmHr4sOEFWDlfBQC9IUFnZfiLD60bJ4ztjtNfmpu-sagMRrINhsPXQRuYeFU7EM0EqH04_7BHQB4I6sYv9vdKcUoPvI_IxqRzyTNCBaGJR3mIRaXWhHjojSzB1lBqexe85xxSJs6fx7aXjgW2vucKgSOGL1YZh2bY7COm48jYnAujo4Qu46Xr71OxxFGSmecGLShUTmUz_e1pF86oJxr_2yQwD_aKbDtjLaKrRAkuyKgkVVbnBz3kzAIy5bZOgOXkb-iMBt5WegKYYE__TEyCbl5bRuY4genRmII0oSLm_c2sS_VGw_M43_YmESRO1NCyiYO4EFzPcsX3vlGEqrpFqONBeC80Re_Waee5H-_9v29QXVbUTYGWGsFfFSTe-1ZRngOsTfjVBRRVQjueqMW49iwaz5sDq45EBpLXhEjw4IJGQBf29mIoZBWysqvj4Wgn67LqjQJcgeppw7vmPHs-Y849Gb42U85a2SnMKOt1bx2UPl_-Dj69cqwzws4V11_7oYkRH44fB9BVeehG_sbqUQsOoIziRyg_0vhSdCdHDwN6Qe",
+      "summary": []
+    },
+    {
+      "id": "msg_0173bb8233ca3e02006ace3d3e6ba087d0bfb172f7795ab14b",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\"caseId\":\"W5\",\"selectedChoiceId\":\"C3\",\"result\":\"WRONG\",\"depth\":null,\"tags\":[],\"failedOperation\":\"LINK\",\"failedNodeId\":\"C3-L1\",\"failedElement\":\"E8\",\"nodeElement\":null,\"overrideQuote\":null,\"candidates\":[],\"studentQuote\":\"의견 경쟁이 제대로 되려면 갈등을 일으키는 주장은 처벌해서 걸러 내야 하니까 을의 주장은 다수 의견 취지에 맞아요.\",\"reason\":\"위헌 결정과 의견 경쟁을 중시하는 헌법 재판소의 입장은 정확히 읽었으나, 이를 갈등을 일으키는 주장의 처벌이 필요하다는 취지로 잘못 연결했다. 다수 의견의 취지를 도출하는 C3-L1의 근거 결합 실패이다.\"}"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": "24h",
+  "reasoning": {
+    "context": "all_turns",
+    "effort": "medium",
+    "mode": "standard",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "description": null,
+      "name": "answer_path_run",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string"
+          },
+          "selectedChoiceId": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "CORRECT",
+              "WRONG",
+              "WRONG_NO_RATIONALE",
+              "POLARITY_FAILURE"
+            ]
+          },
+          "depth": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "GUESS_STATED",
+                "RATIONALE_ERROR"
+              ]
+            }
+          },
+          "failedOperation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "READ",
+                  "LINK",
+                  "APPLY",
+                  "UNDETERMINED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failedNodeId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failedElement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "E1",
+                  "E2",
+                  "E3",
+                  "E4",
+                  "E5",
+                  "E6",
+                  "E7",
+                  "E8",
+                  "E9",
+                  "E10"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nodeElement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "E1",
+                  "E2",
+                  "E3",
+                  "E4",
+                  "E5",
+                  "E6",
+                  "E7",
+                  "E8",
+                  "E9",
+                  "E10"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overrideQuote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "nodeId": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "READ",
+                    "LINK",
+                    "APPLY"
+                  ]
+                },
+                "element": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "E1",
+                        "E2",
+                        "E3",
+                        "E4",
+                        "E5",
+                        "E6",
+                        "E7",
+                        "E8",
+                        "E9",
+                        "E10"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "nodeId",
+                "type",
+                "element",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "studentQuote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "caseId",
+          "selectedChoiceId",
+          "result",
+          "depth",
+          "tags",
+          "failedOperation",
+          "failedNodeId",
+          "failedElement",
+          "nodeElement",
+          "overrideQuote",
+          "candidates",
+          "studentQuote",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tool_usage": {
+    "image_gen": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "web_search": {
+      "num_requests": 0
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 7316,
+    "input_tokens_details": {
+      "cache_write_tokens": 4861,
+      "cached_tokens": 2452
+    },
+    "output_tokens": 367,
+    "output_tokens_details": {
+      "reasoning_tokens": 180
+    },
+    "total_tokens": 7683
+  },
+  "user": null,
+  "metadata": {},
+  "output_text": "{\"caseId\":\"W5\",\"selectedChoiceId\":\"C3\",\"result\":\"WRONG\",\"depth\":null,\"tags\":[],\"failedOperation\":\"LINK\",\"failedNodeId\":\"C3-L1\",\"failedElement\":\"E8\",\"nodeElement\":null,\"overrideQuote\":null,\"candidates\":[],\"studentQuote\":\"의견 경쟁이 제대로 되려면 갈등을 일으키는 주장은 처벌해서 걸러 내야 하니까 을의 주장은 다수 의견 취지에 맞아요.\",\"reason\":\"위헌 결정과 의견 경쟁을 중시하는 헌법 재판소의 입장은 정확히 읽었으나, 이를 갈등을 일으키는 주장의 처벌이 필요하다는 취지로 잘못 연결했다. 다수 의견의 취지를 도출하는 C3-L1의 근거 결합 실패이다.\"}"
+}

@@ -1,0 +1,263 @@
+{
+  "id": "resp_080625fcd671829b006ace3cb767fc87d094ed1023d8b8f4a3",
+  "object": "response",
+  "created_at": 1791900855,
+  "status": "completed",
+  "access_programs": null,
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1791900938,
+  "error": null,
+  "frequency_penalty": 0,
+  "incomplete_details": null,
+  "instructions": "수능 국어 문항 지도를 처음부터 생성한다. 문항 원문과 정답 키만 사용하고 학생 풀이를 예상하지 않는다. 모든 선지를 포함한다. 출력 스키마에 따라 JSON만 반환한다. depth는 각 선지의 READ+LINK+APPLY 노드 수다. coreElement는 핵심 요소 하나(어휘 밖이면 null)다. 층은 dependsOn으로 계산한다.\n\n## 어휘\n\n| 코드 | 요소 | 해냈다는 것은 | 짝 함정 |\n|---|---|---|---|\n| E1 | 발문 유지 | 발문의 방향(적절한/않은)과 조건(〈보기〉 관점 등)을 끝까지 지켜 선택한다 | POLARITY |\n| E2 | 지시 대상 확정 | 기호·ⓐ·대명사·\"이것\"이 가리키는 대상을 지문에서 확정한다 | REFERENT |\n| E3 | 입장·지위 구분 | 누구의 주장인지, 그것이 사실·현행인지 주장·제안·가정인지 구분한다 | ATTRIBUTION |\n| E4 | 관계 방향 파악 | 인과·증감·비례·대립의 방향을 바르게 읽는다 | DIRECTION |\n| E5 | 조건·범위 대조 | 한정어·조건·범위를 선지와 지문에서 맞춰 본다 | CONDITION, SCOPE |\n| E6 | 사례 대응 | 〈보기〉의 인물·현상을 지문 개념의 요건에 하나씩 대응시킨다 | MAPPING |\n| E7 | 의미 동일성 판별 | 표현이 달라도 같은 뜻, 표현이 같아도 다른 뜻을 가려낸다 | PARAPHRASE_DISTANCE, SURFACE_MATCH |\n| E8 | 근거 결합 | 둘 이상의 문장·문단 근거를 이어 하나의 결론을 낸다 | MULTI_STEP |\n| E9 | 지문 근거 고수 | 상식·배경지식이 아니라 지문 근거로 판정한다 | OUTSIDE_KNOWLEDGE |\n| E10 | 사실 정확 포착 | 값·속성·동일성 같은 사실 정보를 정확히 읽는다 | MISREAD_FACT |\n\n## v0.1 개정 규칙 (D-0121)\n\n### 문항 지도: 층 구조\n\n- **노드** = 선지 판정에 필요한 연산 하나. 종류는 셋이다.\n  - `READ` 근거 읽기: 지문·〈보기〉에 적힌 사실·관계·입장·지시 대상을 확정한다. 〈보기〉 대상이 지문의 어느 개념에 해당하는지의 단순 확인도 포함한다. 기호(ⓐ 등) 확정은 항상 별도 `READ` 노드(E2).\n  - `LINK` 연결: 확정한 근거 둘 이상을 결합하거나, 하나를 변환(함축·방향 뒤집기·계산)해 지문에 직접 적히지 않은 중간 결론을 얻는다.\n  - `APPLY` 적용·판정: 중간 결론을 선지에 대어 적절/부적절을 판정한다. 선지당 정확히 1개, 최상층. 선지와의 최종 대조는 별도 노드로 세지 않고 여기에 포함한다.\n- **필요한 노드만**: 부적절 선지는 틀린 부분 판정에 필요한 노드만, 적절 선지는 선지의 모든 진술 확인에 필요한 노드를 넣는다. 해설용 부가 설명은 넣지 않는다.\n- **층**: 노드마다 의존하는 노드를 적는다. 의존이 없으면 1층, 아니면 의존 노드 최대 층 + 1. 같은 층 안에는 순서가 없다.\n- ~~**깊이** = 최상층(`APPLY`) 층수.~~ → **D-0122로 대체: 깊이 = 선지의 노드 수**(`READ` + `LINK` + `APPLY`). 층은 지도 구조(의존 관계 표시)로만 남기고 지표로 쓰지 않는다. 파일럿 2차에서 10개 선지 중 9개가 3층으로 수렴해 변별력이 없었다.\n- **요소**: 노드마다 요소 0~1개. E6은 〈보기〉의 대상·상황을 지문 개념의 요건에 대응시키는 연산에만 붙인다. 어휘에 맞는 요소가 없으면(예: 계산) `null`과 `outsideVocabulary` 메모를 남긴다(어휘는 바꾸지 않는다). 선지 요소 개수 상한(1~3)은 폐지하고, 핵심 요소 하나만 표시한다.\n\n### 채점\n\n- **정답**: 근거와 무관하게 정답 선지의 모든 노드·요소 성공, 깊이 = 정답 선지 노드 수(D-0122). 풀이에 이미 드러난 문제는 꼬리표로만 남긴다: `GUESS_STATED`(찍음 명시), `RATIONALE_ERROR`(근거 오류, 인용 포함). 꼬리표는 성공 집계를 바꾸지 않는다.\n- **오답(근거 있음)**: 위치(%) 대신 오류가 드러난 **노드 종류**(`READ`/`LINK`/`APPLY`)와 요소를 기록한다. 앞선 노드의 성공은 보충하지 않는다. 하나로 정할 수 없으면 `UNDETERMINED`와 후보를 남기고 종류 집계에서 뺀다.\n- **명시적 오진술 우선(D-0123)**: 오답 풀이에 지문·〈보기〉와 어긋나는 사실 진술(과잉 일반화·방향 뒤집기·주체 바꾸기 포함)이 있으면, 그 사실을 확정하는 `READ` 노드의 실패로 기록한다. 그런 진술이 없고 읽은 사실은 맞는데 잇거나 적용하는 데서 틀렸을 때만 `LINK`·`APPLY`로 기록한다. 오진술이 여러 개면 판정에 직접 쓰인 것을 고른다.\n- **실패 요소 덮어쓰기(D-0124)**: 실패 요소의 기본값은 실패 노드에 붙은 요소다. 풀이에 다른 요소의 오류가 **말로 드러날 때만** 그 요소로 바꿔 기록한다(예: \"말이 안 되니까\", \"상식적으로\", \"당연히\" → E9). 덮어쓸 때는 `failedElement`에 새 요소, `nodeElement`에 원래 노드 요소, `overrideQuote`에 근거 인용을 남긴다. 실패 노드·종류는 바꾸지 않는다. 드러난 증거가 없으면 덮어쓰지 않는다.\n- **오답(근거 없음)**, **극성 실패**: v0과 같다(극성 실패는 E1 실패, 종류 없음).\n\n### 누적 지표\n\n| 지표 | 계산 | 문구 예 |\n|---|---|---|\n| 깊이별 정답 | 정답 선지 노드 수별 풀이 수·정답 수 | \"근거·연결 3~4개 문항 10개 중 8개, 7개 문항 6개 중 2개\" |\n| 정답 꼬리표 | 정답 중 `GUESS_STATED`·`RATIONALE_ERROR` 수 | \"맞힌 14개 중 찍음 2, 근거 오류 1\" |\n| 오답 분모 | 전체 오답, 종류 관측, 미확정, 근거 없음, 극성 실패 | \"오답 12개 중 원인 관측 8개\" |\n| 실패 종류 분포 | 종류 관측 오답의 `READ`/`LINK`/`APPLY` 수 | \"적용·판정 5 · 연결 2 · 근거 읽기 1\" |\n| 요소별 성공·실패 | 위 규칙으로 센 횟수 | \"사례 대응 4/6\" |\n\n리포트에서 \"실제로 n단계까지 사고했다\", \"사슬의 n% 지점까지 도달했다\"는 표현은 쓰지 않는다.\n\n### 일관성 확인\n\n문항 지도는 동결하므로 실행 간 차이가 없다. 채점은 같은 풀이를 독립적으로 두 번 채점해 결과·실패 종류·요소·꼬리표가 같은지 확인한다. 어휘·규칙 버전이 바뀌면 과거 풀이를 새 버전으로 다시 채점해야 변화 비교가 성립한다.\n",
+  "max_output_tokens": 10000,
+  "max_tool_calls": null,
+  "model": "gpt-6.1-sol",
+  "moderation": null,
+  "output": [
+    {
+      "id": "rs_080625fcd671829b006ace3cbd1be487d0bdd1e2dc0297f821",
+      "type": "reasoning",
+      "content": [],
+      "encrypted_content": "gAAAAABqzj0K2HU9XQJy_i66GLLVeIeaVfJ5u_5bfxHTzuacAbeQyjHgonjjltQAt72klN6J6eRo2RFfv9b-9HT57OnJAr2WvDyJKaoMFvBXQFaSS2txe7Uiv3jocZWWN7PYEA99YsYhYVw_muLfkFTP0r7Gx4R-Qf6Ag-JAunVyQCLczPIezXUEbvOtEdehsYoRUlIIQ7kQQz0L8TMzwrh4aUMuADdx6TQ_oa820_W8sWWWQ6bt3wgtyyNy8a-EwbWSFMRVM-cPJb-bS9P1fh6LSnevIQmLsJ2BKR1G3EE-ohwzmwIc9eMY3BRfdVzTN0tAyPQI4PQo9Cd_VF2lZ3p047AVzpQRUyShDwLpOIh08FHlAgYOzE57wO6UBpO6baUI0QJIRRNdX1S8Uwe_kMOU5wjGPDxnc3sES4uxpdgX0kA8PNRmOzPn4EcZUVDM9RUY7XFvUgH8f6TdlPxmG4uKmoDLUsbL7J180lreeZq6sWou_202QEaQq1rbnr4jpT0YAzS5EUzmiiicDCjcCNgkbjMztBfbc3VKcMbfTkH47y7OZO76JnRKcxi-SloJNVo-mIZ3YX5z81HBjHip1gh20Z-tq6V_aGxV622-yVCUKJzVUSYxKcxcvDFE5mddbh4lKUdJ08U5NE3xutsAhm9QxgyKcyfGlcDymJbmoiY-kgh_O9y8ehoaBGHGmCsaAqF7ffeqo6-3YxJdANKhR-CNJS5FOQvybwCt3rdHAeiRIGRsuAGxUsHUtLFr2BMEEuPJ_kQGXNP-4OgAy5OxiNrxCxRCB6a3eiLqDqwKxEgbWm7xGhI5PzIxCJRGgOJMjP2jCV9SlVQmjREq4fMRFPCqTvIKVsReQtUOueF0xyYyv_tuucLORwEnvnxaY7wnvOftHPvkocMtT8NIVvUTrgLwmQkBsWk4vC2fTUADXOhwcThKjbxrtzYA84nuS8fyFHVtcYQrmxsMLcS28M8sBEIxFc7Z3vfMDraebXKYKxUQREWCF1RkT5v2mz-2_0QwXFsASN3LVAeYArM6ussN9I8hWlifvLdRUHffxjK1BvtpvzpyEQ2cTu7_viwp8qA_3FFRDjCF7BYdLetWCs6gOKKKFprn88fE8PcSQhNz-KKwyrEDI7wV_xw9OsVVuoDlaNfwxtsb8gyh-GpCjfx1n7TrpIGqLb3i3zpeExjNDX_YH8BhVOVJ76HaW6q5CUiSMkv2wZv23Vmj3HTLMCf-85khlJq0or0Z9FEseuJFbeuyYHztf1jHJh8Iet1yLRpvT_PVo6jb4eLpItQJmff6ruQV2XgBtnGWoWiSqgeZHym4hOtizAzRzX_ZC5JKeoJkwH5QT3YRCTSJxEQ-lrbILsU1yQYcs8DFoorvljUuuQ_JA6KFRjyIhnovyBiMMUvr_S27V7PRDHFuZJt_mkQz1hUU8ZgjkC9yFi62g5ivb6mwXCHOtddM5Dn8cYAvMF2y_YzLGXozn-uq0loTh-K0IyoUPUrLwyLv4uZTzkOHuBeoJ_u8S6rJUFWkoZNyWEDZ5kUwXxoAFpj7H7xnk1EijGblpo9jRVnuca6zr4cZQvMlD9glGrYBqZASvQN_fSZxjLtpt4gsD4YqJAX2-pVCpBBVsB_dWtfMVidpLAKzBfDx2vtEgLfIEoqLOywoiG4bHpQmlGv_6myZNzCS8mCe6itlIwi9CeWWFS5K-hX40dyCiqRv5xHXQXC_IZPfizArHiydxwCknCWuYfBinkW1kh2ZgsZEhx6QZw8tON-ArTvnTKvxfen3rHnFOPh1wZoF2aREu-_5ph5t4sgpqJ2r2l-V1wAG3jcaXXQizug-NFydoqZKggggttKTpJ_PjzM3waxcNe6MM_taumL1apbg-hwkuMdH7a6PwvWESQtLT30UMyFdg9DM68vBQ96g9JIF1PahGzNY1FJ_-0lpIa_8wfl5aCi7M0TRihnK13syPMn72-wfAz3PpNQjVSdKGb8VgG1NmaevVH6D6XVqgq5utUTSEf0IrgwI15aEFkdly-W4Zj8QMetD21ejVcRWFuJDHr-mkNMx0yLCfypI7pVrdMtVtAmTdLlavGdcxeoYxRXPOOshC5c1FdlDEUElCOXyGfJIEKB_bSoL12QkNH455W6KrD93npSiNJPkPoRlbXJQ9gWNEvShvNeqmRsL1h5z-8yjcJJiiBBUQCJzXCGnM_YYoflauwIAnXzLl-CXhJU-ZrXNDIDkZFXqWIfCunC9gE_-H35Fe4H_F2bkiswCkhS02zc3iu-AOpu9muSgMDEzjZ-tivqQ5cEFSaWXRbY4_qQeodkJhvGAP-qQgb1hmNQ7vVyLzIstlQ5IRfZVW491oilmlUtsgReB5toNMlQN-VdnsW5fRb5WpmaQohptERoxE_fh_CCOdfD7qOno5FYZ7oaNwwFXVGrPa5aLVeL_4efnY45Pwds9qtjp2aDJNM9MH7o6f6j_ETptfhbxfTZOeBH-wL-9_V8m90ey4oByS3npo0OJ-etYRd2QTk4fDWPqqRs4Q2y2RLkByLjOY7CAZ3IDF1sa-Lp7ABrni1t9_MzmWJgZNtjb4VtdnkKiKJrWE3xauJa9X1tK6e1HtrxLRk9Ch_lMx_75cezLBGyoFG0GXxYxRLMtTd80ty8Bfk2bcKVTBKwOSNO_xxJgMtR9bH7-Jd6OlAT-6qBrtyYwuiIe910pSElg-rJcgqUOB2lSXuHSfdWKPfm2VQOUKKgpof17FjrGh5hiyZfPdqkIDx4iilht0G3zLkwUmf8BnbIjtWbGG2qrgfzApDgOkdoZySdGlakApTAAZcmMElswqKzD23ZGgU0H8zkqZHhqHMycmk77NPBmcK3DOwQMyQ4KASfAIK75U9cXm7V4QjkGhDqID14odYXZlgTRklE88nuyUMXQXzyZW4092vPUvsY0mPrCJT70X7F7QHmXYRXm65eYeAPWuYog2I8XJ9DB1-x_a2ftQfMK9XgfJY0rCOZ5j86ZDUySqkt6GEXgmyml7Y1ckUufhBKRMutG8a0qKkMKq8svkvehlLkfPzsJnrutvy5-IS7DJniWnunr_X2tP-npKEt4KrQKmxjyPRUP4wMcGFKbXJo2Na11RHNfDx_Q75YoDABRUdov6WdPdOvSM1bP6Kuywoib91jGIw8uTJyFYbH9DCfm41GTwmcBBESbjCV9n-pgj2JT_6n_DSSZDeAZ7-E7HvxrJLg55pTC9MZ16oZ_imhDk0VligJYdIvgAo0x2SEQbt5NBykrKS2rKmOiiPYig9RbcH2oGf70gaBJ13KE4rPJj7huYh97QXugYcBzmSZmjtzQnBE3LFR7sq2d_xc6UeG5uH59-vFbXX5gr0Rsup51-jjTGEATGDtuFlZSN_pRTHf4gmGxKBjVhQzCjCsEXLpfLtio5kB3hZsAlUX4E-Lg9HJFiEW08Re3Z8ZpqgMNI7_lU9aywFHQZQs481cThfS5XXXf4uojjD2A5fonwe5leFrVbuO1G3SJC9vPEBcPcqlPzz45tnDkuBuylhGxC7gnNfL9-rxkrHglmNCjMPBQTPzrz2AkN8b20rTJ7mfKJU77Xy38K7_gG4IwXL76rYSc2YsPSLnkvWrFgzCmYbpCWN4jgB86yFjUofOVSFDx7A3P6MgK3txxxIAcoa51ISmZj8lvZnSf70Ua35H4T-PZp_LgHoJlJFxahfvLv-aIvlYCz7mjOVnnsv8i4mGOTLlt8GXYKiPp_tdQ5vTsDHzqKGZa_MJB2d_u0GoU8tPQhhmhuGEedlIwSva7j5fUTU9yumK2Xq5uIdsn3A89ebjHAf9mkqo5_Xsq2QNfztTAu6NES73ZEr0BSNCMFT522Rla38iSoEUeQh5e7xLD6UsYY9_2uk3yYr6vPnKgJvLr2U6vA1L5IS-NtT3ewjJx-_2ImHVZtcvO423PK26TAsADNhZEUmoU_sJW47j8NJcJr62jRaEpbv9-AHzRdTMkHqts8N1gWaSZ78-HnS_Zil4uzsVjOk_vZyjuiSkmQbnZjX4fXQN91lU81p6EKrG8qFt3HFHQNlXb9OY40Wu2tUguqs7ziOBVhEs7ILYO9FBKOcqosgmR6zubX_NXcZv8ILRnPok7wgbPphtysAcgYlDBCdZ_M3Z-ITV0rHszuaE1Q1620HSvYIS_lgcaQePd-QgkHE1uJSri4foZ2mGpoEtzHaaV6U7-NVfuOk0nYO57VWCLtGC7X0Q7evqgl9zTulN8SL_K3QFsnVz1XdG7PRiSIpHAlEx8t81lkG8GDMsQ7trT1DZ9xPFfGgHBWNtY8K269G2Xkr3_rlBzJMcGb-zYpK9nNYH9AjUMeUKHtN7-OdLLKW35iFgtAf_LjlDi2578np4WR01Vz-76fjU85BgvnYjR8r6ZOvJHq0ZnrcOwmMLWbcuthzkqDUMbvtoaj3Yb54SEZaX3gFuBZEslUi2ZnDBDTO5xN3U3I4u66ZqRtQIIpf0-ABM9JkT0t_uRHwFOhLKc36Xa-m3DeDf5n4gzeEELl_8mwOisio35CHJ1Zj-TDruMWYnuRIA61k61IgMVR6XYBTHWvftx2vewLXki1UzGNEsRvVXpRZuxuqnCIgx1ZMqCUPc-N2rO-8tOu_uTWOCDf2VEgq4CSifgUB8cT4DQOMTehkU9LD_O2DO7HkTXhZXz481G0ultyXhr0UpyiYDZqmeotf1v1rb5SmyHK5FvQw15y3WGLFnFH_MMZKK_0JCb2vOny1AghBK9lwbgcw5yBmOVrETeFBuWo7CxBIbuRXZRIDn-so7ejyPggQGL-eUkMnG-NoXxR2SApji7fvcc_3Q0qWChzPz2lec6xPMOksb2ZDHGb8RBstHbl3fo7GQarFKZdLTNTXZP4jYF1iF-DorAxkLeqIBMLnCGe_68aeF60Vwbz83ETV1MNqY9bLHHYQ1pNVMppKejxlf_0krB2DHGz_LlE80v2fy1U3HeEFfS6bNlHv2KETd_xQBNv3YcQH7ahZYzmH0fDvdu_IytNsX4Apj66mZpj-ZL3vcbbiLmpL0oqgmYD0Yi6DOdF7FaKcSgYWpXZ7fFANEjuZ2XVMiMM1DOmk41ljoqYGsiDKkfKzYUswhowxgA3cNMpbCxT0AjwG-GNhcxQDFP_mDdAD8KROotzsQI5zYmNYhVGg4LSuwDE8hhxuufEDOofprWSnVEwAZCZno9FICjG7IznSM7p0deJzUqToaVfXMeixrrIIW3zcuEhhe6O1a2kYS1RK1_FNGr95fA1w6eVsUWRS8HEgQUZSY8iK_5nei5dYYCbFVgIrSlQMje5RMBUwH2BQR7nBkdOFw2nRqIBIuGScPH6RD0PzftuASwk4ctVvFkrb5P3UgrGOuz-PuucED1aA9pAG4vIWJXDMQmUCoZlbv8NAijGFIVnUBb_qZiE490dJq3sYh6-E-7fF9wfJKmkgjC4tzc8eBHJF_aMobN0seeHCsEYPIlDLC0G7FY1jqo-1Ivwmhe96mpvt7c8FopCgBTmdNBdy44WP00L0oLmDTGJkwatujRa1h900ZJ-c8Hi8B0Y22GNhxxzktr2pQ84XzKcYu02b9lJLcrj6Ri1PXH01ZgvvOD0nIPs4Lo10atDrHy8p3PRfs6zAnLS5iN3awYuLm8ZlFSpmlVsl5hMsVAGB2WimqlhFSnyY_CF_T30glSBt3Pfn_zkQcZKqpV39Y4U8ucDZSnqywDZiPLdJNqipGlzpULh96tXFqHVHo0KxFP-bx5t8VZ49rHkC-4iSoVtxSdVvHt-tM0wwKgXzu3M9DXseNN_2efyT1gY3BOAn09aI1vjNT5xNL09Bhwpp1D1g5m6FqrmX_of7EByEMI341WGso4APyoqvQ9mpmu1qLCdjgTOHb123YgpZIHy65M0TUHB2SkFO_e6A9-lVWiLmuUCr1QSGL5LIml5S1yDHANyiy2mtiyCJrIzITfrDUup2RJVXTOPjRldxlsnObzJyQv5PuMpeH49eyDKOYDbCZt7N0wEeuKGUmEqY5CdzbZTtHxDhM0MSil4l_jtmrlSqxvfqIkqd3YQlbAAq0IjJHLMHDj6OFC6rIqfloKwACetr88eqau3btq7AB72zSY0QGKxib7f9Fg438wAM7RIPQ9tdCOay0GS1IiqoC0yBNXB18G8vLoIUPxf4xAcp1p0FGRh4T8cTjCNCKEz2HDZh6cVDlRHoLma0COH_gA01tZcEVFx5zK7quY0p7eWaDY8FAAQCLqisWUPadFKXrO6srpwnCk6i50pE68nHZrOMNuQlu0VV-z5o4h7Z8eT3flu8Glpm7BYwWGm3nrrzros0bxsHCRFYe6zuGVo7b_S-8t9rRqhcsq5BQhfuCdq17oSMpeqExH8vY8o1FAge9yuQlvNLcxa-X_4KY4j_cOBWoYO2HKN38ErfwdvpwkCfn-Swtit94YpmXjqP-m1j5bFXyvHRCoDD-Bsfdm-YmyUUIMPA0_strzrFvSZ2krcHQZjMmytsyxQY23ZIEI_K5WDHJMMe2T5jBM9KgGFJ2Qgtfrn9uE5jRF5vQIkepszxHWGInbTfuFBXFoIC0aVKFPjIekIW8Ee3o5zDSfcSO0lGMLt9jte7oCuKZ0H3I_L59CMjf75_uIRg_hXINNTN93H2mL2ChGS-oYiypAJnLA_5v0UOkhIGa4SQkYUGXgNnAmfxm41D6h-dv_u3pCbNUN6xk0NCwiEqOiPkce01BQN-sf_-NBFg9JCcbLz_EzjrR_7bSjNWP2YUQZrfhus9ttSWrROo-rCEJQOFNPGdtfVc8KR8of7FTI5cXmpsYSTlyr_36Gn73k1v71B0q0ngeaExgkQLjnxEJD7Y4LIS7YGvWW1dkkfqWnWvIb49IgLvj9L9TGJo-z-13tr1_b9aznRPqvlKwLiltiBgnNlTWo9jTcrp3oXlmehteiYi41WOrL5_aNPfVH0NIArwp0EyeA8d2VT1EkNXVMrA8bD6D1XAh2DFvpvMnoM_pyXc4hA1vhEgkJRjOaAoEFY5QLbEXu-8M1nIYzOdcIW8K_3lDttB5qaT9K47ymo8p8Tvmx27I5Pf9cP3PUzJpy-ohZyE5bAzUmuSgxf0NyYdnS5RDuYGf-vL-b3pm09B0w3scWIH-16-Vmjl6PiQi7cVJVUabIsRKc_cd7WfTavubJXZLwpa1OtA-I-88aOaQ_K9KzgU649kW6_DrSNfArFW5gTg3HQGAv_5KmPpKENGrgwCVdPbcXJhccZJzb7CBekTU4ROI0V0plYA7_kgd4OuZ6BNdZtCLt4fp19WYsBblWuW9gpvEWWdyOjjD97zgS",
+      "summary": []
+    },
+    {
+      "id": "msg_080625fcd671829b006ace3ccf0a9087d0a9738674c231473f",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\n  \"questionId\": \"surface-tension-laplace-q16\",\n  \"stemPolarity\": \"POSITIVE\",\n  \"answerChoiceId\": \"C3\",\n  \"choices\": [\n    {\n      \"choiceId\": \"C1\",\n      \"verdict\": \"INAPPROPRIATE\",\n      \"nodes\": [\n        {\n          \"id\": \"C1-R1\",\n          \"type\": \"READ\",\n          \"operation\": \"구입 당시 빨간색 잉크의 출력 상태를 확인한다.\",\n          \"evidence\": \"〈보기〉에서 구입 직후 빨간색 잉크와 파란색 잉크 모두 안정적으로 출력되었다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E6\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C1-R2\",\n          \"type\": \"READ\",\n          \"operation\": \"안정적인 인쇄가 가능한 오네소르게 수의 범위를 확인한다.\",\n          \"evidence\": \"일반적으로 오네소르게 수가 대략 0.1에서 1.0 사이이면 안정적인 인쇄가 가능하다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C1-L1\",\n          \"type\": \"LINK\",\n          \"operation\": \"구입 당시 빨간색 잉크도 인쇄의 적정 범위에 있었다고 추론한다.\",\n          \"evidence\": \"빨간색 잉크도 안정적으로 출력되었으므로 구입 당시 오네소르게 수는 대략 0.1에서 1.0 사이에 있었다고 볼 수 있다.\",\n          \"dependsOn\": [\n            \"C1-R1\",\n            \"C1-R2\"\n          ],\n          \"layer\": 2,\n          \"element\": \"E6\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C1-A1\",\n          \"type\": \"APPLY\",\n          \"operation\": \"구입 당시 빨간색 잉크는 파란색 잉크와 달리 적정 범위에 있지 않았다는 대조를 판정한다.\",\n          \"evidence\": \"빨간색 잉크도 적정 범위에 있었으므로 '구입 당시의 빨간색 잉크의 오네소르게 수와 달리'라는 진술은 부적절하다.\",\n          \"dependsOn\": [\n            \"C1-L1\"\n          ],\n          \"layer\": 3,\n          \"element\": \"E7\",\n          \"outsideVocabulary\": null\n        }\n      ],\n      \"depth\": 4,\n      \"coreElement\": \"E7\"\n    },\n    {\n      \"choiceId\": \"C2\",\n      \"verdict\": \"INAPPROPRIATE\",\n      \"nodes\": [\n        {\n          \"id\": \"C2-R1\",\n          \"type\": \"READ\",\n          \"operation\": \"두 달 후 빨간색 잉크의 변화를 점도 증가 및 분사 불능에 대응시킨다.\",\n          \"evidence\": \"빨간색 잉크는 구입 당시보다 더 끈적끈적해졌고 노즐에서 나오지 않았다. 지문에서 끈적끈적할수록 점도가 크다고 했다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E6\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C2-R2\",\n          \"type\": \"READ\",\n          \"operation\": \"점도 증가에 따른 오네소르게 수의 변화 방향을 확인한다.\",\n          \"evidence\": \"오네소르게 수는 잉크의 점도가 클수록 크다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E4\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C2-R3\",\n          \"type\": \"READ\",\n          \"operation\": \"오네소르게 수가 적정 범위보다 클 때의 출력 상태를 확인한다.\",\n          \"evidence\": \"적정 범위는 대략 0.1에서 1.0 사이이며, 점도가 커서 오네소르게 수가 이 범위보다 커지면 잉크가 노즐 밖으로 나오지 못한다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C2-L1\",\n          \"type\": \"LINK\",\n          \"operation\": \"첨가제로 정상 인쇄를 회복하려면 높아진 오네소르게 수가 적정 범위로 낮아져야 함을 도출한다.\",\n          \"evidence\": \"점도가 증가하여 분사되지 않는 상태는 오네소르게 수가 적정 범위보다 높아진 경우에 해당하므로, 정상 인쇄를 회복하는 변화는 오네소르게 수의 감소이다.\",\n          \"dependsOn\": [\n            \"C2-R1\",\n            \"C2-R2\",\n            \"C2-R3\"\n          ],\n          \"layer\": 2,\n          \"element\": \"E8\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C2-A1\",\n          \"type\": \"APPLY\",\n          \"operation\": \"정상 인쇄를 회복한 뒤 오네소르게 수가 더 커졌다는 진술을 판정한다.\",\n          \"evidence\": \"성공적으로 인쇄되었다면 오네소르게 수가 적정 범위로 낮아진 것이므로, '더 커진 것'이라는 진술은 변화 방향을 뒤집었다.\",\n          \"dependsOn\": [\n            \"C2-L1\"\n          ],\n          \"layer\": 3,\n          \"element\": \"E4\",\n          \"outsideVocabulary\": null\n        }\n      ],\n      \"depth\": 5,\n      \"coreElement\": \"E4\"\n    },\n    {\n      \"choiceId\": \"C3\",\n      \"verdict\": \"APPROPRIATE\",\n      \"nodes\": [\n        {\n          \"id\": \"C3-R1\",\n          \"type\": \"READ\",\n          \"operation\": \"오네소르게 수를 결정하는 요인들의 관계를 확인한다.\",\n          \"evidence\": \"오네소르게 수는 점도가 클수록 크고, 표면 장력·밀도·노즐 지름의 곱이 클수록 작다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E4\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C3-L1\",\n          \"type\": \"LINK\",\n          \"operation\": \"선지의 변경 조건에 따라 표면 장력·밀도·노즐 지름의 곱이 어떻게 변하는지 계산한다.\",\n          \"evidence\": \"표면 장력을 유지하고 밀도를 두 배, 노즐 지름을 반으로 바꾸면 세 값의 곱은 기존 곱의 2×1/2=1배로 유지된다.\",\n          \"dependsOn\": [\n            \"C3-R1\"\n          ],\n          \"layer\": 2,\n          \"element\": null,\n          \"outsideVocabulary\": \"곱의 배율 계산\"\n        },\n        {\n          \"id\": \"C3-L2\",\n          \"type\": \"LINK\",\n          \"operation\": \"점도와 나머지 세 요인의 곱이 모두 유지되므로 오네소르게 수가 같음을 도출한다.\",\n          \"evidence\": \"선지에서 점도는 유지되며, 계산 결과 표면 장력·밀도·노즐 지름의 곱도 유지되므로 오네소르게 수는 변하지 않는다.\",\n          \"dependsOn\": [\n            \"C3-R1\",\n            \"C3-L1\"\n          ],\n          \"layer\": 3,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C3-A1\",\n          \"type\": \"APPLY\",\n          \"operation\": \"제시된 변경 조건에서 오네소르게 수가 변함없다는 진술을 판정한다.\",\n          \"evidence\": \"점도와 세 요인의 곱이 모두 동일하게 유지되므로 선지의 결론은 적절하다.\",\n          \"dependsOn\": [\n            \"C3-L2\"\n          ],\n          \"layer\": 4,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        }\n      ],\n      \"depth\": 4,\n      \"coreElement\": null\n    },\n    {\n      \"choiceId\": \"C4\",\n      \"verdict\": \"INAPPROPRIATE\",\n      \"nodes\": [\n        {\n          \"id\": \"C4-R1\",\n          \"type\": \"READ\",\n          \"operation\": \"파란색 잉크의 구입 당시 출력 상태와 두 달 후의 상태를 확인한다.\",\n          \"evidence\": \"구입 당시 파란색 잉크는 안정적으로 출력되었고, 두 달 후에도 구입했을 때와 차이가 없었다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E6\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C4-R2\",\n          \"type\": \"READ\",\n          \"operation\": \"오네소르게 수의 결정 요인을 확인한다.\",\n          \"evidence\": \"오네소르게 수는 잉크의 점도, 표면 장력, 밀도와 노즐 지름에 의해 결정된다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E10\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C4-R3\",\n          \"type\": \"READ\",\n          \"operation\": \"안정적인 인쇄에 해당하는 적정 범위를 확인한다.\",\n          \"evidence\": \"오네소르게 수가 대략 0.1에서 1.0 사이이면 안정적인 인쇄가 가능하다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C4-L1\",\n          \"type\": \"LINK\",\n          \"operation\": \"두 달 후 파란색 잉크의 오네소르게 수도 구입 당시의 적정 범위에 유지됨을 도출한다.\",\n          \"evidence\": \"구입 당시 안정적으로 출력되었고 두 달 후 잉크에 차이가 없으므로, 같은 노즐에서 오네소르게 수가 적정 범위를 벗어날 변화가 없다.\",\n          \"dependsOn\": [\n            \"C4-R1\",\n            \"C4-R2\",\n            \"C4-R3\"\n          ],\n          \"layer\": 2,\n          \"element\": \"E8\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C4-A1\",\n          \"type\": \"APPLY\",\n          \"operation\": \"두 달 후 파란색 잉크가 적정 범위를 벗어났다는 진술을 판정한다.\",\n          \"evidence\": \"파란색 잉크의 오네소르게 수는 구입 당시와 같이 적정 범위에 유지되므로 선지는 부적절하다.\",\n          \"dependsOn\": [\n            \"C4-L1\"\n          ],\n          \"layer\": 3,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        }\n      ],\n      \"depth\": 5,\n      \"coreElement\": \"E5\"\n    },\n    {\n      \"choiceId\": \"C5\",\n      \"verdict\": \"INAPPROPRIATE\",\n      \"nodes\": [\n        {\n          \"id\": \"C5-R1\",\n          \"type\": \"READ\",\n          \"operation\": \"파란색 잉크의 구입 당시 출력 상태를 확인한다.\",\n          \"evidence\": \"구입 직후 파란색 잉크는 안정적으로 출력되었다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E6\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C5-R2\",\n          \"type\": \"READ\",\n          \"operation\": \"끈적거림과 점도, 점도와 오네소르게 수의 관계를 확인한다.\",\n          \"evidence\": \"액체가 끈적끈적할수록 점도가 크며, 오네소르게 수는 점도가 클수록 크다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E4\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C5-R3\",\n          \"type\": \"READ\",\n          \"operation\": \"안정적인 인쇄 범위와 위성 잉크 방울의 발생 조건을 확인한다.\",\n          \"evidence\": \"안정적인 인쇄 범위는 대략 0.1에서 1.0 사이이다. 오네소르게 수가 이 범위보다 큰 경우와 반대로, 범위보다 작으면 수많은 위성 잉크 방울이 생긴다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C5-L1\",\n          \"type\": \"LINK\",\n          \"operation\": \"밀도와 표면 장력이 유지된 상태의 점도 증가는 위성 잉크 방울의 발생 조건으로 이어지지 않음을 도출한다.\",\n          \"evidence\": \"같은 노즐에서 밀도와 표면 장력이 유지되고 점도가 증가하면, 구입 당시 적정 범위에 있던 오네소르게 수는 증가하므로 적정 범위 아래로 내려가지 않는다.\",\n          \"dependsOn\": [\n            \"C5-R1\",\n            \"C5-R2\",\n            \"C5-R3\"\n          ],\n          \"layer\": 2,\n          \"element\": \"E8\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C5-A1\",\n          \"type\": \"APPLY\",\n          \"operation\": \"제시된 점도 증가 조건에서 위성 잉크 방울이 생성될 수 있다는 진술을 판정한다.\",\n          \"evidence\": \"점도 증가는 오네소르게 수를 높이는 변화이며, 위성 잉크 방울은 오네소르게 수가 적정 범위보다 낮을 때 발생하므로 선지는 부적절하다.\",\n          \"dependsOn\": [\n            \"C5-L1\"\n          ],\n          \"layer\": 3,\n          \"element\": \"E4\",\n          \"outsideVocabulary\": null\n        }\n      ],\n      \"depth\": 5,\n      \"coreElement\": \"E4\"\n    }\n  ]\n}"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": "24h",
+  "reasoning": {
+    "context": "all_turns",
+    "effort": "medium",
+    "mode": "standard",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "description": null,
+      "name": "answer_path_map",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": "string"
+          },
+          "stemPolarity": {
+            "type": "string",
+            "enum": [
+              "POSITIVE",
+              "NEGATIVE"
+            ]
+          },
+          "answerChoiceId": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "choiceId": {
+                  "type": "string"
+                },
+                "verdict": {
+                  "type": "string",
+                  "enum": [
+                    "APPROPRIATE",
+                    "INAPPROPRIATE"
+                  ]
+                },
+                "nodes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "READ",
+                          "LINK",
+                          "APPLY"
+                        ]
+                      },
+                      "operation": {
+                        "type": "string"
+                      },
+                      "evidence": {
+                        "type": "string"
+                      },
+                      "dependsOn": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "layer": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "element": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "E1",
+                              "E2",
+                              "E3",
+                              "E4",
+                              "E5",
+                              "E6",
+                              "E7",
+                              "E8",
+                              "E9",
+                              "E10"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "outsideVocabulary": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "type",
+                      "operation",
+                      "evidence",
+                      "dependsOn",
+                      "layer",
+                      "element",
+                      "outsideVocabulary"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "depth": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "coreElement": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "E1",
+                        "E2",
+                        "E3",
+                        "E4",
+                        "E5",
+                        "E6",
+                        "E7",
+                        "E8",
+                        "E9",
+                        "E10"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "choiceId",
+                "verdict",
+                "nodes",
+                "depth",
+                "coreElement"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "questionId",
+          "stemPolarity",
+          "answerChoiceId",
+          "choices"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tool_usage": {
+    "image_gen": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "web_search": {
+      "num_requests": 0
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 4191,
+    "input_tokens_details": {
+      "cache_write_tokens": 1996,
+      "cached_tokens": 2192
+    },
+    "output_tokens": 3695,
+    "output_tokens_details": {
+      "reasoning_tokens": 451
+    },
+    "total_tokens": 7886
+  },
+  "user": null,
+  "metadata": {},
+  "output_text": "{\n  \"questionId\": \"surface-tension-laplace-q16\",\n  \"stemPolarity\": \"POSITIVE\",\n  \"answerChoiceId\": \"C3\",\n  \"choices\": [\n    {\n      \"choiceId\": \"C1\",\n      \"verdict\": \"INAPPROPRIATE\",\n      \"nodes\": [\n        {\n          \"id\": \"C1-R1\",\n          \"type\": \"READ\",\n          \"operation\": \"구입 당시 빨간색 잉크의 출력 상태를 확인한다.\",\n          \"evidence\": \"〈보기〉에서 구입 직후 빨간색 잉크와 파란색 잉크 모두 안정적으로 출력되었다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E6\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C1-R2\",\n          \"type\": \"READ\",\n          \"operation\": \"안정적인 인쇄가 가능한 오네소르게 수의 범위를 확인한다.\",\n          \"evidence\": \"일반적으로 오네소르게 수가 대략 0.1에서 1.0 사이이면 안정적인 인쇄가 가능하다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C1-L1\",\n          \"type\": \"LINK\",\n          \"operation\": \"구입 당시 빨간색 잉크도 인쇄의 적정 범위에 있었다고 추론한다.\",\n          \"evidence\": \"빨간색 잉크도 안정적으로 출력되었으므로 구입 당시 오네소르게 수는 대략 0.1에서 1.0 사이에 있었다고 볼 수 있다.\",\n          \"dependsOn\": [\n            \"C1-R1\",\n            \"C1-R2\"\n          ],\n          \"layer\": 2,\n          \"element\": \"E6\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C1-A1\",\n          \"type\": \"APPLY\",\n          \"operation\": \"구입 당시 빨간색 잉크는 파란색 잉크와 달리 적정 범위에 있지 않았다는 대조를 판정한다.\",\n          \"evidence\": \"빨간색 잉크도 적정 범위에 있었으므로 '구입 당시의 빨간색 잉크의 오네소르게 수와 달리'라는 진술은 부적절하다.\",\n          \"dependsOn\": [\n            \"C1-L1\"\n          ],\n          \"layer\": 3,\n          \"element\": \"E7\",\n          \"outsideVocabulary\": null\n        }\n      ],\n      \"depth\": 4,\n      \"coreElement\": \"E7\"\n    },\n    {\n      \"choiceId\": \"C2\",\n      \"verdict\": \"INAPPROPRIATE\",\n      \"nodes\": [\n        {\n          \"id\": \"C2-R1\",\n          \"type\": \"READ\",\n          \"operation\": \"두 달 후 빨간색 잉크의 변화를 점도 증가 및 분사 불능에 대응시킨다.\",\n          \"evidence\": \"빨간색 잉크는 구입 당시보다 더 끈적끈적해졌고 노즐에서 나오지 않았다. 지문에서 끈적끈적할수록 점도가 크다고 했다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E6\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C2-R2\",\n          \"type\": \"READ\",\n          \"operation\": \"점도 증가에 따른 오네소르게 수의 변화 방향을 확인한다.\",\n          \"evidence\": \"오네소르게 수는 잉크의 점도가 클수록 크다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E4\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C2-R3\",\n          \"type\": \"READ\",\n          \"operation\": \"오네소르게 수가 적정 범위보다 클 때의 출력 상태를 확인한다.\",\n          \"evidence\": \"적정 범위는 대략 0.1에서 1.0 사이이며, 점도가 커서 오네소르게 수가 이 범위보다 커지면 잉크가 노즐 밖으로 나오지 못한다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C2-L1\",\n          \"type\": \"LINK\",\n          \"operation\": \"첨가제로 정상 인쇄를 회복하려면 높아진 오네소르게 수가 적정 범위로 낮아져야 함을 도출한다.\",\n          \"evidence\": \"점도가 증가하여 분사되지 않는 상태는 오네소르게 수가 적정 범위보다 높아진 경우에 해당하므로, 정상 인쇄를 회복하는 변화는 오네소르게 수의 감소이다.\",\n          \"dependsOn\": [\n            \"C2-R1\",\n            \"C2-R2\",\n            \"C2-R3\"\n          ],\n          \"layer\": 2,\n          \"element\": \"E8\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C2-A1\",\n          \"type\": \"APPLY\",\n          \"operation\": \"정상 인쇄를 회복한 뒤 오네소르게 수가 더 커졌다는 진술을 판정한다.\",\n          \"evidence\": \"성공적으로 인쇄되었다면 오네소르게 수가 적정 범위로 낮아진 것이므로, '더 커진 것'이라는 진술은 변화 방향을 뒤집었다.\",\n          \"dependsOn\": [\n            \"C2-L1\"\n          ],\n          \"layer\": 3,\n          \"element\": \"E4\",\n          \"outsideVocabulary\": null\n        }\n      ],\n      \"depth\": 5,\n      \"coreElement\": \"E4\"\n    },\n    {\n      \"choiceId\": \"C3\",\n      \"verdict\": \"APPROPRIATE\",\n      \"nodes\": [\n        {\n          \"id\": \"C3-R1\",\n          \"type\": \"READ\",\n          \"operation\": \"오네소르게 수를 결정하는 요인들의 관계를 확인한다.\",\n          \"evidence\": \"오네소르게 수는 점도가 클수록 크고, 표면 장력·밀도·노즐 지름의 곱이 클수록 작다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E4\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C3-L1\",\n          \"type\": \"LINK\",\n          \"operation\": \"선지의 변경 조건에 따라 표면 장력·밀도·노즐 지름의 곱이 어떻게 변하는지 계산한다.\",\n          \"evidence\": \"표면 장력을 유지하고 밀도를 두 배, 노즐 지름을 반으로 바꾸면 세 값의 곱은 기존 곱의 2×1/2=1배로 유지된다.\",\n          \"dependsOn\": [\n            \"C3-R1\"\n          ],\n          \"layer\": 2,\n          \"element\": null,\n          \"outsideVocabulary\": \"곱의 배율 계산\"\n        },\n        {\n          \"id\": \"C3-L2\",\n          \"type\": \"LINK\",\n          \"operation\": \"점도와 나머지 세 요인의 곱이 모두 유지되므로 오네소르게 수가 같음을 도출한다.\",\n          \"evidence\": \"선지에서 점도는 유지되며, 계산 결과 표면 장력·밀도·노즐 지름의 곱도 유지되므로 오네소르게 수는 변하지 않는다.\",\n          \"dependsOn\": [\n            \"C3-R1\",\n            \"C3-L1\"\n          ],\n          \"layer\": 3,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C3-A1\",\n          \"type\": \"APPLY\",\n          \"operation\": \"제시된 변경 조건에서 오네소르게 수가 변함없다는 진술을 판정한다.\",\n          \"evidence\": \"점도와 세 요인의 곱이 모두 동일하게 유지되므로 선지의 결론은 적절하다.\",\n          \"dependsOn\": [\n            \"C3-L2\"\n          ],\n          \"layer\": 4,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        }\n      ],\n      \"depth\": 4,\n      \"coreElement\": null\n    },\n    {\n      \"choiceId\": \"C4\",\n      \"verdict\": \"INAPPROPRIATE\",\n      \"nodes\": [\n        {\n          \"id\": \"C4-R1\",\n          \"type\": \"READ\",\n          \"operation\": \"파란색 잉크의 구입 당시 출력 상태와 두 달 후의 상태를 확인한다.\",\n          \"evidence\": \"구입 당시 파란색 잉크는 안정적으로 출력되었고, 두 달 후에도 구입했을 때와 차이가 없었다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E6\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C4-R2\",\n          \"type\": \"READ\",\n          \"operation\": \"오네소르게 수의 결정 요인을 확인한다.\",\n          \"evidence\": \"오네소르게 수는 잉크의 점도, 표면 장력, 밀도와 노즐 지름에 의해 결정된다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E10\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C4-R3\",\n          \"type\": \"READ\",\n          \"operation\": \"안정적인 인쇄에 해당하는 적정 범위를 확인한다.\",\n          \"evidence\": \"오네소르게 수가 대략 0.1에서 1.0 사이이면 안정적인 인쇄가 가능하다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C4-L1\",\n          \"type\": \"LINK\",\n          \"operation\": \"두 달 후 파란색 잉크의 오네소르게 수도 구입 당시의 적정 범위에 유지됨을 도출한다.\",\n          \"evidence\": \"구입 당시 안정적으로 출력되었고 두 달 후 잉크에 차이가 없으므로, 같은 노즐에서 오네소르게 수가 적정 범위를 벗어날 변화가 없다.\",\n          \"dependsOn\": [\n            \"C4-R1\",\n            \"C4-R2\",\n            \"C4-R3\"\n          ],\n          \"layer\": 2,\n          \"element\": \"E8\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C4-A1\",\n          \"type\": \"APPLY\",\n          \"operation\": \"두 달 후 파란색 잉크가 적정 범위를 벗어났다는 진술을 판정한다.\",\n          \"evidence\": \"파란색 잉크의 오네소르게 수는 구입 당시와 같이 적정 범위에 유지되므로 선지는 부적절하다.\",\n          \"dependsOn\": [\n            \"C4-L1\"\n          ],\n          \"layer\": 3,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        }\n      ],\n      \"depth\": 5,\n      \"coreElement\": \"E5\"\n    },\n    {\n      \"choiceId\": \"C5\",\n      \"verdict\": \"INAPPROPRIATE\",\n      \"nodes\": [\n        {\n          \"id\": \"C5-R1\",\n          \"type\": \"READ\",\n          \"operation\": \"파란색 잉크의 구입 당시 출력 상태를 확인한다.\",\n          \"evidence\": \"구입 직후 파란색 잉크는 안정적으로 출력되었다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E6\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C5-R2\",\n          \"type\": \"READ\",\n          \"operation\": \"끈적거림과 점도, 점도와 오네소르게 수의 관계를 확인한다.\",\n          \"evidence\": \"액체가 끈적끈적할수록 점도가 크며, 오네소르게 수는 점도가 클수록 크다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E4\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C5-R3\",\n          \"type\": \"READ\",\n          \"operation\": \"안정적인 인쇄 범위와 위성 잉크 방울의 발생 조건을 확인한다.\",\n          \"evidence\": \"안정적인 인쇄 범위는 대략 0.1에서 1.0 사이이다. 오네소르게 수가 이 범위보다 큰 경우와 반대로, 범위보다 작으면 수많은 위성 잉크 방울이 생긴다.\",\n          \"dependsOn\": [],\n          \"layer\": 1,\n          \"element\": \"E5\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C5-L1\",\n          \"type\": \"LINK\",\n          \"operation\": \"밀도와 표면 장력이 유지된 상태의 점도 증가는 위성 잉크 방울의 발생 조건으로 이어지지 않음을 도출한다.\",\n          \"evidence\": \"같은 노즐에서 밀도와 표면 장력이 유지되고 점도가 증가하면, 구입 당시 적정 범위에 있던 오네소르게 수는 증가하므로 적정 범위 아래로 내려가지 않는다.\",\n          \"dependsOn\": [\n            \"C5-R1\",\n            \"C5-R2\",\n            \"C5-R3\"\n          ],\n          \"layer\": 2,\n          \"element\": \"E8\",\n          \"outsideVocabulary\": null\n        },\n        {\n          \"id\": \"C5-A1\",\n          \"type\": \"APPLY\",\n          \"operation\": \"제시된 점도 증가 조건에서 위성 잉크 방울이 생성될 수 있다는 진술을 판정한다.\",\n          \"evidence\": \"점도 증가는 오네소르게 수를 높이는 변화이며, 위성 잉크 방울은 오네소르게 수가 적정 범위보다 낮을 때 발생하므로 선지는 부적절하다.\",\n          \"dependsOn\": [\n            \"C5-L1\"\n          ],\n          \"layer\": 3,\n          \"element\": \"E4\",\n          \"outsideVocabulary\": null\n        }\n      ],\n      \"depth\": 5,\n      \"coreElement\": \"E4\"\n    }\n  ]\n}"
+}

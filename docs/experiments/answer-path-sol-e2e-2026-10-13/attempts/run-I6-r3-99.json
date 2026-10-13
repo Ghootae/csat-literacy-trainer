@@ -1,0 +1,301 @@
+{
+  "id": "resp_06fecd861e72e6c3006ace40fef77087d0a11297f859e68680",
+  "object": "response",
+  "created_at": 1791901950,
+  "status": "completed",
+  "access_programs": null,
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1791901956,
+  "error": null,
+  "frequency_penalty": 0,
+  "incomplete_details": null,
+  "instructions": "동결된 sol 문항 지도와 원문으로 학생 풀이 하나를 독립 채점한다. 출력 스키마에 따라 JSON만 반환한다. 지도는 변경하지 않는다. caseId와 selectedChoiceId는 입력 그대로다. CORRECT의 depth는 정답 선지의 노드 수, 다른 결과의 depth는 null이다. CORRECT 실패 필드와 nodeElement·overrideQuote는 모두 null이다. WRONG_NO_RATIONALE 실패 필드도 모두 null이다. POLARITY_FAILURE는 failedElement E1, 다른 실패 필드 null이다. WRONG 미확정은 failedOperation UNDETERMINED, failedNodeId·failedElement null, candidates에 후보를 남긴다. 확정 WRONG은 선택 선지의 노드 ID·종류·요소를 사용한다. 덮어쓰지 않으면 nodeElement와 overrideQuote는 null이다. 덮어쓰면 nodeElement는 원래 노드 요소, overrideQuote는 풀이 원문 인용이다. tags는 CORRECT에만 쓰고 중복 없이 출력한다. studentQuote는 판단에 쓴 풀이의 부분 문자열 그대로, 없으면 null이다. 후보는 UNDETERMINED에만 남긴다.\n\n## 어휘\n\n| 코드 | 요소 | 해냈다는 것은 | 짝 함정 |\n|---|---|---|---|\n| E1 | 발문 유지 | 발문의 방향(적절한/않은)과 조건(〈보기〉 관점 등)을 끝까지 지켜 선택한다 | POLARITY |\n| E2 | 지시 대상 확정 | 기호·ⓐ·대명사·\"이것\"이 가리키는 대상을 지문에서 확정한다 | REFERENT |\n| E3 | 입장·지위 구분 | 누구의 주장인지, 그것이 사실·현행인지 주장·제안·가정인지 구분한다 | ATTRIBUTION |\n| E4 | 관계 방향 파악 | 인과·증감·비례·대립의 방향을 바르게 읽는다 | DIRECTION |\n| E5 | 조건·범위 대조 | 한정어·조건·범위를 선지와 지문에서 맞춰 본다 | CONDITION, SCOPE |\n| E6 | 사례 대응 | 〈보기〉의 인물·현상을 지문 개념의 요건에 하나씩 대응시킨다 | MAPPING |\n| E7 | 의미 동일성 판별 | 표현이 달라도 같은 뜻, 표현이 같아도 다른 뜻을 가려낸다 | PARAPHRASE_DISTANCE, SURFACE_MATCH |\n| E8 | 근거 결합 | 둘 이상의 문장·문단 근거를 이어 하나의 결론을 낸다 | MULTI_STEP |\n| E9 | 지문 근거 고수 | 상식·배경지식이 아니라 지문 근거로 판정한다 | OUTSIDE_KNOWLEDGE |\n| E10 | 사실 정확 포착 | 값·속성·동일성 같은 사실 정보를 정확히 읽는다 | MISREAD_FACT |\n\n## v0.1 개정 규칙 (D-0121)\n\n### 문항 지도: 층 구조\n\n- **노드** = 선지 판정에 필요한 연산 하나. 종류는 셋이다.\n  - `READ` 근거 읽기: 지문·〈보기〉에 적힌 사실·관계·입장·지시 대상을 확정한다. 〈보기〉 대상이 지문의 어느 개념에 해당하는지의 단순 확인도 포함한다. 기호(ⓐ 등) 확정은 항상 별도 `READ` 노드(E2).\n  - `LINK` 연결: 확정한 근거 둘 이상을 결합하거나, 하나를 변환(함축·방향 뒤집기·계산)해 지문에 직접 적히지 않은 중간 결론을 얻는다.\n  - `APPLY` 적용·판정: 중간 결론을 선지에 대어 적절/부적절을 판정한다. 선지당 정확히 1개, 최상층. 선지와의 최종 대조는 별도 노드로 세지 않고 여기에 포함한다.\n- **필요한 노드만**: 부적절 선지는 틀린 부분 판정에 필요한 노드만, 적절 선지는 선지의 모든 진술 확인에 필요한 노드를 넣는다. 해설용 부가 설명은 넣지 않는다.\n- **층**: 노드마다 의존하는 노드를 적는다. 의존이 없으면 1층, 아니면 의존 노드 최대 층 + 1. 같은 층 안에는 순서가 없다.\n- ~~**깊이** = 최상층(`APPLY`) 층수.~~ → **D-0122로 대체: 깊이 = 선지의 노드 수**(`READ` + `LINK` + `APPLY`). 층은 지도 구조(의존 관계 표시)로만 남기고 지표로 쓰지 않는다. 파일럿 2차에서 10개 선지 중 9개가 3층으로 수렴해 변별력이 없었다.\n- **요소**: 노드마다 요소 0~1개. E6은 〈보기〉의 대상·상황을 지문 개념의 요건에 대응시키는 연산에만 붙인다. 어휘에 맞는 요소가 없으면(예: 계산) `null`과 `outsideVocabulary` 메모를 남긴다(어휘는 바꾸지 않는다). 선지 요소 개수 상한(1~3)은 폐지하고, 핵심 요소 하나만 표시한다.\n\n### 채점\n\n- **정답**: 근거와 무관하게 정답 선지의 모든 노드·요소 성공, 깊이 = 정답 선지 노드 수(D-0122). 풀이에 이미 드러난 문제는 꼬리표로만 남긴다: `GUESS_STATED`(찍음 명시), `RATIONALE_ERROR`(근거 오류, 인용 포함). 꼬리표는 성공 집계를 바꾸지 않는다.\n- **오답(근거 있음)**: 위치(%) 대신 오류가 드러난 **노드 종류**(`READ`/`LINK`/`APPLY`)와 요소를 기록한다. 앞선 노드의 성공은 보충하지 않는다. 하나로 정할 수 없으면 `UNDETERMINED`와 후보를 남기고 종류 집계에서 뺀다.\n- **명시적 오진술 우선(D-0123)**: 오답 풀이에 지문·〈보기〉와 어긋나는 사실 진술(과잉 일반화·방향 뒤집기·주체 바꾸기 포함)이 있으면, 그 사실을 확정하는 `READ` 노드의 실패로 기록한다. 그런 진술이 없고 읽은 사실은 맞는데 잇거나 적용하는 데서 틀렸을 때만 `LINK`·`APPLY`로 기록한다. 오진술이 여러 개면 판정에 직접 쓰인 것을 고른다.\n- **실패 요소 덮어쓰기(D-0124)**: 실패 요소의 기본값은 실패 노드에 붙은 요소다. 풀이에 다른 요소의 오류가 **말로 드러날 때만** 그 요소로 바꿔 기록한다(예: \"말이 안 되니까\", \"상식적으로\", \"당연히\" → E9). 덮어쓸 때는 `failedElement`에 새 요소, `nodeElement`에 원래 노드 요소, `overrideQuote`에 근거 인용을 남긴다. 실패 노드·종류는 바꾸지 않는다. 드러난 증거가 없으면 덮어쓰지 않는다.\n- **오답(근거 없음)**, **극성 실패**: v0과 같다(극성 실패는 E1 실패, 종류 없음).\n\n### 누적 지표\n\n| 지표 | 계산 | 문구 예 |\n|---|---|---|\n| 깊이별 정답 | 정답 선지 노드 수별 풀이 수·정답 수 | \"근거·연결 3~4개 문항 10개 중 8개, 7개 문항 6개 중 2개\" |\n| 정답 꼬리표 | 정답 중 `GUESS_STATED`·`RATIONALE_ERROR` 수 | \"맞힌 14개 중 찍음 2, 근거 오류 1\" |\n| 오답 분모 | 전체 오답, 종류 관측, 미확정, 근거 없음, 극성 실패 | \"오답 12개 중 원인 관측 8개\" |\n| 실패 종류 분포 | 종류 관측 오답의 `READ`/`LINK`/`APPLY` 수 | \"적용·판정 5 · 연결 2 · 근거 읽기 1\" |\n| 요소별 성공·실패 | 위 규칙으로 센 횟수 | \"사례 대응 4/6\" |\n\n리포트에서 \"실제로 n단계까지 사고했다\", \"사슬의 n% 지점까지 도달했다\"는 표현은 쓰지 않는다.\n\n### 일관성 확인\n\n문항 지도는 동결하므로 실행 간 차이가 없다. 채점은 같은 풀이를 독립적으로 두 번 채점해 결과·실패 종류·요소·꼬리표가 같은지 확인한다. 어휘·규칙 버전이 바뀌면 과거 풀이를 새 버전으로 다시 채점해야 변화 비교가 성립한다.\n",
+  "max_output_tokens": 3500,
+  "max_tool_calls": null,
+  "model": "gpt-6.1-sol",
+  "moderation": null,
+  "output": [
+    {
+      "id": "msg_06fecd861e72e6c3006ace41016b4087d08b2aaab2c3c3b0c0",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\"caseId\":\"I6\",\"selectedChoiceId\":\"C5\",\"result\":\"CORRECT\",\"depth\":3,\"tags\":[\"RATIONALE_ERROR\"],\"failedOperation\":null,\"failedNodeId\":null,\"failedElement\":null,\"nodeElement\":null,\"overrideQuote\":null,\"candidates\":[],\"studentQuote\":\"헌법 재판소의 소수 의견이 실명 확인을 안 한 언론사에 대한 제재 규정을 위헌으로 결정했으니\",\"reason\":\"정답 선지 C5를 선택했다. 다만 해당 제재 규정을 위헌으로 결정한 것은 소수 의견이 아니라 다수 의견이므로, 판단 주체를 잘못 진술한 근거 오류를 꼬리표로 기록한다.\"}"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": "24h",
+  "reasoning": {
+    "context": "all_turns",
+    "effort": "medium",
+    "mode": "standard",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "description": null,
+      "name": "answer_path_run",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "caseId": {
+            "type": "string"
+          },
+          "selectedChoiceId": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "CORRECT",
+              "WRONG",
+              "WRONG_NO_RATIONALE",
+              "POLARITY_FAILURE"
+            ]
+          },
+          "depth": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "GUESS_STATED",
+                "RATIONALE_ERROR"
+              ]
+            }
+          },
+          "failedOperation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "READ",
+                  "LINK",
+                  "APPLY",
+                  "UNDETERMINED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failedNodeId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failedElement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "E1",
+                  "E2",
+                  "E3",
+                  "E4",
+                  "E5",
+                  "E6",
+                  "E7",
+                  "E8",
+                  "E9",
+                  "E10"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nodeElement": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "E1",
+                  "E2",
+                  "E3",
+                  "E4",
+                  "E5",
+                  "E6",
+                  "E7",
+                  "E8",
+                  "E9",
+                  "E10"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overrideQuote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "nodeId": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "READ",
+                    "LINK",
+                    "APPLY"
+                  ]
+                },
+                "element": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "E1",
+                        "E2",
+                        "E3",
+                        "E4",
+                        "E5",
+                        "E6",
+                        "E7",
+                        "E8",
+                        "E9",
+                        "E10"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "nodeId",
+                "type",
+                "element",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "studentQuote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "caseId",
+          "selectedChoiceId",
+          "result",
+          "depth",
+          "tags",
+          "failedOperation",
+          "failedNodeId",
+          "failedElement",
+          "nodeElement",
+          "overrideQuote",
+          "candidates",
+          "studentQuote",
+          "reason"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tool_usage": {
+    "image_gen": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "web_search": {
+      "num_requests": 0
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 7289,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 7286
+    },
+    "output_tokens": 163,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 7452
+  },
+  "user": null,
+  "metadata": {},
+  "output_text": "{\"caseId\":\"I6\",\"selectedChoiceId\":\"C5\",\"result\":\"CORRECT\",\"depth\":3,\"tags\":[\"RATIONALE_ERROR\"],\"failedOperation\":null,\"failedNodeId\":null,\"failedElement\":null,\"nodeElement\":null,\"overrideQuote\":null,\"candidates\":[],\"studentQuote\":\"헌법 재판소의 소수 의견이 실명 확인을 안 한 언론사에 대한 제재 규정을 위헌으로 결정했으니\",\"reason\":\"정답 선지 C5를 선택했다. 다만 해당 제재 규정을 위헌으로 결정한 것은 소수 의견이 아니라 다수 의견이므로, 판단 주체를 잘못 진술한 근거 오류를 꼬리표로 기록한다.\"}"
+}
