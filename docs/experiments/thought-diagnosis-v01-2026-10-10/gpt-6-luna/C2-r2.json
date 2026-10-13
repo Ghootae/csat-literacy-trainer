@@ -1,0 +1,318 @@
+{
+  "caseId": "C2",
+  "replicate": 2,
+  "label": "C2-r2",
+  "model": "gpt-6-luna",
+  "frozenHash": "c5c5a0e00356b9628145279c3290440aa92de41ed4db8203d2d643d0808c39f2",
+  "status": "VALID",
+  "output": {
+    "caseId": "C2",
+    "outcomeType": "ERROR",
+    "steps": {
+      "S1_STEM": "PASS",
+      "S2_CHOICE": "PASS",
+      "S3_LOCATE": "PASS",
+      "S4_INTERPRET": "FAIL",
+      "S5_JUDGE": "PASS"
+    },
+    "firstFailedStep": "S4_INTERPRET",
+    "errors": [
+      {
+        "tag": "MISREAD_FACT",
+        "step": "S4_INTERPRET",
+        "studentQuote": "자본 잉여금도 배당금으로 지급할 수 있으니"
+      }
+    ],
+    "note": "자본 잉여금은 배당금으로 지급될 수 없는데, 지급할 수 있다고 잘못 이해해 1번을 부적절한 선지로 판단했다.",
+    "unjudgeableReason": null,
+    "guessed": false
+  },
+  "citations": [
+    {
+      "tag": "MISREAD_FACT",
+      "step": "S4_INTERPRET",
+      "studentQuote": "자본 잉여금도 배당금으로 지급할 수 있으니",
+      "exact": true
+    }
+  ],
+  "attempts": [
+    {
+      "requestId": "C2-r2-41",
+      "status": "VALID",
+      "response": {
+        "id": "resp_0ea356c0bb413d25006aca4accff6887d0848bb6874a369713",
+        "object": "response",
+        "created_at": 1791642317,
+        "status": "completed",
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1791642321,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "너는 수능 국어 독서 문항에서 학생 풀이를 진단하는 평가자다. 아래 가이드에 따라 이 학생의 풀이 하나를 진단한다.\n\n# 사고 진단 라벨 가이드 v0.1\n\n학생 한 명의 풀이(선택한 선지 + 근거 설명)를 보고, **어느 논리 단계에서 성공·실패했는지**와 **어떤 함정 유형에 걸렸는지**를 판정한다.\n사람 라벨러와 AI 분류기가 같은 가이드를 쓴다.\n\n## 0. 원칙 (가장 먼저 적용)\n\n- 학생이 **실제로 쓴 말**과 선택만 근거로 판정한다. 드러나지 않은 사고는 판정하지 않는다.\n- 판단 근거가 없으면 `UNJUDGEABLE`(판단 불가)나 `NOT_OBSERVED`(알 수 없음)가 정답이다. 과잉 분류보다 판단 보류가 낫다.\n- `NOT_OBSERVED`는 실패로 세지 않는다.\n\n## 1. 결과 유형 `outcomeType` (하나)\n\n| 값 | 뜻 |\n|---|---|\n| `NONE` | 명시 오류가 없고, 선택 판단에 필요한 연결이 드러난다 |\n| `ERROR` | 원문·선지 내용에 대한 명시적 오류가 하나 이상 있다(선택이 정답이어도, \"모르겠다\"가 함께 있어도) |\n| `POLARITY_MISMATCH` | 내용 이해는 맞는데 발문 방향(적절한/적절하지 않은)과 선택이 충돌한다 |\n| `INSUFFICIENT` | 내용이 있는 진술(참인 사실 등)은 했지만 선지 판단과 연결되지 않는다 |\n| `UNJUDGEABLE` | 판정할 논리 내용이 없다. `unjudgeableReason`을 함께 적는다 |\n\n`unjudgeableReason`(`UNJUDGEABLE`일 때만, 그 외 `null`):\n`NO_CONTENT`(감·느낌·선지 문장이나 선택을 되풀이할 뿐 근거 내용 없음), `GUESS_ONLY`(모름·찍음만 말함), `CONTRADICTORY`(서로 반대되는 진술로 판단을 확정할 수 없음).\n\n`guessed`(참/거짓): 학생이 모른다·찍었다·감으로 골랐다고 **명시**했으면 `true`. 결과 유형과 별개로 기록한다.\n\n## 2. 논리 단계 `steps` (다섯 칸 모두)\n\n\n| 단계 | 확인하는 것 |\n|---|---|\n| `S1_STEM` 발문 처리 | 발문의 방향(적절한/적절하지 않은)과 기호·지시 대상을 맞게 다뤘는가 |\n| `S2_CHOICE` 선지 해석 | 선지가 무엇을 주장하는지 정확히 읽었는가 |\n| `S3_LOCATE` 근거 위치 | 판단에 필요한 원문(지문·〈보기〉·그림) 부분을 찾았는가 |\n| `S4_INTERPRET` 근거 해석 | 그 원문 내용을 정확히 이해했는가(방향·주체·조건·범위) |\n| `S5_JUDGE` 대조·판정 | 선지와 근거를 연결해 정오를 판정했는가 |\n\n각 칸의 값: `PASS`(풀이에 성공이 드러남) / `FAIL`(풀이에 실패가 드러남) / `NOT_OBSERVED`(풀이만으로 알 수 없음).\n드러나지 않은 단계는 `PASS`로 추정하지 않는다. `firstFailedStep`은 `FAIL`인 첫 단계, 없으면 `null`.\n\n단계 규칙:\n- **규칙 ① 단계 독립:** 앞 단계에서 틀렸어도 `S5_JUDGE`는 학생이 내세운 전제에서 선지로 연결하는 추론 자체로 판정한다. 틀린 전제에서 일관되게 연결했으면 `S5_JUDGE`는 `PASS`다.\n- **규칙 ② 필요 근거 기준:** 판단에 필요한 근거를 언급하면 `S3_LOCATE` `PASS`, 그 내용을 맞게 진술하면 `S4_INTERPRET` `PASS`. 판단에 필요 없는 참인 사실만 말했으면 `S3_LOCATE`·`S4_INTERPRET` 모두 `NOT_OBSERVED`.\n- **규칙 ③ 모름은 실패가 아니다:** \"모르겠다\", \"찍었다\"는 어떤 단계의 `FAIL`도 아니다. 해당 단계는 `NOT_OBSERVED`, `guessed: true`.\n- `INSUFFICIENT`와 `UNJUDGEABLE`에는 `FAIL`을 두지 않는다.\n\n## 3. 오류 목록 `errors`\n\n`outcomeType`이 `ERROR` 또는 `POLARITY_MISMATCH`일 때만 채운다. 그 외에는 빈 배열. 독립된 오류마다 하나씩 적는다.\n`{ \"tag\": <함정 유형>, \"step\": <S1~S5>, \"studentQuote\": <학생 풀이의 해당 구절 그대로> }`\n\n함정 유형(하나):\n\n| 태그 | 뜻 |\n|---|---|\n| `POLARITY` | 발문의 적절/부적절 방향 처리 실패 |\n| `REFERENT` | 기호·지시 대상 혼동 |\n| `ATTRIBUTION` | 입장·주체 귀속 혼동 |\n| `DIRECTION` | 인과·논리·증감 방향 오독 |\n| `CONDITION` | 조건·한정 누락 |\n| `SCOPE` | 범위 과잉 일반화·축소 |\n| `MAPPING` | 〈보기〉 사례를 지문 개념에 잘못 대응 |\n| `SURFACE_MATCH` | 표면적 어휘 일치에 기대 판단 |\n| `PARAPHRASE_DISTANCE` | 맞는 내용을 재진술이 멀어 틀렸다고 판단 |\n| `MULTI_STEP` | 여러 근거를 결합하다 이탈 |\n| `OUTSIDE_KNOWLEDGE` | 배경지식·상식에 기대 판단 |\n| `MISREAD_FACT` | 위에 해당하지 않는 단순 사실 오독(동일시, 값·속성 오인 등) |\n\n## 4. 출력 형식 (풀이 하나당)\n\n```json\n{ \"caseId\": \"M2\", \"outcomeType\": \"ERROR\", \"unjudgeableReason\": null, \"guessed\": false,\n  \"steps\": { \"S1_STEM\": \"PASS\", \"S2_CHOICE\": \"PASS\", \"S3_LOCATE\": \"PASS\", \"S4_INTERPRET\": \"FAIL\", \"S5_JUDGE\": \"NOT_OBSERVED\" },\n  \"firstFailedStep\": \"S4_INTERPRET\",\n  \"errors\": [ { \"tag\": \"DIRECTION\", \"step\": \"S4_INTERPRET\", \"studentQuote\": \"pH가 높아지면 수소 이온 농도가 높아져서\" } ],\n  \"note\": \"한 문장 근거\" }\n```\n",
+        "max_output_tokens": 6000,
+        "max_tool_calls": null,
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0ea356c0bb413d25006aca4acd980887d08b0c7711f0299f57",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqykrRtH4sOd0Kfka-4k_ZBilCu8mugd8Vshmj-9SjJym59KrBGfMqKno4HLaa1G12u7rVAl7rVVtSpIMRm0LAd42VHnTCaip2viA81M0dIJySSZcERseqkZz3-Pl_ULCvMr9Zqeqk8WR5LM-8S7TaLacNRVrDz9-yTxthxVZmW1ZWoa2pJwG-67akAmjIOj7Mzy2C8guVeAp3MH3vZc6C9_skCwuoplV53bnQ5ZlGcpJzUjiEShT76ATFtP6ikl_HWAxmmKN1mP0i-9y8KQ6m6oVeqXKcWLpK6eqFvpbsY1TxvEdBAhoeOVaMWBXKlVeTHrpZucX121hMcTifSAxJjZOdJcyH30DBjVG605Bb9Wa42gnFvXtqj0YMGgl_q6drqPqys1EHqQFf38iA5k6Tc8clYNyjCQW4girbUqe9oohBY7e_ZURN-61LJbxcf-knq64O8laD6tLc6wP-bIoaDWs3C0jbIGbXhIyuW-ztIOVRcKouGVzAU39oaIPA9XiWwWyp3Uejiw2JqJq-kNSPNB24wo44udfYPQ1OxHwbfQIoTkhuOznIHq1I24kLCSngB4F-um6fLFb6HzZjVOsSlmhNtfxO51B2oh1gzjVrqNdyRm5zNjYam1SvYW5PNJLcPsaYbKWI5sS1lR5lkfNjM123JQ2_sf6c5_5kqUlMkDKsZcyg7ro_0TFRVdc-zzF2d5ktZg7PsZTMp7rgN4mKYTO-w5e6JoBAZflQ5PO9t95qjcJ7VMZ4u61471kMVYQ7eOd06CNgBKYMNP9zYhLkXLD5VgNPN3IlZ1fxSUYSBPu62X6z4SrUcmx9xU2Dx7ZNh1pTQB_ZMXIGJpx3tL-Y_WpNB3x3lj1jnufOo2s3Tx_hP3pPprxOVryAwNireQCTvjivDfR3m8zTzNad-9rVZUFyLOTCLjsqf6v-NqMz5UtkRqwljbWW396fqzCONm1VfFZs1TBgSuMDE6RaiCR2QIny386ZpgHMrpXyKyL_28KFoh-awKcCGXyBptN__cKYQEymlb7MlA7CIYKv9weiSd7jKBNtVzcWtUiCsXo2llQXdPerO6xmuB2n7fYi6Q2EuLRt5ww0Ev57f5_wGIhCP7DHRRXC9fxF2qd0duDBQRhiVFemRKTbg9OcIftPSxIfAp4pz1SPq0aDIQazA6L0BUo-83AYFhw-RI1BKb-kLQHNZXchKvaQXjyd8E6xAySTTry5_uOsSDzefPlYVwZUsYDIA1nVUjgSlZCGz9C1cgbcJtKP76-axOTd8ryKGgl7hCUzF1182Om9_XMbjm8RcavsIK46_TScoiSDd5bDaAS13H8yyVNrnRNSRSKdsXIOmPHVJu4Ssse4P9jFYvXoH_I2pS08a7HLvX7eC-gImYOCYLyUmo3f2A8btOW47FED7XcdQxE0Irlwd_YRDWYLC98x7xKZs50zamLBCtGNG8S8QWrtWh95NGFFkDDPJpBI6x9kOzs1iNedw0NV9DrfaeswlAw78NzZgsaRtLOx3AN1-lEgrxlnE9h0_dzBCqGRTyCBm-eOECZIyP8oDdRlbOLLPszpn0F4ApFSxrKdqFrGvYGRxHoY3fXF9b4kVz_6haWxMZCBp2ulFINQ6HGtFeY0c6dGktGC6go37utaZYEipnZZOdY7uQQZi3eP-GWnMBuWwXkhO67--e7FZBtMvA764SxVz5wRrgLTCr4qc2aql5U-docfCIwwIJmTCQOZo5oxscEZXBBelwtupgTmNlQJ2BglrzI11659DDIU15o3Hupr-ZnRvy5XgwOjtQjM5BG766jSs-VWG6Wrol9krAQHMw6rEbHxHay_M6uVMaSjjim-H4mmMiZkw66fUedwmqTS4C4u1XhEPF58CmAVCx3LoDLKjqNu6f2sRHZ6gjnW71gc7J9SjPsVOojBF_xU4a2MC4DnozNE3yM4Xb3Uy0eXDEt_ItNmgXjSSyhabJuenANvtPCjHpTbahz9MfBqvaHQeniXCGDBS8vV7xzhbTjL8N8ED6zpWa3IfVmuPDuYR4JhQpwJbx6YCoYgvoQVVemzc7_lRHaG-B75AZBj9cCDJXrJOVT1GeC7Cy6JenKONjXfvhH6oJMksYjZQ9WoLGFvvKGnvhlV1Wddtbt2RprpqX42V1xEiNDPw_CWmmPYyUJUHc5iV5_2Qr_x9oA0HMcCubmGQu74C8_iHMv5Dys_NIUhuHB-ZpVjXqYjAZCEnwPLLDVcRgYSqLfbuxxf3MAxQg8cw5bnMi7sAGXzBsMr108EYjmSJzFgbVnGMzItHKF4EeXY_oV4dtvaDgMxtC8Zvcg5m1m1zxAfWDqmGBgPSWZ2SfJTmg2CAT7A2Pu3WEWeql9vM4H1FAl8FfZbq7ZI3XcmryAOa47qxvOvxZLB2yWsS1abftSs6fbhXoUvfNSGe2k9H5YhbTtwnZ6iC8xGCUkEb9iEF8_Un_IhEXEiyQmfX9zbOjJ9MPFDb5to6kk4SQAxZuuA35pk7B69HjAcuf5cyo7229cAkEbhWxJbWRD0lXYeEBcV1N8mhDITqFJfnoOXhrhL3EqviNlTGywKYh0EfCaqhF1SbkPxjv5Rk0sa93NikLba4pL-0BPiFayEflIVqSEe0fqv7fpt4cylHoRTUmau6JuaBrH1NA2ms-Vrbs0PCSncidJQ_zGLUNelXypESYZspm-mAwuZpL6SQdTfCwIuMuJWOYuZY4YHOf4r-HFEplfzTcJGAbwQ-Mfl6HazU_4EVyLVNLe4d19dAE3vnBo3X12brhY98z3VskhFdTEwZBHsBH_ceprht_IFIpatTIVVmLiUKRD0_d7Z4KNWKaDXlLFRwXvmyD9247j_luSlnOWDEpByGj1GRXIMoogeDG7OwSzj5OY7f4WsQht4G6iqgObBaRex-k00dENZZXm9fMdz_rY7rnpI-ZmCRSdV2h6L1wx3xc4-1cktBulXmB4zveXvjt29w6KwWIbiqzSs8jMLcLGPsjRFrcoJQI02rtqTWqQQ4LcLwfatnuRL4KT_QY87x0u45OOwJhwRr70J8IuIV0PUE7vEIyZ9fDUpPVMoL22BCPIyNd432-wnwwRxpifqxyGvFAqJZGHBwftR7X1ax-HDLoNXvpxbtCqwUmYwB8Y_Jxe3M_Tnkmzbl5kkskhMdxf2bcc6cmHdQl6E8A2IdRcK5ZVB8y97ckvErdRYUoBrHK8BTJ3Di7NomL-SzQlVo2YbuAukO2HgcTK8VVPexYlchujMHysVzKbQMPxgoWFWcYSknN7ydVp-PVQ1JDfGWrobBAaAxph757bFIHLxpLQvSsZFOCaIWQ6NMpAywbhjwr4iI70vjg1zXWDvdKV-Q7qdrp5ztl3gfQGKozsGvny_1MkqP40iX8yYJqk08ZQ6qsnpWUiYq2_cEngU7qSp_LhnQmmUBhmO_TC2VP4sS3BgYoyQL4at0K2VkAcjpo06beEZ5dgNmpsduiYdkwWnihR1MA5xbpp0HRaywn0dM-fpBWqkNPZ3Urfv4f_jR-yqLoSprN036x_i02jUzoGBcvr1EHfDNT5Tt3pkH87wY7avSf1wiQt95GoLWhkh6w3f4x8L2q1PwR-DISZyE3UgCm3ivmfqVWWhDU4aczIAwEbqBoEJdSDw3-b1lls_9Wd3k84_lH1guBBYoQ_T4MDJK66_6X_Y1JEhJpjbF7CJHPA_rP9hUW2_6QTxUpuXR5K0YjMw2jA3heMk1kTR1as64NAx2wmyJkLhPBmah9U039cKW9vTnwE--N5Yhbn943ecfDqgTyFhHEQovpOyVHl5qwyZM3wzClIw2xMsH821hS5Kb3MiF7z3ZMu2yuRufkYHOLHiuJ_xWOTx3fyLnIsU_wL-q5BYbp7rXvqxIKzMq0rl8iTjO5F9_ptB5whruVRQNir2-5JNAcRuDhNE8cduFJUIt0mHtA6U_y8qi-gogIlYxC8Kp015TDM9eoma6c0-_uyXmZV8x8oYapf7hUU_fuO0_lop_OTyJUvfpuHbb6J8xRqWaCwYBzr4QTwakWY07s2BviA79PDH2FC92KFOq2eF-m3hOE_7UNlwJZ18MIzNU5AM1QTQ9r4y03tUXGRo43fnqb1RuEcItCtJoXU7_OaqelqDW7qqP3C84eoHg3kK5ZnhDvcTGOmkeOdAQqfg1xZwXIat1NkmQLz_jKDMM7FBmX2ACgehPnn5ahC5Xyp0tv0D60fcG3A3gjOVti6W1NpnnHFwCNEIwtPXVf4wb5gOIVe8lvzx-DrBxcAO2ZQr7huLa2iONMpV0IvyFtziPdImcJJ3j9krrE4DebHV7r2JZS-By9IVaOb3pZq1YzG0r8xDXfMgYQa0Lem-u78YtBOorKorUwBs42c8fOHVb9_VNqqphBBnype3XvvPYyZMepG93B6yi9PaUKvIT0Hxw4N1mtd4WFCwGsCI6-EUGFTTbHMsF8DVB9MqBpA4Kf_MgBgXKLDwMenwC0OUbrZ71KlrnVTPP1oRhMM96gI55LY5QObF78dVPTQ1UJMTcYQeNAHooNOM68GdUC0K3XJnUZceJxCqtwXgzKUZZL1eJTtKDdN_OgbIqKkYJC_YowfZcqbSAiGZvueSZ0JnsTVvsbOumjbnOElELGBWn5XV4jYuDi__7rM5-zW_lhHXygZSMGLg0-rHEEaW__N9mpR95FN3ugnr1N-lgo-nf9s5fPtKPONy1iMKut7jciChwP7eAi9uWAYo1rz2ZhSaoMDEwsYPi-WifxFvXRxAkWxi0WY4OaT1nW6nNXhfGNANyg7HsX1tOACd6oXDd9UXvIZumlc-tg2yKN7BbHBozpgo6qCJLzwLTuOLGBBA4Qs5JciJ-_x1gGvycfFoPrNsTIWPIcH3YCK7AqRoSEJLIhYTMf5ExGKh9MqZqfcwAGlX_32P19e3QDhUFCi5nvH1Wyi7GO1RPKuP2kPwCCG-ePDRYpipz5IvxD5-qLJ0t3u36V1-kEHbBZUyWhFf86F1JHZxmrk7JfzJYTqeqElBnUdsZfk5gdWKeA==",
+            "summary": []
+          },
+          {
+            "id": "msg_0ea356c0bb413d25006aca4ad061a087d0ad23622c4a66bb4f",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\"caseId\":\"C2\",\"outcomeType\":\"ERROR\",\"steps\":{\"S1_STEM\":\"PASS\",\"S2_CHOICE\":\"PASS\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"FAIL\",\"S5_JUDGE\":\"PASS\"},\"firstFailedStep\":\"S4_INTERPRET\",\"errors\":[{\"tag\":\"MISREAD_FACT\",\"step\":\"S4_INTERPRET\",\"studentQuote\":\"자본 잉여금도 배당금으로 지급할 수 있으니\"}],\"note\":\"자본 잉여금은 배당금으로 지급될 수 없는데, 지급할 수 있다고 잘못 이해해 1번을 부적절한 선지로 판단했다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "description": null,
+            "name": "thought_diagnosis_v01",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "string"
+                },
+                "outcomeType": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "ERROR",
+                    "INSUFFICIENT",
+                    "POLARITY_MISMATCH",
+                    "SELF_CONTRADICTION",
+                    "UNJUDGEABLE"
+                  ]
+                },
+                "steps": {
+                  "type": "object",
+                  "properties": {
+                    "S1_STEM": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S2_CHOICE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S3_LOCATE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S4_INTERPRET": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S5_JUDGE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "S1_STEM",
+                    "S2_CHOICE",
+                    "S3_LOCATE",
+                    "S4_INTERPRET",
+                    "S5_JUDGE"
+                  ],
+                  "additionalProperties": false
+                },
+                "firstFailedStep": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "S1_STEM",
+                        "S2_CHOICE",
+                        "S3_LOCATE",
+                        "S4_INTERPRET",
+                        "S5_JUDGE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "POLARITY",
+                          "REFERENT",
+                          "ATTRIBUTION",
+                          "DIRECTION",
+                          "CONDITION",
+                          "SCOPE",
+                          "MAPPING",
+                          "SURFACE_MATCH",
+                          "PARAPHRASE_DISTANCE",
+                          "MULTI_STEP",
+                          "OUTSIDE_KNOWLEDGE",
+                          "MISREAD_FACT"
+                        ]
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "S1_STEM",
+                          "S2_CHOICE",
+                          "S3_LOCATE",
+                          "S4_INTERPRET",
+                          "S5_JUDGE"
+                        ]
+                      },
+                      "studentQuote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "step",
+                      "studentQuote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "note": {
+                  "type": "string"
+                },
+                "unjudgeableReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "NO_CONTENT",
+                        "GUESS_ONLY",
+                        "CONTRADICTORY"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guessed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "caseId",
+                "outcomeType",
+                "steps",
+                "firstFailedStep",
+                "errors",
+                "note",
+                "unjudgeableReason",
+                "guessed"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 4232,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 4229
+          },
+          "output_tokens": 449,
+          "output_tokens_details": {
+            "reasoning_tokens": 282
+          },
+          "total_tokens": 4681
+        },
+        "user": null,
+        "metadata": {},
+        "output_text": "{\"caseId\":\"C2\",\"outcomeType\":\"ERROR\",\"steps\":{\"S1_STEM\":\"PASS\",\"S2_CHOICE\":\"PASS\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"FAIL\",\"S5_JUDGE\":\"PASS\"},\"firstFailedStep\":\"S4_INTERPRET\",\"errors\":[{\"tag\":\"MISREAD_FACT\",\"step\":\"S4_INTERPRET\",\"studentQuote\":\"자본 잉여금도 배당금으로 지급할 수 있으니\"}],\"note\":\"자본 잉여금은 배당금으로 지급될 수 없는데, 지급할 수 있다고 잘못 이해해 1번을 부적절한 선지로 판단했다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+      },
+      "error": null
+    }
+  ],
+  "retryCount": 0,
+  "hasInputImage": false
+}

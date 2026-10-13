@@ -1,0 +1,318 @@
+{
+  "caseId": "I1",
+  "replicate": 2,
+  "label": "I1-r2",
+  "model": "gpt-6.1-sol",
+  "frozenHash": "c5c5a0e00356b9628145279c3290440aa92de41ed4db8203d2d643d0808c39f2",
+  "status": "VALID",
+  "output": {
+    "caseId": "I1",
+    "outcomeType": "ERROR",
+    "steps": {
+      "S1_STEM": "PASS",
+      "S2_CHOICE": "PASS",
+      "S3_LOCATE": "PASS",
+      "S4_INTERPRET": "PASS",
+      "S5_JUDGE": "FAIL"
+    },
+    "firstFailedStep": "S5_JUDGE",
+    "errors": [
+      {
+        "tag": "MAPPING",
+        "step": "S5_JUDGE",
+        "studentQuote": "실명 없이도 법 제정이 가능하다는 것을 근거로 소수파는 실명 확인을 주장할 수 없음."
+      }
+    ],
+    "note": "실명 없이 게시한 글이 법 제정으로 이어지는 상황은 파악했으나, 이를 소수 의견의 반대 근거로 잘못 연결했다. 동일인이 이름을 달리해 올린 의견이 정책 결정에 영향을 미치는 사례는 민주주의 의사 결정의 왜곡을 우려하는 소수 의견을 뒷받침할 수 있다.",
+    "unjudgeableReason": null,
+    "guessed": false
+  },
+  "citations": [
+    {
+      "tag": "MAPPING",
+      "step": "S5_JUDGE",
+      "studentQuote": "실명 없이도 법 제정이 가능하다는 것을 근거로 소수파는 실명 확인을 주장할 수 없음.",
+      "exact": true
+    }
+  ],
+  "attempts": [
+    {
+      "requestId": "I1-r2-43",
+      "status": "VALID",
+      "response": {
+        "id": "resp_0bdaa46ca68a84ef006aca4aebd58087d0bd63ab090962c142",
+        "object": "response",
+        "created_at": 1791642347,
+        "status": "completed",
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1791642361,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "너는 수능 국어 독서 문항에서 학생 풀이를 진단하는 평가자다. 아래 가이드에 따라 이 학생의 풀이 하나를 진단한다.\n\n# 사고 진단 라벨 가이드 v0.1\n\n학생 한 명의 풀이(선택한 선지 + 근거 설명)를 보고, **어느 논리 단계에서 성공·실패했는지**와 **어떤 함정 유형에 걸렸는지**를 판정한다.\n사람 라벨러와 AI 분류기가 같은 가이드를 쓴다.\n\n## 0. 원칙 (가장 먼저 적용)\n\n- 학생이 **실제로 쓴 말**과 선택만 근거로 판정한다. 드러나지 않은 사고는 판정하지 않는다.\n- 판단 근거가 없으면 `UNJUDGEABLE`(판단 불가)나 `NOT_OBSERVED`(알 수 없음)가 정답이다. 과잉 분류보다 판단 보류가 낫다.\n- `NOT_OBSERVED`는 실패로 세지 않는다.\n\n## 1. 결과 유형 `outcomeType` (하나)\n\n| 값 | 뜻 |\n|---|---|\n| `NONE` | 명시 오류가 없고, 선택 판단에 필요한 연결이 드러난다 |\n| `ERROR` | 원문·선지 내용에 대한 명시적 오류가 하나 이상 있다(선택이 정답이어도, \"모르겠다\"가 함께 있어도) |\n| `POLARITY_MISMATCH` | 내용 이해는 맞는데 발문 방향(적절한/적절하지 않은)과 선택이 충돌한다 |\n| `INSUFFICIENT` | 내용이 있는 진술(참인 사실 등)은 했지만 선지 판단과 연결되지 않는다 |\n| `UNJUDGEABLE` | 판정할 논리 내용이 없다. `unjudgeableReason`을 함께 적는다 |\n\n`unjudgeableReason`(`UNJUDGEABLE`일 때만, 그 외 `null`):\n`NO_CONTENT`(감·느낌·선지 문장이나 선택을 되풀이할 뿐 근거 내용 없음), `GUESS_ONLY`(모름·찍음만 말함), `CONTRADICTORY`(서로 반대되는 진술로 판단을 확정할 수 없음).\n\n`guessed`(참/거짓): 학생이 모른다·찍었다·감으로 골랐다고 **명시**했으면 `true`. 결과 유형과 별개로 기록한다.\n\n## 2. 논리 단계 `steps` (다섯 칸 모두)\n\n\n| 단계 | 확인하는 것 |\n|---|---|\n| `S1_STEM` 발문 처리 | 발문의 방향(적절한/적절하지 않은)과 기호·지시 대상을 맞게 다뤘는가 |\n| `S2_CHOICE` 선지 해석 | 선지가 무엇을 주장하는지 정확히 읽었는가 |\n| `S3_LOCATE` 근거 위치 | 판단에 필요한 원문(지문·〈보기〉·그림) 부분을 찾았는가 |\n| `S4_INTERPRET` 근거 해석 | 그 원문 내용을 정확히 이해했는가(방향·주체·조건·범위) |\n| `S5_JUDGE` 대조·판정 | 선지와 근거를 연결해 정오를 판정했는가 |\n\n각 칸의 값: `PASS`(풀이에 성공이 드러남) / `FAIL`(풀이에 실패가 드러남) / `NOT_OBSERVED`(풀이만으로 알 수 없음).\n드러나지 않은 단계는 `PASS`로 추정하지 않는다. `firstFailedStep`은 `FAIL`인 첫 단계, 없으면 `null`.\n\n단계 규칙:\n- **규칙 ① 단계 독립:** 앞 단계에서 틀렸어도 `S5_JUDGE`는 학생이 내세운 전제에서 선지로 연결하는 추론 자체로 판정한다. 틀린 전제에서 일관되게 연결했으면 `S5_JUDGE`는 `PASS`다.\n- **규칙 ② 필요 근거 기준:** 판단에 필요한 근거를 언급하면 `S3_LOCATE` `PASS`, 그 내용을 맞게 진술하면 `S4_INTERPRET` `PASS`. 판단에 필요 없는 참인 사실만 말했으면 `S3_LOCATE`·`S4_INTERPRET` 모두 `NOT_OBSERVED`.\n- **규칙 ③ 모름은 실패가 아니다:** \"모르겠다\", \"찍었다\"는 어떤 단계의 `FAIL`도 아니다. 해당 단계는 `NOT_OBSERVED`, `guessed: true`.\n- `INSUFFICIENT`와 `UNJUDGEABLE`에는 `FAIL`을 두지 않는다.\n\n## 3. 오류 목록 `errors`\n\n`outcomeType`이 `ERROR` 또는 `POLARITY_MISMATCH`일 때만 채운다. 그 외에는 빈 배열. 독립된 오류마다 하나씩 적는다.\n`{ \"tag\": <함정 유형>, \"step\": <S1~S5>, \"studentQuote\": <학생 풀이의 해당 구절 그대로> }`\n\n함정 유형(하나):\n\n| 태그 | 뜻 |\n|---|---|\n| `POLARITY` | 발문의 적절/부적절 방향 처리 실패 |\n| `REFERENT` | 기호·지시 대상 혼동 |\n| `ATTRIBUTION` | 입장·주체 귀속 혼동 |\n| `DIRECTION` | 인과·논리·증감 방향 오독 |\n| `CONDITION` | 조건·한정 누락 |\n| `SCOPE` | 범위 과잉 일반화·축소 |\n| `MAPPING` | 〈보기〉 사례를 지문 개념에 잘못 대응 |\n| `SURFACE_MATCH` | 표면적 어휘 일치에 기대 판단 |\n| `PARAPHRASE_DISTANCE` | 맞는 내용을 재진술이 멀어 틀렸다고 판단 |\n| `MULTI_STEP` | 여러 근거를 결합하다 이탈 |\n| `OUTSIDE_KNOWLEDGE` | 배경지식·상식에 기대 판단 |\n| `MISREAD_FACT` | 위에 해당하지 않는 단순 사실 오독(동일시, 값·속성 오인 등) |\n\n## 4. 출력 형식 (풀이 하나당)\n\n```json\n{ \"caseId\": \"M2\", \"outcomeType\": \"ERROR\", \"unjudgeableReason\": null, \"guessed\": false,\n  \"steps\": { \"S1_STEM\": \"PASS\", \"S2_CHOICE\": \"PASS\", \"S3_LOCATE\": \"PASS\", \"S4_INTERPRET\": \"FAIL\", \"S5_JUDGE\": \"NOT_OBSERVED\" },\n  \"firstFailedStep\": \"S4_INTERPRET\",\n  \"errors\": [ { \"tag\": \"DIRECTION\", \"step\": \"S4_INTERPRET\", \"studentQuote\": \"pH가 높아지면 수소 이온 농도가 높아져서\" } ],\n  \"note\": \"한 문장 근거\" }\n```\n",
+        "max_output_tokens": 6000,
+        "max_tool_calls": null,
+        "model": "gpt-6.1-sol",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0bdaa46ca68a84ef006aca4aed057487d0be9afaafdaa21d10",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqykr5oNKEWjdKY6OkcfFyzBUY0r24ucXbP6GdHFZ4LyVQ5xhtgXEZ-Vfc05OeZmMRukFLaLO40ZUaBZX5CX-UmiO-_3AV5yemVuv26OXd_JbNnooBpybz2DymQe6wnaB2PH4eVNJ9Bb4ld-hoG3SQQHdxuwIByl_v8JI_st3okRwQb89oIVOVVCgPKi0R17lljw-5zmGpqOaphcuE0kb81KQvb3sKvhEideaa63Jbd_FOEqsNOtQalWuliZhXWi0PSuHrMtq1wfhCqGQqha-UnZJ0RzEzCnrqtxXZ7yrNwfn7SysrjZ6kUxwKbsz_VRFXMNqZcrmcRo4n8kEiLJRnBvzRBST5iuKTZ85HScc0xytN60o26vySNKti6C8CFmSROxpgSZ8UA0WoM-jA2SVDuIVR543xF5cUKOkfiiFNo8s3hP9ULcMCJoJxylnFCZjQWnf0PWTfMiDosMASGUQUzgcbj9Mgfnh1pwHTe54DZZuhjxh4B0cQ4H8YOCiRQdLzGwIgA8hiMBpwmhaM8RotBBXtUoT5F472KvZBco7iY9HIytLA-c6PGFXIoqX7zumjfrix5yWO0MpA4HzSZfjy1bvpZaOd7DSFNZdfObMFhCK7cXO7iFV_BpMGoxjdERGLe1Sm10l8xK41EH1keOPbRGcLKGZUfptcsl7f89x5P-qUsbUgnMJYU9xEBr2yZvflfVRXUR3qD3DqJA5BSc3jgFiZEKiqOrIHBrjbSHzxseJwlMq5cRaNiVpA77VJoNZkmU2v72NYs_Gc8ktwjPgGBpygZjKXB4io1482It7GX2u8JJ26GdpuJ8Nryj1iLRkyCBQLYh0LQwRflC-m7H9UUlDyjpo_U4HIrU3UmwcWcLMtfAHZ6QirTQ80XbrpfY5bexHgHNWZXGzmnZ9L6wJ8DKFdMQ8rCk8C4Y3bERXXxmcUlzUbBWJic3Pne0AjaSA5AtLRI2I3xkKRKd1F0PbOyKkskZU9DSOCzc9d8F9feFIIKIvyshHfGHwd9bC_kIQ_7znyuLncgSx7wOSe6skxHqDXLh9aWJoSwG8nz63p-EtyfKprA0M-WqLgdISShXS_WkI9iAcVNy-z1L8PFBGa4sKtoJhCca295U31PKSwWnDymV6pjPrArFt7dZWkq99V3QYK1W-mfOpM_-zammgl48UTruZMbEQkTPLsU_tdSt9iZwkKTs9QtuJI6jYAz_gmznEEK2dguyfOFGc_W7raopFDEJxOSMRCJm_NJTxepoKTSzLPKcgB3Qff-3GFY36H0g6w2ZAMcCG_32lor7lET__w5rZy3IQ-ivs1KQNg1scSWTSUcRpfcFhBVVpDfQXGFPZj0BI7_iux7TUjXqOmVcOzyHBrUFHsfvCmAsAgXoE1fRrjF7hQXAgB3O96RGXuUaxhTH39nNwGzyt7U-b7OxKnZh231pIWc3MxrzL4a4UPBs-qw4xW6ag2iXFaYYhe7yBQa4AO9rZeM1IBQyzYazu_Aq9Gl6IbPk68RfxOekKcNoul2tQ0RbcTsC0C54Hdn5vtPutxDL4KkN_xmyENZ3Vd76-nft9tzz09c0o48LbvtXo6QIeMJAPzq6kpbrVGtuPWU8g66CvZTTXpezNkTpormyR-OHqcAbokplfQeXuaa88gn5al3Q8uZE1szLwv3S2kQIGcB5uFDWyjgUJPT_DPc-PTD9r9rOZbq3_cdiOP6EL6xX4cemQa_BZn8cVAXC_djqlymxdFcvGHEVPEkQ3sQqgFS_opUgsR4HPWvYTU8uxtBPTu6GgXTLBBUTu68CqiilbX-L16V7gSUbtcmx4IuI2JFE-6__ZX-Lm9K50uMBnpN8RT7Ht2rl4UicaBY4tEscokAKR5pi9J-trJc85OkDotllAvv_4fPzLeAdkKG-SN8z1x0zJfuy4vGHR6HuQ0Rq3qpvXnqO5qwhDGP7FHtBrFIht0zosRFKYzFf2_D7nIoYPHZUWJ505AuEE7S66oKSXX3yMn7csBZQfE6bc9ynFpcQUgFm18_OoL2BJ3H5PLJtBuzJXY44jr7sxEHW0UVJK80JadiTZBZau7-RYszh6zHq9LlLIyEIprZwEqk3ekPuyYyexYDMfIbWqiwnhb5NQxm4rkNvnU3G0-xcJAtlxO5DTswcpZsdIrGvZItn9vlvELYaUmJ2SxGpXpaixtfjywLVOS4YfTha4V1hcRQV4v2TSs1Ab6XxQ9p5lIkc7ALo6q6nFGTNVDWGIANfFLX_0Ph5ehDPmzI23tFhxEFxnfI2wd5kN5gdphHVqVn3_vkB5Tsl8xbLVuePq4A3o4w1ETAZKx9sltLj8Yt5lOtIay6OA3hk5NmuaSpEHdCK4tuRlex3inVDKRxI5BBGe5mt6CsQX9A3RG1p5O2-nLuosM9gEaDW5INIMmKRM8yMOPJUKI_V2D25E8ho1_-k8SwNtqEZbqLxDJOL6nizA05i7uwaHPwEPU7FwCORR8w5cC6GlchUCMGAJRo1na8g38HCK__QRzfL_WAffBeC3z3sglTOK4D55bpD7HXTaNjOjCuXv32oQXdh1alwdpxODYDV1GWH7wfXX_0Sg4DDFxR-9m1I4zVho8zSKAstd0lOLmjBPIQNhTJITqcMssk4VsllxhyGHAP8uZagodOU-yZdFza5Wzg9x0Z1MY5icpEzOOWN0QaNniRqKqJWJXInJ7l4flFGmhXa-UhFF4IIHpuExMFp-2ZLnBlid4I1-jHFCIVdNfUgRZZF4S40mzxQf3tLWW-Pm6oAQ5RgUFUCqOXvwi2O2InieKaQ5Lkt1vxjklREGs3HGjZQiQc9g-bMK_6sXhT5y6piwO_mLlImMga7uJCJDrCYewh07dMptI_HuIZLzWNbLWBEldqSHFkmL_sEqqhUjSqfolMPHGIRefR5iJkKQQgPx0uOmyTTSpf3BkO5XBT7Ahn_mOwcuLz1pT4vspMXa0osuxIOZsJ9KIPfrwAKbJbB8SMRgI3DbJZHaw5uBcbHojzmq97Hytt2L1vXsFl9XcWhVkIzvW0d9MO7eUHwtguaan4rKyHY1xFKFIspXuh8APJugGBVf06sfuo9u5dnZCn4XrNs7pMoWnZvBLdoy9uzOP-tM1p6823QlfiILORvLQgs5VSA-INfrGmZtPCwuUT1ho9kIgzaAz1eQ_sHBV0J4RG8eZOK8ch-sMk_-3AzxuLrr4yFlNSDQNWVw3yYrXjz9kEMlpdy7bOy_26t8h1hlz-AOVJ0wWg6zHduuILs7X_S4Qgq0gZSGdzioNLayWGIPIJIGF75Kvp67sHaPzzlYkXpxxtdbzSkyiN4drMYNQY_C7EQWd7KVbZvoFwO3jE3WbuIm_TSOjBJo8ULxYDUfCJJOOgOYM2bA09pDSOSAa74o0ijoQJv5Gb59Q_3Fu_CDnvus0e22UsnOZa7aZmJOBLm0BIgRj6zTR3382QT-u0biRZah4ntJnezkDO1nC07jALCVgyaJDchzAzqamrHN3YjrpBn3mBeH9YMC1vMJNZSnAdd1EU5pNpewp9BWGw5F_EoOOWtZD3KK2ay2rS13QH5XFOro6y0lY4u3zAIrL41u_e9J9dr7pa_0HoYhGGNi3EYXz3CwPODHWF72_nSSERN3cYjxLwALX8Tww0apQ4_N276ZAUJtKpjD0p68SEMuT8HiA3cSaQ_vvksn3SN3rHODCwaO_5iYyM4UbbS_n9tdqovlCQa8u2KHz8tq66idHt-AbNEINIkfrujUMA01sOckGGKlumjSjRY0Kok-5MJ5podSHdvxT9JdSeI6DthOaEA2rTDxqwt0ooQenkTiOG6rWOPWHuzvUUlq_s3b8Na91O9Wlxfwu0AGH_IpBRItkkJzsxliOrEoWIDQuqaHXnfXkM0EggGttHUH32gEAmhuqoJWeYOgTOa_fbYsImti0xjgnaX9WYJcOBPGjTHd9QrHbgb3L6J6Y2WgVxuWT9qdH2Idu5_Vp1BJ26npWTOrsdCZbv46CnyT0AQEsIlEYw2RYwsJmYFKgmCdrx2fjanato1eulvJTvr3o4vE3ydRURApXeY6p-OW_6HK28u1ff46wccsUvpMNOANZMgFxvB8KcockF7KdZOitHNV0Vsrz4i6A07O8Mudl-8hcnng9Bsk8gm_yvXmidu3TkWLqNytxwv5cf0iL93gGPftgf6nC1e70fm8LpDkgbJE1bljnhUGPclvif3VzTRylAhiTIOtvTqcz7Hm5DuqJqMM2grkSqUQQS56J8XKS5chZB1NiXrUImFK0ZDlKDKgdJOcFGmrrTFIBOzhzXndGQGw35JqEPM_opejAKqCN-1L2ft7CV2ppnlgdDY4W6EDAZa96cnNmXxchGRt10_aDgVDF2qc9_d1Y-Fyx5X4p-VmPtMFN96EWgHoFi4N5tE4in3aPo1GLLP-kNCcEbRZb11rCQVATShAGJ_reQt59l1y1U7cXj2yqJVNSoyr6lB1mSU-eSly8geK1-zOmRhJzDNLviiBtFEYoX54Twjf6HdubC-Ys6JHaqrGcgDfC2TKJtpDj9suY-1IB57jONOi1RV4biCAwBqReUs0Fr776No5pkd48W7g9SaJ1nBiMM_8CuhIhEqaKrepReloFknXG5K58qn1JHAhkofQVI9_h6U06PMHuLBsLrTpe0DX6KmzOJ83VGi-KvYDMI9gfDARTp8-drGVwy4rAxnaBrMwZGm6MosLEu8lCKw37Q2r4qWd6KDYrhtm5IQ8V1kACeA3HZszcbRW5IlGTAMkb2XuRGqqXcKuht6GzyuNvf0tepur0GmQaWz3U4ppp6jigGzXQHgMD3pdkVFa1gxO_TEraCMAEsct3OnxRB4dGPANWVEcKLGboMy-25_UtitgNxVH-gXyX_LIS-rFKL0-86m_B4kagwFGIfIodPWx6nlm-vB7PonfNhaB4zUWiY7L5tapxKSNISST2A7JvBiK_ejMZtaSoI46kCQ0oWrbh4Hd1PVAWwSuiBu9jw_VmU0m_L-v-JlbZt57y2p4qNkNqtuNOb-1EYd_YLqcJ-1IIRvMA6nZvs2eSOla9YSXdab25hbwUylpYEIXlL_rJASmlQBLyS6D_N6zKV-Pom62J1qxE7-XvW963bLK-uRtnVMHufqJhkTjmkl3p8B5WvBQ8_9gjJpX1HsS4SxwX-L8DS_BuWnuyjIzDXQkDQxesUXLk3WivUX7_3yaKRz9BfRBO0WVDLLdCtAvgffF81ysIoW0yRbfx2a5RerMe113fE0LhTJ8m_BfhLBRxiBIvBVcoT4IMZDJ4ZmO5Y1UqiRGlrxsOjD-h5B6IaesB-LQuE66FimjdikHZ2PAYw4uBN0qX4D61AL1t_PHmUXWCvkU3MUxo564iQno1idqcfzcwIUlsbwizDoDTBQO-DLtHvIyDYaj_Lnj_QpE1IdB40IU_MtPkHqQCZGVBWiFDr1Fe1ovzqUK1MIAOd6QcOVr5pIqs6bZgNCKv-9extoTOXRDKPJO93nMGMxeeJLXRfc-D6IbsUv1Qc5M14x9OdYRSNHZo868w3c_D4XItHtHfWH7XzIxR0g18VlZ6isknQe8qmy28REfe73jXcmOowgTDGQL7HmnRJtVWW3yiaM2DzXA5aqP7SpsuJ4najw5dkMXZS8CCkK0sbX55PqU8hrcnWcRkuh09h17c1jgjOsapsiNnrJt4Sh7zmWhu5yUAzTu9OCBIolXLLiHuhAgYqAJq6EcMjsxl-Rm7wju5y-Y0pNQdKp_f-cUe_mbkogDWWNS2Z4Ej7rY8lSIBqP2ihVDLIvM1Ju9X_ONT2oAjfdoQOBOc_nggZWzE0vcsXn12y_7I0Tjlscrab19FiTZCHI_M3Xjtz3rtjSoR5hk-XCSvWB5UWOXnmhjI-oOZM0fcbk3GK8jlxsZkN6nEhPMqCpAPOYf6pepgSUy-xU8BHQIB_EbhvSknlTq4tX8hbfaQLCe4mF11dhqu5ox_85IOJBBsyzIUUrZg2sw3j-l0DSsB6hEoNS4jo4xnP40IlQj_Y59AMHt49RwBJH3yakbbe2Ni3RMJyedRynaYVCqVlaGL01ZvnBHqoHpeiH0fJFmBvcrvDvgtkeUxtW0RaxNHiSJxgVJzS431ei_M_NxO8zCeMI7ED7O3ZrwTASI8-J-n55JuExhpWVxrXJcdl_z9USPZ8jSonNxKyCJDP4M84a0K6JbI6iCCEPvBV_8IrxOpnZ6DkTF3_k-dy2IZyr6AzBLH8IM2Ggzn2HHPSPLiHlH0s7XslaZ8NCAj2ru7DU7dGZp7aBV-AFOhOiIp_Z_2IO26h7CHNDl-u-C-0cdnwK8g6XEqeuLrowiXsHBsuoR2vK_SUa_TPaR-yEt8cL0HYeQWqV2Cow2ZQ68RGWiyzNzhKFBDcc9RtA4dwdHxZhcDrD7eMg-ECOP-NTHEs8o0ojGq6hwngqvOQMaDJDCyVTI_5oPqUt8nDgstPJvuYaBbhiTYkXtvgQNLw5PmQjbQpD25Nz5Q0zZqxIUQPzynTALfStlKcMPbfHJ8vxfyI2Z_q0y0Foy0yc0QV-km1OXe06_aWZ_gandecfBPcPRApZBvUqOH3_A=",
+            "summary": []
+          },
+          {
+            "id": "msg_0bdaa46ca68a84ef006aca4af5e89487d08856f1316de87ecd",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\n  \"caseId\": \"I1\",\n  \"outcomeType\": \"ERROR\",\n  \"steps\": {\n    \"S1_STEM\": \"PASS\",\n    \"S2_CHOICE\": \"PASS\",\n    \"S3_LOCATE\": \"PASS\",\n    \"S4_INTERPRET\": \"PASS\",\n    \"S5_JUDGE\": \"FAIL\"\n  },\n  \"firstFailedStep\": \"S5_JUDGE\",\n  \"errors\": [\n    {\n      \"tag\": \"MAPPING\",\n      \"step\": \"S5_JUDGE\",\n      \"studentQuote\": \"실명 없이도 법 제정이 가능하다는 것을 근거로 소수파는 실명 확인을 주장할 수 없음.\"\n    }\n  ],\n  \"note\": \"실명 없이 게시한 글이 법 제정으로 이어지는 상황은 파악했으나, 이를 소수 의견의 반대 근거로 잘못 연결했다. 동일인이 이름을 달리해 올린 의견이 정책 결정에 영향을 미치는 사례는 민주주의 의사 결정의 왜곡을 우려하는 소수 의견을 뒷받침할 수 있다.\",\n  \"unjudgeableReason\": null,\n  \"guessed\": false\n}"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "description": null,
+            "name": "thought_diagnosis_v01",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "string"
+                },
+                "outcomeType": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "ERROR",
+                    "INSUFFICIENT",
+                    "POLARITY_MISMATCH",
+                    "SELF_CONTRADICTION",
+                    "UNJUDGEABLE"
+                  ]
+                },
+                "steps": {
+                  "type": "object",
+                  "properties": {
+                    "S1_STEM": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S2_CHOICE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S3_LOCATE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S4_INTERPRET": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S5_JUDGE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "S1_STEM",
+                    "S2_CHOICE",
+                    "S3_LOCATE",
+                    "S4_INTERPRET",
+                    "S5_JUDGE"
+                  ],
+                  "additionalProperties": false
+                },
+                "firstFailedStep": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "S1_STEM",
+                        "S2_CHOICE",
+                        "S3_LOCATE",
+                        "S4_INTERPRET",
+                        "S5_JUDGE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "POLARITY",
+                          "REFERENT",
+                          "ATTRIBUTION",
+                          "DIRECTION",
+                          "CONDITION",
+                          "SCOPE",
+                          "MAPPING",
+                          "SURFACE_MATCH",
+                          "PARAPHRASE_DISTANCE",
+                          "MULTI_STEP",
+                          "OUTSIDE_KNOWLEDGE",
+                          "MISREAD_FACT"
+                        ]
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "S1_STEM",
+                          "S2_CHOICE",
+                          "S3_LOCATE",
+                          "S4_INTERPRET",
+                          "S5_JUDGE"
+                        ]
+                      },
+                      "studentQuote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "step",
+                      "studentQuote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "note": {
+                  "type": "string"
+                },
+                "unjudgeableReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "NO_CONTENT",
+                        "GUESS_ONLY",
+                        "CONTRADICTORY"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guessed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "caseId",
+                "outcomeType",
+                "steps",
+                "firstFailedStep",
+                "errors",
+                "note",
+                "unjudgeableReason",
+                "guessed"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 4188,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 4185
+          },
+          "output_tokens": 628,
+          "output_tokens_details": {
+            "reasoning_tokens": 360
+          },
+          "total_tokens": 4816
+        },
+        "user": null,
+        "metadata": {},
+        "output_text": "{\n  \"caseId\": \"I1\",\n  \"outcomeType\": \"ERROR\",\n  \"steps\": {\n    \"S1_STEM\": \"PASS\",\n    \"S2_CHOICE\": \"PASS\",\n    \"S3_LOCATE\": \"PASS\",\n    \"S4_INTERPRET\": \"PASS\",\n    \"S5_JUDGE\": \"FAIL\"\n  },\n  \"firstFailedStep\": \"S5_JUDGE\",\n  \"errors\": [\n    {\n      \"tag\": \"MAPPING\",\n      \"step\": \"S5_JUDGE\",\n      \"studentQuote\": \"실명 없이도 법 제정이 가능하다는 것을 근거로 소수파는 실명 확인을 주장할 수 없음.\"\n    }\n  ],\n  \"note\": \"실명 없이 게시한 글이 법 제정으로 이어지는 상황은 파악했으나, 이를 소수 의견의 반대 근거로 잘못 연결했다. 동일인이 이름을 달리해 올린 의견이 정책 결정에 영향을 미치는 사례는 민주주의 의사 결정의 왜곡을 우려하는 소수 의견을 뒷받침할 수 있다.\",\n  \"unjudgeableReason\": null,\n  \"guessed\": false\n}"
+      },
+      "error": null
+    }
+  ],
+  "retryCount": 0,
+  "hasInputImage": false
+}

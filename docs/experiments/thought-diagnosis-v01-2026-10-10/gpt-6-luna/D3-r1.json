@@ -1,0 +1,305 @@
+{
+  "caseId": "D3",
+  "replicate": 1,
+  "label": "D3-r1",
+  "model": "gpt-6-luna",
+  "frozenHash": "c5c5a0e00356b9628145279c3290440aa92de41ed4db8203d2d643d0808c39f2",
+  "status": "VALID",
+  "output": {
+    "caseId": "D3",
+    "outcomeType": "NONE",
+    "steps": {
+      "S1_STEM": "PASS",
+      "S2_CHOICE": "PASS",
+      "S3_LOCATE": "PASS",
+      "S4_INTERPRET": "PASS",
+      "S5_JUDGE": "PASS"
+    },
+    "firstFailedStep": null,
+    "errors": [],
+    "note": "카르비도파가 말초에서만 작용한다는 근거로 ②의 설명이 부적절하다고 판단했다.",
+    "unjudgeableReason": null,
+    "guessed": false
+  },
+  "citations": [],
+  "attempts": [
+    {
+      "requestId": "D3-r1-20",
+      "status": "VALID",
+      "response": {
+        "id": "resp_09cc95f95c55a922006aca4a4fc0c887d0bc68d5dd6da11ecc",
+        "object": "response",
+        "created_at": 1791642191,
+        "status": "completed",
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1791642194,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "너는 수능 국어 독서 문항에서 학생 풀이를 진단하는 평가자다. 아래 가이드에 따라 이 학생의 풀이 하나를 진단한다.\n\n# 사고 진단 라벨 가이드 v0.1\n\n학생 한 명의 풀이(선택한 선지 + 근거 설명)를 보고, **어느 논리 단계에서 성공·실패했는지**와 **어떤 함정 유형에 걸렸는지**를 판정한다.\n사람 라벨러와 AI 분류기가 같은 가이드를 쓴다.\n\n## 0. 원칙 (가장 먼저 적용)\n\n- 학생이 **실제로 쓴 말**과 선택만 근거로 판정한다. 드러나지 않은 사고는 판정하지 않는다.\n- 판단 근거가 없으면 `UNJUDGEABLE`(판단 불가)나 `NOT_OBSERVED`(알 수 없음)가 정답이다. 과잉 분류보다 판단 보류가 낫다.\n- `NOT_OBSERVED`는 실패로 세지 않는다.\n\n## 1. 결과 유형 `outcomeType` (하나)\n\n| 값 | 뜻 |\n|---|---|\n| `NONE` | 명시 오류가 없고, 선택 판단에 필요한 연결이 드러난다 |\n| `ERROR` | 원문·선지 내용에 대한 명시적 오류가 하나 이상 있다(선택이 정답이어도, \"모르겠다\"가 함께 있어도) |\n| `POLARITY_MISMATCH` | 내용 이해는 맞는데 발문 방향(적절한/적절하지 않은)과 선택이 충돌한다 |\n| `INSUFFICIENT` | 내용이 있는 진술(참인 사실 등)은 했지만 선지 판단과 연결되지 않는다 |\n| `UNJUDGEABLE` | 판정할 논리 내용이 없다. `unjudgeableReason`을 함께 적는다 |\n\n`unjudgeableReason`(`UNJUDGEABLE`일 때만, 그 외 `null`):\n`NO_CONTENT`(감·느낌·선지 문장이나 선택을 되풀이할 뿐 근거 내용 없음), `GUESS_ONLY`(모름·찍음만 말함), `CONTRADICTORY`(서로 반대되는 진술로 판단을 확정할 수 없음).\n\n`guessed`(참/거짓): 학생이 모른다·찍었다·감으로 골랐다고 **명시**했으면 `true`. 결과 유형과 별개로 기록한다.\n\n## 2. 논리 단계 `steps` (다섯 칸 모두)\n\n\n| 단계 | 확인하는 것 |\n|---|---|\n| `S1_STEM` 발문 처리 | 발문의 방향(적절한/적절하지 않은)과 기호·지시 대상을 맞게 다뤘는가 |\n| `S2_CHOICE` 선지 해석 | 선지가 무엇을 주장하는지 정확히 읽었는가 |\n| `S3_LOCATE` 근거 위치 | 판단에 필요한 원문(지문·〈보기〉·그림) 부분을 찾았는가 |\n| `S4_INTERPRET` 근거 해석 | 그 원문 내용을 정확히 이해했는가(방향·주체·조건·범위) |\n| `S5_JUDGE` 대조·판정 | 선지와 근거를 연결해 정오를 판정했는가 |\n\n각 칸의 값: `PASS`(풀이에 성공이 드러남) / `FAIL`(풀이에 실패가 드러남) / `NOT_OBSERVED`(풀이만으로 알 수 없음).\n드러나지 않은 단계는 `PASS`로 추정하지 않는다. `firstFailedStep`은 `FAIL`인 첫 단계, 없으면 `null`.\n\n단계 규칙:\n- **규칙 ① 단계 독립:** 앞 단계에서 틀렸어도 `S5_JUDGE`는 학생이 내세운 전제에서 선지로 연결하는 추론 자체로 판정한다. 틀린 전제에서 일관되게 연결했으면 `S5_JUDGE`는 `PASS`다.\n- **규칙 ② 필요 근거 기준:** 판단에 필요한 근거를 언급하면 `S3_LOCATE` `PASS`, 그 내용을 맞게 진술하면 `S4_INTERPRET` `PASS`. 판단에 필요 없는 참인 사실만 말했으면 `S3_LOCATE`·`S4_INTERPRET` 모두 `NOT_OBSERVED`.\n- **규칙 ③ 모름은 실패가 아니다:** \"모르겠다\", \"찍었다\"는 어떤 단계의 `FAIL`도 아니다. 해당 단계는 `NOT_OBSERVED`, `guessed: true`.\n- `INSUFFICIENT`와 `UNJUDGEABLE`에는 `FAIL`을 두지 않는다.\n\n## 3. 오류 목록 `errors`\n\n`outcomeType`이 `ERROR` 또는 `POLARITY_MISMATCH`일 때만 채운다. 그 외에는 빈 배열. 독립된 오류마다 하나씩 적는다.\n`{ \"tag\": <함정 유형>, \"step\": <S1~S5>, \"studentQuote\": <학생 풀이의 해당 구절 그대로> }`\n\n함정 유형(하나):\n\n| 태그 | 뜻 |\n|---|---|\n| `POLARITY` | 발문의 적절/부적절 방향 처리 실패 |\n| `REFERENT` | 기호·지시 대상 혼동 |\n| `ATTRIBUTION` | 입장·주체 귀속 혼동 |\n| `DIRECTION` | 인과·논리·증감 방향 오독 |\n| `CONDITION` | 조건·한정 누락 |\n| `SCOPE` | 범위 과잉 일반화·축소 |\n| `MAPPING` | 〈보기〉 사례를 지문 개념에 잘못 대응 |\n| `SURFACE_MATCH` | 표면적 어휘 일치에 기대 판단 |\n| `PARAPHRASE_DISTANCE` | 맞는 내용을 재진술이 멀어 틀렸다고 판단 |\n| `MULTI_STEP` | 여러 근거를 결합하다 이탈 |\n| `OUTSIDE_KNOWLEDGE` | 배경지식·상식에 기대 판단 |\n| `MISREAD_FACT` | 위에 해당하지 않는 단순 사실 오독(동일시, 값·속성 오인 등) |\n\n## 4. 출력 형식 (풀이 하나당)\n\n```json\n{ \"caseId\": \"M2\", \"outcomeType\": \"ERROR\", \"unjudgeableReason\": null, \"guessed\": false,\n  \"steps\": { \"S1_STEM\": \"PASS\", \"S2_CHOICE\": \"PASS\", \"S3_LOCATE\": \"PASS\", \"S4_INTERPRET\": \"FAIL\", \"S5_JUDGE\": \"NOT_OBSERVED\" },\n  \"firstFailedStep\": \"S4_INTERPRET\",\n  \"errors\": [ { \"tag\": \"DIRECTION\", \"step\": \"S4_INTERPRET\", \"studentQuote\": \"pH가 높아지면 수소 이온 농도가 높아져서\" } ],\n  \"note\": \"한 문장 근거\" }\n```\n",
+        "max_output_tokens": 6000,
+        "max_tool_calls": null,
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_09cc95f95c55a922006aca4a503c9887d0876ac70825942e65",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqykpSzvOH_ll_MGOrVTs_u7hnjpF6OlsDBFA6TPAu_O8EJ0hMGwOTnlvqxIyAukrUcNxZ4Az1jZKXck0aJ1mRnd3hCLojm_Z522hCdiqab3J1ftfu1UARw5HWEKTErr_pCUh0DWdJEcdKhH5gApdJm1Cs_3KLijzxM-IrvWCyAv8yIeKmUmZR_I-5pAY4xpsNs02yrhDmVrLcNwdmVCe2DmVqeA5UZ32YUPYbBPai64uELEpFi2lkYsCJPghttknLvCptVmlkJMiVwlFokordhFISjQSXZ2CKTCdaJQkA_vn38pgJk0DFBx_IWB4xIR7brc_NdqaH0VoyJJR38cyVWesiknbRMciAbFyH-lW5eAZOVZO1wuiyaeTdtojRAFvyY2yPK1KJ9kBFWZAqCJ8aGmyAn0QGhTV0FQgJQxsrrc3Dmk-o0MeYZgETxDejNsnrW_w3w2lvND_qZwfCZzA-magpgSZXm_nGIItpNvoNHC-48NEblq77W8Td3s2-adZyEH-byAyD9blirPMM20Pi9ZHHRqhDKEok76dqgumsbwi-Yx2cNGPHLbWC04tcLLZ9NVgDUHdRMXs74kBszpmqMTwJtZhtcHwX2fsIDo80T3cNL-VzDi3ydDKtnAONfVx8kO9Avy0SdU7gbxCc9gAVEroxFRbua2Sc2xhoy-6AMY-T9AeAq0761ycJpDZ8hIEJiSlSmYCZNUP_Jxn02GhTUNbgrYUZrilRnp-tzNZWc2uIiBQAZrnKB0CbzlqPB2lu6PCMZQ9vMG9Rh6EH1EKzfEXria-SRIhxG9vNZ5Gfd_UgfI3YczVtv65AePWEy_LnhibvJHo0ztowO2uBgY8ibympAWxcu-iu5M4VRJs2lHXT5cmSYHtHe-owiTPmum1rVKQLJmNIN74vIWOgPkL5EawTZPX-qTiMTPLy3vTn44avWvIOdGapzdE2Dio7HNlV_33vurki_45RC1LgqsWegD-oo6s32lI8pQEaj4hkQLXnr1yHvVHszw702t2C134b-z_8dyWr1UcUwa1Z9Av7Zm6DfmAbRNoSKYpggu0obkzkW46NqS5zSzmQSebi8KKdpHutipHPGa106gJ8dzrSKLedVl4K_rIKTu351cOfgMHBD4v-YPUtgbxK1Z5Q5sHIraPHGme4KdH2RqDpbPy-Vy4QysghwuLDcKoa_HnIrP-kUsL5ekaKPmfQBbeoPIHinCsM691LB9COjS5dT_uWAkRgRGcCz4dTWGB3GXLEE5izwKvHQRGf0uqJh2wtBB-RMODPv1Ylm5gs5hWwkKO7Zh0_djIb3RmZcEb6HvsIFqTJ_zX4DRVcaVx1Se3qMP5DRh0_i3g5xr4NbZM__WPPsG7LxBPDa64LiK_uWSBOUczrt_NbH6WCKbMSBs80fZgkjaWNFaM7O5ke0aRdRh_3IiBfFKiDD1tfgWPbcMUsQEAcnhG3Vmbps46PPDU1Zz2wANZV4hH2QocfAXPSQUrBAC9EP9xv6xXbQXqSV4wn023TIpcW3LD2UCidF7mGENOJAyqfY09hCgPo9W_L4TSb8CctIOi_HwE2RmYeUjFfK6LEoAteSggPoERk3P0hFBqa9aqPdT58B3E442dhRE0ELObQLCQl6VERJha8ft5EbAaTMJwQQHqnzPGgHeBg0lbILQYgWF6FVaK5NAJ9AjZxEgLJIQMPVRheMHZvLOx9oet6RPH98tDdNbg9tP9wHMsbtTBYOSaCKIRfDPp7RVCANauk45bb8E1pzxXz3KBJ69_0MXMJaTbhPsk9NXEm3Pb9AyZiLzwJvNc9VGnzzbq0njXN2QHwsqP1YsEbFTotlhP0bvnqTwRO5c2wbCMSw-sYkCRvE8c2DpgFBKaGhb7EwiW_ci-9wmKVMqu59aIRpVELiD_esvDXAM8dbzGOEG2p2Stii1V6Tw0jj1HueavYpGQVEdXDriaUvZOzbzhM4cZUgcxW2Kxnzog3aNJ36CAsCM6mFWP6YPlWrBnSPqFJC64DEfa9B428UcluvMuZhYKGkkxxH0SCzQLq2cuBt-U1wXe_0hpVzna_hssDIsPDZTQDoZZZWkeme50hhjdw0hoqjwsJxIcISGawWHJBGQByTd4J5ELRRc4CWGBcnFFEgZ-YMdfURBxNm4kX-oHommlZTnS61sW0U5kBliF_EE-RQV_yI4pWJ8C_6HdemUyCmNgrCcfoqKkuxGxzU6M2_sUKPQ3M9a3XAhBnca1QbOKIHiuSGZ4SXifbDGmE_1G1pFdgwYQ6D-U1Wy1XqfO2sXG4eub-1akFOOmqMcu9Op-rZBJvaIOWxRvtC6UdhqBKRLGp0sC0dV3fQ-5t3XjVDixz-iH0Es3DeIK1EUTnhOijCdeZtHLudoEsQmV6-S_7d16a83ZuTqL4oC-rN_rKT5f83Fe0CwZ7Vx_QepWMhqWa6doBG_ZdCK-8_JW2NiTAOWsTYCxGa7xBf5e9h4uNv7F2Bt9tucHdfX_CYXzgWP6GRJFJeIgyelMqUJ2AVfu9htzZc49wv7hb7yd5lYNxhUGDFIyJqNV9jO6UkEPMjd5jvB8jz-6P3RaK4sQT8USYM4G46AkYbKso50Z_ason5NxF_6JCrLiZS_jKNhpzbJvHYA78nCYdfXhN403zLRr_LkNZ4lAH5m1FYb0YzkPiloaglHOkQdFPOt6gs6JD7U7EQDzrOR7_sx2kmCK7svrd4fn50otvHtJJvtRPvx_ajSsPm9rQrK_lbH__3veGg0Q_FbFwdoqz1_R9m8CdM6I6UwPdYiZybyUx_So5j6h87XA0L5gXXfjP2rcC48F7vaTX79oiFUSp_cI7A7mZfCJAMEsj2w62LgDQH-Uml1IsptK8PUtIxIle1QoPc0l62FuxdWVUDvoLhsU_U_z-UcWE3L0VtW5r0lrVQUL5Aby0zrYIANa-Jf3uwaJBDJLs8nCsmtCmQ7ENRsnF3Mp1cs4WCQfHOyOZLna7iLPuoUG8MBfrL5I2QJoFCyxC_w_roq9500Q_qvirH_qxnNErGlF4hx1dF4lSvsptHf0kCZ0FNaS7zw0DV7VPVh4uLQHeDmpudCzjm9IarW6cgHCGKe0H05xoN22muntzxjqb-6WXZYPkUcL4eGpHNOnbHPH4ILNYKo7U48XB9bu2Y-PjvXruSM74H3FvVMHqpyzEdJkfxNsR3ThIehHXgRMiuF1m3y_N1CnmyFswgC2QuTbLFyLlpIXhBYilv4L-HlM_SBi8cHFX_7Y-RYuHferh_F3UWe5yUtytIUpYJjANkaV_iSonKVJ1o3GIc8NFb_WQfL_8KxzFJP9qxFKvMDmj06aDZQDpeak1rSxjQpjpYBynzabCQJWSP5tk2dI6_5bnyITciPxq5I9yxTbYR7pLL6JmbOKWBeq6GDbvFyiSROZhQjJylvO7G9-knlEQ7VBe8N0o5PYrFYWHNp6dwYT6M_OpvZ3wvRdp81ixjbJOsQaw77PA5TB7y5qFePJsIv9404JYWHYBGnaYdPO4borW-y8y_mdSniIVNYoOEd8JsM3qDO4R_WJnk77oAUPtADOVQNfSiP5rzL4=",
+            "summary": []
+          },
+          {
+            "id": "msg_09cc95f95c55a922006aca4a51d88487d0be29f3a03a22a382",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\"caseId\":\"D3\",\"outcomeType\":\"NONE\",\"steps\":{\"S1_STEM\":\"PASS\",\"S2_CHOICE\":\"PASS\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"PASS\",\"S5_JUDGE\":\"PASS\"},\"firstFailedStep\":null,\"errors\":[],\"note\":\"카르비도파가 말초에서만 작용한다는 근거로 ②의 설명이 부적절하다고 판단했다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "description": null,
+            "name": "thought_diagnosis_v01",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "string"
+                },
+                "outcomeType": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "ERROR",
+                    "INSUFFICIENT",
+                    "POLARITY_MISMATCH",
+                    "SELF_CONTRADICTION",
+                    "UNJUDGEABLE"
+                  ]
+                },
+                "steps": {
+                  "type": "object",
+                  "properties": {
+                    "S1_STEM": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S2_CHOICE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S3_LOCATE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S4_INTERPRET": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S5_JUDGE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "S1_STEM",
+                    "S2_CHOICE",
+                    "S3_LOCATE",
+                    "S4_INTERPRET",
+                    "S5_JUDGE"
+                  ],
+                  "additionalProperties": false
+                },
+                "firstFailedStep": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "S1_STEM",
+                        "S2_CHOICE",
+                        "S3_LOCATE",
+                        "S4_INTERPRET",
+                        "S5_JUDGE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "POLARITY",
+                          "REFERENT",
+                          "ATTRIBUTION",
+                          "DIRECTION",
+                          "CONDITION",
+                          "SCOPE",
+                          "MAPPING",
+                          "SURFACE_MATCH",
+                          "PARAPHRASE_DISTANCE",
+                          "MULTI_STEP",
+                          "OUTSIDE_KNOWLEDGE",
+                          "MISREAD_FACT"
+                        ]
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "S1_STEM",
+                          "S2_CHOICE",
+                          "S3_LOCATE",
+                          "S4_INTERPRET",
+                          "S5_JUDGE"
+                        ]
+                      },
+                      "studentQuote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "step",
+                      "studentQuote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "note": {
+                  "type": "string"
+                },
+                "unjudgeableReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "NO_CONTENT",
+                        "GUESS_ONLY",
+                        "CONTRADICTORY"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guessed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "caseId",
+                "outcomeType",
+                "steps",
+                "firstFailedStep",
+                "errors",
+                "note",
+                "unjudgeableReason",
+                "guessed"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 4780,
+          "input_tokens_details": {
+            "cache_write_tokens": 2826,
+            "cached_tokens": 1951
+          },
+          "output_tokens": 281,
+          "output_tokens_details": {
+            "reasoning_tokens": 162
+          },
+          "total_tokens": 5061
+        },
+        "user": null,
+        "metadata": {},
+        "output_text": "{\"caseId\":\"D3\",\"outcomeType\":\"NONE\",\"steps\":{\"S1_STEM\":\"PASS\",\"S2_CHOICE\":\"PASS\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"PASS\",\"S5_JUDGE\":\"PASS\"},\"firstFailedStep\":null,\"errors\":[],\"note\":\"카르비도파가 말초에서만 작용한다는 근거로 ②의 설명이 부적절하다고 판단했다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+      },
+      "error": null
+    }
+  ],
+  "retryCount": 0,
+  "hasInputImage": false
+}

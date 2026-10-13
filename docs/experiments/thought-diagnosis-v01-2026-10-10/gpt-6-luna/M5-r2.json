@@ -1,0 +1,305 @@
+{
+  "caseId": "M5",
+  "replicate": 2,
+  "label": "M5-r2",
+  "model": "gpt-6-luna",
+  "frozenHash": "c5c5a0e00356b9628145279c3290440aa92de41ed4db8203d2d643d0808c39f2",
+  "status": "VALID",
+  "output": {
+    "caseId": "M5",
+    "outcomeType": "INSUFFICIENT",
+    "steps": {
+      "S1_STEM": "NOT_OBSERVED",
+      "S2_CHOICE": "NOT_OBSERVED",
+      "S3_LOCATE": "NOT_OBSERVED",
+      "S4_INTERPRET": "NOT_OBSERVED",
+      "S5_JUDGE": "NOT_OBSERVED"
+    },
+    "firstFailedStep": null,
+    "errors": [],
+    "note": "pH에 따라 이온화 지질의 양이온성이 달라진다는 사실만 진술했으며, 이를 선택한 선지의 판단 근거와 연결하지 않았다.",
+    "unjudgeableReason": null,
+    "guessed": false
+  },
+  "citations": [],
+  "attempts": [
+    {
+      "requestId": "M5-r2-71",
+      "status": "VALID",
+      "response": {
+        "id": "resp_0472c8b66dd44c12006aca4b6d1e1887d0b0ca4bc26cb61bb0",
+        "object": "response",
+        "created_at": 1791642477,
+        "status": "completed",
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1791642481,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "너는 수능 국어 독서 문항에서 학생 풀이를 진단하는 평가자다. 아래 가이드에 따라 이 학생의 풀이 하나를 진단한다.\n\n# 사고 진단 라벨 가이드 v0.1\n\n학생 한 명의 풀이(선택한 선지 + 근거 설명)를 보고, **어느 논리 단계에서 성공·실패했는지**와 **어떤 함정 유형에 걸렸는지**를 판정한다.\n사람 라벨러와 AI 분류기가 같은 가이드를 쓴다.\n\n## 0. 원칙 (가장 먼저 적용)\n\n- 학생이 **실제로 쓴 말**과 선택만 근거로 판정한다. 드러나지 않은 사고는 판정하지 않는다.\n- 판단 근거가 없으면 `UNJUDGEABLE`(판단 불가)나 `NOT_OBSERVED`(알 수 없음)가 정답이다. 과잉 분류보다 판단 보류가 낫다.\n- `NOT_OBSERVED`는 실패로 세지 않는다.\n\n## 1. 결과 유형 `outcomeType` (하나)\n\n| 값 | 뜻 |\n|---|---|\n| `NONE` | 명시 오류가 없고, 선택 판단에 필요한 연결이 드러난다 |\n| `ERROR` | 원문·선지 내용에 대한 명시적 오류가 하나 이상 있다(선택이 정답이어도, \"모르겠다\"가 함께 있어도) |\n| `POLARITY_MISMATCH` | 내용 이해는 맞는데 발문 방향(적절한/적절하지 않은)과 선택이 충돌한다 |\n| `INSUFFICIENT` | 내용이 있는 진술(참인 사실 등)은 했지만 선지 판단과 연결되지 않는다 |\n| `UNJUDGEABLE` | 판정할 논리 내용이 없다. `unjudgeableReason`을 함께 적는다 |\n\n`unjudgeableReason`(`UNJUDGEABLE`일 때만, 그 외 `null`):\n`NO_CONTENT`(감·느낌·선지 문장이나 선택을 되풀이할 뿐 근거 내용 없음), `GUESS_ONLY`(모름·찍음만 말함), `CONTRADICTORY`(서로 반대되는 진술로 판단을 확정할 수 없음).\n\n`guessed`(참/거짓): 학생이 모른다·찍었다·감으로 골랐다고 **명시**했으면 `true`. 결과 유형과 별개로 기록한다.\n\n## 2. 논리 단계 `steps` (다섯 칸 모두)\n\n\n| 단계 | 확인하는 것 |\n|---|---|\n| `S1_STEM` 발문 처리 | 발문의 방향(적절한/적절하지 않은)과 기호·지시 대상을 맞게 다뤘는가 |\n| `S2_CHOICE` 선지 해석 | 선지가 무엇을 주장하는지 정확히 읽었는가 |\n| `S3_LOCATE` 근거 위치 | 판단에 필요한 원문(지문·〈보기〉·그림) 부분을 찾았는가 |\n| `S4_INTERPRET` 근거 해석 | 그 원문 내용을 정확히 이해했는가(방향·주체·조건·범위) |\n| `S5_JUDGE` 대조·판정 | 선지와 근거를 연결해 정오를 판정했는가 |\n\n각 칸의 값: `PASS`(풀이에 성공이 드러남) / `FAIL`(풀이에 실패가 드러남) / `NOT_OBSERVED`(풀이만으로 알 수 없음).\n드러나지 않은 단계는 `PASS`로 추정하지 않는다. `firstFailedStep`은 `FAIL`인 첫 단계, 없으면 `null`.\n\n단계 규칙:\n- **규칙 ① 단계 독립:** 앞 단계에서 틀렸어도 `S5_JUDGE`는 학생이 내세운 전제에서 선지로 연결하는 추론 자체로 판정한다. 틀린 전제에서 일관되게 연결했으면 `S5_JUDGE`는 `PASS`다.\n- **규칙 ② 필요 근거 기준:** 판단에 필요한 근거를 언급하면 `S3_LOCATE` `PASS`, 그 내용을 맞게 진술하면 `S4_INTERPRET` `PASS`. 판단에 필요 없는 참인 사실만 말했으면 `S3_LOCATE`·`S4_INTERPRET` 모두 `NOT_OBSERVED`.\n- **규칙 ③ 모름은 실패가 아니다:** \"모르겠다\", \"찍었다\"는 어떤 단계의 `FAIL`도 아니다. 해당 단계는 `NOT_OBSERVED`, `guessed: true`.\n- `INSUFFICIENT`와 `UNJUDGEABLE`에는 `FAIL`을 두지 않는다.\n\n## 3. 오류 목록 `errors`\n\n`outcomeType`이 `ERROR` 또는 `POLARITY_MISMATCH`일 때만 채운다. 그 외에는 빈 배열. 독립된 오류마다 하나씩 적는다.\n`{ \"tag\": <함정 유형>, \"step\": <S1~S5>, \"studentQuote\": <학생 풀이의 해당 구절 그대로> }`\n\n함정 유형(하나):\n\n| 태그 | 뜻 |\n|---|---|\n| `POLARITY` | 발문의 적절/부적절 방향 처리 실패 |\n| `REFERENT` | 기호·지시 대상 혼동 |\n| `ATTRIBUTION` | 입장·주체 귀속 혼동 |\n| `DIRECTION` | 인과·논리·증감 방향 오독 |\n| `CONDITION` | 조건·한정 누락 |\n| `SCOPE` | 범위 과잉 일반화·축소 |\n| `MAPPING` | 〈보기〉 사례를 지문 개념에 잘못 대응 |\n| `SURFACE_MATCH` | 표면적 어휘 일치에 기대 판단 |\n| `PARAPHRASE_DISTANCE` | 맞는 내용을 재진술이 멀어 틀렸다고 판단 |\n| `MULTI_STEP` | 여러 근거를 결합하다 이탈 |\n| `OUTSIDE_KNOWLEDGE` | 배경지식·상식에 기대 판단 |\n| `MISREAD_FACT` | 위에 해당하지 않는 단순 사실 오독(동일시, 값·속성 오인 등) |\n\n## 4. 출력 형식 (풀이 하나당)\n\n```json\n{ \"caseId\": \"M2\", \"outcomeType\": \"ERROR\", \"unjudgeableReason\": null, \"guessed\": false,\n  \"steps\": { \"S1_STEM\": \"PASS\", \"S2_CHOICE\": \"PASS\", \"S3_LOCATE\": \"PASS\", \"S4_INTERPRET\": \"FAIL\", \"S5_JUDGE\": \"NOT_OBSERVED\" },\n  \"firstFailedStep\": \"S4_INTERPRET\",\n  \"errors\": [ { \"tag\": \"DIRECTION\", \"step\": \"S4_INTERPRET\", \"studentQuote\": \"pH가 높아지면 수소 이온 농도가 높아져서\" } ],\n  \"note\": \"한 문장 근거\" }\n```\n",
+        "max_output_tokens": 6000,
+        "max_tool_calls": null,
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0472c8b66dd44c12006aca4b6db55487d0b73d37576eb18b4f",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqyktxkJ6fe3-E04SaKtdRJU2D3PeaXO7jG4RACXTbrGGhx9so9tHjcl5Lza3uJyJ-J_FUCAZisu9LgXyogn-FPKGm37C-W2qzvqzj-ilzFYZznpP6d8kdKB64yvMZtXNlhLRFTuFN5pb5g8lZGs8ev4H6Jjvv58Uqa6O3g2hDtuML1tF0BauEEr1YTi3rPs1ZvYj4PNaFnodGXqZt7u4I47vMbSCfxVKw0Gca2hB_FZB1dkOF0jbvaXX8O5RcfOVnotuOmmUJJohMv9_tNAGhagSasDDp8xMhnAVoExyDUp5inxP_dkgtFRMNKo5FfvFPA9LVTxwy2RFcM62dhz-z1eeXO22gpHsJV24JRJ_B9b39cIHL9X5PkTa7_bhuc4BcoLGRsk117hcNw4iWCPDF88Yi5z2s1jTVc1-4OdeQZ8gzHZ9fYiHeK0Ttbkv9XAcPV7dfZDaxbaejWwmvvhv9rbLtuumeNP02hgDy1MDr9n5L27NzwaNBSoHh7fWCv71aO44DzW0n6FRxD0E2Dd5d19fdWtDoND6C-OIzVVZ0DVtVFIi-grjf13wdaI7ajR2Vb-h6zA9u5t812IVw5K7Ua-Qs0PqYgRzWHhyxepZrzqYFKdXGLMzmTXbxCl4UA55eRyzzQCwCHS9FE6vcN_dY1BcP9Xpm09m8rUYffcnpGTsIlGCkJou4o81i7hBnVI_6SmhDEt4KTS69AM6-WOvjwv3CJwRGLFDJLLJ1vtvIg_4ONSV5fe19OuDyGYO8jUSgcpPua-KviHh6nt2dSk23jcU1saHrhzc3O-XHr1AxsCzvcaz0UBKDzqx9PNMDDYdiV-f2jm5WhUaRsY8-_WqUnxa8W8Qc7VNaA8XApuyGtyVL-1VjTovzohK8T7sM09eae3Woy96BYMVwppvJhaFAOhHdv2cMYCYo5VQywmbL3L-U3LavrJhFXzqu-Ng1dKX8Y-0g3D04enSbeosMfCEzUc6xyYIEAHZRxfh9BEzksRM9f2t46goXK5YMTxhGQr_iC3ODhbz5Kf_FAbdq3l6JcsUCzzU2nQ6TJhoBVEshQSwP6HTOha8y48ccwzfpK7bxVngoXS8kSAyHt3W4pkp8hwB1WstbHIoQGi1pWdEeNR9WDJR-OsYvfCrDalkkq1VzR1JLeLW31TyoTsQEJlIWqICHhbl23sQGawQxqCb0pEr-wWedQsiLDLDQzp68_G07dZt7jC76VR7yy9FPN3msNtS5rIeISfgwAiyKfV8BT3L5R2iA0A_MYX1abMTXKLf9sJTlPIVQLpsM_T_4iHv0qSwi9WTS_Qb9LLYGsiSYZxRFEQqEnBunZfMcI-LiZCJFUIMUTBqac9Md_B3Lk0zGAGoFptBLTsjh4k4z0h_hD1V3giqf4gv3-bHtZt7uknTSNDTuizfueAxZ0gDsVqkeBKwlw_BYPiDJPlydNd0k8tI2E9xqP_8eSz30xTar6uBySRA4tfg3Z1pradWsx5XnfuR2DkO3hqSjNI1__59kXnse7R9jNkoBwM19snEwGII7Jz24M_IcSRgFh86Y8imR6CzJOnyTLTd6EFpuUwHUv5JTGUHlLmume6WvjcWpdS54cNSUv3DTHIuPXCs4kemk7I6KO21Vm0quynxEqJlv893qfTKUBNgcN041X8XGi1oxEHBFKFOqB7qfa4aOhl65CYR7vbvkY7KZvbsJ9Bk6AVG6ZhKax-VFLUQhW4tuUsmrrL6v9xr5wHKMnhmenNPy_nUT4T_0jN1dKMLxUJeAlhkkvnbjqa3o0weWS0Cqh6EVDxbDXoIarF_2GEMVUXTlGenmaCW4CEEyUKs-UTMe5Xs1tn-E24sys7ogsYHhoelUK8V0k5kH7q5F4RvYtp2hcas-gXHFV11DtnOWcwHp7yLb3dmmtrycMXoA2X9UqqgrWyEQIPW9LpDP-ul39-dl4-icYc-3vi4ptJ9bDBLFYgiP1ZSAUckyrkyKKNZ0CeDXJsHxjlvyUultoxNZ3x5gRQELRpMTC4B_1Kpbe7j46TAZ-CGgMOHn0QSxX9tOQgGH2312s3KhEwFjC1R_ySox2N8oNfKnSjbVkF9xGRuniwPTk0JsOgLDIUVDE9KXm79yBaL_SxGgpjc-O1lipXoW2x99bNjvm5FNN7Zg31RPjj-1GJ9AcKyqcR1qfyXqvbKjV5JbUTIbezh8Zb7bCR1G2YejljLepqtKkzwWgiilAg1QKuDSyxek6UmfvbfMZO-1tgOGFBRxxcOQ7lfP0HVanDD9razodkkOIUSv8GvS5MuwHOuCbooFMRFa8DZDKjhotR0ZLs_UuajA5j3T9tOvW0GNyF1s71v00BC-h0-TUZ1jzQLMcE-zn6x3nu64uLl1KE9bE9pAcYUSB-tFb3a2lwaEFv9C7mcdnHxQLyOp4vuw7wQ2dHIFnB-pnq1UED1cIdesIIMquVnmZcXiceE_psDnhzYZ-I5b2AjCfC6m5WG63UcVej97E0lfspTIWwj7WzBSOLblNpda4swMMNBO40i0mfcePFTBItLV3OxsqAqEZHozw3RlEcEXqK4NCew-wiZAhm_R7_ycPp5vE-IRmMsFa3pEpFRHnNC5D-uD8N1sFBjBAsDWmXOUumV9PHYD8f2qHOMqiry_hosNM46x-trYHwpB3E-p0jiUVSb9I0JtlviDT2zM4Y73xiLSCBvyKz4HWYKq4EmS5u4UsJCwVSVwI54HmWWYXIhqtWDJhsfrTpGuyysmw-2-5Cv59MhIKHjErLBWCB7ETChoNsjubeNAOvsfg4DCNBl_OgaoQ_Ftx7qVxb8ONzYJaSzpfVcPd-QJNnPWgxIa5XOpvClHCFbSe9hzFkB_XU1tYARf2-yqwmYAFFZoaMq9RGl-Kyfjm57R0ReY9mvfqHT-xbivQ9rBNbf3MvvXtkrZJtV7CkD6msjTmoxz3hWVwS6pTP4zImngnLmjFbOr8kKX4OslLEHHDWme7w4Pym9jhVY10JFUzRv6LYRFdpRUknOLyzM7qYEQ-vdAFyJXMWl7g1IkithSMWerx6y4pUWcvtaebPkUPwt7hI7bc2aIZNdgPIr4dBYnqB5msjINcM5MABg7JcNTa2TjDXzrP8zx8pVgzJkkayino8Uf06WADeQWZwdHWChrh7UnwIkGIx7WXydxFXSLcuTUgMEq-IgfiTQjdkYnzVbBxyqQb04cOx6OXtEf_DbBb7U-xz8IuVJ8zvDaAzccdgyGnVBDNHmt54LN8SuZH8ZITGugNszZpO_ZaGFVRxsfLbyAfQ2XnEnWkQIf4G5rC8sbOgJhZ4O3pKbbvB5_qpw7wuKRV9ti5eHGyueol66a5D3g0FEam7qX67Ep32mmboSyb09c4xaHeswKS78DQtfJrg-1yweigX9CigBaqCqARBzWAlAYUKy5CQCoTVlqFQf1fYiwFhuun4DFMjkfBqtaJGOAniiQHnRhUud7KHmdwpzBi0BFIzHQoTbzFbd9gnz76-NdaIGilYXcO45JiHbAJP-k8KxXCTNJCzW1mGKo-OajogFhkARKEs3195IA0qfXgv39zlWU1f16CNWoNfXbnCaWCphVL7_XuJ-E7p5mDq48jASxvmAS5u0hJNeIUhzluXyeAn1yNPtZp-gRGQc7RNABdCbEqaXX20R0Z3Qw6jYSZrPf6dH-cr9FnV20ejhskV6BoII3HQ1n0qIc2EDdqx83a5n19KHbNIdwRtv2kAXZ3XZg0Tplg3hD33G7jYKghXGGmQieWWis7nPres6Wqv77MOtRn_9QP5dgQIs4qpQtXJYJHz54ESSz5sCUfyoAvSiX9z883nJH5Be3XgRBC4oy6lYlpMhM3MKOf6JLGlhJsGUp4X4XgkE5uo-HEd23c0125SzXAVfbx6p3s3qcBBW9RkQupJy8pQeXz9U11s_kImm5EAaDDsN5YAYGVTPICMKeN1N1t8kj2i4lEnsJBVtCVfbM_oYaVX6q5slS680LogxAzdcGcF86J_nCvRzb1WuuI5l5IUsUP3jTDAnuBtQOcmrNfLlCQ3tAoaYzdWOlISWCSuH5jzUelbsC0NykuFPYG_gSV3Xf1aFJ4GS1nNArSPDS5uuLDYIS2XZMAgEA_0zafTn52Wg4VLBnVfR6I-xUnprMEVSufaiCB_XpTOb3y-UN2qDpZ4nqrdJXxPjvEC_b4SpsRADxLPKCSt3UHWamEhc5hS1JJUEVfBoj_PmU3S6LUtDc9VtIVDVz9-HqL9xfXe_kaYO482hp8gf1t_y0wBsDpDR5FRp47QKPmPmmuMbuJyTpDwbkkaT1ynQx_V_j_aB9FPQd76EU3k7kY07wk90VGTsIhf_Np59qI9aan-YyRpxC6dH2YhxCP9ZZk1Owg4M_OTBszr4O2uAcbXnqw8JAKGeJFaIr1urYdp-eX_P5ZEkO6kzgxMoobRFDbrjNt3QYRWXFNoRQDZfzCu276gN-uYWYlJ-UhhKqCBoqGaH06rCfX6dmrUDXvvOGfZp7QLNvj_bIGYNdgo1daV4CVMVcnhXvMIJmYiXKuGhe-BijwCSy7n-UbAIROh8FmpAOD7cwNo5YXJfZdLMlUybdgCD2Haq9lL9Cf5JyZSOcmA6CfTo0j34VWsptn4WMcIJ_zyx8xFx6Pydy6U58zps8MIMaru_PGClYK_lxXfmxMil0XYU5QFsTl43Hy_c-_7sgoYcZYN2y_R76HvKtsX-M15AIV9CwYJpq4kqNOt8WM_5JrRtVTyTtQ8tyT2OuxxKyTCogB2fg0w9eYzT0srQNjnuL0sR25cPWWJXvbh4YYQhcSLAC6ngax5ly4GerYBRyDzbnXx_P7-z7RzFCq-lc9CzLy3-41xBVTQIqMRRN2t-oS9Mo8mRp7-TCTdOFBud1R6g7urwB9RCNtwrA0wsMW5eDQd988JX9U7cNjk1XQO6a8sGFpjtvYWdzGMrco8_qsJ07LugOHPudhO9gSEXBRrWvJP01gPiNuPqAALCizFRMNgj0-Qc5HYnHvEXoOnsNtiNxroxfKNPpmHoq8r1Dww4_fZVIJH6FggoKdUQWubdM2__RT4FTPSsu1GVKT1-4lMLVmg7AYGh4mcU0RAUTEf5op9N9zgA5WSj4xmmjo5OrOm6tL5zWF2icvvQYrfzl6WmH0rZNyzAeCgrh8u8MvfcSEq9RZAOIjZHQmZPIBUUX5KAXCHSwTXKrO5IybgcGhX8DLHys-u0b_aBhchgz5ioigD-DhgckNzduWDHWlzjWboVJxltPQGocbjLfxBwtB3LWYb1Ax552FPR9t5OyGQxVBRLsIgbxy9uVdqqGhzN9nKnWjmARZ1BQglKJETWlYyY8doPNiBSpknYGfhTOt0wLEmPaHkdmUTLxYFFKqBmIXvlEiMfXGyBBBD9z5Syicqxn71GCM_NfcB2TowwOR2s5TEoO5dessnQFXA7Ex79Yp3YAHaTKA6sfWeQIa4adCQ3p8r0JInukI52ZdkT7R0z99ppc-V30V82y7vl7ejpjjsHrm75-8wH1ychTyE5xPPYwsqCO9aLG62dDM0a5Jq3GeEiyse6ZQHQVqOrDMZ42HnPHqAnTp9e5v-XiupVlx5Ez2LFZzjBiyA==",
+            "summary": []
+          },
+          {
+            "id": "msg_0472c8b66dd44c12006aca4b7086c887d091e9e6ea968c086f",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\"caseId\":\"M5\",\"outcomeType\":\"INSUFFICIENT\",\"steps\":{\"S1_STEM\":\"NOT_OBSERVED\",\"S2_CHOICE\":\"NOT_OBSERVED\",\"S3_LOCATE\":\"NOT_OBSERVED\",\"S4_INTERPRET\":\"NOT_OBSERVED\",\"S5_JUDGE\":\"NOT_OBSERVED\"},\"firstFailedStep\":null,\"errors\":[],\"note\":\"pH에 따라 이온화 지질의 양이온성이 달라진다는 사실만 진술했으며, 이를 선택한 선지의 판단 근거와 연결하지 않았다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "description": null,
+            "name": "thought_diagnosis_v01",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "string"
+                },
+                "outcomeType": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "ERROR",
+                    "INSUFFICIENT",
+                    "POLARITY_MISMATCH",
+                    "SELF_CONTRADICTION",
+                    "UNJUDGEABLE"
+                  ]
+                },
+                "steps": {
+                  "type": "object",
+                  "properties": {
+                    "S1_STEM": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S2_CHOICE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S3_LOCATE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S4_INTERPRET": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S5_JUDGE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "S1_STEM",
+                    "S2_CHOICE",
+                    "S3_LOCATE",
+                    "S4_INTERPRET",
+                    "S5_JUDGE"
+                  ],
+                  "additionalProperties": false
+                },
+                "firstFailedStep": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "S1_STEM",
+                        "S2_CHOICE",
+                        "S3_LOCATE",
+                        "S4_INTERPRET",
+                        "S5_JUDGE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "POLARITY",
+                          "REFERENT",
+                          "ATTRIBUTION",
+                          "DIRECTION",
+                          "CONDITION",
+                          "SCOPE",
+                          "MAPPING",
+                          "SURFACE_MATCH",
+                          "PARAPHRASE_DISTANCE",
+                          "MULTI_STEP",
+                          "OUTSIDE_KNOWLEDGE",
+                          "MISREAD_FACT"
+                        ]
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "S1_STEM",
+                          "S2_CHOICE",
+                          "S3_LOCATE",
+                          "S4_INTERPRET",
+                          "S5_JUDGE"
+                        ]
+                      },
+                      "studentQuote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "step",
+                      "studentQuote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "note": {
+                  "type": "string"
+                },
+                "unjudgeableReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "NO_CONTENT",
+                        "GUESS_ONLY",
+                        "CONTRADICTORY"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guessed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "caseId",
+                "outcomeType",
+                "steps",
+                "firstFailedStep",
+                "errors",
+                "note",
+                "unjudgeableReason",
+                "guessed"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 4954,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 4951
+          },
+          "output_tokens": 484,
+          "output_tokens_details": {
+            "reasoning_tokens": 338
+          },
+          "total_tokens": 5438
+        },
+        "user": null,
+        "metadata": {},
+        "output_text": "{\"caseId\":\"M5\",\"outcomeType\":\"INSUFFICIENT\",\"steps\":{\"S1_STEM\":\"NOT_OBSERVED\",\"S2_CHOICE\":\"NOT_OBSERVED\",\"S3_LOCATE\":\"NOT_OBSERVED\",\"S4_INTERPRET\":\"NOT_OBSERVED\",\"S5_JUDGE\":\"NOT_OBSERVED\"},\"firstFailedStep\":null,\"errors\":[],\"note\":\"pH에 따라 이온화 지질의 양이온성이 달라진다는 사실만 진술했으며, 이를 선택한 선지의 판단 근거와 연결하지 않았다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+      },
+      "error": null
+    }
+  ],
+  "retryCount": 0,
+  "hasInputImage": true
+}

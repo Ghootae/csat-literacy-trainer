@@ -1,0 +1,305 @@
+{
+  "caseId": "D6",
+  "replicate": 3,
+  "label": "D6-r3",
+  "model": "gpt-6.1-sol",
+  "frozenHash": "c5c5a0e00356b9628145279c3290440aa92de41ed4db8203d2d643d0808c39f2",
+  "status": "VALID",
+  "output": {
+    "caseId": "D6",
+    "outcomeType": "NONE",
+    "steps": {
+      "S1_STEM": "PASS",
+      "S2_CHOICE": "PASS",
+      "S3_LOCATE": "PASS",
+      "S4_INTERPRET": "PASS",
+      "S5_JUDGE": "PASS"
+    },
+    "firstFailedStep": null,
+    "errors": [],
+    "note": "카르비도파가 뇌에 진입하지 못한다는 핵심 근거로, 흑질에서 합성된 도파민의 작용 기간을 연장한다는 ②의 주장을 부정했다.",
+    "unjudgeableReason": null,
+    "guessed": false
+  },
+  "citations": [],
+  "attempts": [
+    {
+      "requestId": "D6-r3-104",
+      "status": "VALID",
+      "response": {
+        "id": "resp_0d5c6ddf60bef97f006aca4c6baf2487d097acbbf79f7ceea1",
+        "object": "response",
+        "created_at": 1791642731,
+        "status": "completed",
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1791642741,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "너는 수능 국어 독서 문항에서 학생 풀이를 진단하는 평가자다. 아래 가이드에 따라 이 학생의 풀이 하나를 진단한다.\n\n# 사고 진단 라벨 가이드 v0.1\n\n학생 한 명의 풀이(선택한 선지 + 근거 설명)를 보고, **어느 논리 단계에서 성공·실패했는지**와 **어떤 함정 유형에 걸렸는지**를 판정한다.\n사람 라벨러와 AI 분류기가 같은 가이드를 쓴다.\n\n## 0. 원칙 (가장 먼저 적용)\n\n- 학생이 **실제로 쓴 말**과 선택만 근거로 판정한다. 드러나지 않은 사고는 판정하지 않는다.\n- 판단 근거가 없으면 `UNJUDGEABLE`(판단 불가)나 `NOT_OBSERVED`(알 수 없음)가 정답이다. 과잉 분류보다 판단 보류가 낫다.\n- `NOT_OBSERVED`는 실패로 세지 않는다.\n\n## 1. 결과 유형 `outcomeType` (하나)\n\n| 값 | 뜻 |\n|---|---|\n| `NONE` | 명시 오류가 없고, 선택 판단에 필요한 연결이 드러난다 |\n| `ERROR` | 원문·선지 내용에 대한 명시적 오류가 하나 이상 있다(선택이 정답이어도, \"모르겠다\"가 함께 있어도) |\n| `POLARITY_MISMATCH` | 내용 이해는 맞는데 발문 방향(적절한/적절하지 않은)과 선택이 충돌한다 |\n| `INSUFFICIENT` | 내용이 있는 진술(참인 사실 등)은 했지만 선지 판단과 연결되지 않는다 |\n| `UNJUDGEABLE` | 판정할 논리 내용이 없다. `unjudgeableReason`을 함께 적는다 |\n\n`unjudgeableReason`(`UNJUDGEABLE`일 때만, 그 외 `null`):\n`NO_CONTENT`(감·느낌·선지 문장이나 선택을 되풀이할 뿐 근거 내용 없음), `GUESS_ONLY`(모름·찍음만 말함), `CONTRADICTORY`(서로 반대되는 진술로 판단을 확정할 수 없음).\n\n`guessed`(참/거짓): 학생이 모른다·찍었다·감으로 골랐다고 **명시**했으면 `true`. 결과 유형과 별개로 기록한다.\n\n## 2. 논리 단계 `steps` (다섯 칸 모두)\n\n\n| 단계 | 확인하는 것 |\n|---|---|\n| `S1_STEM` 발문 처리 | 발문의 방향(적절한/적절하지 않은)과 기호·지시 대상을 맞게 다뤘는가 |\n| `S2_CHOICE` 선지 해석 | 선지가 무엇을 주장하는지 정확히 읽었는가 |\n| `S3_LOCATE` 근거 위치 | 판단에 필요한 원문(지문·〈보기〉·그림) 부분을 찾았는가 |\n| `S4_INTERPRET` 근거 해석 | 그 원문 내용을 정확히 이해했는가(방향·주체·조건·범위) |\n| `S5_JUDGE` 대조·판정 | 선지와 근거를 연결해 정오를 판정했는가 |\n\n각 칸의 값: `PASS`(풀이에 성공이 드러남) / `FAIL`(풀이에 실패가 드러남) / `NOT_OBSERVED`(풀이만으로 알 수 없음).\n드러나지 않은 단계는 `PASS`로 추정하지 않는다. `firstFailedStep`은 `FAIL`인 첫 단계, 없으면 `null`.\n\n단계 규칙:\n- **규칙 ① 단계 독립:** 앞 단계에서 틀렸어도 `S5_JUDGE`는 학생이 내세운 전제에서 선지로 연결하는 추론 자체로 판정한다. 틀린 전제에서 일관되게 연결했으면 `S5_JUDGE`는 `PASS`다.\n- **규칙 ② 필요 근거 기준:** 판단에 필요한 근거를 언급하면 `S3_LOCATE` `PASS`, 그 내용을 맞게 진술하면 `S4_INTERPRET` `PASS`. 판단에 필요 없는 참인 사실만 말했으면 `S3_LOCATE`·`S4_INTERPRET` 모두 `NOT_OBSERVED`.\n- **규칙 ③ 모름은 실패가 아니다:** \"모르겠다\", \"찍었다\"는 어떤 단계의 `FAIL`도 아니다. 해당 단계는 `NOT_OBSERVED`, `guessed: true`.\n- `INSUFFICIENT`와 `UNJUDGEABLE`에는 `FAIL`을 두지 않는다.\n\n## 3. 오류 목록 `errors`\n\n`outcomeType`이 `ERROR` 또는 `POLARITY_MISMATCH`일 때만 채운다. 그 외에는 빈 배열. 독립된 오류마다 하나씩 적는다.\n`{ \"tag\": <함정 유형>, \"step\": <S1~S5>, \"studentQuote\": <학생 풀이의 해당 구절 그대로> }`\n\n함정 유형(하나):\n\n| 태그 | 뜻 |\n|---|---|\n| `POLARITY` | 발문의 적절/부적절 방향 처리 실패 |\n| `REFERENT` | 기호·지시 대상 혼동 |\n| `ATTRIBUTION` | 입장·주체 귀속 혼동 |\n| `DIRECTION` | 인과·논리·증감 방향 오독 |\n| `CONDITION` | 조건·한정 누락 |\n| `SCOPE` | 범위 과잉 일반화·축소 |\n| `MAPPING` | 〈보기〉 사례를 지문 개념에 잘못 대응 |\n| `SURFACE_MATCH` | 표면적 어휘 일치에 기대 판단 |\n| `PARAPHRASE_DISTANCE` | 맞는 내용을 재진술이 멀어 틀렸다고 판단 |\n| `MULTI_STEP` | 여러 근거를 결합하다 이탈 |\n| `OUTSIDE_KNOWLEDGE` | 배경지식·상식에 기대 판단 |\n| `MISREAD_FACT` | 위에 해당하지 않는 단순 사실 오독(동일시, 값·속성 오인 등) |\n\n## 4. 출력 형식 (풀이 하나당)\n\n```json\n{ \"caseId\": \"M2\", \"outcomeType\": \"ERROR\", \"unjudgeableReason\": null, \"guessed\": false,\n  \"steps\": { \"S1_STEM\": \"PASS\", \"S2_CHOICE\": \"PASS\", \"S3_LOCATE\": \"PASS\", \"S4_INTERPRET\": \"FAIL\", \"S5_JUDGE\": \"NOT_OBSERVED\" },\n  \"firstFailedStep\": \"S4_INTERPRET\",\n  \"errors\": [ { \"tag\": \"DIRECTION\", \"step\": \"S4_INTERPRET\", \"studentQuote\": \"pH가 높아지면 수소 이온 농도가 높아져서\" } ],\n  \"note\": \"한 문장 근거\" }\n```\n",
+        "max_output_tokens": 6000,
+        "max_tool_calls": null,
+        "model": "gpt-6.1-sol",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0d5c6ddf60bef97f006aca4c6cbce887d08d5dd3ec53507045",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqykx1-BVJ7IIJ84npL9phFWFvxohsr7PULP7CAnOf-y9syQpZylYyUrD1ITj327DWK3YyiH1R6q53_ZpcVKvDj4vsyKEJl46q1UhHrKKRwpX7kprTNJIR2tidyAuGXYcMNY2W2zHtE8w4F0iU44nuWhyv9Jb3JR2aRQAMNRt-yx7iI9fctxp3oHNbtWY1aldTY6ej6unbr3aa7d7O_sCYadBifJWrVe5qr_7tLQepuFIaenj8dYlt8FgURJgT_ww7G5p4DAGtqPBJH7asvGPKzyMHKjmS9y5ySA8OkoP1nSLvQE_e8d_N0DvcnMsMWxOIegJSYNIG28LxdrTwVgEeM2aNs_pgJhXpQEdl6NHRiesKT47IXSTduMB47e4JtKAheN-Gyo0d3e7HNmCnznPfzf43iQhhBFa1XlciDLz1hjvGKZ29dAu7wwYsXWbg96Ld8Y-v2exoUYYBwR66dWTHEEdhijR3tyQhE0mOcNN3efnFszWPg9Wg0-Jw4F5rEW3u_R92XlP7Y4oX-fM84cVO1Jw48xcpUEPphnuke4SWnOq8uDHBTt0RowTe-9Tk0vpI4Fe2TcrV9kVLNA_u4IlWKDyboBjlYaKm7m2C8-X0Vb372ObB66buJ-5tAv5Maua7wcpxTPMeLf9wF1e9sIvw_y13CNC8C0jBAtRa-STqAMddoatKouN1L68RPf9UqyJPo-Cc09pCcmco-VIIZykX2oFX-gHmZ9wBzyk464NPeqrAGSVtdMj-VCDSxhYnHUB-eA0RPZKf_T2EuBYcCLsni3umVZE_Fnylk2mHDdaIzyVA4BVV2l5Lz9dv0SXGEZnwYcuQBicOeBtEwMza0qy2l0PUJ6AeTMY-k_2Op26HumJyaBvVsVi_ejNtytOpb8h0XmPlw0qsjkW0rAiDzgbRDeJtrSAgPe9RBzNorCQNGZtDfgWayCGIBSEd_W11B5kfqsHZyhqy6ckF-epstyHUys5qXXZbgcfWyqCbHBRyb6zdA0pOwwuaPL6yEK4yX4Bxhdd5Iz0usiXQOaot4nl4Gsd3bGFUOdqShxQeGP0cw4Bd6cWkUqXlI44mOfzvzvPokWMpdgU4V5-Wc2mqVyPmyDPXNoIbYcSxOTlLiT3Uq1U6MGgctjr22dbaaQ3O8V0Y7r5nuriUEKPRWPrvi-bYuRIfG9R9UtAe8ixqSD3P_62hKyo_A4inbtuyBYJX_3F3e4dIL4fKl6tq5etWC9AljePiL4zfjkR8DfP-m4ri00wR9uhxgrOvlXSB5MwU--ghlH7LrdAeiBntYGoQh_3KN8Le3NXlBU5IQ9G8UbG2f88TXXx6-FxfjCB3gnxfc_K1o2r2nCRODzIrQ6gUH3qL9or_L3j9gLNAuiHqpR3rq-i9LFC2siEJa0s2tZ8o2Zcx5FBRJf-hrOWJxhmT6WNbvL9YTcMgKixwywKpRHp9VkY91r2fs5BW6NhulfihyeUV4cCWXrwSBxB_qeCQYm9UA8y-_pWprEKoc_I5EVb8YhzxaWGVaq-zHxizrBFS6pHGIgX3Zow0hPMOXq4jwvZQxObRCOrgj2lQ04HEKnHnLnvpZvCSNMeBUtf1eLnbLLtUcQx3DfB6ZXjGyySe2cOxcXsourp5gURsH0E9vAvRqDlo13ASUlNmCisAUULAc5ti7h5ssR2I4v55A2seNvPpLqSXXmi9TUxHSnxG4fmqJx0eOb5RRfOZ7YDOP3VhsEcqoToCrSSl0JReEz-_DrZVqSlGklkE5wBEqD23ANkNqHFaH-BkJ5PceOmCCV2WrOOfm8Y7uj7hnnzkgq1DHDMY3SQZQz8SItL7Ihunln8godWZHfFa7Ra6abMSGE860a9lj5f4VmQjJ7BwkOonQ2RWUoAbuKCtMCM96WpvTiZ3huWZSQI1UkNksMzM9YaY_iskDz1z_ZfNLSmhDkrU3O5rtMRv3_g3vIqTWAMK7TxkhshCXwiBNKhFZQnQ7c--IJZjK6G8u4iMNlrOqQssDoPJEO2p5b_LHy_Q4DOBLphYFu6RgbEgDLVBqlzRHP4hOq5EDSi_SHSrnBGitBO-81aGFy8KuIVyJhzXc62T6hFO9DVgs4FIyztmY3DU_YqLeysoz3gkGIA_nhFleckvTmkdwvqyNZm6dJk-KBWWtw3XChU5FL35YhIqbcdLhhrLDlsB4_eVzLNhOpFqw6Hetgr0ElabGFyiFjBHlJrwsr87-KbT6PXO7GlH6c_rhcxdQxFUB5AoYNvUDQ4KmKr5g2NaUAwGu__kxbLEFlKgmsty8LkEokkoAsxWeMG2qxFinHWeKKZr1B_Z6VXrNoQtDRqmcItOTWjuAOxOSrSMDcXmw_MzXkgJVR3DwbQHS3bghqXqSJy_yjw1iBwnXYVaqwze_rMz4cnVXv2fe44QvqQItYQa8_LfL-XRUz3dA1HiTpDNskQxhx6S-DZXqctNRitiQgJIY4lLUxcHQIKhkpsMwYtqRcZz1c7xp-vMCKwuioQGClQJ5GVUEjbSnZKEn-omJdlPmZsdYa_qYNiOHUd6dIksxkZhN_SUiq_hWfDgXxleywa-XBShVzYco1SwYgUaqfl3v1DQUlTVVvGj8_59akaFtSZFBmPR_aJRUh-fFa1X5oLOU2sh28Jv8-r3xx68rdefIXo3Zzv79F6-39ahKozUtu1OwNhNJ4sJ4RKLSKjQafrmpK1vtDcAWVawny9mf-pY-JEXHeXHXXeTYc2wi_hhcGWVxgW_TqWwS_WGulEXEbG6OclNr7asbQ8zDJx3n0ZGbISUHJBuMraNxgrF8pnZlf8_hqYQzNh_o_BKdbAe_Tgl1RmSrKyI8XTApHw1u8xOEftY3WmBlsNy6qUYab1c-cBSPSGkMD5gGkzXoMZ6cjpk_N4YdQW1XMMqtJWuw236-MWrpz95u80-At93i82uPufCN0DZHy5bDiwvIM-REnbxHU37oGWpWY-52rj6RrC4C7M4PpQU3StjCbPlKKBYwntuFW1aurRkAbHUvERpuKfgexx7BRRZ7Zfs1c_BtJrdHjsXMTHAnj0DZYMafRyJyL3KcKFhG-M-wGlQxKzRrWkMw4UelsETuAnQ_yLN9CnnrL3uI5GHXrE5sts54ptXwlhF7zZtWAXpJJmfbl1S8PvKl3VRjBfFtNanlVS8BrPJY_IHF41Ly-m1hmb_XfPCpZwWUNwlMd4fRsyywOCfk0xnEVaLusKgoPgMvbJBlkgJaRoRvxWNTNvETrx-9E2RxlniSpx3268vRugLaACVEfUuiCx0pO-mPq-k7Ka_1GsCdoOTsRHsksA1ZUtFicCI9eHafDD7JISgaHQ2LmMZl4cXmuuuHLj2zu-EhNBVw2VsPZ5ipp2hTU68pRkb0Dv04J7EkHksJckS-wM5wZZx0DepxWN9UutjD-0U5QHqKEmE8RfL9dHv-0gjNcDyrw4aIzRKLE_O5AX1jqNgGfMnnK_iJyJUtMsddZTvJy4SMbS6_FYfF9P-H-tiGEQMo4ymnl2MyhdHmJTS8IVNx5dMWzGR88FlShaWP7Em8pPowLUnjhVmLKdPmoIVDII2607Y8H5gz1TYp4Aoz1k6hogQnD8ZDkEV5UY9X2F8N-liVgY4NSV2cuy27gRMHMl03IOFRcPCLJZ0dY_fKZczTYlm6DUMCXmwFIi48yOS-xR5QFJpdPirhNZIHstrfDsjdT9vRZd7-4lg22OpqmqYBJ3AnUBfajYAe4Sf7wTqfCLoQN7E9RTmh3jCj1Mg1lh62y_RCaDZKCFXLfwekxarCi_-CNSEmvJwzl3hOnSGrXCM8kL5VQrddMnFH3qmo4bty-YRQ1RiiYKrCIuUfkcsT58_ypRHBxt6FX0T8CLdcLybTbUFe6BYZQusRr0zh-JbYWpqTCRQSdfo8rvKtf_vu28M7IurrjPNBEfzTUZK39nM_6B2yLNBYrqmXcUYlXqesAIbHwWrp7bU-CLQCURoaQ1C657cnAtPXBwsjyAGijL6QIEN38ZxaCziaNCSIbAQIfcL5L3NejXShwunlIKXM6sipEyYxu33ActnjVO_qFCIhwRwUYt_7XpGnvfvj40XRcbUDOfOl6rXFsm6CZjB9dGe241sxvbmtGkG1Oz-zWZQPDm33IB9-gzUdr5uwSALL9DzRtwiQ3YD9O9v9VEXjzFbIdKJ5XRKjtENWdI-nAKDhpwMwBo9oBNfXl50crrvvlCfrNcxpbg6DJgjKzxcXtxW76xKPvBoXEwFb-2DudE-RXw-PiK-XLFbOYdEfxTghfCF7Q_udeIFo_qY0B1FnP5saSBV02dwAguNuGp8B06jd57wWPLQQFJUw_kFsNibjEjVn-wCJMTzz6Zzf89T_BY7v55Ob7ko4mEib1ns4XHLrYGz6OWO6sWtvVm9IJh7omrGPgmwXMk4KoDUVPtmViKpiitIO9iMSSaGZLyQ2Yo2bwYQA8gXfnLplXl-jjb5_R0n7WOlnbK7HSyqPvXqmhgnoBmfJmbpjx7d06NT0dzePFMpwpcwgjfz64p6bTJDQ3wIWUp4M3gek9_BtAwpyH5XmUWkcC127bvtuBMo1dOLTm2wSwVXvFZtOCd_Q4ehBslS242ny2jq26KaOoT5hKTfw1GkI_pUCe3XSvk24JXlbRvTq0SBDsxNWnGfg3bt7tFUu1Q2hQ4VsvKGHDBcb1Rh55vG8JhHBsSYxRd1vJ_Y7-S4Mq4LYn2mpUfCGw85Ht4lb26aiD7_hyvPMi6y78nCkb_hYVtlR-JWFVvKCpkPiyHg2ZHHsF4LH8ShwtZs6Atl5G2YgdOt5ic6V3VyoswTu1kToft9PbvEv5PLENW4I-UTZE1MIOBlb2NbEff2Ru_V27VzWYu_vZxbGI2b-DpOmxQv",
+            "summary": []
+          },
+          {
+            "id": "msg_0d5c6ddf60bef97f006aca4c732bfc87d0ba1e9e47187ab12b",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\n  \"caseId\": \"D6\",\n  \"outcomeType\": \"NONE\",\n  \"steps\": {\n    \"S1_STEM\": \"PASS\",\n    \"S2_CHOICE\": \"PASS\",\n    \"S3_LOCATE\": \"PASS\",\n    \"S4_INTERPRET\": \"PASS\",\n    \"S5_JUDGE\": \"PASS\"\n  },\n  \"firstFailedStep\": null,\n  \"errors\": [],\n  \"note\": \"카르비도파가 뇌에 진입하지 못한다는 핵심 근거로, 흑질에서 합성된 도파민의 작용 기간을 연장한다는 ②의 주장을 부정했다.\",\n  \"unjudgeableReason\": null,\n  \"guessed\": false\n}"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "description": null,
+            "name": "thought_diagnosis_v01",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "string"
+                },
+                "outcomeType": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "ERROR",
+                    "INSUFFICIENT",
+                    "POLARITY_MISMATCH",
+                    "SELF_CONTRADICTION",
+                    "UNJUDGEABLE"
+                  ]
+                },
+                "steps": {
+                  "type": "object",
+                  "properties": {
+                    "S1_STEM": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S2_CHOICE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S3_LOCATE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S4_INTERPRET": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S5_JUDGE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "S1_STEM",
+                    "S2_CHOICE",
+                    "S3_LOCATE",
+                    "S4_INTERPRET",
+                    "S5_JUDGE"
+                  ],
+                  "additionalProperties": false
+                },
+                "firstFailedStep": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "S1_STEM",
+                        "S2_CHOICE",
+                        "S3_LOCATE",
+                        "S4_INTERPRET",
+                        "S5_JUDGE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "POLARITY",
+                          "REFERENT",
+                          "ATTRIBUTION",
+                          "DIRECTION",
+                          "CONDITION",
+                          "SCOPE",
+                          "MAPPING",
+                          "SURFACE_MATCH",
+                          "PARAPHRASE_DISTANCE",
+                          "MULTI_STEP",
+                          "OUTSIDE_KNOWLEDGE",
+                          "MISREAD_FACT"
+                        ]
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "S1_STEM",
+                          "S2_CHOICE",
+                          "S3_LOCATE",
+                          "S4_INTERPRET",
+                          "S5_JUDGE"
+                        ]
+                      },
+                      "studentQuote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "step",
+                      "studentQuote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "note": {
+                  "type": "string"
+                },
+                "unjudgeableReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "NO_CONTENT",
+                        "GUESS_ONLY",
+                        "CONTRADICTORY"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guessed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "caseId",
+                "outcomeType",
+                "steps",
+                "firstFailedStep",
+                "errors",
+                "note",
+                "unjudgeableReason",
+                "guessed"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 4737,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 4734
+          },
+          "output_tokens": 432,
+          "output_tokens_details": {
+            "reasoning_tokens": 257
+          },
+          "total_tokens": 5169
+        },
+        "user": null,
+        "metadata": {},
+        "output_text": "{\n  \"caseId\": \"D6\",\n  \"outcomeType\": \"NONE\",\n  \"steps\": {\n    \"S1_STEM\": \"PASS\",\n    \"S2_CHOICE\": \"PASS\",\n    \"S3_LOCATE\": \"PASS\",\n    \"S4_INTERPRET\": \"PASS\",\n    \"S5_JUDGE\": \"PASS\"\n  },\n  \"firstFailedStep\": null,\n  \"errors\": [],\n  \"note\": \"카르비도파가 뇌에 진입하지 못한다는 핵심 근거로, 흑질에서 합성된 도파민의 작용 기간을 연장한다는 ②의 주장을 부정했다.\",\n  \"unjudgeableReason\": null,\n  \"guessed\": false\n}"
+      },
+      "error": null
+    }
+  ],
+  "retryCount": 0,
+  "hasInputImage": false
+}

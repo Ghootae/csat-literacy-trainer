@@ -1,0 +1,325 @@
+{
+  "caseId": "M6",
+  "replicate": 3,
+  "label": "M6-r3",
+  "model": "gpt-6-luna",
+  "frozenHash": "c5c5a0e00356b9628145279c3290440aa92de41ed4db8203d2d643d0808c39f2",
+  "status": "VALID",
+  "output": {
+    "caseId": "M6",
+    "outcomeType": "POLARITY_MISMATCH",
+    "steps": {
+      "S1_STEM": "FAIL",
+      "S2_CHOICE": "PASS",
+      "S3_LOCATE": "PASS",
+      "S4_INTERPRET": "PASS",
+      "S5_JUDGE": "PASS"
+    },
+    "firstFailedStep": "S1_STEM",
+    "errors": [
+      {
+        "tag": "POLARITY",
+        "step": "S1_STEM",
+        "studentQuote": "4번은 맞는 설명이에요."
+      }
+    ],
+    "note": "C4의 내용은 지문에 맞게 판단했지만, ‘적절하지 않은 것’을 고르는 발문의 방향을 반영하지 못했습니다.",
+    "unjudgeableReason": null,
+    "guessed": false
+  },
+  "citations": [
+    {
+      "tag": "POLARITY",
+      "step": "S1_STEM",
+      "studentQuote": "4번은 맞는 설명이에요.",
+      "exact": true
+    }
+  ],
+  "attempts": [
+    {
+      "requestId": "M6-r3-83",
+      "status": "VALID",
+      "response": {
+        "id": "resp_0814c39f82e6f446006aca4bb6f8f087d0837fe71d4a9efbd1",
+        "object": "response",
+        "created_at": 1791642551,
+        "status": "completed",
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1791642559,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "너는 수능 국어 독서 문항에서 학생 풀이를 진단하는 평가자다. 아래 가이드에 따라 이 학생의 풀이 하나를 진단한다.\n\n# 사고 진단 라벨 가이드 v0.1\n\n학생 한 명의 풀이(선택한 선지 + 근거 설명)를 보고, **어느 논리 단계에서 성공·실패했는지**와 **어떤 함정 유형에 걸렸는지**를 판정한다.\n사람 라벨러와 AI 분류기가 같은 가이드를 쓴다.\n\n## 0. 원칙 (가장 먼저 적용)\n\n- 학생이 **실제로 쓴 말**과 선택만 근거로 판정한다. 드러나지 않은 사고는 판정하지 않는다.\n- 판단 근거가 없으면 `UNJUDGEABLE`(판단 불가)나 `NOT_OBSERVED`(알 수 없음)가 정답이다. 과잉 분류보다 판단 보류가 낫다.\n- `NOT_OBSERVED`는 실패로 세지 않는다.\n\n## 1. 결과 유형 `outcomeType` (하나)\n\n| 값 | 뜻 |\n|---|---|\n| `NONE` | 명시 오류가 없고, 선택 판단에 필요한 연결이 드러난다 |\n| `ERROR` | 원문·선지 내용에 대한 명시적 오류가 하나 이상 있다(선택이 정답이어도, \"모르겠다\"가 함께 있어도) |\n| `POLARITY_MISMATCH` | 내용 이해는 맞는데 발문 방향(적절한/적절하지 않은)과 선택이 충돌한다 |\n| `INSUFFICIENT` | 내용이 있는 진술(참인 사실 등)은 했지만 선지 판단과 연결되지 않는다 |\n| `UNJUDGEABLE` | 판정할 논리 내용이 없다. `unjudgeableReason`을 함께 적는다 |\n\n`unjudgeableReason`(`UNJUDGEABLE`일 때만, 그 외 `null`):\n`NO_CONTENT`(감·느낌·선지 문장이나 선택을 되풀이할 뿐 근거 내용 없음), `GUESS_ONLY`(모름·찍음만 말함), `CONTRADICTORY`(서로 반대되는 진술로 판단을 확정할 수 없음).\n\n`guessed`(참/거짓): 학생이 모른다·찍었다·감으로 골랐다고 **명시**했으면 `true`. 결과 유형과 별개로 기록한다.\n\n## 2. 논리 단계 `steps` (다섯 칸 모두)\n\n\n| 단계 | 확인하는 것 |\n|---|---|\n| `S1_STEM` 발문 처리 | 발문의 방향(적절한/적절하지 않은)과 기호·지시 대상을 맞게 다뤘는가 |\n| `S2_CHOICE` 선지 해석 | 선지가 무엇을 주장하는지 정확히 읽었는가 |\n| `S3_LOCATE` 근거 위치 | 판단에 필요한 원문(지문·〈보기〉·그림) 부분을 찾았는가 |\n| `S4_INTERPRET` 근거 해석 | 그 원문 내용을 정확히 이해했는가(방향·주체·조건·범위) |\n| `S5_JUDGE` 대조·판정 | 선지와 근거를 연결해 정오를 판정했는가 |\n\n각 칸의 값: `PASS`(풀이에 성공이 드러남) / `FAIL`(풀이에 실패가 드러남) / `NOT_OBSERVED`(풀이만으로 알 수 없음).\n드러나지 않은 단계는 `PASS`로 추정하지 않는다. `firstFailedStep`은 `FAIL`인 첫 단계, 없으면 `null`.\n\n단계 규칙:\n- **규칙 ① 단계 독립:** 앞 단계에서 틀렸어도 `S5_JUDGE`는 학생이 내세운 전제에서 선지로 연결하는 추론 자체로 판정한다. 틀린 전제에서 일관되게 연결했으면 `S5_JUDGE`는 `PASS`다.\n- **규칙 ② 필요 근거 기준:** 판단에 필요한 근거를 언급하면 `S3_LOCATE` `PASS`, 그 내용을 맞게 진술하면 `S4_INTERPRET` `PASS`. 판단에 필요 없는 참인 사실만 말했으면 `S3_LOCATE`·`S4_INTERPRET` 모두 `NOT_OBSERVED`.\n- **규칙 ③ 모름은 실패가 아니다:** \"모르겠다\", \"찍었다\"는 어떤 단계의 `FAIL`도 아니다. 해당 단계는 `NOT_OBSERVED`, `guessed: true`.\n- `INSUFFICIENT`와 `UNJUDGEABLE`에는 `FAIL`을 두지 않는다.\n\n## 3. 오류 목록 `errors`\n\n`outcomeType`이 `ERROR` 또는 `POLARITY_MISMATCH`일 때만 채운다. 그 외에는 빈 배열. 독립된 오류마다 하나씩 적는다.\n`{ \"tag\": <함정 유형>, \"step\": <S1~S5>, \"studentQuote\": <학생 풀이의 해당 구절 그대로> }`\n\n함정 유형(하나):\n\n| 태그 | 뜻 |\n|---|---|\n| `POLARITY` | 발문의 적절/부적절 방향 처리 실패 |\n| `REFERENT` | 기호·지시 대상 혼동 |\n| `ATTRIBUTION` | 입장·주체 귀속 혼동 |\n| `DIRECTION` | 인과·논리·증감 방향 오독 |\n| `CONDITION` | 조건·한정 누락 |\n| `SCOPE` | 범위 과잉 일반화·축소 |\n| `MAPPING` | 〈보기〉 사례를 지문 개념에 잘못 대응 |\n| `SURFACE_MATCH` | 표면적 어휘 일치에 기대 판단 |\n| `PARAPHRASE_DISTANCE` | 맞는 내용을 재진술이 멀어 틀렸다고 판단 |\n| `MULTI_STEP` | 여러 근거를 결합하다 이탈 |\n| `OUTSIDE_KNOWLEDGE` | 배경지식·상식에 기대 판단 |\n| `MISREAD_FACT` | 위에 해당하지 않는 단순 사실 오독(동일시, 값·속성 오인 등) |\n\n## 4. 출력 형식 (풀이 하나당)\n\n```json\n{ \"caseId\": \"M2\", \"outcomeType\": \"ERROR\", \"unjudgeableReason\": null, \"guessed\": false,\n  \"steps\": { \"S1_STEM\": \"PASS\", \"S2_CHOICE\": \"PASS\", \"S3_LOCATE\": \"PASS\", \"S4_INTERPRET\": \"FAIL\", \"S5_JUDGE\": \"NOT_OBSERVED\" },\n  \"firstFailedStep\": \"S4_INTERPRET\",\n  \"errors\": [ { \"tag\": \"DIRECTION\", \"step\": \"S4_INTERPRET\", \"studentQuote\": \"pH가 높아지면 수소 이온 농도가 높아져서\" } ],\n  \"note\": \"한 문장 근거\" }\n```\n",
+        "max_output_tokens": 6000,
+        "max_tool_calls": null,
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0814c39f82e6f446006aca4bb7a51887d08c49d3cad2ac4573",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqyku_dVpqdo69UAjz6tSxRF3k4jtCJ7FMUMk6lAfWbtqEgJ9X-bOgucC-UfBpG_erT3CEVkcHJHYaqEcEv8P9I5BEdpKPWOcVN6QLp6u1dhFucR1rtdQ5Pg7VuwjrbjNhNjU6qv42RDOAo_IM_pXL69cW6vR8djTp4KdTFZkBxhyxUSdllq9gd3ydbZyLu-aPwWHGEbue-VLL9LMrn04eldyyYYtGg_BX_FWRQ7D7jXqumk58eCSTm1JJIf-FRyrv19-19tri1VqwprmF75b2Tu4qQweBkRtIdxl-HjJTB3BtjEWoRJoF-J50zMSWRHIC7iSrDKWVZdOEQbAnayI0W6tTe2AIzDxF1FMV_wNdXu4i9PkMEAr25nNS-FzH6xIflHFgUcQAgLfcdXkHonggc8Cr0PkGbxsFTIS_N1XncNX--OsTR-hGEevvTRwEHi6oN0xscdP46foCY7We4eOITipStquv0ZzU-Dg0QnIX3x6sOvz_UKYb3oPtd5ZCBTrGYmmrl_lU2hy_UOC-2wbg1fQx_RrOUUgdRIAdfcM57tTtjXI5T-qz5Nu81XtTeEj0E187ijKQGXI7Hqpw-Xh6ZyMjDoaXwQMACQSSBqvfG_1pcZaRMwp4wpbJEMH7g1R6L50lrLRLNSn7lWz2q2s6aaM44SpjcqksLL0bOUIOi1AOvBEBgduw_cAu3HHlIqKtoCsuMxf7Lxjk5C0Cf7GAz9nI6Gv8APys75V5j1pGKJWNy4Uj5zopBNeK6YSb8Jr88m4jncMPUT50AuAPuOBJM4UDjWfbXnOdvAw58oN0rXT1-YY5Icma-yOOx4iFuyyM7it3XTsQsobX2aOui2H3emBRFbW2dXTL4DVx_Av54_EUmDVBk6OyHMvQbusZFXak2DzVkBbuRzkGFkxlM0DMruKn_cPBWlj_HYRie9SLgGe9iOx4acF8faLQFw72OKIPXYrvYrA1TpDDDI9uMKrSU3HLwYFDS31BMu0EgBFlkIxkIdc7zAVAyXyJylvMaOu-HUX3-KKACCSuruML3JlJu76SlVYfISSuLa35syRTwOoyQWg8PtCxsPi5qIml8owKxHrNqs9zYtG0vDg9sbPJLdsAuHw4BiF6XB7T6TsSefNemlNbxfKLefkUBUzS1NxhLhULV1vnJwnaVd4faR_4noFfJ9eO8SQCAVzY1m08trzNXeKNpUoOM1Ck5GNWJRrmuzzBi18mhrDnX386546aGFCvoDTE-lqHc2IvHiVDuNql76SoW2gCTKjAulHse7O6CEIkwTXDqLvkK9ALWJQWRnnjJGkIZSOFJLfDz0XPxv4YLiCcKShZhyoMLC65CeF76AF_LxzQUXB_Vv2N2-FXRjRE3Zc0H_8W24BYGKsSLXuEEWRIsfokPZffxxTSkChaVf-k1-TJpkKDmyK7EZGDNehe1Ui2pumHiA3KlB-BhEHIo00ejtLI4mhAeLMrTC253utSlEdz4y13MzOYlW0xE4lS-F84UGw-yMVZ7F_iY2UFe1NzEUYEBpUFRbUzKn3Jk1wupGcEEQi84MIoaFE16Rq1JnsIKQS-1f7RgXB30ZGydqoQkJ9ZlfpwDaHgIjdYwzChZxfroB24s_czXitjwl_-r9_n0TK6YW5rsiIIj4Kw7mEqwXCtpLP_x7mCwbo9H1xp4U9FFuc5kIsTh6Z3AhktDAt1u03yPnBT0xEQ0r6CrxnpyQOysSUQJCAiOWvU_nFxWG_ZRRJ9lEK0zwqvQ5wkuwZczhzqjIVmOOrE1cKtTgxksmq4semwTo-Q6bRX8cy4RExgvg8-4NEub9tZsr2UATIOpNMVaXqZ8drDOepmsdTgPgA-jq8St8YEBoFOqu_Q2Yjt97BDCw-hW5Eo2tRHQ2EzCY1d6tTfgi-qmDBtfiV-5pW6adRhUYSu2nbenAnnrJq4wKje0tbeMFYKjgJ--o1J00ih2ikHGG7zHqHmwYbpRBdzMMeGNp4MMZ_sHf2Jdr2bDH66wHOawVsPdtphG5H8JIiZDKYS9FeNp9LWjBYCtuxdDPSL1nm1SaogMobWNPq97j1zRT-lM2Vjt-390PCIFVM53rRBq2m53A0fz52BdRo871OD2X2KHRwvabEjMBsMCN0RjQmwLH7GbO1L6JZm9n3a58r0D7ZBur3Wzly5DhK1TTwcbxIUEZUTtOIgxatNEmpUhxyy3wn5Vs7BybG4YLJTCxvP6Fe6Gt92pbH4rKe_DVHzs9OTIvH8yv2bnQvjFo7yZTPNsXR7CD1tIEx_WriZj-iExL1GYDqIAhccmEnZ_Fe6pdS1b6L9ghVVoZ8T7aSPWGIpOM6tTlGFFSZFQSncAxAZjMb7ntDLnWhju95TP0I2fVUSkrc2HSB-V__lzXYU8zIDOGuQeNJYQPgfxxWUMMb7wIOx5K25fpzKqWPCKHjMUUQ2dEjz7DordZ1sd1YbQmyNeIW0u4l4GqaTJB5hAzdRG_UCHlv5pBTpILKXbsRCI-i20fBl0xO8hzAHnJ5QtdY1VnuOHJvAbDQp2GBk0_6fqm7tU7xbWsdMs1xSm5KHqIt71mxrX-7Swq2CJeCq_ucIDAPOZbpHB8drRkASvTO0Goo3KeSXUzEmH0K0Hct2maMCaQnj2q851wFPYTUTWTGvF-UQXH0i0AGspG3xEUcfRIT1V9CvY7vgRTm4ZtLlRg4mz9riIx4Wi8seWx6yJsBkG2dS3khzUg3GhopSGCJZ_gMlvyRnhI3YD7s05xY-yeWw-6smaYBku3BMXQH95GMmWKxrlPwuGgAFU4GWOloK40Tt8Y0YUNl1nGayVfVQovTGYcL75C3Nxg7Br7-Ixi0iE0DNXCRDRKZYORK9p5flRGzzAzcgN_Abn39_jC_KzKtAZFmyt6sTwk_FftKYSSczpBGioLsf6wej3xR-nOFbuNc5ja5GuVMXYVic_N_Qf7oYJeqTz-waQ97W22U-hxE4utInJ5lvbs3FpENhxsDLIRm_trox-8wJtT7OvJX96-BIpPtPA3xyqNngzGfeUaC2HbvUgLKBMbQfyA4Ad43q7aLMCBHENAFpjLZ7QqcB10u0kMAEu3ijfPw_5mVuvR5kGaRjVVEBLQbk4rMYlYd0vtA_UXD8kblymtSsP-cVS615K6EGrzb3fkWtkfAfROgIYC6gFjRj4t_f_9wmgM57tmPOU0_E_IOqvKanUUyeVQonu1QJKw8GXquQ7CvuPKRkjlXAoPLoyfMzUfwvEpGrmsRZKrmKq0VKJQuLWUbHvcNnbSBqP_wetHvvubNlb_l3Lr9PT1Qt3LW6L3KlhhxMATa5GD1ukvzhMLqHFM4Wjym34CHsABl59xm8Pp7uxGR86Y5yM2uO_95o_UNy4me8S9hg7-WzqdSEfxDkjnEWABQW5GAIubi7TonwB7lHc9dPu5tebQz53DWuWcQG4U7lVgiVupXcCuvzfaH2_pMNOFfmzMe69qNDfNhLXYIHMKRIj4a8z5B_opZDKXF1iOZzdI9DXQDy-NunrPWjU_KwXCJ6P9UbtcaByOQtrWRwPiT2lFU_U4v0j1XOEV34LktnMZD8HITFJ-DNyWyjM5UmBArjVY2SaEukuLt7SfNUGZe-Fyawi9ju36YyDL8H4ZO5xL7eMUeCNDyKzenROq0AeVdcKX2pZyKoztvtboQJqN-PnWyBdAplHXp_mlhaB9kh3ouLal6dV-mBCFrDMH7jZ-iTUPHIqUSX_WQoRJme_1wLsEWQYEs3IeyX45_xW1-6wcKATB4dXETWgnXZwOAr1F0PRNH_KIf94zpNfRLHf1dKAmGVK5Z3-eIcNqOB9Im7i660J07mQvH6j_m8Q63MRKXvS-m5tlvLKJYKO_lTHOAzJqqgcHLi8_pK2WCBm67eOwC6GbrxytYi3ZWem8UG-4IjIuGYcymRlX2pMphKqSumjTNpoE-1SEuCNp6Dtpfu0pAPHoxG3JXKpi5V-6UBkIYMjDbfuVArzzOFe1uR7PFZzhYv9SwEOXbwG544JJz1bp1Y-ppEadqkvA6hCwBfLc77kPNukt1ZBy9IwCgpmZ-G8uXtbHvhtfO-2Lbb2VczBKlWFMRuu1ASZzSz-rUd9GSufi4gUJ7g7anPl-idl_zB3g8Pk-H549I1b_D-D_a0vTb-XZpH70DuvsRhKjiqCItC1XbkYC2E9Ot16dguL7Z2EzoOYc-ytWP0thyADc4Pyytfq0xlnqxCGnUhwexMdUsZkSBQ7bfxtkuiTlmCHZAGr07SKrPWY32wHSR0iQF-p4uTqJQQUdhyXTZDyXdRNLAZk090RhKGbmj50mR22mvvNdp6yT6RFX_rjTzUDi5zGxIeB-STH3KmlxYfN-202u39dVFb9gI7sk6C_BEgs6X8bs7lQwgyNKzpfOoV3Us_Vhnx5RbLh-EnvjNzLHo28bWIBI-eh90tGq4gwtnaIVgyqmtwSivTCbUQn365zPoOlXBcp48TOUu1lf0oxvJetcmwpIEMWBLy0a2eKvW39YM98QfS6s2ZLVV6m9ROfdcYU3kMiS5_HgrBWLTIwBp4OGFt3NT3Vbju-qYcxJSA0AuYP1eywWtqFsRw_o3PeYVLHsJcrzM1EP1wq70TaN0kCxZ2W6c00gtceOR97awof8FLF55EDiUim2gCp0LlS8PwrASUABOimWSfsS5Q9ZW-upFRF4NiSBUOrmTjPxQUHlgzqPyX-EH9KRXkPICQYE5j_pzKXcLiFkFeE6SZZZA7spAFreKHGuxhbpiCwuxU43HanwmetCFcgIaNbNytjxgbyEBx1O53IJoiHm4M8FN7TmYbXyjIrAIN6HpZVdLtGJupiX_3ENKr4eZ8lHbQJgEiWLUIXB2XA--KmAdMDTI5Ae8f-A36tlFnV7cI0e8OKWj6BR7hPwPE9no2sSlbd_giDUzDlszj_4-ewhNFGusSL9sj1QrV6z2E8wvXDpoOz3y-SNErMq3DcAXGp6gHdSgTvbSV-r3KdVs-7evVa_12zMsn6JVkTcvHvqOWEYOjpULsDearQezlqyQvjfV92vqlT0xlwN08QL4tm8pzT6bx2MKiGijQqdyuZL0FmM04jFK-ArGD6uWl-wOMHfJgoN7njXaEPEPjrtu0660B3KSooSis94L5i5LVcJQyQfKWivum9igVwKjpynd300-dsJED2lkLasH2WDZDa-MFGeFJY5PAlzrpMCH07aoOpn7tDsldikIGZZVxMn6UukVLFCjznNKi-Ta86kM2y207VT5chTo36VK-XdA2TaGVrHE-awnhoIu826tzGvZfXH5Zyxlj5x9_hyCHmwgagy6OLXov3nx2B8twrbeEu9DCCGfOkI80dgDcSN0tn1pULtQZ5b89JZdBJHyUH6HVDs7XPEClpycJ8mNThv82befvWOx5AnsDtOWh6vc9-RLRQ7mAvGijgblF9XdDicH-PFk0ZU7o4-Y4TmwkbgfK2yH2XJAaH_q2eYx6rsVsfvAEcUnMTszkdAnQ-ADIAx57PKjHD1EEaT4sK1544gI0cSYj5QlbY2IC45uuHdLR19ky2t5k1j2K2GlAaVe9c47rGMO9bFiNkmq6_4VRUQdsFwo2ZbX3yNsn_MksbAaLv5zdrVXNnr72J20hQvyusBRhZTIko4iHDGWq7YYPnywVbyor-wzjglzJTd8_eGfRkcSFE5PkuJRCJ0qpLy45Acjekqf74M-t2ianLz7l3H5REgwBp_coKNo1EOsdYAvuONOKDJ4hq_gzc6TvrJaymuZOcOSOjyko5GCkaYlnBfcj8y9qxoT-xNaxWftamFVuVPo3qlj0O-wIirSW0_TDc0NDmCw2ibq9dfZ7Prl3oeHVd8MwcRBq7LbRTqHQiw9ymoAoZuVvE57-zOuLNvuYE-1p8VMj6vJ--NLk2Q4hMzFNHLVC8J6k4V-RAf8m9-KRq8-cbi3fM2xekd0659Rq0QlDpFBdHjF3GMMfdsRzWWmGuzQUv5WDNxJlPbB245N17yoUq0D8LsWEuAxD0-cz4M2Kq3E3BQWRk8JmmTc4yqDQ-HhoFLKDZpiU65CzUhdC0TOoOm8Xf_1C88C1NPTy0jpgJuu2gidkyauumSe_rq-a0ZX3AnfmfM6s8FuzAC_xdq8XVDoKBXczmF5QS9ZQd_VzE7oZ4Zwy3WdMKXYkkeoA-DBHfmln1Do0A2JoktbEmuHKVE45gbFgbL6c12Pek2NDZ1Iz1Y6zKnRZvph6ryPkTxaL8foeyn2PzqzEYOhuW2uF7jDrrhPSNNTl1GfClE8IeMeY7CqmuGiA9Yoq6RKA3auQm9nlpN6GlsDs3B37hihrxvVV8RmflYbLJ4Bf67uCmTM4mWvGOBfA_nvBmf0nIGmLXdgwTtg6n_qtQJQ4Zi7TIBz9eXA7hADMmcJ1hT7eyGy1mjsbbNaymRUQ63ixN5YSx3wk9rgWQCECyT9dt-flJEOnFIMV02WBxDYbVaLhYTsfEQsSq1v-BMRDcDWQKOOZp-NqRLBQGX7bdsvEMMVzqvSan-zJVzqKKY7KRqtMfcYlLXEea8YlQMHgXz6RrgJzlER7WCY3A2edy228h2MtkLkPheMBFznUL98OryYmZ42jsERMOz4GigszgA0mfw57XM1840wVTe1Jk1NQAJsrlIrDp0JJ-5HSwdOvhNsepfvkeSUi7SduJuMi6dK8tIa7E_Y3nqDPqGpC4yVkQeF-z9HeYkFooQNsHNsmiYO3lxg9cBsXu9gknq5d3XVsKtzOf6941RTSTFZkLBUZ7cq_RhDqyvBunFe3TL8UR-OuyBeDy5e1TaefGR8Y3JJ-M6xmORpx8w3Q8HQYGD2z73jgZoFZWIQ5j7RXhMLQXqRlHgFNhCTXxBkZ_hEHz86Yq0cVaWwsPX0_11_eFkrBfxgIpnqWxkwiWCM9NqdlFaTyhvJpP8fLrD1UFkTDnB9x1CiXcUwhEvgiH5sdByEjT66SjvT26PnlHkk3LwdqKV7xLgngVX9eRFqgIZOTNl5p5vfvzY8uxhzoGH8QYwRYH-xIxAbOoGxtSVlEfCMtiqOmQ--W5kYX-Bah2xe9VvLGu1hP-gpMRrVemiyOJ_abo5oipEpIwsPk2SBJBNVQgHVlDrG49NNm1uklMnbsazNNxaCKmFvwOI0OO9EMIJiLukGmWflddPD0TcrwieXfeSkTOAfh4psw1KzUH11w2RZrKtz9v7EE8ut8xYg76z9N9Huux2SM3rJBkfptSFPsNgjRurziKaj33W8Do-Lmh2IQh_m1RgiN9ljc0-U90YRr7JPo5FgBHBEdI5SycJisI10jM-W2Q6zFSj9gnx861Q_IbtXULyv_1_BRX8ObMIDKqLamVIVsNN1j4L45V4v44zX2_UTDeepQc-Wv5IWTasPdOwVNEdTkxCT8a6iux7idYUKph5wF6dHtxRM76NsBcaduwZ-Xl9x0fI5KWuRGtQkHE0vHvCL0bAU3EI8Ajj4AhfAuI-gwodgDPqe0CVD6V8_R8hkepbFXqzrjX9kmXD3hnnNvhgPBuTuEnBbLP8PhB7I8c1xtqCU7q9n5qSK1z8Env1EgdfDmopJZIqecf34MVqLUWijTGE7NYsFc5RHIkDcIc0jgMpF6KmzibSWHAql33WFxC_HToHeqCDWf1DkhyHpBcSZm-ktLsntNLp0pr3wQuleng_70bMeqzt0gqPX_o60HZ9QPdBnuuN_LUDVdtdHxjWlHWvyO6UrHutWJ_Yc1HSiqxFisFAmCiZynmJeP4LIa4Ly2Rhhq2FRqKkxAVtx9Y1iH9lCx8_z3_lH1I0I-nko8sJNGKjQC0G0-7r8=",
+            "summary": []
+          },
+          {
+            "id": "rs_0814c39f82e6f446006aca4bbbc3c887d080a44556142e035d",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqyku_0rWn3TT06ogSHPWd_z5_21futhYUgoH6s2-ythcKygSjcJt2hM-F-hwvKzbVenM-Hcoyc-od6vDxZ9IEa_W2I-DEOtrSJFeUT3DPDjX7phsrxjcIZa_ZssFh-9YZzBmynNuOXp26QeX5Y2Kx9fLIYS2WIH_2J8Lw2dEBOHNHT5abniA-IPQFQlF7F23niigeZ43E-yGSLsdduLxAX5WahGCbLr-3rdRzl0Nk7u1mn1xgxUzrbqElaeKp252Y_NrUJFea8mMFqiPTLvTe463dl_XIWG2e0BNXbrUfEegZDkPwTbdOH-61KnMoX2kkk-usgV9t0DmY5LpF5HzqWaa8zXJChZzk_ddUnZWmPKawQvQEBi9Hauf86lkiaIpePIeZk1-XbN8KGKxikXtLulhbfNAICuPRAdVL74187fzUrs06c70dTR7ti23viqPsLgsBYX2x3ph0AArnv66Vb6wi7as1iECpL7hfT791vfvtzQC3zML5fPGSxsS3roUsY0s6NKm3BMkDwZhe2_uXP9K7BNoqbJ4aTUYhSMDZf9XsFUH5raWuC1jNAbRRoYXzaxUwtuKb9yEpZVVZaIou35EeBtqj1CyDkib4SVvWZ1tUe-ZVrJ_aiQ_A-Gp3WCxGNu9n3JYHEebm0LguoX3FPMUAW1LbKjPZYghGEjhKZ4wszH7ZGOFpTFTimLhls6hFzpYpKZBmneUWKn-JPQW0cLayZKeiP6J9aSWqS_2UI82yRSmw1dCb4rOAJctLScCJbqOkDDUsa8TJumrqy5a_5u6MbXkecV67HWnVhDGnj6K8IM4I-k8oocNHjzfaB4pX5HRfLJEv485f2fGe3qZFVjiAxYIOP33FlqduutbtcVGXR0-kwAzPHFLMAMbcoVzAOKrxok8J1L46_vlbE0uNIZmH8HFwviNSoSpHnTTUjGtNXHPIAitZbVkjJiWFuSQU61scwmo02MAgou0ezGLcaS-z3h82DQew7ho176j5VABvrRs2FQ0iMmSBfN0n9SYku7zVvFbobcEI-bxrBGaD9mTfKwXuaDXnvecuTLjK_NHfj-jxh5DTaofOXTpOgvDde36cJ6SNk7cMNnNtyGuPDRAGoKMoQi9fl5aCITrVHuPYysZp6RFtsj5wkkzzb61_h1sjAMXcElLfk7Kjunw1A9PUJ5poQLwLiNqK8gSUZG7WY-SmjeSfFLK05ldf9vBJORCjtVni0xkxXXASSaNOh4Qx6fTQXmimaxVQ7XbSCF54q8e-nNVjRWl6Sk953H6KZb9vrBI9Xg835XE-_yZECG4tbr54GpOow8rVyoCGhOKea0iyT8pxsza-Jfd8j0eJ7jaXjTuj5ADX6VPJ2bkPiiUUertPE2XCu6X3vbMUyQ0yXThJLZWoQ6bP8mlITFTHygmHYWeSESqEkIsFAyu4jIjmcFq7P9W6D43nB6S5dVZqRhi9CJvvFiv_EORzj7frm5r5UvEg9xf2rn-etfpZBCFHJfXU7Uktohr1oMUiCzlTMcJ8oA67xU9zLAwcJMRXPMGgJ0iOThUIRcpLxtCwkYyPVuj64_NHQSuwP5lJZTmq0L0VI_C7UbCPuTjyt82lwsZRaNA62JhNeU2tQJa4obmtH8JR8dJi3_Nb61FBFMPSHnyxbIyNOxsCAk4Oow2PXsZWVRxQqPspv3eZZar2aNFSM7c-noK-2b9WUzgwcuEFNQ8LVS7ApeESzCS5SuAIFyDKy8hu2zDSAc4oDyzHRIUmcYtO5njV4kAsb_v8xB1sQKByh3c3It6mxcGjNa4uoM4K7ZnbsWSATPkJOiX5u63ins7ykWzpj8JzsqXe5lquyVzNsYFOOgAQ0USaN7alCFcOheuoK6SYI16zITrhW3KmMAqHtBAVx8ubDfXq8Zhel5-AQJiXGuPDrzAORDqBwerLqR3k9OLLytOlWFkKHH9sxskfu73lsJeA5kN3HTUxCTzp0d5DgRaxdwejRvaJOPESPerASsBAr-VFnYZrZy-C6MSfce-8ywoVeLNhN0ElPQdavNJsjtd4PsTtzvURrUquGXHdnP248iHlHHs-YNi9uwyEuayyLcC1WI7rVoLoLSWJ_xcn3ruWcg7bu0Q0c_v3B_7zPjQFea8iAD7oN3t0YGnvK6-X7umqIqtNFF_QXvwwlk2c20WDsnpzvFmh6pYRZQR-4v-y7MVT2vubRoCr1WLHBfJ4CPgJ-3JtHivCmf9odT0KNm-mOSeL7P9sbG0mufXfwrW680CTaZQnTqb_pa5aAgTELS07ejUXA-m9v-EnS5Df0D_Ck-nmcbUkME7T4bC59vZaA9LyMnPoq-mjNBnPXTFb0pCvMSSu8Eh1plokd7KvGWoP9Pz0LWBuseqdIYjPi8rgGUPEO-FNEyxWg-3Fxbvyk0b6EgX7O8GxUTaV3l6W38Y42u236VRMkKu5vNq0Qi5OWfPQfkwLnDr3SXV0twI4dgEl18daeEZDvYhylDLR4Z8bkJeR8exy21gP6JkXhQ4-7F_wJ-gEglUg4BBXSJSYaiIZC_fSqev-UNNTB2eXP2IXrDOPX6D7Omy4C8QttPnyN-MstoaZxxdgUwiI87LI9tD7WL14ejHX5SlGlaxmQ9ZaRFz5-2Z7zXLmtB5JOv1qXVKYEuUGjjz0lbE910w-KDNCESnDvYXiueRk-y837H3JF34FPzT1kyaZRKdyIn2Vi-GdhJrnskB_wsbHS3ea7hA7sEwKdc1xQBGuk43z8RGHeje35nYfB3pi8bwhRCKlU26AB_g-LCfabBPBk01QyodptI1F0qfZSQDYCNr1Gp22eiEskO9XE9O6Ykcm8XBlT6Ogf9UuljAdC7cdKOTbK3AiaG4M_7tdUXj4CiT2TT25lvFy696nyYIF2aiHhS6XTmKN10FGOsi7ohDDA-xG_XjDN8aDb-d0Acsk8Bilre276Rta80kf2aX2ZB6irBzSbeUP0l_bd9ZqOOUVPk2-XUbkcgNGd99laQLQhjp1etu1Rx47fE1bOsy-6m3zenqZuXUILWd2wcJYMLarFuvAiU1acgD-LpabXYAZmcjfrMUqTWDjrtIyMd_iqsxYuWjuEQ9FrwkR2tiLrEcelNCjdi58ZAsFjuQc44FXnjHeWufDa-lFlfA4WckrPOhoLTM62tnzK6hTlTfqDYMHJcjkbelROiv7CZZqv0p5PuCTd4no1uaTfUxXqCPFoQjsPHmGKeEDoekXXUFRXq5LYrNuHjdw0bdcKkoQy3glfT4LkcZe9AeYehForHOEo64b7PhRMSAdxJ531zNR0vzdVeVvOv3mMTz-QXdSAij6vOMJp_O1w9vbkV9VQvz9fIrFxjnlcUkiNLBWObvwjtgIKZQUZDip9vkMml4xGrlF1-L_ZTYaB2PqlIZsNwggoFe6lDH2vHTjtI2186SrAsts8pQr3DQ91R3swHHAQ7xfkq2n_Bogs1McterZrqDU5tJdoBCieO2uzDINrSmdxn_wLz8APHhZSgTAlw1swRgIkuSPMZiHFMu5-oDjUG0st_u9Ex84rytxlOX7dGTmgnGDRHaXc_8nAh7judQlhWGqDLWVmpzfKnvKCmv2-VNpWgJDcGrN_dEdpnsKUsdGHGfPW07caYASyRsA7sPVfldSRmtUrWwQsKaNqwtKp9Z7C8oO0b4wzgV_ElsDutbYa5aXfBkr2fItlOoM7hnR4CxucYqBYBLdzgIsVzebtrlcDdv_KCIH6XPQqzArluRxPqux9zU91YpI22VDAkRNVREbJgxWKariTHNmRV_xz6Rh-eipZ1klpSwC1BrX0hTlhwSmPmZ51cD91mZF4L5A5Y9_tApaXKDizFGsqd66pqcLNfUR_U4NvLonW2aaR9h1R38BnNIqBn2yGll2r-yLhid_24uX5zR283xDiTz-eXCOL7pO71I_MXBcAeqNonqAAwmYYOhz260L-PtEQVLZ7ZzJrsTB2Xn5zut_70ZIubftFJjmZZbGIu76iCLDc36WH6d_PbHiQVGVVk2f9kBuEhrJJjnK_kPTk9zcbSrWUVRVNhHnv5b-Waf793lRkYXCFyj_2_rXD0TAh_puis5MclxAToGZJNSIpI3Nn5KMoP0H21LlwsJZk4hEB2c-oKkcml904Gd1CtVBzb7rWH47zynS2MlJ4Qkaew9aDPDakQRV2C6nYta2gRy2I8jLI8ui_oJbsuNeruUHYz4nNzYhJ5px_IKJryxYX-yCjEs6JKGZ9IKn7yqUVrzUZxHx0h8gytXiUJogu9L1qKHIA0D5Frm9luuACSPqypwX8W1hpaE83ZVZRQuzL6FnLLkmLAe4ld4VtOuWWGGgWVh-iBrJS-9_JgnpR8JTbOxB285zag5Bo4I7EOQjywG7G4SPMfGZIit5A9ueoE43eh2-H35LVe4QfyJfEOmS-keyUkvZqilIr03uoV0cCccILGrTPZZq2RO0Ri0jG9dlqi4plPXTAhqH5D9thFldi127F4puQwsddFVZEzmsQ6cpIKKgg4Abw-B-C1xhHCrBuY_XV1gVEPzl4-u4dkPzQNMoeIxgl1fqDC3kwExdAdWZegfux1ilBudw8xfuX0mPb4ZW3BbHhoJwSAoa6xLsZ2_2i2H_LTzFllqtuA7tZFHBqNqABHZT6LG9JLFkp5GxP-ENn9wISy-II6VJ-0UACyHiH39hVBxWIZKzKGjyXdwaluZGKT6qAj1ZwxAwwDyF7_7FLMd-ky5g4NGrzILP1imXdz8j1RRT3nS5ib9DITGVjLytbfnJ9Z0chffOVZV4TKpJmvp7BDFRSSn97-51EmbmZ8gg21L0C4p2zsydK2u7RoLb36CidVg7-C0HrF8kKVIuSxkyw-5pAubdwVtXVZOnn0wUzYSNB1edDmLfYh9Hlg2oOk03Fz2ytusQQNhFBKSsaWwGyM6OHqT5jN8r9arUhWt-uO4Lb3LwJlNOkO1oPD5jSRw-KZG8Y7QXl6SL4IzOiEODV4EmG0kqJNXNEC3Bz2mMnd4mOiYVM2qUoCmY57-w7pDbW0OQfPdCZ50zz8MzfFqMOlsnrmykqqWXbX4qrzWQivRhLkfdS3g0SRVZWbj2Zlpf7Auh7pDuL7btZ9j9ixnuF6dG8MFrCyIvBPF-r4WP4qxQH1jtw7xhF-JvMVX4d-e5-6W1lx0rAsaULh2iy_zg8VaWkc02NKxTStF9osZLvVpHHO4Od0XYe1U5wEt_PiPtyshhdyqJPVR4pN5j5zmLb4rVQe5hJNGSTP6ePJEUlv6qAmvW9YaXFiEmLmaOdEI3bgYOoWa5IUfwOQcE_dI2QRGFBFE8e2WbNUjQEC_6bE7Daqp_m8Ghx_TsyXDg9i7t-Iytvj3ArHgmflqNhnL-J7IgducyGoTFrId86lccQJhA8EUf-tjP_8MjCnl9xbgZZLMuFPSosBVHYvnNdMMzOC9leBF0L_WUEy2XZ6I3CFQWUiEO-wyVgHwJORe-o3niGHCMgmtwu2Tj99Rhe7FXAHQ=",
+            "summary": []
+          },
+          {
+            "id": "msg_0814c39f82e6f446006aca4bbebed487d0b2aec48cf3fc70ba",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\"caseId\":\"M6\",\"outcomeType\":\"POLARITY_MISMATCH\",\"steps\":{\"S1_STEM\":\"FAIL\",\"S2_CHOICE\":\"PASS\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"PASS\",\"S5_JUDGE\":\"PASS\"},\"firstFailedStep\":\"S1_STEM\",\"errors\":[{\"tag\":\"POLARITY\",\"step\":\"S1_STEM\",\"studentQuote\":\"4번은 맞는 설명이에요.\"}],\"note\":\"C4의 내용은 지문에 맞게 판단했지만, ‘적절하지 않은 것’을 고르는 발문의 방향을 반영하지 못했습니다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "description": null,
+            "name": "thought_diagnosis_v01",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "string"
+                },
+                "outcomeType": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "ERROR",
+                    "INSUFFICIENT",
+                    "POLARITY_MISMATCH",
+                    "SELF_CONTRADICTION",
+                    "UNJUDGEABLE"
+                  ]
+                },
+                "steps": {
+                  "type": "object",
+                  "properties": {
+                    "S1_STEM": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S2_CHOICE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S3_LOCATE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S4_INTERPRET": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S5_JUDGE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "S1_STEM",
+                    "S2_CHOICE",
+                    "S3_LOCATE",
+                    "S4_INTERPRET",
+                    "S5_JUDGE"
+                  ],
+                  "additionalProperties": false
+                },
+                "firstFailedStep": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "S1_STEM",
+                        "S2_CHOICE",
+                        "S3_LOCATE",
+                        "S4_INTERPRET",
+                        "S5_JUDGE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "POLARITY",
+                          "REFERENT",
+                          "ATTRIBUTION",
+                          "DIRECTION",
+                          "CONDITION",
+                          "SCOPE",
+                          "MAPPING",
+                          "SURFACE_MATCH",
+                          "PARAPHRASE_DISTANCE",
+                          "MULTI_STEP",
+                          "OUTSIDE_KNOWLEDGE",
+                          "MISREAD_FACT"
+                        ]
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "S1_STEM",
+                          "S2_CHOICE",
+                          "S3_LOCATE",
+                          "S4_INTERPRET",
+                          "S5_JUDGE"
+                        ]
+                      },
+                      "studentQuote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "step",
+                      "studentQuote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "note": {
+                  "type": "string"
+                },
+                "unjudgeableReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "NO_CONTENT",
+                        "GUESS_ONLY",
+                        "CONTRADICTORY"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guessed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "caseId",
+                "outcomeType",
+                "steps",
+                "firstFailedStep",
+                "errors",
+                "note",
+                "unjudgeableReason",
+                "guessed"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 4976,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 4973
+          },
+          "output_tokens": 1001,
+          "output_tokens_details": {
+            "reasoning_tokens": 844
+          },
+          "total_tokens": 5977
+        },
+        "user": null,
+        "metadata": {},
+        "output_text": "{\"caseId\":\"M6\",\"outcomeType\":\"POLARITY_MISMATCH\",\"steps\":{\"S1_STEM\":\"FAIL\",\"S2_CHOICE\":\"PASS\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"PASS\",\"S5_JUDGE\":\"PASS\"},\"firstFailedStep\":\"S1_STEM\",\"errors\":[{\"tag\":\"POLARITY\",\"step\":\"S1_STEM\",\"studentQuote\":\"4번은 맞는 설명이에요.\"}],\"note\":\"C4의 내용은 지문에 맞게 판단했지만, ‘적절하지 않은 것’을 고르는 발문의 방향을 반영하지 못했습니다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+      },
+      "error": null
+    }
+  ],
+  "retryCount": 0,
+  "hasInputImage": true
+}

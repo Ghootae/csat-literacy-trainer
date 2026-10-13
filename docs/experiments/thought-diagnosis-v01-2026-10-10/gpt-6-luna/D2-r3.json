@@ -1,0 +1,336 @@
+{
+  "caseId": "D2",
+  "replicate": 3,
+  "label": "D2-r3",
+  "model": "gpt-6-luna",
+  "frozenHash": "c5c5a0e00356b9628145279c3290440aa92de41ed4db8203d2d643d0808c39f2",
+  "status": "VALID",
+  "output": {
+    "caseId": "D2",
+    "outcomeType": "ERROR",
+    "steps": {
+      "S1_STEM": "PASS",
+      "S2_CHOICE": "PASS",
+      "S3_LOCATE": "PASS",
+      "S4_INTERPRET": "FAIL",
+      "S5_JUDGE": "PASS"
+    },
+    "firstFailedStep": "S4_INTERPRET",
+    "errors": [
+      {
+        "tag": "MISREAD_FACT",
+        "step": "S4_INTERPRET",
+        "studentQuote": "카르비도파는 혈액-뇌 장벽을 통과해 흑질에서 레보도파가 도파민으로 바뀌는 걸 막아요."
+      },
+      {
+        "tag": "DIRECTION",
+        "step": "S4_INTERPRET",
+        "studentQuote": "그러면 뇌로 전달되는 레보도파도 줄어들 테니"
+      }
+    ],
+    "note": "발문 방향과 선지의 증가 주장은 파악했지만, 카르비도파의 작용 위치와 뇌로 전달되는 레보도파의 양을 잘못 이해했다.",
+    "unjudgeableReason": null,
+    "guessed": false
+  },
+  "citations": [
+    {
+      "tag": "MISREAD_FACT",
+      "step": "S4_INTERPRET",
+      "studentQuote": "카르비도파는 혈액-뇌 장벽을 통과해 흑질에서 레보도파가 도파민으로 바뀌는 걸 막아요.",
+      "exact": true
+    },
+    {
+      "tag": "DIRECTION",
+      "step": "S4_INTERPRET",
+      "studentQuote": "그러면 뇌로 전달되는 레보도파도 줄어들 테니",
+      "exact": true
+    }
+  ],
+  "attempts": [
+    {
+      "requestId": "D2-r3-88",
+      "status": "VALID",
+      "response": {
+        "id": "resp_0bc56879c151236d006aca4bd4168087d0a4f0a08bbf0ccaf1",
+        "object": "response",
+        "created_at": 1791642580,
+        "status": "completed",
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1791642589,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "너는 수능 국어 독서 문항에서 학생 풀이를 진단하는 평가자다. 아래 가이드에 따라 이 학생의 풀이 하나를 진단한다.\n\n# 사고 진단 라벨 가이드 v0.1\n\n학생 한 명의 풀이(선택한 선지 + 근거 설명)를 보고, **어느 논리 단계에서 성공·실패했는지**와 **어떤 함정 유형에 걸렸는지**를 판정한다.\n사람 라벨러와 AI 분류기가 같은 가이드를 쓴다.\n\n## 0. 원칙 (가장 먼저 적용)\n\n- 학생이 **실제로 쓴 말**과 선택만 근거로 판정한다. 드러나지 않은 사고는 판정하지 않는다.\n- 판단 근거가 없으면 `UNJUDGEABLE`(판단 불가)나 `NOT_OBSERVED`(알 수 없음)가 정답이다. 과잉 분류보다 판단 보류가 낫다.\n- `NOT_OBSERVED`는 실패로 세지 않는다.\n\n## 1. 결과 유형 `outcomeType` (하나)\n\n| 값 | 뜻 |\n|---|---|\n| `NONE` | 명시 오류가 없고, 선택 판단에 필요한 연결이 드러난다 |\n| `ERROR` | 원문·선지 내용에 대한 명시적 오류가 하나 이상 있다(선택이 정답이어도, \"모르겠다\"가 함께 있어도) |\n| `POLARITY_MISMATCH` | 내용 이해는 맞는데 발문 방향(적절한/적절하지 않은)과 선택이 충돌한다 |\n| `INSUFFICIENT` | 내용이 있는 진술(참인 사실 등)은 했지만 선지 판단과 연결되지 않는다 |\n| `UNJUDGEABLE` | 판정할 논리 내용이 없다. `unjudgeableReason`을 함께 적는다 |\n\n`unjudgeableReason`(`UNJUDGEABLE`일 때만, 그 외 `null`):\n`NO_CONTENT`(감·느낌·선지 문장이나 선택을 되풀이할 뿐 근거 내용 없음), `GUESS_ONLY`(모름·찍음만 말함), `CONTRADICTORY`(서로 반대되는 진술로 판단을 확정할 수 없음).\n\n`guessed`(참/거짓): 학생이 모른다·찍었다·감으로 골랐다고 **명시**했으면 `true`. 결과 유형과 별개로 기록한다.\n\n## 2. 논리 단계 `steps` (다섯 칸 모두)\n\n\n| 단계 | 확인하는 것 |\n|---|---|\n| `S1_STEM` 발문 처리 | 발문의 방향(적절한/적절하지 않은)과 기호·지시 대상을 맞게 다뤘는가 |\n| `S2_CHOICE` 선지 해석 | 선지가 무엇을 주장하는지 정확히 읽었는가 |\n| `S3_LOCATE` 근거 위치 | 판단에 필요한 원문(지문·〈보기〉·그림) 부분을 찾았는가 |\n| `S4_INTERPRET` 근거 해석 | 그 원문 내용을 정확히 이해했는가(방향·주체·조건·범위) |\n| `S5_JUDGE` 대조·판정 | 선지와 근거를 연결해 정오를 판정했는가 |\n\n각 칸의 값: `PASS`(풀이에 성공이 드러남) / `FAIL`(풀이에 실패가 드러남) / `NOT_OBSERVED`(풀이만으로 알 수 없음).\n드러나지 않은 단계는 `PASS`로 추정하지 않는다. `firstFailedStep`은 `FAIL`인 첫 단계, 없으면 `null`.\n\n단계 규칙:\n- **규칙 ① 단계 독립:** 앞 단계에서 틀렸어도 `S5_JUDGE`는 학생이 내세운 전제에서 선지로 연결하는 추론 자체로 판정한다. 틀린 전제에서 일관되게 연결했으면 `S5_JUDGE`는 `PASS`다.\n- **규칙 ② 필요 근거 기준:** 판단에 필요한 근거를 언급하면 `S3_LOCATE` `PASS`, 그 내용을 맞게 진술하면 `S4_INTERPRET` `PASS`. 판단에 필요 없는 참인 사실만 말했으면 `S3_LOCATE`·`S4_INTERPRET` 모두 `NOT_OBSERVED`.\n- **규칙 ③ 모름은 실패가 아니다:** \"모르겠다\", \"찍었다\"는 어떤 단계의 `FAIL`도 아니다. 해당 단계는 `NOT_OBSERVED`, `guessed: true`.\n- `INSUFFICIENT`와 `UNJUDGEABLE`에는 `FAIL`을 두지 않는다.\n\n## 3. 오류 목록 `errors`\n\n`outcomeType`이 `ERROR` 또는 `POLARITY_MISMATCH`일 때만 채운다. 그 외에는 빈 배열. 독립된 오류마다 하나씩 적는다.\n`{ \"tag\": <함정 유형>, \"step\": <S1~S5>, \"studentQuote\": <학생 풀이의 해당 구절 그대로> }`\n\n함정 유형(하나):\n\n| 태그 | 뜻 |\n|---|---|\n| `POLARITY` | 발문의 적절/부적절 방향 처리 실패 |\n| `REFERENT` | 기호·지시 대상 혼동 |\n| `ATTRIBUTION` | 입장·주체 귀속 혼동 |\n| `DIRECTION` | 인과·논리·증감 방향 오독 |\n| `CONDITION` | 조건·한정 누락 |\n| `SCOPE` | 범위 과잉 일반화·축소 |\n| `MAPPING` | 〈보기〉 사례를 지문 개념에 잘못 대응 |\n| `SURFACE_MATCH` | 표면적 어휘 일치에 기대 판단 |\n| `PARAPHRASE_DISTANCE` | 맞는 내용을 재진술이 멀어 틀렸다고 판단 |\n| `MULTI_STEP` | 여러 근거를 결합하다 이탈 |\n| `OUTSIDE_KNOWLEDGE` | 배경지식·상식에 기대 판단 |\n| `MISREAD_FACT` | 위에 해당하지 않는 단순 사실 오독(동일시, 값·속성 오인 등) |\n\n## 4. 출력 형식 (풀이 하나당)\n\n```json\n{ \"caseId\": \"M2\", \"outcomeType\": \"ERROR\", \"unjudgeableReason\": null, \"guessed\": false,\n  \"steps\": { \"S1_STEM\": \"PASS\", \"S2_CHOICE\": \"PASS\", \"S3_LOCATE\": \"PASS\", \"S4_INTERPRET\": \"FAIL\", \"S5_JUDGE\": \"NOT_OBSERVED\" },\n  \"firstFailedStep\": \"S4_INTERPRET\",\n  \"errors\": [ { \"tag\": \"DIRECTION\", \"step\": \"S4_INTERPRET\", \"studentQuote\": \"pH가 높아지면 수소 이온 농도가 높아져서\" } ],\n  \"note\": \"한 문장 근거\" }\n```\n",
+        "max_output_tokens": 6000,
+        "max_tool_calls": null,
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0bc56879c151236d006aca4bd4a74487d085054d1487f0a0f2",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqykvdjS5vU3kS0PM5BCjqCSaK55nncVwIgEoTNgIIscJkRd6_Are30bJEjrVRIecZLCJkkJSHBABMYJnrYSapJe7qZQKJ73wJVTn-DCN2X6G1Zt2UuIkhsjACHy7OS1xuL_uxkS0LNZtM8pBC1lwJGdidpN-S-BTJtVhYtahnPnirWOgSSEebJ1LHyW6adW-RHyeL0lS4r1ms7R9Mt_UD7WC6-cTpJQPExPeW6QMRjMUiGU0i6-YF5ZmLKNUreaVdYq4bEAEia-oVHP9vK0IHyNhSLEMUJUovPAuOB7E8yF6WQEgEptvR4K7f9nmSYHYDFsIQ-FGBJZMtt1YSpLMhY-6S5aH_Cir6GHsICTueJlluf_lxqDzmlr_qY94-xif1Tyt2_P7GRvL-kPo1a9PS3-kw9aDgBgzawymH8w3DVIciGkm2OxzSnBh72SqqHxYM3n3LVvcVXym_gEUW_5IqSabrxL2VKUMErRdsajWhYZkq0Tl0aaUcBtxGcZYO1Ok6NIR_PE9Da_eQyi0lxImdFrnWDm7NJwELnDn9tUAS5QspCVDfqAyTSlTyuIFS37DVJDrLN4ThfMnMsuheKMEceNbmriDu0DYLrRwwG6MZE2bdGvFVjj6ci98LSeQAUOtHlp6YkmzDY9YvccSI0mKsBvBM626ltJD3H_tB2_BWrpdCCkDpTRFxzQsj3e517tph5wTq62GkiYmAnPTPvHGJIqqb8jgQB0PtTxQSCNLEyxXiXlEAbF4U4skadGK-DcuwEMIXOroXfY2-Hbi4FmZBTHHZkWuIJdH6LtC8ms7cBmuNGg1tJQBB5EzlnT_Q6DJXcuO3ze19vPHeFMwWaUYGJ9mUjvnMa1AstPMoWrVLnArNmQtrkOsohCfxCuclROxYfYx7g5QO38HBN45Pn_Prvb8vrRW4VPZS4Ebp8VSHgHkmjL_ATJVsFAWgnrViPQvBDZSMyPoCkyMLszx0FvmRnX7BTYOMNZDXPbeX6leBfDA2T_jM6ypg6XGQNI1aVk7vdjWemz_vWfy7u0kEoNMXtgiF9BTsICGfNTVO3uQJkGZxSkOIFvhq93yZgzJtT6eTmDHFpmyeVTRdBc6pzmm21tbqqtr9VFhJa2fcr2m2lu0LD1zu8d3LwuNoHf5zXl_L1n6ZyYAA2OX2oqsy-DZMUamkgZfvOKt1UVCOonWqGrmSo7QPtrfVRwjiyaS72f8sEHue01KBL57xuaeYYDfouuyn8KKkQFLDowBHChY5RxIkFdLDQPc5VbwI5F_-ZlYhU4KCxtOz6GYM69Qz927EXwlQMzXtXLzv0jahlXRl1GT-EMx1mW1MsoflFOfXUwylqcCQnL_vfpR-m1D8Q0-AbTTO74nYYcOEN6maTKYP371fIlyaA6f9JZKUUqFJAxpNW2-IJ71aWbjLDnZvxIE8_qCG0bzEEmHaos1DVSdgo-5SKrb5bcUr8u_N-odcqhCKe6KIWzSnIGzphDiu2afkU4NWs3TIp9RgynF8s7kHXrBd9gNAzMmvZSmy9uDFhJX1ELVSoYce0EvG6yK2GEQpw0oSo0Lfzr0CTHwoqN6lioKFLGe9Qckq7VznDuM0KMgYwXy5ViPjusbDu0HhQuc1raWSkWp1cN9IQPyNlXZOiv2QkQPGIh_j-7A0GMzQ1kC4MyDcfQNbYrhzoGkqLxbkZ3Tg7I_tPEYi-0tdS8HRHjVwuSakzqm0hFOL-McD_y1rG3l7RhDUzQi4ZiLz1pcMoQgg9vsMg8hdbEAlAyl_SW6tXiHZ4pfFhM7rB5zOYUKweMYOdARG72yJdjqiDICYPKGJK7qR6Y3Mr-IbuKsfdVgzasP6_K6dNyO4fkC7aqFh-wLTpsFMJJgILmGu4KY6mZ6DQemTIz96Ccx68XomHCZZZikUN9LmcDxUS8yzwujcBadfG9pTQb9xEetIZZq3Jd809ZOEQVL6xXozDzO-V1_lOiT9MtbWkbk3pOefPtra_P6fW1tDKEWvb1Q6n-rxdSSBEKTfoUJYS8AOsctA-tfAMWvWV518k7kf5mkNvJhUDAQtEB9t9iHgjrdsQkU_qWlFmg4-YwycC4F4JW-5Xeptj1RxYmAEu2BATVOD6zB9xzfy29rVnAQxZEsg8ruxCNs9Ag8uQFad057vilVlmROAgGYvlBkSZQ11WN_rBCwLUObPYgTnOflODjjl8VmuJRAKe4nMynkw6G-MYnHGbN50bWaDfbPNfGpv7gXwo55EpYd8qKMDJUMS3lcDIlmlwm_rO31WKk6Md1jLT8wnr3ejwXNiyQ01OzvYkVm1G5jZzICcA6finOklgss7_gKjjpW7paDjCALByfQ5_H95izqmDpeck8VfvRMW-Xx8wgakxW7Bq5nr5bJGNO2Dj2TqQWbdNP2vgJlFRZOBTGacy2F6GshEO9lYCgmH6lInJ5bjFURVzVDGcGW1YElIZ-MR1XY7oIRhjk5R-tTYVTTnx2mVO37DhqlSoukq7XLe_3yPe_eJiZExibIZkKhmmEDMK6ICpi2eYoj3crPbwykPtr8_eEjUcFo1A6ji5sn9XSKP37CWsd2y9IVIvXZjZWqhD8KvjOGQ-nX7MZUanCWbJNvKfTxix2TyuWVmn7LYdXZ3DTqLWcoBcjh4DReGXvJ_9kwq9tvyMtvwcEpK-QpKBT_t9L0vI5Xa8oU0aUK0Fb2x-6LDtt4AvbaLP2U1UxglalRXExz-hAyYE6D1zDRyWwrCogqTm8b-1FKiX4rwhLyApN1XD3rxBUPDtpxkXPsLu7QsviMS4hIRKBZ5aaDeZKyfst-gbOzsXzY5SS0CdTRKqWK9lCdIcc-vU8cTfeRXwnUZg9iNLKuP2G6IOwTB7fV9BqaCIx4_T6D5pmc0Y88tXAVrR1dW0F-Z7kZU8pps9nlWliVdU5um_vgKsCS45qKvJ_y5dmSnn0U6uoSpjHALKs5hTXf6kN0u-tJt0NSDgoW8wtAvn_UAPOGicbjQjOyP_jqnsbZqx7hAse-hkEr1h684lRMcrPmkVYMpJnG0Ckzyel7sE4Cbl2wz9N9VUuA-rKaswJDYUgHm3E4TNqwe40n90PhiR9XAc-ng0H7Y5d-hTiFhZ4XxJcTdeqAP2pXP4OFCLP9unYbF0mJyoPDI3vIbhYVCdbkH2NaHBOYvLTBafmsBubHfvXZSxhpU2AFBuygXHJQwG-VMSzbrha81cxXu0uvYGbn2MNla4rlbNNbskaJ2fqgJHxpeif08ZYM8yDxDiuAfIa9gvN5nPf00ZwXDv4R_kfKTxId2pqVeZttQFHrdph5ZL8TqFFJ266T9UsMibxnhhSCW3h1fkR1leg_-1ZxKWHZCaWR1wJOSRzjgOqLH_SYfv0GGD8_r4-27sCilNJ-r5if05ephuWuglDzppqY5cEUKWuxQwP4CZIvLR7LRZQhhv0YDu1JozHN-V0xVCUGSQxzdMfNi0MtxH8WZw9Cw3g9CJ6oxoJfR85VtYagg9M-tf5AMlngLENTtqZCUodstp6-ImiF30HRFPtud4JAjVhzMwzeMi_lOFG6qByHxl7ti9DNSWKF1FWKs4ITg4Wa7WZIp2pP7jURBie9sRGqKdt_BB3hWjgAdg0N7dNiyfdERxgRPTlVdNENbK6ASL8402Aoz7qPWdl25XbDbwMmncukrvILSb40DMqMMuTGzPRcKJHm0PQP187ihXulMvffJ3KUwjdYGi9sCAvzSvwq3QBgbaYtvcdrcPytbnJ-CUTI8ARMD6FwxLWqG6I8RcE70CW9amnJNWjWxjUNw7waftL5qC7Qsqv8lfHfC5CjIEubRzExio0ln3WqVQrZuO-LHGFRs6FkEgOUJHRYSfggo5OmWo9_Q-H8PUHGBEV3YOhWMwViQB865WR5tKNVeSA1MkovsG8iRQBFQQ1iLSBi1ge6QjNnk3rbdhOpibmYWs9LXCRYsQoo4_sr-ZdslbfYyb0IODv95jQs5UtDZWiwwkoHMlvF9k5VANwXHHM67HHGtk0ormO5jLiK49AGLFH2Gf9aNe9kz_iCyi3B48XgGOrhpkszCTXx17LYMKYlcj22a1mCsZqdlY0yBSJ4B-WLKVf3ZwbKTPesyMQ17-KcSrJMJ8ZnvfJ1CYX-zY9JGZWtfVgLJ4U75LmpwC2AMp4KBBtT3TjhohhRZsE2FvsujECHLdUerGaoZdZBp0KkWEyFZEFIVBoTE8CDEgRBL6cXj1ilbX1x-4PCY-soZCLtX-5GzfqURTIOiq0gdIroZNlstFYz-txIXiVy4owHvVAimRqv3oT8SrzhQ7fxoSoGNFdz0_HwVte6eCi1msr0Kef8rTtAyvGQ0C8F5ZXKKOSRthk6nsDUkOXlBX1g1fGlIEjeSUYq9qHH0lbCYrxvI1er8HQv2wz-dH2iDFQnmweFpUXW70DaZm_zV2Z9zFN3yWFRmpxSfJRpIxI8BdIooai0dKO6Ac9OjLADuzq71gZ__sAMeO5u1PlbJTDziihSQthEIpxrnik24pFQ6I8VYw8zha-9C1xRcAc7bCDnYPY54aK8RBOCpG8V20xKs-YToldTVlCRfVrkHyZT_kcaD_5WhyBrazRabJ3xFMRLeA8En4klAaZsBDi_PgbMGoaz252gJOKy9s-K7s1m9DUyfwvxXGNiNAFuTLi3h11MON9i_peHcS8v7QR8DnHDJaXjpretJ7Zd1SwsDdMUqCOA_AUhFDFL_SIKV43rt1gxubzoGCWCf4-t6lG8Mmm__K5gBcISmqX68RF9bqnaYP_VPH45IZgeblPNxMLgxAw8SgEk97zNOsvZWeryA0GtbZ0Zg2gC3V3Zc4prf0p73e8cx3m2isGMUm-IZ_afvTbI88DR23E6rLpkXmCbl8ms8yuAkThaSPNPxI0Kocf1MZRaUKO7s6iMj7fNlNtI9CP3hQPe8ZDdr4ws2j0YQDjtfuRx3QE94MIO20V_CNIevmLjGqxwxVWLqL3YIRxnkssCPnYhT2VkeCo9kQVLpZp2DusKHQdeuiYor-PHu4OfOaHcsV3zrBEzUJTWV3MROEFoIO8iWBlRLcmr25vd4HCNpXLL5UVKj8388u8gWfupp7j9zxsXgCN9AIi49p0RVD_3TBSvPNZIqHPVfhFPCI2OZi5aGq5Md2lyssDkZcP4hJqUTzbgz56S1luoW_jUxJCmyGd_Kv_Ii8Yt-gVCmyAcRzdqsKVPGYYRb6h5IN36DlLoY4fLAVj85WkubOJdOK4bxnRW5wU4Xfyc8sr5ndpHccvT3HJMy-MqfeEWWlGqjXCpUh_SO3MKbnk0-gs3SQ2lAqBPCNViKXNOBqmIGbNYYnabUFix96Z5ta1mxmtDhbCGWWdZeB1RHUxuIZlpSLK_EX8N3UHyVWMVTJiBqhyFjyGLfPZ3VIkFbg32ofbbVwLlVfDZJkiZz-HFNxAp9e_HqPwy8-QdzKKVBYp2zA_hp8R8QFYxvhYhfRM30sIPWz5R7j65Y3WHFPB_jpbMvYCDdZn9ySTRWT4dle4XGOqhkYg_WVJ7ImSO_fU21UhNYGOAnHX-Ye_ACGIcEHV2HFEj0zLVDMDOlstNXrkRimViaoyf2_VwwT-kVnS0GZh9_S3o8uOOkvJQl8iXV4uCoWuJwQ22orir1o1sTe8IFMm0nDbJk6fyWcSsO-ogBXRzFtytmXTJnhOHImy8cLmZCkfDhsNQSN3RrGFwHR2-wDq1_RpY1MTSIrwKZo4mrRhBNG6NhwG3ca8CqPV7p5spxDcMv6Q2DOxX7oTN24CBia-XwDzmv93MIKkV-MUxqat5faPuThLMYOxFu10wS_KNjwPTxKyPSvvEN64CypaFkMBSIGbKjk3uGjY4HBD3gkDzOrjmIdPJepbDySPh6o2Q5CZnpOKIdcqwDtqAwo5NkrmJDkcZ30-xF6sy11jvhHZpzWuKx7tYkiivXsgP_umH3zRy3FMT3PBtcNBBOJlT4qyHBWxjblrwWElD50RhZVs9fw_Tvc2jr_N5yp6juVFMixHY5LuI-oiO93a0_lopHF0H0vuXxwppRpvkkLprL9n7Ol-I_yBxBTrPbytIFcTnHyzHCMP0Nk9Ni56-qx6aB1dJd2J6jr1k8-nEZgFLYErQBVAJZFLN3ScBJcN_Qm_xmy7Ugfl7-7mstHhnX-mq7fbPfuheTy0V7fqei4wdfVaPnICVDSGtzzeeczN_YL87aD49-D47UeIk5TJ5_IoKToTwqc1O_vrdxOuCPAYonGuyEgl_di43DE-R5mi-FzblsZoaOHfdhLjThxRvkhgMPKVWluv4qT_oyjNNqfKKfxwlZFE8sWZuXPY5I4bTG8NTAKhqBMBt0xvyTvAYXqShr0pYU2K96gNsIevRIHtrrnXaduqBgxVrO3mxNKq4EPJtjNdYGb3inENhLEEoRKkCzs_th56YHqMDyUFtx2nxJBWcvRjuK0yqf4JMlhXAFhpy05tiwquAsbLY0b2yz8efpg-NkQfYyugc-PJ-_lz_RQQ98eCsE00Sk_2RywGsiHNiIArKmuQmLqi1Rc_Tyzhuqqi_bKMjk-h8O-rXb5o_nuGUIlmVjWME0tBy_EHZGYQVARXXi8qVMDsyFIPi1Sq6NnRE-UyfV7mzBmwEWoCX09iEysxdxxOorFoAKLmpBKJI83UegWzP47LAX-Yxakz_kGDI3iXghmVYAlZMypJTC1YyRnN0_AqfGlGKxEst4sPb8usRpmVYva7CeN161z19NedfspGmlvltIS2aq60VESzij_rGVo-RFesM4Nn-DzU9UY9spT6Ki9PkiQQF8IREbeJWHQWZ_i8zgLBN-sEbNmSSHYqla_O5Mi4I7gR16J5u5-9dH8nsKc1HMC4JqL1Fe6MIQKD4wLbO3k-JZ61Px89xj3fycka2E_74oYGzCn0H6StnBKH9L1A03V4uAFrNHhsA2L0BZl4E2i4ZLGhySug57TDWm1u_RyJ8_VtkDj4nWJQP7dX5RGJJsYY8dkQLivCI2TVfEhp2QuIQMdng7q7fJmW-bpZ2krBs84d6M5tGzFcE-MznZiJDHrZ0ZVptaBBcjoOuE8ARTJA9Q5L5VPzqOo33rmKBvaUp4TOm7-6T_tH_vKBHRtJDd6pUT47U-q7rpEv6sD6Ct_g6fTLhuomEB1EhcJ-vqsmpnbdiELiZs_GPJ4BctC6_PIqpQvI0E2U0sJaZSux5_G-vtCcg_cOasmpA_Dz7kJmLscq-rZ2-qaZodqULJaeR4h8_8KAf1tBZQwDObvXfYTF_tGT2D4nqy8YPqZq8lxzXT9tp9fgBPqSR2ZeJIZ11OHRvkCYJSVgRJR5D5UkhTs_Bt-F2zSWNkf43UZGTtO8Teedt57aMMerIHVLq0LykTuIayx95QDEV6HyaUsp0R4_nG1vPlTdTSXoc_z2Tc4tpSJ7Nfxvvx_wPxS8u_acfVSBr24UYkiPSy2sJukt39Ql02D3-Q6XyB8blEn5wfHw-E0mNEmlRnr7aXRXdiUavMKaHg4evsDW3iG8gKeVBPoHfqf72gRNY74qtILyfUCINNWCkc3S7ro_nRluK4aYG_8CV1qAIwx_Y5KQDIwrRqdWVbuGYPfOLh0p010rgssfIVFFdtedOsnbT3tAV6CuGSKa3c5tTTQtTogH7UlF9a1moJBZfP0fydjr0M3EDGKEuvon0HWtMiKNh602C-cv4kaRQCMQozXfieDy7hTwNNgDAmx7S23wuL9m9Vzp6Gezj4lwB6oOKmCGLLe7qTDiexxGoGQKmZ_0dJvVdxFrR-GgaebuRr-A-OGgJopR4wYquKpJfoXjsKilhAIpiznl29DdpLvGNSooFrEQyq3T_D9TYXbeSpGm6HR74g7Hed4Owcj5lPDr8zBnXlN5e7Jt0rsoiKdB-37dmqe6SvnmXlNWRRkevrK6nMewoNdLPR-DHf8CCB0EdGk8R8P4KsQf43za6UpJsfj1hHP2lyloPlm-xrOAEPQK8RvNjLAt0C8GA6vAJZDnYm16axVa9fB-SfDo-N5EmifCfuC-pIld0DvJYHwudSM4ZaPggb6We47QBkZalyMXEBQc3E3737-zzWDsxqMJLpUadXz691nGbIMOYNzVz8pzkqH499KYvNPG54m1WDjIXkqh9jtW2thb77gSh56Z0P96HQ_1MLzJCxQ1kF0LRgBT99gXbI8I1DWa1xeLDmB4KYrwOhg2EWpPXU94qUkbmaotum",
+            "summary": []
+          },
+          {
+            "id": "rs_0bc56879c151236d006aca4bd91c3887d0a560a0798b658cdf",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqykvdBF4rL9448yGZdFlNx1FoyQJFctFsifOrN2AnRPgvaFUO4lAefgBmVF0GtG4FIMsTP4nc7KmWgTMrYQj1_s4O8T62WoaKIK182VxUnVunieZ6gS9uYE1-IBQHlohlC-QmB-4Z5UiGE9QtNQXAwrWNX5iLcksrUIXCj1o46i-NGLdTfyFBI3CuPeRu064JhEypcr4Ff5HOdBsfkheEitwjspAGvTDmCuTEuKQ4ouJYhw_UkSDr5fElffx5W3SYXR07AYWhI88JM7N7ouvjxQ_vMLZBbA8N8LrEclZZI_wTU_ArZNyVE-TFAUkjO0VT0ntNw4lRBa3DYD-4rsMNZxSykypKEfeNxfikJLeqiCMi6MKb5CSAdhxRgukgq15rhvvUIfN1JqToz3MCiNJMtTSi2lViqciiIGsf_I-CjEPPUqxdBsQ11Gf2OiOOzpLvhV6JvTbjPYUtdL9z-w3YYMEMCBmVYSi8kno1gHNvYiC4eWf8Jpj_ZKi0M4m7unSkfzyxOjCPMesdFx9A_TcndtrvuyBkBLua5wgiexikN7BjQ14FQprf0EsMUCKDeUk7EtLx6e2oPc1daFmrFiW8QQ_oHJq_HMSZEi3ZBCyAqY_gz13LWD7NDP67Ush6Kl-IWxxmJb194alv5n3FYndFv1M9t4MhigkMHReckA7IPp_OD7g7GKeHLAs_YBeKumB75Bp0wQquuGKlydopujjkTIL1WmiJYcizFtPLly_LejPdgWtZFBglx650nqqr-NXpxWsYUYQTdEz-QNRiPWgEQf9jTIJIQiN5db37tNzgpDP2Awoczj8WhQb5hNKR6D2RdUw49qppSG2maWVuZCnJVATuyqKixZsY2S9S2XfhfhD73YiWiXELBMcW5txzYtKb_VxfLzAPSJ1GD2Yv_0q4DTPjii2UYBAbLBltJ0GNPy2XXLuEtqrpAO1tznjhaigm53oNwEHdTsqhpxeVtWksDrsgEeZCeAtLIgrwAKhiAMzfsRSkNc1y7ADTOjGmmCP1vX0VvNble4_HuiEBbbywTGWfKx9CZma1yo9hLn9T1MTXgA9_dWIqD9oUT7OTVNhku2ROeRO-dAkCbApd334vI5tIM_SzxsYRzbWz7kLoYgSJbJAN9wRk058m4QrdpxK8o__29zh9mVjytLkWabO6xbR09WWc1Vrgf_EW9WKGu26HDCTQKAvJucgm6JmeoCfGSz3gu8tKxue4jiHee1Jzx0sac8Qa4I9_t-nXBZJLMevpu3qIaZpPqpy9wGN-hkdjGQ-K2wkeLAVzj-Y1CqDfWMRBo7ooqe5LVMooStcCvxvkNRA2Z1r4mLx5cfsNup1PgHzAXMfYyrxe4sXZ5ThACvzONw2GoC7_tQ-z-O5428GVDppmYuPD3VGhiIchkIvuRasfIxI6Pw-wmRpBI5orcFAlqdTJcZE-wIpSl06BPjctkRN7xjDHjD8sUkTGJ8ULE_v3_R4vyhYsWaa-FER-MF0pdaIzNp4g4augMUey5GKkOW8m7AvR0mLeqc7-a07Wv-sI0Mb6FlJg-VsHjSd6JNVSaMY65jZyv_xsTUuabRG8zhEYEG_tMPX6WizbqapNSGg9KRQau089HGBAvjjNEHOXFxUcR6sIXyksgwlh0btfkLbKKQeivPkOjvasQ11nwQ--TAefNFDrk10hp_2UHgEEOZ3b9EMIfrmvWRmcd0Uw5D-AgdpR-7006sael7PLEr00_Aya6nMynkBn55GMj7nGB9tqZl035uaRbbH2WaAnjXLuk0KPpEojldjdrGw3SKGfgr2vnK_6TS7oy-ohjPH-wJeYzkWD3f3_OR-ArrK2PA3VOhWnL56nlDXJo0mY88cpubaUHO8du5dSgj7hDmADkkJyujj5Is6DZ7QDbpjQeC8c2nAp10XM3V16iKrPk3G1VlakgSITj8fugOxWadVJqWH_KwfWcVdu6KGhBB-i4m1XheYFKvsUTql4EEsJAF9dwtp6qG5DynB7O6RJqxO5xQU1n0Ot8MqglY-l0BvA7LuiiA_ks-mSyU5dizDuoCe0kNaVxNre6v9NlDeHy0W6WZKg56vReevktYbAFFAJsG_fsu-F0HHTzenYhicRH1wDI9XHMsIg7rpJHjc2QU2UZYBx1JitFAr9pnZfGujvubyPGuotv0XPUxw1VR_gaEykhZ-3CdcERzrvYqlMIxN3L6LhP8GG_PUT1MWg8Blxfj9s8jlxDTRJu99fYjuxjD_SdriEYDcdPdJiwbnz0nBeoGfqWCi6o29GG5HI2Jq4y5d75rrCGihRof9UshAy1iVUagoIcu7apLXkj5ZV4CaZlXEHExCLidJSk-S_ybpVGeNboQfsxjXdaJOYua21PQVHObgSB53oEaNwh0Z4tN0wRsCUaiaZnmG6cUnGSLJqQzQ7mMc0QFzEE0POXCby3l1EYkbNl_XvJxz1CUOneH8PPskLwuyYTkhODDFheYV8FMt98RqBuIXeNBh7oFuJXXsCJWYZJnoxXuYmuo6rjEgjSEz1Ophl-W3jv0etAVJ2fL-SrHUkrGyKJ4nkA8sQwpcOvOBtJ5EnszYV1kPHq9eg6b0HQIO_YqXK32hHD3KyRyty0HaH46ri78mbvRG-n0i0u7V2rR5bndvmY4YrZJ3_aNQfugYhRFpC8X8o5H_zU8361-fNG9yJu8vZJorwHxTZ3G4hWZJ30u5Rx35o1IIpiHLm-yUK8DF2dEbJise5Lw01aSafUvETnYd1VN3Vxa1YXAKc4zUYvbW1i7e2CWQKKJIRBGQ-ltum_kG4cQu4gKcKf3f-TwmGmBG945W31kQ4V_CrB0_EMgY0cudHPJY18NOKJZu5tItilK29s97kE6w3QjjvBhfBikfJ8mFwdMk39QySOOos6i_KvWP0bYUCvRp3NaRCWyUdKfwdQDdPCscqr4tGaqLK1jzdovSPM8eq6_d4HpLC9p9CRaHxHlqozzSxXEcq82-X0zu5K9bb-JQcMoqCkSUhRHgQz3WoqqzqVkdhsrK57tB3W0YU9hZ9mmNJG9Ps6jizAUO1hrPkBqacAgyZGcYxKVVja3tvnMKMZrfhy9bJgspaUOpjXazvwlCfqSciBqfD9zbOL2lATbmRjFWAAaDZC2jZjf_EU5hLcm13nXqpAhsXxfslJ9Ui_Xa4o9GvehRUXx2pJ2bmeWXlBu0VYjAo0RAUvbi_0ZhiZjkABMDRfNFtLGc_gaoeXJaVnOcc7iQsM6xC-2b5pZ3BPP3NqvBF5sGuQeVINFBXl4i825G5QIdZIvx_Jis9G0MjHVABqGAYEp-a5xkj5rbdOVcXt4kLM77jurxQN0zNeamH2my5VOchUJXRbe9INWKpTHl39RUvJJMzXA-C9NPBS2xm5NJomUP8gOKOapS7p2U2FckLsXC1YW9-iDusJMq4plvdiIPKy1lbm6SqD_YSZAyFBzvLfowYy79_47dBJqF1rdR_i-c3nygvOqwXvvtbMLVa8mYelOgK63KuO1Q7uhqVna9FtHbUNRzapt864HTLCgIdmPIH2uIWp4BLo_NXnmVCPpzcCMvPz_1RLH1ElpSAL5k_yiYrTe2plYWd8Z3lEttftn-bKhpiClZ-eMJnc7NPhBf1cpdQzV8Y_SHu1Aofh8eIdbAVISoqX2VBXzPLGg8HNNJlfSL9jG0iPhviBhXfaWloL2Id9lqHcorok081ijCqiY03_iFx0GN_8XbR8_IKBuyXNuotkvRxEUnDMTRPSwCnvxApO7UXOB2-4fbZNMqA5FrD5WhMFl8_uk6b6Rz8npYDl5QJC_ZLSBGtTMJQpdeUi-5y41uvhBrG5Og6RC2S5N7TI2xvmPeYL0t0PVSMwDSTmWooQRZ8nfXrCizvhI9eREhcmyEh9GDZqOncOwJzMxRlWYjKN7DZaMxUSU2tE2H6oDdWd91vMz6FSOvzJjDbJ2bbJzv0A7i8A_BpCtKD22GTYiGNXO_7vb5rijbr3vi2qIJ-lZA6qSecU6NPw4EtWej2SjAJKT4PEGOPH6I8JpMf9DYIRJwG2wH7ZZ4Hp0NV8Tn7DLaW5Nb53kj6q5KxhvrPgdvXbCIBsyA3QrfSYx4AYb76aU4Kw0z1I2iMpULhz7OKJoCvlIpYOoxU8Vqm7ue1i5YhLip9PT8X3Zo2lAVdrefMU2Ue_sUC4Ezl7oe2pXJlE-zV-WAM-mFfYCksZcQhhY1zVnqFC5p3GQ_9BgFplFqtMXigoGl-_c8DbTSMwpMm1zrr0im-MZ5Z4oV8fhi0txKkLY9b3F7-Ap-9Pl9cgjJ4nrPeupTmTRNSRNgTwAbzvBjinSewx2Xw6Gp6GIJ9iH7SZiuxmgNnfwfnC0DK6fmPrE2oypXCQ7GxfNvoAu4gm6uoffHGski5Xz12M5ZB_BVgj8qjV6JgU65tqxADAdl_gX1th5sYlBdV9ALv0jrvpklBvsNVWYLsSNPmKbFn6Zp28gpyrtZb24EmMAILPCvm1VIoL4KMX5KT27sgrCT6N3TyOC8tt7VKc3iWJ19y66-d_aVqy3jn3-sjUSJSruI0slvAE0-hXjFUeM-IjhjJI2ftfCY1vlkPTYhwf6YeCGR1KUI7DHWWOW3Ugd0HbcVJEj_uYXECFb-65dzjr4O6mGU8VLzCLZ5IxO86r0d9_Nlai0S6jMUbMvP8gujijcwOaOT9fwTi4L_5_XBxSCQWa7xckRnZurCR-TlLx8Z-0s0YtayAt-j5xBeCPK40_ZMdUQBs5Yyr76yi_sAc75FO_qHK4AYSW7xIqouiK6xjcheX61EiwHPnB_Ivu__itUSaeIG4494OnP33mODuHsx55NRIxs34_B6p3kx_L1HVNI_mNRWRRw_Oamtb_BstBjVQukJJeBMekWr6kFLt_Io2CVK55uU1zEcK_zvivYGMmKbd0d-TYX___54NavLAnpMxSsvDUIQrm7-6gc1GxdW0vmcGIWd8bOAyjifi0vTMvGtyio2gw2HTXIkgzhdorMu4BaLjNaWXpLbWD6fhcYb9ko7QvJb2ak1eKPhxJe1kKQ2NpyWZYtJBL92HP9t-2p3hZJUZ07huegioDT2mDzLSD6pG0hvt0xrfBhPqv8gQ8I-P3OVarHGdi2rks8uvZjpR4H2rn8q39z2cuyUQj9t-UBtrJ8YQY41ORedJ5ZVOXCZZNHFcJrIrmw4LVbSnnQWFw4k8avs3dxwie4690WvBMvFPOTzudMWxSDDNt_uQluJdPyCYhE-O7uGM-u9Ade3B2_c05cdgarbqn5HRYNDF7zztwyzggEimZ4fhpRL3NsyEsax397gIuXOyr4YLN_FiIWQTVbeoLPqzCKEF8bRyBMucH9k8sb17JF0LJYHMJl1jqNPby-jbqSXB_BTnkzb2f-_q3hu9jFDXFk35KrfJ3jnUPS0Y9a3UFbxs01JFwjbTvwqhuW2jNIHH9nIr2riupPbkM0sFDX2j_psYQkXTPVUnkYEYc9aaKu0btMTpceZVz68ZGFWktB8cOYdcmKWw3LqeznBQGtvubxu1_oqf2CpSK7tNd6NP7fSRn-xtTZTIeSuPLOiR0eKcHkdPiudnGsfgINvykpbw6hir9Bsr_6YrjW2IP5Cf3_k0rapQ8FHhS_AEZlnPYqbK2T5zqIDF36CfEiHze3Lx2zdOQ6eRLf_XwugzDPqTK0pseWg1W2KnNPvuEfE03ia4A0kKYS4uTkXqnFj9QUN1_zMKh2OmTgYK-zvl8O9MyZOnJm07IeEW_DbCuRpMECsLaH-T4QF09M18",
+            "summary": []
+          },
+          {
+            "id": "msg_0bc56879c151236d006aca4bdbdb1887d0838189f8a68dcc18",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\"caseId\":\"D2\",\"outcomeType\":\"ERROR\",\"steps\":{\"S1_STEM\":\"PASS\",\"S2_CHOICE\":\"PASS\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"FAIL\",\"S5_JUDGE\":\"PASS\"},\"firstFailedStep\":\"S4_INTERPRET\",\"errors\":[{\"tag\":\"MISREAD_FACT\",\"step\":\"S4_INTERPRET\",\"studentQuote\":\"카르비도파는 혈액-뇌 장벽을 통과해 흑질에서 레보도파가 도파민으로 바뀌는 걸 막아요.\"},{\"tag\":\"DIRECTION\",\"step\":\"S4_INTERPRET\",\"studentQuote\":\"그러면 뇌로 전달되는 레보도파도 줄어들 테니\"}],\"note\":\"발문 방향과 선지의 증가 주장은 파악했지만, 카르비도파의 작용 위치와 뇌로 전달되는 레보도파의 양을 잘못 이해했다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "description": null,
+            "name": "thought_diagnosis_v01",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "string"
+                },
+                "outcomeType": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "ERROR",
+                    "INSUFFICIENT",
+                    "POLARITY_MISMATCH",
+                    "SELF_CONTRADICTION",
+                    "UNJUDGEABLE"
+                  ]
+                },
+                "steps": {
+                  "type": "object",
+                  "properties": {
+                    "S1_STEM": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S2_CHOICE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S3_LOCATE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S4_INTERPRET": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S5_JUDGE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "S1_STEM",
+                    "S2_CHOICE",
+                    "S3_LOCATE",
+                    "S4_INTERPRET",
+                    "S5_JUDGE"
+                  ],
+                  "additionalProperties": false
+                },
+                "firstFailedStep": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "S1_STEM",
+                        "S2_CHOICE",
+                        "S3_LOCATE",
+                        "S4_INTERPRET",
+                        "S5_JUDGE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "POLARITY",
+                          "REFERENT",
+                          "ATTRIBUTION",
+                          "DIRECTION",
+                          "CONDITION",
+                          "SCOPE",
+                          "MAPPING",
+                          "SURFACE_MATCH",
+                          "PARAPHRASE_DISTANCE",
+                          "MULTI_STEP",
+                          "OUTSIDE_KNOWLEDGE",
+                          "MISREAD_FACT"
+                        ]
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "S1_STEM",
+                          "S2_CHOICE",
+                          "S3_LOCATE",
+                          "S4_INTERPRET",
+                          "S5_JUDGE"
+                        ]
+                      },
+                      "studentQuote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "step",
+                      "studentQuote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "note": {
+                  "type": "string"
+                },
+                "unjudgeableReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "NO_CONTENT",
+                        "GUESS_ONLY",
+                        "CONTRADICTORY"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guessed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "caseId",
+                "outcomeType",
+                "steps",
+                "firstFailedStep",
+                "errors",
+                "note",
+                "unjudgeableReason",
+                "guessed"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 4790,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 4787
+          },
+          "output_tokens": 1086,
+          "output_tokens_details": {
+            "reasoning_tokens": 860
+          },
+          "total_tokens": 5876
+        },
+        "user": null,
+        "metadata": {},
+        "output_text": "{\"caseId\":\"D2\",\"outcomeType\":\"ERROR\",\"steps\":{\"S1_STEM\":\"PASS\",\"S2_CHOICE\":\"PASS\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"FAIL\",\"S5_JUDGE\":\"PASS\"},\"firstFailedStep\":\"S4_INTERPRET\",\"errors\":[{\"tag\":\"MISREAD_FACT\",\"step\":\"S4_INTERPRET\",\"studentQuote\":\"카르비도파는 혈액-뇌 장벽을 통과해 흑질에서 레보도파가 도파민으로 바뀌는 걸 막아요.\"},{\"tag\":\"DIRECTION\",\"step\":\"S4_INTERPRET\",\"studentQuote\":\"그러면 뇌로 전달되는 레보도파도 줄어들 테니\"}],\"note\":\"발문 방향과 선지의 증가 주장은 파악했지만, 카르비도파의 작용 위치와 뇌로 전달되는 레보도파의 양을 잘못 이해했다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+      },
+      "error": null
+    }
+  ],
+  "retryCount": 0,
+  "hasInputImage": false
+}

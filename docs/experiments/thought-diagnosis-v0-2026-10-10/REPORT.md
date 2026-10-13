@@ -1,0 +1,853 @@
+# 사고 진단 v0 결과
+
+정답 라벨 SHA-256: b37b864331cb8da1e99479eddc7cc21ae9a72f436de16731f5697a14803bbb54
+
+```json
+{
+  "interLabeler": {
+    "reference": "codex",
+    "compared": "claude",
+    "outcomeType": {
+      "matches": 30,
+      "total": 30,
+      "accuracy": 1,
+      "kappa": 1
+    },
+    "firstFailedStep": {
+      "matches": 29,
+      "total": 30,
+      "accuracy": 0.9666666666666667
+    },
+    "steps": {
+      "S1_STEM": {
+        "matches": 29,
+        "total": 30,
+        "accuracy": 0.9666666666666667,
+        "goldFail": 3,
+        "predictedFail": 3,
+        "truePositive": 3,
+        "failRecall": 1,
+        "failPrecision": 1
+      },
+      "S2_CHOICE": {
+        "matches": 30,
+        "total": 30,
+        "accuracy": 1,
+        "goldFail": 0,
+        "predictedFail": 0,
+        "truePositive": 0,
+        "failRecall": null,
+        "failPrecision": null
+      },
+      "S3_LOCATE": {
+        "matches": 28,
+        "total": 30,
+        "accuracy": 0.9333333333333333,
+        "goldFail": 0,
+        "predictedFail": 0,
+        "truePositive": 0,
+        "failRecall": null,
+        "failPrecision": null
+      },
+      "S4_INTERPRET": {
+        "matches": 25,
+        "total": 30,
+        "accuracy": 0.8333333333333334,
+        "goldFail": 14,
+        "predictedFail": 14,
+        "truePositive": 14,
+        "failRecall": 1,
+        "failPrecision": 1
+      },
+      "S5_JUDGE": {
+        "matches": 21,
+        "total": 30,
+        "accuracy": 0.7,
+        "goldFail": 13,
+        "predictedFail": 4,
+        "truePositive": 4,
+        "failRecall": 0.3076923076923077,
+        "failPrecision": 1
+      }
+    },
+    "traps": {
+      "total": 18,
+      "meanJaccard": 0.9074074074074076,
+      "fullyIncluded": 16,
+      "fullyIncludedRate": 0.8888888888888888
+    },
+    "errorCount": {
+      "matches": 30,
+      "total": 30,
+      "accuracy": 1
+    },
+    "disagreementCases": [
+      "I1",
+      "I3",
+      "I6",
+      "C1",
+      "C2",
+      "C4",
+      "C6",
+      "D1",
+      "D5",
+      "D6",
+      "S2",
+      "S4",
+      "S5",
+      "M2",
+      "M4",
+      "M5"
+    ],
+    "citations": {
+      "codex": {
+        "exact": 20,
+        "total": 20,
+        "rate": 1
+      },
+      "claude": {
+        "exact": 20,
+        "total": 20,
+        "rate": 1
+      }
+    }
+  },
+  "goldHash": "b37b864331cb8da1e99479eddc7cc21ae9a72f436de16731f5697a14803bbb54",
+  "models": {
+    "gpt-6-luna": {
+      "run": {
+        "model": "gpt-6-luna",
+        "requests": 90,
+        "conservativeUsd": 0.06147030000000001,
+        "unknownReservedUsd": 0,
+        "completedCells": 90,
+        "plannedCells": 90,
+        "stop": null,
+        "statuses": {
+          "VALID": 90,
+          "FORMAT_ERROR": 0,
+          "POLICY_REFUSAL": 0,
+          "API_ERROR": 0
+        },
+        "retries": 0,
+        "formatErrors": 0,
+        "citationExact": 59,
+        "citationTotal": 59,
+        "citationExactRate": 1,
+        "tokens": {
+          "input": 352713,
+          "output": 52398,
+          "cached": 274257,
+          "reasoning": 38395,
+          "unknownUsageRequests": 0
+        },
+        "actualModels": [
+          "gpt-6-luna"
+        ],
+        "frozenHash": "59bba4f82274323b4c303e1c824faa7768690457d8b60b2ff03c76f6e424f26c"
+      },
+      "repeats": [
+        {
+          "replicate": 1,
+          "outcomeType": {
+            "matches": 30,
+            "total": 30,
+            "accuracy": 1,
+            "kappa": 1
+          },
+          "firstFailedStep": {
+            "matches": 28,
+            "total": 30,
+            "accuracy": 0.9333333333333333
+          },
+          "steps": {
+            "S1_STEM": {
+              "matches": 28,
+              "total": 30,
+              "accuracy": 0.9333333333333333,
+              "goldFail": 3,
+              "predictedFail": 3,
+              "truePositive": 3,
+              "failRecall": 1,
+              "failPrecision": 1
+            },
+            "S2_CHOICE": {
+              "matches": 28,
+              "total": 30,
+              "accuracy": 0.9333333333333333,
+              "goldFail": 0,
+              "predictedFail": 1,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": 0
+            },
+            "S3_LOCATE": {
+              "matches": 25,
+              "total": 30,
+              "accuracy": 0.8333333333333334,
+              "goldFail": 0,
+              "predictedFail": 0,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": null
+            },
+            "S4_INTERPRET": {
+              "matches": 27,
+              "total": 30,
+              "accuracy": 0.9,
+              "goldFail": 14,
+              "predictedFail": 16,
+              "truePositive": 14,
+              "failRecall": 1,
+              "failPrecision": 0.875
+            },
+            "S5_JUDGE": {
+              "matches": 23,
+              "total": 30,
+              "accuracy": 0.7666666666666667,
+              "goldFail": 5,
+              "predictedFail": 10,
+              "truePositive": 4,
+              "failRecall": 0.8,
+              "failPrecision": 0.4
+            }
+          },
+          "traps": {
+            "total": 18,
+            "meanJaccard": 0.8055555555555556,
+            "fullyIncluded": 14,
+            "fullyIncludedRate": 0.7777777777777778
+          },
+          "errorCount": {
+            "matches": 28,
+            "total": 30,
+            "accuracy": 0.9333333333333333
+          },
+          "citations": {
+            "exact": 20,
+            "total": 20,
+            "rate": 1
+          }
+        },
+        {
+          "replicate": 2,
+          "outcomeType": {
+            "matches": 30,
+            "total": 30,
+            "accuracy": 1,
+            "kappa": 1
+          },
+          "firstFailedStep": {
+            "matches": 27,
+            "total": 30,
+            "accuracy": 0.9
+          },
+          "steps": {
+            "S1_STEM": {
+              "matches": 27,
+              "total": 30,
+              "accuracy": 0.9,
+              "goldFail": 3,
+              "predictedFail": 3,
+              "truePositive": 3,
+              "failRecall": 1,
+              "failPrecision": 1
+            },
+            "S2_CHOICE": {
+              "matches": 27,
+              "total": 30,
+              "accuracy": 0.9,
+              "goldFail": 0,
+              "predictedFail": 1,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": 0
+            },
+            "S3_LOCATE": {
+              "matches": 27,
+              "total": 30,
+              "accuracy": 0.9,
+              "goldFail": 0,
+              "predictedFail": 1,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": 0
+            },
+            "S4_INTERPRET": {
+              "matches": 25,
+              "total": 30,
+              "accuracy": 0.8333333333333334,
+              "goldFail": 14,
+              "predictedFail": 16,
+              "truePositive": 14,
+              "failRecall": 1,
+              "failPrecision": 0.875
+            },
+            "S5_JUDGE": {
+              "matches": 20,
+              "total": 30,
+              "accuracy": 0.6666666666666666,
+              "goldFail": 5,
+              "predictedFail": 15,
+              "truePositive": 5,
+              "failRecall": 1,
+              "failPrecision": 0.3333333333333333
+            }
+          },
+          "traps": {
+            "total": 18,
+            "meanJaccard": 0.8333333333333334,
+            "fullyIncluded": 15,
+            "fullyIncludedRate": 0.8333333333333334
+          },
+          "errorCount": {
+            "matches": 30,
+            "total": 30,
+            "accuracy": 1
+          },
+          "citations": {
+            "exact": 20,
+            "total": 20,
+            "rate": 1
+          }
+        },
+        {
+          "replicate": 3,
+          "outcomeType": {
+            "matches": 29,
+            "total": 30,
+            "accuracy": 0.9666666666666667,
+            "kappa": 0.95
+          },
+          "firstFailedStep": {
+            "matches": 27,
+            "total": 30,
+            "accuracy": 0.9
+          },
+          "steps": {
+            "S1_STEM": {
+              "matches": 29,
+              "total": 30,
+              "accuracy": 0.9666666666666667,
+              "goldFail": 3,
+              "predictedFail": 3,
+              "truePositive": 3,
+              "failRecall": 1,
+              "failPrecision": 1
+            },
+            "S2_CHOICE": {
+              "matches": 29,
+              "total": 30,
+              "accuracy": 0.9666666666666667,
+              "goldFail": 0,
+              "predictedFail": 0,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": null
+            },
+            "S3_LOCATE": {
+              "matches": 25,
+              "total": 30,
+              "accuracy": 0.8333333333333334,
+              "goldFail": 0,
+              "predictedFail": 1,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": 0
+            },
+            "S4_INTERPRET": {
+              "matches": 26,
+              "total": 30,
+              "accuracy": 0.8666666666666667,
+              "goldFail": 14,
+              "predictedFail": 16,
+              "truePositive": 14,
+              "failRecall": 1,
+              "failPrecision": 0.875
+            },
+            "S5_JUDGE": {
+              "matches": 22,
+              "total": 30,
+              "accuracy": 0.7333333333333333,
+              "goldFail": 5,
+              "predictedFail": 12,
+              "truePositive": 5,
+              "failRecall": 1,
+              "failPrecision": 0.4166666666666667
+            }
+          },
+          "traps": {
+            "total": 18,
+            "meanJaccard": 0.8055555555555556,
+            "fullyIncluded": 14,
+            "fullyIncludedRate": 0.7777777777777778
+          },
+          "errorCount": {
+            "matches": 29,
+            "total": 30,
+            "accuracy": 0.9666666666666667
+          },
+          "citations": {
+            "exact": 19,
+            "total": 19,
+            "rate": 1
+          }
+        }
+      ],
+      "majority": {
+        "outcomeType": {
+          "matches": 30,
+          "total": 30,
+          "accuracy": 1,
+          "kappa": 1
+        },
+        "firstFailedStep": {
+          "matches": 27,
+          "total": 30,
+          "accuracy": 0.9
+        },
+        "steps": {
+          "S1_STEM": {
+            "matches": 28,
+            "total": 30,
+            "accuracy": 0.9333333333333333,
+            "goldFail": 3,
+            "predictedFail": 3,
+            "truePositive": 3,
+            "failRecall": 1,
+            "failPrecision": 1
+          },
+          "S2_CHOICE": {
+            "matches": 27,
+            "total": 30,
+            "accuracy": 0.9,
+            "goldFail": 0,
+            "predictedFail": 1,
+            "truePositive": 0,
+            "failRecall": null,
+            "failPrecision": 0
+          },
+          "S3_LOCATE": {
+            "matches": 26,
+            "total": 30,
+            "accuracy": 0.8666666666666667,
+            "goldFail": 0,
+            "predictedFail": 1,
+            "truePositive": 0,
+            "failRecall": null,
+            "failPrecision": 0
+          },
+          "S4_INTERPRET": {
+            "matches": 26,
+            "total": 30,
+            "accuracy": 0.8666666666666667,
+            "goldFail": 14,
+            "predictedFail": 16,
+            "truePositive": 14,
+            "failRecall": 1,
+            "failPrecision": 0.875
+          },
+          "S5_JUDGE": {
+            "matches": 21,
+            "total": 30,
+            "accuracy": 0.7,
+            "goldFail": 5,
+            "predictedFail": 14,
+            "truePositive": 5,
+            "failRecall": 1,
+            "failPrecision": 0.35714285714285715
+          }
+        },
+        "traps": {
+          "total": 18,
+          "meanJaccard": 0.8055555555555556,
+          "fullyIncluded": 14,
+          "fullyIncludedRate": 0.7777777777777778
+        },
+        "errorCount": {
+          "matches": 29,
+          "total": 30,
+          "accuracy": 0.9666666666666667
+        }
+      },
+      "stability": {
+        "stableCases": 27,
+        "total": 30,
+        "rate": 0.9
+      },
+      "citations": {
+        "exact": 59,
+        "total": 59,
+        "rate": 1
+      }
+    },
+    "gpt-6.1-sol": {
+      "run": {
+        "model": "gpt-6.1-sol",
+        "requests": 90,
+        "conservativeUsd": 0.9748360000000001,
+        "unknownReservedUsd": 0,
+        "completedCells": 90,
+        "plannedCells": 90,
+        "stop": null,
+        "statuses": {
+          "VALID": 90,
+          "FORMAT_ERROR": 0,
+          "POLICY_REFUSAL": 0,
+          "API_ERROR": 0
+        },
+        "retries": 0,
+        "formatErrors": 0,
+        "citationExact": 60,
+        "citationTotal": 60,
+        "citationExactRate": 1,
+        "tokens": {
+          "input": 352713,
+          "output": 26941,
+          "cached": 274257,
+          "reasoning": 7880,
+          "unknownUsageRequests": 0
+        },
+        "actualModels": [
+          "gpt-6.1-sol"
+        ],
+        "frozenHash": "59bba4f82274323b4c303e1c824faa7768690457d8b60b2ff03c76f6e424f26c"
+      },
+      "repeats": [
+        {
+          "replicate": 1,
+          "outcomeType": {
+            "matches": 30,
+            "total": 30,
+            "accuracy": 1,
+            "kappa": 1
+          },
+          "firstFailedStep": {
+            "matches": 27,
+            "total": 30,
+            "accuracy": 0.9
+          },
+          "steps": {
+            "S1_STEM": {
+              "matches": 29,
+              "total": 30,
+              "accuracy": 0.9666666666666667,
+              "goldFail": 3,
+              "predictedFail": 3,
+              "truePositive": 3,
+              "failRecall": 1,
+              "failPrecision": 1
+            },
+            "S2_CHOICE": {
+              "matches": 29,
+              "total": 30,
+              "accuracy": 0.9666666666666667,
+              "goldFail": 0,
+              "predictedFail": 0,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": null
+            },
+            "S3_LOCATE": {
+              "matches": 23,
+              "total": 30,
+              "accuracy": 0.7666666666666667,
+              "goldFail": 0,
+              "predictedFail": 2,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": 0
+            },
+            "S4_INTERPRET": {
+              "matches": 25,
+              "total": 30,
+              "accuracy": 0.8333333333333334,
+              "goldFail": 14,
+              "predictedFail": 15,
+              "truePositive": 14,
+              "failRecall": 1,
+              "failPrecision": 0.9333333333333333
+            },
+            "S5_JUDGE": {
+              "matches": 22,
+              "total": 30,
+              "accuracy": 0.7333333333333333,
+              "goldFail": 5,
+              "predictedFail": 11,
+              "truePositive": 4,
+              "failRecall": 0.8,
+              "failPrecision": 0.36363636363636365
+            }
+          },
+          "traps": {
+            "total": 18,
+            "meanJaccard": 0.9629629629629629,
+            "fullyIncluded": 17,
+            "fullyIncludedRate": 0.9444444444444444
+          },
+          "errorCount": {
+            "matches": 30,
+            "total": 30,
+            "accuracy": 1
+          },
+          "citations": {
+            "exact": 20,
+            "total": 20,
+            "rate": 1
+          }
+        },
+        {
+          "replicate": 2,
+          "outcomeType": {
+            "matches": 29,
+            "total": 30,
+            "accuracy": 0.9666666666666667,
+            "kappa": 0.95
+          },
+          "firstFailedStep": {
+            "matches": 28,
+            "total": 30,
+            "accuracy": 0.9333333333333333
+          },
+          "steps": {
+            "S1_STEM": {
+              "matches": 29,
+              "total": 30,
+              "accuracy": 0.9666666666666667,
+              "goldFail": 3,
+              "predictedFail": 3,
+              "truePositive": 3,
+              "failRecall": 1,
+              "failPrecision": 1
+            },
+            "S2_CHOICE": {
+              "matches": 29,
+              "total": 30,
+              "accuracy": 0.9666666666666667,
+              "goldFail": 0,
+              "predictedFail": 0,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": null
+            },
+            "S3_LOCATE": {
+              "matches": 24,
+              "total": 30,
+              "accuracy": 0.8,
+              "goldFail": 0,
+              "predictedFail": 2,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": 0
+            },
+            "S4_INTERPRET": {
+              "matches": 26,
+              "total": 30,
+              "accuracy": 0.8666666666666667,
+              "goldFail": 14,
+              "predictedFail": 14,
+              "truePositive": 14,
+              "failRecall": 1,
+              "failPrecision": 1
+            },
+            "S5_JUDGE": {
+              "matches": 23,
+              "total": 30,
+              "accuracy": 0.7666666666666667,
+              "goldFail": 5,
+              "predictedFail": 12,
+              "truePositive": 5,
+              "failRecall": 1,
+              "failPrecision": 0.4166666666666667
+            }
+          },
+          "traps": {
+            "total": 18,
+            "meanJaccard": 0.9444444444444444,
+            "fullyIncluded": 17,
+            "fullyIncludedRate": 0.9444444444444444
+          },
+          "errorCount": {
+            "matches": 30,
+            "total": 30,
+            "accuracy": 1
+          },
+          "citations": {
+            "exact": 20,
+            "total": 20,
+            "rate": 1
+          }
+        },
+        {
+          "replicate": 3,
+          "outcomeType": {
+            "matches": 29,
+            "total": 30,
+            "accuracy": 0.9666666666666667,
+            "kappa": 0.95
+          },
+          "firstFailedStep": {
+            "matches": 29,
+            "total": 30,
+            "accuracy": 0.9666666666666667
+          },
+          "steps": {
+            "S1_STEM": {
+              "matches": 29,
+              "total": 30,
+              "accuracy": 0.9666666666666667,
+              "goldFail": 3,
+              "predictedFail": 3,
+              "truePositive": 3,
+              "failRecall": 1,
+              "failPrecision": 1
+            },
+            "S2_CHOICE": {
+              "matches": 30,
+              "total": 30,
+              "accuracy": 1,
+              "goldFail": 0,
+              "predictedFail": 0,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": null
+            },
+            "S3_LOCATE": {
+              "matches": 25,
+              "total": 30,
+              "accuracy": 0.8333333333333334,
+              "goldFail": 0,
+              "predictedFail": 1,
+              "truePositive": 0,
+              "failRecall": null,
+              "failPrecision": 0
+            },
+            "S4_INTERPRET": {
+              "matches": 26,
+              "total": 30,
+              "accuracy": 0.8666666666666667,
+              "goldFail": 14,
+              "predictedFail": 14,
+              "truePositive": 14,
+              "failRecall": 1,
+              "failPrecision": 1
+            },
+            "S5_JUDGE": {
+              "matches": 23,
+              "total": 30,
+              "accuracy": 0.7666666666666667,
+              "goldFail": 5,
+              "predictedFail": 12,
+              "truePositive": 5,
+              "failRecall": 1,
+              "failPrecision": 0.4166666666666667
+            }
+          },
+          "traps": {
+            "total": 18,
+            "meanJaccard": 0.9629629629629629,
+            "fullyIncluded": 17,
+            "fullyIncludedRate": 0.9444444444444444
+          },
+          "errorCount": {
+            "matches": 30,
+            "total": 30,
+            "accuracy": 1
+          },
+          "citations": {
+            "exact": 20,
+            "total": 20,
+            "rate": 1
+          }
+        }
+      ],
+      "majority": {
+        "outcomeType": {
+          "matches": 29,
+          "total": 30,
+          "accuracy": 0.9666666666666667,
+          "kappa": 0.95
+        },
+        "firstFailedStep": {
+          "matches": 28,
+          "total": 30,
+          "accuracy": 0.9333333333333333
+        },
+        "steps": {
+          "S1_STEM": {
+            "matches": 29,
+            "total": 30,
+            "accuracy": 0.9666666666666667,
+            "goldFail": 3,
+            "predictedFail": 3,
+            "truePositive": 3,
+            "failRecall": 1,
+            "failPrecision": 1
+          },
+          "S2_CHOICE": {
+            "matches": 29,
+            "total": 30,
+            "accuracy": 0.9666666666666667,
+            "goldFail": 0,
+            "predictedFail": 0,
+            "truePositive": 0,
+            "failRecall": null,
+            "failPrecision": null
+          },
+          "S3_LOCATE": {
+            "matches": 24,
+            "total": 30,
+            "accuracy": 0.8,
+            "goldFail": 0,
+            "predictedFail": 2,
+            "truePositive": 0,
+            "failRecall": null,
+            "failPrecision": 0
+          },
+          "S4_INTERPRET": {
+            "matches": 26,
+            "total": 30,
+            "accuracy": 0.8666666666666667,
+            "goldFail": 14,
+            "predictedFail": 14,
+            "truePositive": 14,
+            "failRecall": 1,
+            "failPrecision": 1
+          },
+          "S5_JUDGE": {
+            "matches": 23,
+            "total": 30,
+            "accuracy": 0.7666666666666667,
+            "goldFail": 5,
+            "predictedFail": 12,
+            "truePositive": 5,
+            "failRecall": 1,
+            "failPrecision": 0.4166666666666667
+          }
+        },
+        "traps": {
+          "total": 18,
+          "meanJaccard": 0.9629629629629629,
+          "fullyIncluded": 17,
+          "fullyIncludedRate": 0.9444444444444444
+        },
+        "errorCount": {
+          "matches": 30,
+          "total": 30,
+          "accuracy": 1
+        }
+      },
+      "stability": {
+        "stableCases": 28,
+        "total": 30,
+        "rate": 0.9333333333333333
+      },
+      "citations": {
+        "exact": 60,
+        "total": 60,
+        "rate": 1
+      }
+    }
+  }
+}
+```

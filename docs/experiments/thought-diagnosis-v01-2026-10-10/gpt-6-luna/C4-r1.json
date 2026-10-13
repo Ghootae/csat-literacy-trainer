@@ -1,0 +1,305 @@
+{
+  "caseId": "C4",
+  "replicate": 1,
+  "label": "C4-r1",
+  "model": "gpt-6-luna",
+  "frozenHash": "c5c5a0e00356b9628145279c3290440aa92de41ed4db8203d2d643d0808c39f2",
+  "status": "VALID",
+  "output": {
+    "caseId": "C4",
+    "outcomeType": "INSUFFICIENT",
+    "steps": {
+      "S1_STEM": "NOT_OBSERVED",
+      "S2_CHOICE": "NOT_OBSERVED",
+      "S3_LOCATE": "PASS",
+      "S4_INTERPRET": "PASS",
+      "S5_JUDGE": "NOT_OBSERVED"
+    },
+    "firstFailedStep": null,
+    "errors": [],
+    "note": "법인이 권리와 의무의 주체라는 사실은 언급했지만, 이를 선택지의 절차 위반과 법적 책임 판단에 연결하지 않았다.",
+    "unjudgeableReason": null,
+    "guessed": false
+  },
+  "citations": [],
+  "attempts": [
+    {
+      "requestId": "C4-r1-14",
+      "status": "VALID",
+      "response": {
+        "id": "resp_0cd664ce090be297006aca4a2a675c87d0b4224454eee72085",
+        "object": "response",
+        "created_at": 1791642154,
+        "status": "completed",
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1791642159,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "너는 수능 국어 독서 문항에서 학생 풀이를 진단하는 평가자다. 아래 가이드에 따라 이 학생의 풀이 하나를 진단한다.\n\n# 사고 진단 라벨 가이드 v0.1\n\n학생 한 명의 풀이(선택한 선지 + 근거 설명)를 보고, **어느 논리 단계에서 성공·실패했는지**와 **어떤 함정 유형에 걸렸는지**를 판정한다.\n사람 라벨러와 AI 분류기가 같은 가이드를 쓴다.\n\n## 0. 원칙 (가장 먼저 적용)\n\n- 학생이 **실제로 쓴 말**과 선택만 근거로 판정한다. 드러나지 않은 사고는 판정하지 않는다.\n- 판단 근거가 없으면 `UNJUDGEABLE`(판단 불가)나 `NOT_OBSERVED`(알 수 없음)가 정답이다. 과잉 분류보다 판단 보류가 낫다.\n- `NOT_OBSERVED`는 실패로 세지 않는다.\n\n## 1. 결과 유형 `outcomeType` (하나)\n\n| 값 | 뜻 |\n|---|---|\n| `NONE` | 명시 오류가 없고, 선택 판단에 필요한 연결이 드러난다 |\n| `ERROR` | 원문·선지 내용에 대한 명시적 오류가 하나 이상 있다(선택이 정답이어도, \"모르겠다\"가 함께 있어도) |\n| `POLARITY_MISMATCH` | 내용 이해는 맞는데 발문 방향(적절한/적절하지 않은)과 선택이 충돌한다 |\n| `INSUFFICIENT` | 내용이 있는 진술(참인 사실 등)은 했지만 선지 판단과 연결되지 않는다 |\n| `UNJUDGEABLE` | 판정할 논리 내용이 없다. `unjudgeableReason`을 함께 적는다 |\n\n`unjudgeableReason`(`UNJUDGEABLE`일 때만, 그 외 `null`):\n`NO_CONTENT`(감·느낌·선지 문장이나 선택을 되풀이할 뿐 근거 내용 없음), `GUESS_ONLY`(모름·찍음만 말함), `CONTRADICTORY`(서로 반대되는 진술로 판단을 확정할 수 없음).\n\n`guessed`(참/거짓): 학생이 모른다·찍었다·감으로 골랐다고 **명시**했으면 `true`. 결과 유형과 별개로 기록한다.\n\n## 2. 논리 단계 `steps` (다섯 칸 모두)\n\n\n| 단계 | 확인하는 것 |\n|---|---|\n| `S1_STEM` 발문 처리 | 발문의 방향(적절한/적절하지 않은)과 기호·지시 대상을 맞게 다뤘는가 |\n| `S2_CHOICE` 선지 해석 | 선지가 무엇을 주장하는지 정확히 읽었는가 |\n| `S3_LOCATE` 근거 위치 | 판단에 필요한 원문(지문·〈보기〉·그림) 부분을 찾았는가 |\n| `S4_INTERPRET` 근거 해석 | 그 원문 내용을 정확히 이해했는가(방향·주체·조건·범위) |\n| `S5_JUDGE` 대조·판정 | 선지와 근거를 연결해 정오를 판정했는가 |\n\n각 칸의 값: `PASS`(풀이에 성공이 드러남) / `FAIL`(풀이에 실패가 드러남) / `NOT_OBSERVED`(풀이만으로 알 수 없음).\n드러나지 않은 단계는 `PASS`로 추정하지 않는다. `firstFailedStep`은 `FAIL`인 첫 단계, 없으면 `null`.\n\n단계 규칙:\n- **규칙 ① 단계 독립:** 앞 단계에서 틀렸어도 `S5_JUDGE`는 학생이 내세운 전제에서 선지로 연결하는 추론 자체로 판정한다. 틀린 전제에서 일관되게 연결했으면 `S5_JUDGE`는 `PASS`다.\n- **규칙 ② 필요 근거 기준:** 판단에 필요한 근거를 언급하면 `S3_LOCATE` `PASS`, 그 내용을 맞게 진술하면 `S4_INTERPRET` `PASS`. 판단에 필요 없는 참인 사실만 말했으면 `S3_LOCATE`·`S4_INTERPRET` 모두 `NOT_OBSERVED`.\n- **규칙 ③ 모름은 실패가 아니다:** \"모르겠다\", \"찍었다\"는 어떤 단계의 `FAIL`도 아니다. 해당 단계는 `NOT_OBSERVED`, `guessed: true`.\n- `INSUFFICIENT`와 `UNJUDGEABLE`에는 `FAIL`을 두지 않는다.\n\n## 3. 오류 목록 `errors`\n\n`outcomeType`이 `ERROR` 또는 `POLARITY_MISMATCH`일 때만 채운다. 그 외에는 빈 배열. 독립된 오류마다 하나씩 적는다.\n`{ \"tag\": <함정 유형>, \"step\": <S1~S5>, \"studentQuote\": <학생 풀이의 해당 구절 그대로> }`\n\n함정 유형(하나):\n\n| 태그 | 뜻 |\n|---|---|\n| `POLARITY` | 발문의 적절/부적절 방향 처리 실패 |\n| `REFERENT` | 기호·지시 대상 혼동 |\n| `ATTRIBUTION` | 입장·주체 귀속 혼동 |\n| `DIRECTION` | 인과·논리·증감 방향 오독 |\n| `CONDITION` | 조건·한정 누락 |\n| `SCOPE` | 범위 과잉 일반화·축소 |\n| `MAPPING` | 〈보기〉 사례를 지문 개념에 잘못 대응 |\n| `SURFACE_MATCH` | 표면적 어휘 일치에 기대 판단 |\n| `PARAPHRASE_DISTANCE` | 맞는 내용을 재진술이 멀어 틀렸다고 판단 |\n| `MULTI_STEP` | 여러 근거를 결합하다 이탈 |\n| `OUTSIDE_KNOWLEDGE` | 배경지식·상식에 기대 판단 |\n| `MISREAD_FACT` | 위에 해당하지 않는 단순 사실 오독(동일시, 값·속성 오인 등) |\n\n## 4. 출력 형식 (풀이 하나당)\n\n```json\n{ \"caseId\": \"M2\", \"outcomeType\": \"ERROR\", \"unjudgeableReason\": null, \"guessed\": false,\n  \"steps\": { \"S1_STEM\": \"PASS\", \"S2_CHOICE\": \"PASS\", \"S3_LOCATE\": \"PASS\", \"S4_INTERPRET\": \"FAIL\", \"S5_JUDGE\": \"NOT_OBSERVED\" },\n  \"firstFailedStep\": \"S4_INTERPRET\",\n  \"errors\": [ { \"tag\": \"DIRECTION\", \"step\": \"S4_INTERPRET\", \"studentQuote\": \"pH가 높아지면 수소 이온 농도가 높아져서\" } ],\n  \"note\": \"한 문장 근거\" }\n```\n",
+        "max_output_tokens": 6000,
+        "max_tool_calls": null,
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_0cd664ce090be297006aca4a2ae60487d08637a9710fe989d8",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqykovA_6s_BOV0zAV_X-pV4JGCCqafL6jIW3jwwsHlmRT4O61Sw-6qgJSlToyZDURInBWkjfCQHgJ6rcU9MEj_AiMTjcJq2PpCSNVThhbNmbAlax5eOqRlxI81vQtkB5n3Yy-A2Kq-UIbcVvf1S7d4RLuj74irS0uo6ZbQGfsF10hO0UmnY-h8HwO4ddoxcxeYvc4sBmGb07j-zkqLhveUTINlkxWJRGiMScdDHazGoZWd0HeoMRCtDqyzXUanTRX20xzu8tCRxmgoEaAIsPKeszG4_Gdg3ogcHMLIAWVAdckpVWHHs_4mWJVWROkLbNT2r6D-2MmwrxNBgoEvJ8b6JfwyO6eWr4eEKcvux1qcQUmsncL9KVBFo-1I1Nt06_U-cthsAY27X4YtIc1LoicE-4dA_YfWosb1Gl1_OpoBWqhDBs1ZPm0_zdVq8zpUkmYgLbarCrlVPszg0_7ZD5NIXFx_AQ73pB3PT91tuzXcbBmL4EMk870ELXalxdm-Cj7I32me1XMZEH3bUUBR03d-Cb8Pw2z91y93ucEzK5n2Hkkg0T4PVN_fSMYZsbDNm0fCLJfUan9rBmxqn3nH-zRhsb-J4FoswlJ3PqMIcuXf6MAaFDSCnScl25IXZwllp49aEOwt_WPVURVQNBTOMzhWx0qVZXONgVWl2S4aJPr63TDAiMIYQTxmWv9cfRuNHI4YJwtS0D3N55gQpDsskKHZENQqP0Joy-Gs-p02g7kDDXlj0cVzksGORBG1yZG9MOl_bKtEB196cRqJFbsQFcbpxkOxm-QD-r_l4xVN0Ug0I2jH_c34cV9nmMVvzlRHpONMDMSw0QmFrWvULQ1anVZkQ8eZHBbdE9FcS6UYk9CJH_6SrpJIQ3CpvvL7odyMUFy1_Dv7xTWFn0UZwUUB9V7sYI_ZijjEhXRNrwHSO3o9OnnHlY98rXcfQ86Nl3AXX9OYdVKhEPk7i2xdbsjSF8yjw5kdyD5W8SE1UQm96jv35QpGj-Q43G8M4lQuvIFWG-vDDHL4eNkIUE0OplErUCYN6RigDM-3ScO3fshKlRfQirx6Uz1H6ugW_YJuaZPAG7HfsMxeBe--DyWxTNDSWSdoCFBN64pVHu48NRw0A5QbEZZTecb9CvCeyV-xcSkGeqJBNUdM9dT8AaiXY-RrPApXQ9sqFW9gtfuwl-hFrKG27H4wdB7ByE8DGO7yC2m-_hH1dPCJrQDgYO7zptvvewGdfg9WTxtryRQSxQdYghZJdy5uNp5OcuCqpaJSaTP2ftI-kTydj13WdKtpjmnmgZHOGLEYYl9cvXbw8LuxklrvUNZCWYNoBATUdr1bk7NpokXh1lGX-IlKb8sQsWY5KJIulxMqXWZu1XSyTyrDvkIERN91ktBZf06q4zVA-hpQedP9suCCjM7-qGN0h0Ird4WrFWO8QaAO6O1XcejFppzYxBW6Bgs-QnnlFu2Zv8bmUnzS_qgJ6mwi_ZbzJhH8tgDShMl5ggSkTQOO0cdx0euO2MKXf6PoEhhA4hC1BK5A-TNWsCINJLIjuzB0W9HP-Fd4JfwyHxOvIjufCiuQJ_t_ZKS3oRo8RbcglqgdlXcUutNffU6F_Owu-gZJ_K3ZBIfZt_98v2OMF5hhiThqYkA1hvi6ymVCK-0V00i9UKYP74LelfxpkMNf94IdcVW7mo4Ac4JdOcAnffLAcoivCqOyMUXI3w5Umyp9ITLKgTXSLGpQPa4iQBitFnyUIj8M4N1e3jsL9Nt_RFujtfDXunCPyEx4UFMgf95iX8saEEXauSqk9UUI8i1-c3ggsKBi8JCc7wS9sB-CJdMzuYsVHcm8Oo0_hwz6syBf47L8epKSJWy_hy6a7sp7XgcJCkNdEj73TKtSaqXQguCNBVb_oesYJLU4ttDWj1oH6QYqURP-H-3rWeN_wg4d24vvyk8FXjZfGau2UgGXVbXb9oByf3rsuIZRdF_1AzAMDvIpMZ1BQR086afcqvUWKnMXnCzTmxoMndLDp4y71Y2aMALAFunV8EvbRZG7ab2So5OZ_4D4HvPWl9OXaYoqaB6h0Q1AnQlIclVMsn_lUA4n-A33EJ8pHQiEXyJn-uB7c-Ox71mLHKHqVXhQzpIQJnecdR0fkwFY4M_4Zkhh41gixkSlZ8uYRRhLZn3QD_ErbVFdMjJJi0KXOrRMjwSllJgwK1r4p9S7juZ0wxsiRxCILqiqsdxQXq2ttfHjNWEFOU7M4F2OoXAGvRnjOX9mWTipjvaQnBBZ4V4N5hqBMApDnQ3SV7N1IH8SGc-0Z7ghzVHHQRXPJZRTQhNuijqMGeslpNUVory5LJR-1C6-Nt3cvIym70nib2rO1DmwnDSUcfsd_-NB_la6bFc2DBSVgH5MqJeakVY0_zOWab2e4aDKAkUCSQgrHQjr5B_MjcXdL4RjpObE6LanbB_x9yK0Euz29fP9mYyaDpZmnjO7-b2Iwo7yVr7zdD4w5VJM0bxMXj064iBMCeggZEaM8j0T4idaPushEkDktbicla2kH38lfSG9qL3JrMRIL2g3dCVif9nipPr3SezXQg0DjIK5ueYAH_Q1AGUar8QcC9iU2616aW_J-Hzq1bMjMZnZRBVA-Ag3K5Azf3KXbo4y65EqT6XyruFVrZzbctlOa3cAkXwnt2Q0cxCHrwWUVPy4H7uChBP1vHmJ0C-Zcl_TYb9rSOz4fcU5wzZ_oJG98IjYbf5Zm2C9-zWgwg1_eFh6Seygv5B6q-hATgAWng9EAVjl6SR9P_AefSfOFwHOE_17H4dgsQYppyVEG0LP96wBYg2xb802jOz9k3ajrIOqWtbhtTU3Te-p-aib24W08tjZ1vmVGz-JGzpvkmvNCvpVj2IEcT3zbGJz0rz6vNsymk7HLz4sAmVrTIkiG66en1TycFRmeeiAXGsuRvBh6B7Oie32-2KQcTOw3xTuzLYvKiEypISjrIcktLfMYN8m11B5NYhGGaLHFyzX1hJF7HSNHpkufcEQ_drDXnqHG7mnt-_iaxkNaccef6sLYiOICMWwuCQXOqaKlTLnzYGY0x6BHW6MybqDm-qOG-TX2YttXYgfbGghsYmknPeRQJwuKaxJJB3DbkKQbFCbUwj5kkkYIdPTYS0xXRIjVeKAwJ9303EWaW6lVsguIPg0fTWwQt4qqDZi0wroadJQpN77pNuhKvMTWuygUZH5DQmGJx1RCpzZ8psRuooJxjhtBtycGUZmxhwfOOHtwqDf2K0WFSrthZMaY9YkKUbGjnp1EcKAB5Pf54S_0MxkSLWN6D1FfnCyduK4qcbTPwvUWV_cgmpHbx4sx84a97GvOD87lw5e3Gmb5DbxDB55u86aXJO0SEkh_2yqQL_KbpKqWR5r8fBZveTjxBarSHF1HpT6T1B3vApHPv3ivcX2MKoZTMaC0wglDIuPW1ElJMLrKZKE_KQD-1dscRN8RQF7WpNDFWaGIswMkYfcYAqrIBME1NrBMfzGz6eSCouAtxHTnTa9hilejT4rfMIh9cGB0QoV4OexygZINBwwD5u6BcPZ8vYpcUrZ303LhsKOzFS214J14H9AyDYdeOkDBEQal34IPSw6yfFCtlmP2HBjhQb9wuYfcGRBFgV3Z7pytcylykc33durAJ7KrT4XfezVF9TxQifVkle2AZaJ4iI19ysqoBFJ4d1MNbfLvW52PkJAJAKpazNX_uCaQV8XH7QuNKgZ6CIiNdcrJSFmZMNnQlKMc-s-eFFAwM7OCN8t7zscYR_MKppqkh8g6GIvOxFMU_W_vISmEKZdK7uTz7q4G0bJBi0v5_iEQNkuhc8f3TR861huQ9T2vkrrGU67oPY_ZrfjurYqV8HHcdrIcqLmyA9vw9zRYk6mRQ0D6BgQwcb30d42nApdJK02lO7GsaQAOK_nuGFdX69NyMOVeaO0YXuQYs8TNer9G-zh56hT6V8qqnZDir05Xhhi2s3ZtOv-6zyf0qKwiS1iJA48zZakG6MMYDsZj8D0j0ipgyBaQqkMXFFFX-vc6kxLPJAPMHIz8Vx7eW1LQw93tULi64u9tMseeICwMvPyomCK93jJFPjWWeqXAnZWPJWIdm6bCSV_CQWAkRu1ZLjOSteU8vHVuvNkJypHcu_qqr2ozUr_5YupjBZWS7EL9S85YDtxqze0q03P9pI9bhRT2N3k8xYZ4qg4_mKvbi0KE3m9nCz8hE0_GCHb3YbEy_JPdle5EKLOvxqUzbiDRdSJEwCzbOvGz02ayg29E_N5tN3Q5mylRyW9WSkjiJwk16rhnGULTLLdQ8Jtta2R9QDK944v3QINAQL8a4orkmxQWu-t5MyD6aDeXABOYiqNWqrvKE1C_dXriEIxZ_i0C6-fKm2zQ_tgF-rbmEXjG0d0lhNgtNMeFq6fzGBBOGT--woSvLXnMAprGgkzj9Yc5oIoJBIEZv4ctwXIPW-NUaaHwuWPIOHZYDTG4niN4vhvDUKOwHfYN1ioMQd1RGqQmK87VLAy5EsOOO6SgZhmqb_vv6Fllj1WH-9dgJ5RVNCosa0PCoicrD9hOT_uLyFvrn0JGJJ6eeGgfBYZ02GgNY560IkZnzRarbWDGIeTpUbKxcMsjcexo1aaNn2wdjdvwQKELrf8dAPdVMOND0r8GgeLwone8lLApLjaSrniOztQwXRxpWrXhlsKXU0YpWQmcfCTqiFivfLh0IrbnRZSlCIXR-u4wn_KKwJDee__VJHcwfjQY3SSoxkPXCENhzJg9YVk4G74c2giRjCoZVOeIm-PixNHglQ3wLjpk2en6gS5EFadDAjMIFOdOKL9B_jqCZvkzHz-SDfFLPOWYczWP6Hq6Azja5jlsqyZkY5Zapg2N0uMH2Ry7vImhabJ1SoEl3jBNFmYOgHoz04T0MgFhibLMBthYNM0BGtvLpOpuzbLzeQaA0MKx0phH9v8jFoTj_5vllwedlKupVohNZMmkyTLZ-VOGoLzAo3v1fmZkH47TRly49U5CuXR3Mh4RVDlVgWXSKZ0m_vXp4Zw73h3Dwz6nC6YeV5vCKHoN_IRItq2Uw9NzIPCzDF5OYqPk-yaXQ848OoKlTNtrTBtNiKxHbbtshc2OQZBa31NwABS1GwUV7_Sv-0VQFGKzaTsmh3VNpseIwWGezHHegoFKDoDFOUKEu04Uq7GXWpRnLpfMAqIE9p1FuG1dRpK8l6MUJL7X050jmZvs5b9yzSC3StXP7dsrlSO3NpXi2JycbYfGLJnQwh8_NwEjB64XtdE4m4pTTkiMy_ul5gr7gY1aEnTxPOGWkEWqI10rwheB-JgphlaLeaki08SVax0wKv8KplnqpGLPEWnI1aZgAbOIiOqxAXrOOObP7B-9DB06_p6jlCe2T2OvaYQJRG_wPf8cvSCoNXdRFsx6i5lLIhQuF_QpBHgFS0TktPb_VndV1lzzAM_x_2eTwd49yyvukXV6R5Paq3tQIf7--iVaNKLI5GcHB07zHHi0t3_A5cBRzv_nDNHxW_Hh83Dcjz9hTpa3fyoWHOHn32ok0gKsIB5Ykbn-fqr9Ivl-tU76G5LTxtHVJ63NUCKYj9pewpoWqPJJC-7BBJUCbkIZY3F-QqOK0aTdKFwoDlITLtnQVmy7VzlZCghsnHOQDz5dqP17gj5WQ1XSjnAQ-Y6n9_cZJuGRvHMsEl3ak-Wlan4CyRCpOvTHyG7ZUn-37MtPn9b_-rS7AufJyjd1ahxZOM5acy21hUb-qjhvshVdpn_0uzg21pWOD__Y1-_vEox1rWrzVVkcOuwBUdwMtq9kwShcxC0h1AIncEmHbd62l-jLSPoE4g-9lHm5JqtNCUlc4om4iG6nN5CufLab2NIvvpRdt9vPJe-R14zbArxin1Hvx2F7ScOq9wo2gQJRW7xja4lob3FoZ0zVkmB7_pL35TxQ5q1BUtE0t7ApAOALHQVgb-Rh9qrqzT2bE34_uZlDXHIk0KTI-WYD90RF8d0bNZXmckNFWRTrWeU9jVjKadN3Kc-ih7V_HNkZwG0VCccspzy64tdv7-usUPQT2Nl_l_S08e7Bs__4j_rsZh9_TmFfEwfnAlz7-cX4InQGm4wiGjybAPWEA7fW-BDeAbMU4QuMAf-7-4sON0afexPqTYaB30IGm_zy8Gi3MYcEyJQBTjKafkc3Q6hG-gjVIvhCGa6h8AQ6RMirarfvSbXXy676lBKKEQfeIXTa2j75DQeBtecSJcZuUlLM4l0bN_YXa4Ew2HZlPHGw7pFhypSyVg2L9P75Kx2DQHofv4zU7pGuQXxTrz0KrZg-MAB906oHp_Tr16KlXnf37_JGcjQgEOw9uoFGrbkKwvmb074m2z2n5GHVPmoWm3mZdUhMyE2ahg86ZHR4-kXMC-_HTa4V02I0ifWKTrBLwtVVxtHxYNgpycdzr0S0r4lwyQ0ZPVPb3kmuIHjRJ_PqpbQyFH9cE8Sw-Crsny86zenY_kTd6Y2IyDkTyzXU4Ibj5BWHrPsHJ6_ZjK6H8rIPYF3gdjF5nKRQsZs5KHpMRYqJaj6k08N1rRfq-Xv-hVX0EXT6f9pLlDS9aefomluhqrd5rd6YRf-IbiyX2QiEki99FWHaqL64PS3lghjhI8mQu5Pmb9uVKIel2Rx_UAL1w83538W2dk0pxaY9cXW9OKeAKRik-P7cH5VVfhZ2Vav3KlpoZL4lJkWWVaZrHt0NmEO4T6NDCBvUSKqi1AYhk6qxEL1-Xxyk4xf_K19J4kaPBAs1Rq4aI8-KPHvAxIFzPCMpJFlZaaP3ZOTSI45YuUdBA_6Rd3vZ9TmttjQt0GhdOCB9M2G8WDd99xZInflqJeQzgfl9nWmKVnvS8O-c1cSMwRSWKnColpNpfQPjGv3n9VS1UqJ6hS35CA0GFvoyNLSsegVKgnKc4ABzAFvUxnA-xwfIT4FDtZwzmXHX9iuKnqh4yt9DjBYsP04ATq5KtXTMOwSE_eRGSfL_sf9kg-7VZzXn8giq78kuAKisDxyvxN_MAiWG3gKC9JHMW2Wshog0fcdpDDorjqAM07crw0xfCR3nlF4Vb7yskUvB1EkQz21uTX9XOTjIuVkvgRWKzvyUQHneMOayhTkZn_P3zJb-9adXyzm3NwKHh_R6YGDdCmjIIr7dUpU2NZ0zVvKGFIs1cJrVx3GUPIpU2QDvvDuQI9722yD0W14ZLyaHhojg1xwhd6j6vtQoMDZr70zUdnznC5KjC8wgVCaix1fAGyippcKx5bPrVAX-G173AbVJQ7sHT4P-SdYzbOTgyWSbUvEEdezr0Nmuv7cFCmmhbApAMhuLOvBh_UPJXRshs20IZrbvY-syqDTE35Y-1XRECH25mjPpei9YLr80kFJS2SJcBp0o3Cv3u-cOwB54BDyUOI2G1kJXyrqslGnUYROvjitE5u2UZbBwfa_rkDf2ovJne2IDH_4hx4hKAjh62TEzb5aQH2gDDN2vyl_AjoteVbBL_QCRs1FfdFbfc4JKFsWovjiC4DuZf5vdDCUiE1C4d-vU6AbTw0zVCdgxo51B7xpWoCzT3uWj1pWOWjVxAw3-5AxpqDEHXb6ogxJmhXdI5o-jNrhIew2eT3LSvwZQMD3jHEfDtLlU300vZceUdWMlmhy36ePW572_aRa-1H",
+            "summary": []
+          },
+          {
+            "id": "msg_0cd664ce090be297006aca4a2eccdc87d084a7eb9f9232149c",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\"caseId\":\"C4\",\"outcomeType\":\"INSUFFICIENT\",\"steps\":{\"S1_STEM\":\"NOT_OBSERVED\",\"S2_CHOICE\":\"NOT_OBSERVED\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"PASS\",\"S5_JUDGE\":\"NOT_OBSERVED\"},\"firstFailedStep\":null,\"errors\":[],\"note\":\"법인이 권리와 의무의 주체라는 사실은 언급했지만, 이를 선택지의 절차 위반과 법적 책임 판단에 연결하지 않았다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "description": null,
+            "name": "thought_diagnosis_v01",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "string"
+                },
+                "outcomeType": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "ERROR",
+                    "INSUFFICIENT",
+                    "POLARITY_MISMATCH",
+                    "SELF_CONTRADICTION",
+                    "UNJUDGEABLE"
+                  ]
+                },
+                "steps": {
+                  "type": "object",
+                  "properties": {
+                    "S1_STEM": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S2_CHOICE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S3_LOCATE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S4_INTERPRET": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S5_JUDGE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "S1_STEM",
+                    "S2_CHOICE",
+                    "S3_LOCATE",
+                    "S4_INTERPRET",
+                    "S5_JUDGE"
+                  ],
+                  "additionalProperties": false
+                },
+                "firstFailedStep": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "S1_STEM",
+                        "S2_CHOICE",
+                        "S3_LOCATE",
+                        "S4_INTERPRET",
+                        "S5_JUDGE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "POLARITY",
+                          "REFERENT",
+                          "ATTRIBUTION",
+                          "DIRECTION",
+                          "CONDITION",
+                          "SCOPE",
+                          "MAPPING",
+                          "SURFACE_MATCH",
+                          "PARAPHRASE_DISTANCE",
+                          "MULTI_STEP",
+                          "OUTSIDE_KNOWLEDGE",
+                          "MISREAD_FACT"
+                        ]
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "S1_STEM",
+                          "S2_CHOICE",
+                          "S3_LOCATE",
+                          "S4_INTERPRET",
+                          "S5_JUDGE"
+                        ]
+                      },
+                      "studentQuote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "step",
+                      "studentQuote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "note": {
+                  "type": "string"
+                },
+                "unjudgeableReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "NO_CONTENT",
+                        "GUESS_ONLY",
+                        "CONTRADICTORY"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guessed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "caseId",
+                "outcomeType",
+                "steps",
+                "firstFailedStep",
+                "errors",
+                "note",
+                "unjudgeableReason",
+                "guessed"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 4189,
+          "input_tokens_details": {
+            "cache_write_tokens": 2235,
+            "cached_tokens": 1951
+          },
+          "output_tokens": 604,
+          "output_tokens_details": {
+            "reasoning_tokens": 467
+          },
+          "total_tokens": 4793
+        },
+        "user": null,
+        "metadata": {},
+        "output_text": "{\"caseId\":\"C4\",\"outcomeType\":\"INSUFFICIENT\",\"steps\":{\"S1_STEM\":\"NOT_OBSERVED\",\"S2_CHOICE\":\"NOT_OBSERVED\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"PASS\",\"S5_JUDGE\":\"NOT_OBSERVED\"},\"firstFailedStep\":null,\"errors\":[],\"note\":\"법인이 권리와 의무의 주체라는 사실은 언급했지만, 이를 선택지의 절차 위반과 법적 책임 판단에 연결하지 않았다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+      },
+      "error": null
+    }
+  ],
+  "retryCount": 0,
+  "hasInputImage": false
+}

@@ -1,0 +1,305 @@
+{
+  "caseId": "N3",
+  "replicate": 2,
+  "label": "N3-r2",
+  "model": "gpt-6-luna",
+  "frozenHash": "c5c5a0e00356b9628145279c3290440aa92de41ed4db8203d2d643d0808c39f2",
+  "status": "VALID",
+  "output": {
+    "caseId": "N3",
+    "outcomeType": "UNJUDGEABLE",
+    "steps": {
+      "S1_STEM": "PASS",
+      "S2_CHOICE": "NOT_OBSERVED",
+      "S3_LOCATE": "NOT_OBSERVED",
+      "S4_INTERPRET": "NOT_OBSERVED",
+      "S5_JUDGE": "NOT_OBSERVED"
+    },
+    "firstFailedStep": null,
+    "errors": [],
+    "note": "발문의 ‘적절하지 않은’ 방향은 언급했지만, 3번이 부적절하다고 판단한 근거나 원문과의 대조가 드러나지 않습니다.",
+    "unjudgeableReason": "NO_CONTENT",
+    "guessed": false
+  },
+  "citations": [],
+  "attempts": [
+    {
+      "requestId": "N3-r2-44",
+      "status": "VALID",
+      "response": {
+        "id": "resp_08736408dbc15a35006aca4aeaa5ec87d08a8ca3c0afc6c67f",
+        "object": "response",
+        "created_at": 1791642346,
+        "status": "completed",
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1791642349,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "너는 수능 국어 독서 문항에서 학생 풀이를 진단하는 평가자다. 아래 가이드에 따라 이 학생의 풀이 하나를 진단한다.\n\n# 사고 진단 라벨 가이드 v0.1\n\n학생 한 명의 풀이(선택한 선지 + 근거 설명)를 보고, **어느 논리 단계에서 성공·실패했는지**와 **어떤 함정 유형에 걸렸는지**를 판정한다.\n사람 라벨러와 AI 분류기가 같은 가이드를 쓴다.\n\n## 0. 원칙 (가장 먼저 적용)\n\n- 학생이 **실제로 쓴 말**과 선택만 근거로 판정한다. 드러나지 않은 사고는 판정하지 않는다.\n- 판단 근거가 없으면 `UNJUDGEABLE`(판단 불가)나 `NOT_OBSERVED`(알 수 없음)가 정답이다. 과잉 분류보다 판단 보류가 낫다.\n- `NOT_OBSERVED`는 실패로 세지 않는다.\n\n## 1. 결과 유형 `outcomeType` (하나)\n\n| 값 | 뜻 |\n|---|---|\n| `NONE` | 명시 오류가 없고, 선택 판단에 필요한 연결이 드러난다 |\n| `ERROR` | 원문·선지 내용에 대한 명시적 오류가 하나 이상 있다(선택이 정답이어도, \"모르겠다\"가 함께 있어도) |\n| `POLARITY_MISMATCH` | 내용 이해는 맞는데 발문 방향(적절한/적절하지 않은)과 선택이 충돌한다 |\n| `INSUFFICIENT` | 내용이 있는 진술(참인 사실 등)은 했지만 선지 판단과 연결되지 않는다 |\n| `UNJUDGEABLE` | 판정할 논리 내용이 없다. `unjudgeableReason`을 함께 적는다 |\n\n`unjudgeableReason`(`UNJUDGEABLE`일 때만, 그 외 `null`):\n`NO_CONTENT`(감·느낌·선지 문장이나 선택을 되풀이할 뿐 근거 내용 없음), `GUESS_ONLY`(모름·찍음만 말함), `CONTRADICTORY`(서로 반대되는 진술로 판단을 확정할 수 없음).\n\n`guessed`(참/거짓): 학생이 모른다·찍었다·감으로 골랐다고 **명시**했으면 `true`. 결과 유형과 별개로 기록한다.\n\n## 2. 논리 단계 `steps` (다섯 칸 모두)\n\n\n| 단계 | 확인하는 것 |\n|---|---|\n| `S1_STEM` 발문 처리 | 발문의 방향(적절한/적절하지 않은)과 기호·지시 대상을 맞게 다뤘는가 |\n| `S2_CHOICE` 선지 해석 | 선지가 무엇을 주장하는지 정확히 읽었는가 |\n| `S3_LOCATE` 근거 위치 | 판단에 필요한 원문(지문·〈보기〉·그림) 부분을 찾았는가 |\n| `S4_INTERPRET` 근거 해석 | 그 원문 내용을 정확히 이해했는가(방향·주체·조건·범위) |\n| `S5_JUDGE` 대조·판정 | 선지와 근거를 연결해 정오를 판정했는가 |\n\n각 칸의 값: `PASS`(풀이에 성공이 드러남) / `FAIL`(풀이에 실패가 드러남) / `NOT_OBSERVED`(풀이만으로 알 수 없음).\n드러나지 않은 단계는 `PASS`로 추정하지 않는다. `firstFailedStep`은 `FAIL`인 첫 단계, 없으면 `null`.\n\n단계 규칙:\n- **규칙 ① 단계 독립:** 앞 단계에서 틀렸어도 `S5_JUDGE`는 학생이 내세운 전제에서 선지로 연결하는 추론 자체로 판정한다. 틀린 전제에서 일관되게 연결했으면 `S5_JUDGE`는 `PASS`다.\n- **규칙 ② 필요 근거 기준:** 판단에 필요한 근거를 언급하면 `S3_LOCATE` `PASS`, 그 내용을 맞게 진술하면 `S4_INTERPRET` `PASS`. 판단에 필요 없는 참인 사실만 말했으면 `S3_LOCATE`·`S4_INTERPRET` 모두 `NOT_OBSERVED`.\n- **규칙 ③ 모름은 실패가 아니다:** \"모르겠다\", \"찍었다\"는 어떤 단계의 `FAIL`도 아니다. 해당 단계는 `NOT_OBSERVED`, `guessed: true`.\n- `INSUFFICIENT`와 `UNJUDGEABLE`에는 `FAIL`을 두지 않는다.\n\n## 3. 오류 목록 `errors`\n\n`outcomeType`이 `ERROR` 또는 `POLARITY_MISMATCH`일 때만 채운다. 그 외에는 빈 배열. 독립된 오류마다 하나씩 적는다.\n`{ \"tag\": <함정 유형>, \"step\": <S1~S5>, \"studentQuote\": <학생 풀이의 해당 구절 그대로> }`\n\n함정 유형(하나):\n\n| 태그 | 뜻 |\n|---|---|\n| `POLARITY` | 발문의 적절/부적절 방향 처리 실패 |\n| `REFERENT` | 기호·지시 대상 혼동 |\n| `ATTRIBUTION` | 입장·주체 귀속 혼동 |\n| `DIRECTION` | 인과·논리·증감 방향 오독 |\n| `CONDITION` | 조건·한정 누락 |\n| `SCOPE` | 범위 과잉 일반화·축소 |\n| `MAPPING` | 〈보기〉 사례를 지문 개념에 잘못 대응 |\n| `SURFACE_MATCH` | 표면적 어휘 일치에 기대 판단 |\n| `PARAPHRASE_DISTANCE` | 맞는 내용을 재진술이 멀어 틀렸다고 판단 |\n| `MULTI_STEP` | 여러 근거를 결합하다 이탈 |\n| `OUTSIDE_KNOWLEDGE` | 배경지식·상식에 기대 판단 |\n| `MISREAD_FACT` | 위에 해당하지 않는 단순 사실 오독(동일시, 값·속성 오인 등) |\n\n## 4. 출력 형식 (풀이 하나당)\n\n```json\n{ \"caseId\": \"M2\", \"outcomeType\": \"ERROR\", \"unjudgeableReason\": null, \"guessed\": false,\n  \"steps\": { \"S1_STEM\": \"PASS\", \"S2_CHOICE\": \"PASS\", \"S3_LOCATE\": \"PASS\", \"S4_INTERPRET\": \"FAIL\", \"S5_JUDGE\": \"NOT_OBSERVED\" },\n  \"firstFailedStep\": \"S4_INTERPRET\",\n  \"errors\": [ { \"tag\": \"DIRECTION\", \"step\": \"S4_INTERPRET\", \"studentQuote\": \"pH가 높아지면 수소 이온 농도가 높아져서\" } ],\n  \"note\": \"한 문장 근거\" }\n```\n",
+        "max_output_tokens": 6000,
+        "max_tool_calls": null,
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_08736408dbc15a35006aca4aeb362c87d08c9382e329003a25",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqykrup8-Ku_QdoDW18PbGrvdr8okC0DfIBiH0lsK_g_7OPT4yTOI9BqCvdD1Rk_H-_07GCRFtBHOvbhvngk1zk2YCxxet9Vayn2Xm77gQAYJkrXaFZJY6YKSa_r8lLGwG5peRGS0J6_aXz4oS2Lpk8hizmad1xZQyd93r1_MgBAftjNR8a-g8ChEOnLW5XDlKT1T4I-65DKMVwD2O0DaAqsskBBNW1Gw-jHyyzviicrUcmWk37EN-XQc3F9N3dxmOXRNjPU67ABEoLf9QPyDJyCp8Q7EBqGelwVzvWE0SdKqCvIwCoi_lf5o4gmusly5TkS9jdkfHtYPTaSmZxV8mfEeR6HctuXPNvqBCZX66RFugac9qa68DO7Y-HgSkDMznIUZNKJGcaTRHvDbgV2ABC_jvgNwaI2DX16vitl00FwMi5vALrG4cMhCXY3I_oGny2WeXeQXE50p7VYDXWQlpNOE0lopvwBJHgwTZXdECjzq9ZG6C_mwHhEew-eoWnbdtn4auUAf4VI9-RAMLrMDkIMOr7eVG3GqZcCPfG_pWK8lUtVfBR_oejuHR_ULPuWi6RzWnX10TpfTUaF7lrL1O0OBe1aO98hugqJw8Wbe_UI4PvRkUFMQnNtrSZoGIjccuXldpi-VmC3UeAzSLe7sUL6KqMDsYS85p1o9rYrckoY7Ui2o5EMGsH_ro5gS6sRWwRlyO0NUUZoq_kECwHUJaRVh3PGtbVCQzbMPR0x9UIXxodJMbKsjtGgdNv25vyxY1hiW9fdydsSBF_dDzm-Mpaojc1vUCyG-_qWUHQ7z4jn49gJYnoBR1uYvHT-mcPzj3LBlIFqx7EntMdbwD1uxtyYW6mDfK5Jmb5GwJdpzdS3dhfFt9sbPic5Rk2kTeniiFRw3xEPsWIZ7knEd7gazP2cIbblBquuyZgs2bER6ynqAQkEfkNekBw4UT5lbBkgLrLZD5VkQ9l6c2lQl4zTQhm0UR2n_lNc01kXBTJjaRzQh44qW6R2qtVeHftlaqaP4WE_XkpsAp2ozgHDuwiw-VK6ROsvxW29GjbpU5bdBPJGSj6-wuXsdV7yixzuK2yepyynkd3wLYo4s4pE2l2-O7GwM5XCl_183EJ8qVbniqGLPsiJfhABuqN919VBWBx-WVW7ked-Ejib_vbz7NhO6QSK_4cW4VWLt3k3yfNCYCclDRqWAtNPtoz8bwPwMT0C9H8fCWeZL_4TrR4laItFzbWHQrqbyqxUMReUQl3dvTz1I262VEro_rTQ85KjkIldwyggH5rp6FNIp5b60s-7TJW8cYB1camBbRPWBDihF6DUBjCWMR8S_YU7rgJHE3eE99VO2wVYlbzsxsWasWw-QXIVALlw57ClACdd4rtCh36YFsQOisMNZ_VzryiVgV8rWqNu_xxmXV23FRiVbky9GBrNmRCuEdZQ6vbLkZ_4hQGev7AXKxuRWfgkktF0LUTaWUTcJfNCqmv6f4rWGd0skG6ITrvLFc8L9Ih8oXQEwddWTbwb67xe1bNE4Gny9BTRuHI3Fl0cQlgphMwPtwIrM1Gkr_HI5Lh3tAgbCrwN4bTLrsw_d8TU63SbhOf17C_Y3DxPnorwHB3DjtHzCQNIK5qZMaijPj1iaP584lXgp_1jhao4wgl2twAkXPp5PrkG62fXRkJG6-LSdTH-qrA-z5JjHutjfqRSZxKvXJl95qC_wfmU_C0JfgmWFHBH_fX6OenJK6iBc-pFvKlb2-sUpjrhVxMQzFWpwdCn5--vdVPiUsj9j3KVnxNfyORQ5oOae5MEWN54MY6QwMVMcuzEGD9Ks-3BygbKU1TJj5xo3SZk1d2-At-ydrXzyx1f6kCA6YyC6cuKE_aJ9BYKUuOxWG9N871oIeESu0HB6o7vdDfukhaPG0psKrH9r4VC5OzRRSqQNmicKHYFOXUfjj7e8We7StqyFB0cJdRp4WbgJJr3KVxJT0_higrUisPVpUDDXXX5BGrbwjVXgTROUWUHStIEEKtxaUvB7gFH0A1KtQ7Z321H4Lv-tdyvMEm8YzsbkRrTx1tu1fT2T0dCC0e9_nFsWt23Mv8IElGx-xkBEqqce39nu2hm4kmjHPrdFszRyb5fgGSmmZ0j9ofGCiI6oOqSmpUhph4PnC18E44_FrQnUHgpdlIwShBRjAz3RYJhQoOQHlm8dAqbN6jbs1Fct5W_9ho2y7grBFwig0T9VrrIaGTWj1d9j89RjjvKU4o2L6LaEzw6oAlKZsmL1sYimsX-QhJ1ggKbZ6MHg9aSRWQHNoawnWZrp6v7et2-4iEl-kWb4PnTZhyvM3rHVOX0XaHjf_zP3ajHBk1b_fGlGTCu0ADIE7_Xc-wc38l3h5iFfFD8Ikk8sIIcVhMgZkmp5hrRw9_XwWB1BkVN6CF7XMLO01MEb3kYwrd38HaxEwBin2s8bfTj3OvSspTTCR7_jxoq5WcHFsLNqXWaXKHSosoxX-rS48ek5YJmQ7y2HMViUT3bLQNlHI5vTFWtdYqGToOMzdMkxrTX8js8idyJH9sqb3afSAs0ELy4JdCoIc9zfCOWwR_8selVOsOYw45xOonBok37oHtLWexIuXSdFrnYwSQiBLeyY5hd9MYBOGe9eUs6uZSDxP6co2AmNWgMALehH_dL0lUPg9QoHHA_z19CzCjJS41BZ_dSXzw4aYHChJFjPP9_sSW8s09TkUY3fH366TvXLXRZCg1wSsBsb03eeGOc5dlR1PmUpx2u6aHDgN6hyOxR9W0r4vMFhcqOzvd10AeX8-UNNxT77SHDJYpAdPFa0eeZi5gtsp7326QFIbuKIc4HFz0yLbYI7dILpOZ2RyXegWDJm8NkIBFBFqrWDtRWJLJqlb3brDtb3fiupGTCjD8N59lo8OGR1c83ROT9wTQRPgko03SmHbczu54UcWCdYmjkuG38CrxWxDkYM7t-2PKs2k0uHnz09nBgf_Y6vSx0xMc5mLon5zY9t7gngWd9jJbcUioO8H9Y2AM5-syjxwwkmZ5Uj-Hw6CJ8t7Et2n6JLJ1jvZOAXbpus23yVZmLS8mhMp2IVVZ_26s-rY5VKdkMoELUlMbq05tNbPmDzKuNFlpHJrbeeF_w-dOEx4G1ISvJzMPQ2i6ff8-ij2Ndp8lDKVJbHqDbWNyyf3M6yKcyyaefirKI_lwP5nZeCZoa7tnFFsh0DfgZgBQ4kIv7KjcCmAn0TZQlAF7cX6lkW2cHZyYL9yj-Ur-XzldLVgu3_db0aTWetpMq4V6mRC0fIFa26SYSjJHyvJJpRtkz50s_UKDKUQS5mTIiWnqb-JpXTa10jHFmtHZNiv7lOZeRREIKWMF3dPLgS0hrixQd01Pup1sirUpfMtHSCo9bfqiDXeq6LML497M7d5BqXaKl84mwyiPrprJBu8Yzw8Z0ePmg==",
+            "summary": []
+          },
+          {
+            "id": "msg_08736408dbc15a35006aca4aec8d0487d09cec63f644cda3a8",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\"caseId\":\"N3\",\"outcomeType\":\"UNJUDGEABLE\",\"steps\":{\"S1_STEM\":\"PASS\",\"S2_CHOICE\":\"NOT_OBSERVED\",\"S3_LOCATE\":\"NOT_OBSERVED\",\"S4_INTERPRET\":\"NOT_OBSERVED\",\"S5_JUDGE\":\"NOT_OBSERVED\"},\"firstFailedStep\":null,\"errors\":[],\"note\":\"발문의 ‘적절하지 않은’ 방향은 언급했지만, 3번이 부적절하다고 판단한 근거나 원문과의 대조가 드러나지 않습니다.\",\"unjudgeableReason\":\"NO_CONTENT\",\"guessed\":false}"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "description": null,
+            "name": "thought_diagnosis_v01",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "string"
+                },
+                "outcomeType": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "ERROR",
+                    "INSUFFICIENT",
+                    "POLARITY_MISMATCH",
+                    "SELF_CONTRADICTION",
+                    "UNJUDGEABLE"
+                  ]
+                },
+                "steps": {
+                  "type": "object",
+                  "properties": {
+                    "S1_STEM": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S2_CHOICE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S3_LOCATE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S4_INTERPRET": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S5_JUDGE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "S1_STEM",
+                    "S2_CHOICE",
+                    "S3_LOCATE",
+                    "S4_INTERPRET",
+                    "S5_JUDGE"
+                  ],
+                  "additionalProperties": false
+                },
+                "firstFailedStep": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "S1_STEM",
+                        "S2_CHOICE",
+                        "S3_LOCATE",
+                        "S4_INTERPRET",
+                        "S5_JUDGE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "POLARITY",
+                          "REFERENT",
+                          "ATTRIBUTION",
+                          "DIRECTION",
+                          "CONDITION",
+                          "SCOPE",
+                          "MAPPING",
+                          "SURFACE_MATCH",
+                          "PARAPHRASE_DISTANCE",
+                          "MULTI_STEP",
+                          "OUTSIDE_KNOWLEDGE",
+                          "MISREAD_FACT"
+                        ]
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "S1_STEM",
+                          "S2_CHOICE",
+                          "S3_LOCATE",
+                          "S4_INTERPRET",
+                          "S5_JUDGE"
+                        ]
+                      },
+                      "studentQuote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "step",
+                      "studentQuote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "note": {
+                  "type": "string"
+                },
+                "unjudgeableReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "NO_CONTENT",
+                        "GUESS_ONLY",
+                        "CONTRADICTORY"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guessed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "caseId",
+                "outcomeType",
+                "steps",
+                "firstFailedStep",
+                "errors",
+                "note",
+                "unjudgeableReason",
+                "guessed"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 4734,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 4731
+          },
+          "output_tokens": 305,
+          "output_tokens_details": {
+            "reasoning_tokens": 159
+          },
+          "total_tokens": 5039
+        },
+        "user": null,
+        "metadata": {},
+        "output_text": "{\"caseId\":\"N3\",\"outcomeType\":\"UNJUDGEABLE\",\"steps\":{\"S1_STEM\":\"PASS\",\"S2_CHOICE\":\"NOT_OBSERVED\",\"S3_LOCATE\":\"NOT_OBSERVED\",\"S4_INTERPRET\":\"NOT_OBSERVED\",\"S5_JUDGE\":\"NOT_OBSERVED\"},\"firstFailedStep\":null,\"errors\":[],\"note\":\"발문의 ‘적절하지 않은’ 방향은 언급했지만, 3번이 부적절하다고 판단한 근거나 원문과의 대조가 드러나지 않습니다.\",\"unjudgeableReason\":\"NO_CONTENT\",\"guessed\":false}"
+      },
+      "error": null
+    }
+  ],
+  "retryCount": 0,
+  "hasInputImage": false
+}

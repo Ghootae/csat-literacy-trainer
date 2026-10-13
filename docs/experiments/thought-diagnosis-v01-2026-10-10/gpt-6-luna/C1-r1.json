@@ -1,0 +1,336 @@
+{
+  "caseId": "C1",
+  "replicate": 1,
+  "label": "C1-r1",
+  "model": "gpt-6-luna",
+  "frozenHash": "c5c5a0e00356b9628145279c3290440aa92de41ed4db8203d2d643d0808c39f2",
+  "status": "VALID",
+  "output": {
+    "caseId": "C1",
+    "outcomeType": "ERROR",
+    "steps": {
+      "S1_STEM": "PASS",
+      "S2_CHOICE": "PASS",
+      "S3_LOCATE": "PASS",
+      "S4_INTERPRET": "FAIL",
+      "S5_JUDGE": "PASS"
+    },
+    "firstFailedStep": "S4_INTERPRET",
+    "errors": [
+      {
+        "tag": "MISREAD_FACT",
+        "step": "S4_INTERPRET",
+        "studentQuote": "갑이 출연한 부동산은 회사가 아니라 여전히 갑 개인의 소유예요."
+      },
+      {
+        "tag": "SCOPE",
+        "step": "S4_INTERPRET",
+        "studentQuote": "대표 이사에게는 정관이나 법령의 자산 운용 절차가 아예 적용되지 않아요."
+      }
+    ],
+    "note": "법인의 자산은 개인의 출자 여부와 무관하게 법인에 귀속되며, 대표 이사도 정관이나 법령에 따른 자산 운용 절차를 따라야 한다.",
+    "unjudgeableReason": null,
+    "guessed": false
+  },
+  "citations": [
+    {
+      "tag": "MISREAD_FACT",
+      "step": "S4_INTERPRET",
+      "studentQuote": "갑이 출연한 부동산은 회사가 아니라 여전히 갑 개인의 소유예요.",
+      "exact": true
+    },
+    {
+      "tag": "SCOPE",
+      "step": "S4_INTERPRET",
+      "studentQuote": "대표 이사에게는 정관이나 법령의 자산 운용 절차가 아예 적용되지 않아요.",
+      "exact": true
+    }
+  ],
+  "attempts": [
+    {
+      "requestId": "C1-r1-35",
+      "status": "VALID",
+      "response": {
+        "id": "resp_05959b6db16b4e14006aca4aa99cf087d0914153f04bfb9f2f",
+        "object": "response",
+        "created_at": 1791642281,
+        "status": "completed",
+        "access_programs": null,
+        "background": false,
+        "billing": {
+          "payer": "developer"
+        },
+        "completed_at": 1791642289,
+        "error": null,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "너는 수능 국어 독서 문항에서 학생 풀이를 진단하는 평가자다. 아래 가이드에 따라 이 학생의 풀이 하나를 진단한다.\n\n# 사고 진단 라벨 가이드 v0.1\n\n학생 한 명의 풀이(선택한 선지 + 근거 설명)를 보고, **어느 논리 단계에서 성공·실패했는지**와 **어떤 함정 유형에 걸렸는지**를 판정한다.\n사람 라벨러와 AI 분류기가 같은 가이드를 쓴다.\n\n## 0. 원칙 (가장 먼저 적용)\n\n- 학생이 **실제로 쓴 말**과 선택만 근거로 판정한다. 드러나지 않은 사고는 판정하지 않는다.\n- 판단 근거가 없으면 `UNJUDGEABLE`(판단 불가)나 `NOT_OBSERVED`(알 수 없음)가 정답이다. 과잉 분류보다 판단 보류가 낫다.\n- `NOT_OBSERVED`는 실패로 세지 않는다.\n\n## 1. 결과 유형 `outcomeType` (하나)\n\n| 값 | 뜻 |\n|---|---|\n| `NONE` | 명시 오류가 없고, 선택 판단에 필요한 연결이 드러난다 |\n| `ERROR` | 원문·선지 내용에 대한 명시적 오류가 하나 이상 있다(선택이 정답이어도, \"모르겠다\"가 함께 있어도) |\n| `POLARITY_MISMATCH` | 내용 이해는 맞는데 발문 방향(적절한/적절하지 않은)과 선택이 충돌한다 |\n| `INSUFFICIENT` | 내용이 있는 진술(참인 사실 등)은 했지만 선지 판단과 연결되지 않는다 |\n| `UNJUDGEABLE` | 판정할 논리 내용이 없다. `unjudgeableReason`을 함께 적는다 |\n\n`unjudgeableReason`(`UNJUDGEABLE`일 때만, 그 외 `null`):\n`NO_CONTENT`(감·느낌·선지 문장이나 선택을 되풀이할 뿐 근거 내용 없음), `GUESS_ONLY`(모름·찍음만 말함), `CONTRADICTORY`(서로 반대되는 진술로 판단을 확정할 수 없음).\n\n`guessed`(참/거짓): 학생이 모른다·찍었다·감으로 골랐다고 **명시**했으면 `true`. 결과 유형과 별개로 기록한다.\n\n## 2. 논리 단계 `steps` (다섯 칸 모두)\n\n\n| 단계 | 확인하는 것 |\n|---|---|\n| `S1_STEM` 발문 처리 | 발문의 방향(적절한/적절하지 않은)과 기호·지시 대상을 맞게 다뤘는가 |\n| `S2_CHOICE` 선지 해석 | 선지가 무엇을 주장하는지 정확히 읽었는가 |\n| `S3_LOCATE` 근거 위치 | 판단에 필요한 원문(지문·〈보기〉·그림) 부분을 찾았는가 |\n| `S4_INTERPRET` 근거 해석 | 그 원문 내용을 정확히 이해했는가(방향·주체·조건·범위) |\n| `S5_JUDGE` 대조·판정 | 선지와 근거를 연결해 정오를 판정했는가 |\n\n각 칸의 값: `PASS`(풀이에 성공이 드러남) / `FAIL`(풀이에 실패가 드러남) / `NOT_OBSERVED`(풀이만으로 알 수 없음).\n드러나지 않은 단계는 `PASS`로 추정하지 않는다. `firstFailedStep`은 `FAIL`인 첫 단계, 없으면 `null`.\n\n단계 규칙:\n- **규칙 ① 단계 독립:** 앞 단계에서 틀렸어도 `S5_JUDGE`는 학생이 내세운 전제에서 선지로 연결하는 추론 자체로 판정한다. 틀린 전제에서 일관되게 연결했으면 `S5_JUDGE`는 `PASS`다.\n- **규칙 ② 필요 근거 기준:** 판단에 필요한 근거를 언급하면 `S3_LOCATE` `PASS`, 그 내용을 맞게 진술하면 `S4_INTERPRET` `PASS`. 판단에 필요 없는 참인 사실만 말했으면 `S3_LOCATE`·`S4_INTERPRET` 모두 `NOT_OBSERVED`.\n- **규칙 ③ 모름은 실패가 아니다:** \"모르겠다\", \"찍었다\"는 어떤 단계의 `FAIL`도 아니다. 해당 단계는 `NOT_OBSERVED`, `guessed: true`.\n- `INSUFFICIENT`와 `UNJUDGEABLE`에는 `FAIL`을 두지 않는다.\n\n## 3. 오류 목록 `errors`\n\n`outcomeType`이 `ERROR` 또는 `POLARITY_MISMATCH`일 때만 채운다. 그 외에는 빈 배열. 독립된 오류마다 하나씩 적는다.\n`{ \"tag\": <함정 유형>, \"step\": <S1~S5>, \"studentQuote\": <학생 풀이의 해당 구절 그대로> }`\n\n함정 유형(하나):\n\n| 태그 | 뜻 |\n|---|---|\n| `POLARITY` | 발문의 적절/부적절 방향 처리 실패 |\n| `REFERENT` | 기호·지시 대상 혼동 |\n| `ATTRIBUTION` | 입장·주체 귀속 혼동 |\n| `DIRECTION` | 인과·논리·증감 방향 오독 |\n| `CONDITION` | 조건·한정 누락 |\n| `SCOPE` | 범위 과잉 일반화·축소 |\n| `MAPPING` | 〈보기〉 사례를 지문 개념에 잘못 대응 |\n| `SURFACE_MATCH` | 표면적 어휘 일치에 기대 판단 |\n| `PARAPHRASE_DISTANCE` | 맞는 내용을 재진술이 멀어 틀렸다고 판단 |\n| `MULTI_STEP` | 여러 근거를 결합하다 이탈 |\n| `OUTSIDE_KNOWLEDGE` | 배경지식·상식에 기대 판단 |\n| `MISREAD_FACT` | 위에 해당하지 않는 단순 사실 오독(동일시, 값·속성 오인 등) |\n\n## 4. 출력 형식 (풀이 하나당)\n\n```json\n{ \"caseId\": \"M2\", \"outcomeType\": \"ERROR\", \"unjudgeableReason\": null, \"guessed\": false,\n  \"steps\": { \"S1_STEM\": \"PASS\", \"S2_CHOICE\": \"PASS\", \"S3_LOCATE\": \"PASS\", \"S4_INTERPRET\": \"FAIL\", \"S5_JUDGE\": \"NOT_OBSERVED\" },\n  \"firstFailedStep\": \"S4_INTERPRET\",\n  \"errors\": [ { \"tag\": \"DIRECTION\", \"step\": \"S4_INTERPRET\", \"studentQuote\": \"pH가 높아지면 수소 이온 농도가 높아져서\" } ],\n  \"note\": \"한 문장 근거\" }\n```\n",
+        "max_output_tokens": 6000,
+        "max_tool_calls": null,
+        "model": "gpt-6-luna",
+        "moderation": null,
+        "output": [
+          {
+            "id": "rs_05959b6db16b4e14006aca4aaa288487d0aedb2d9aacf2b329",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqykqxv_RXeAwVDhHXicNhwUQK8lwV4AC7_78agxGCpOgECiMvX05N4NxuzrPt5Zv0NnWAzOIrC3ALD4sd6cPtwty3Q3cXvMqs3N0k-7_XNU7ei1KeGNCQFBhnTyDXu4fF64YReoYPoMEJdpG8ohq7V0k9PZtrsjCQhVoBAgERxY_bewAyAIiu_A0qEv6hkl2HcCVMGecfCCBc6R96iN50Xg6gevNLQOpQ26k8ZWubbxN0WhMm9Iqzs9en25XGFnvEmoGobo59RO8Ha3PziicOBZFMVcB2OGfpjAIaVq5H-GC6UqPdzP3hkv9RrWuVZsQcX7Yj_yGMqiYqDlr6uySY1ZtS5xhIMUkupMbddlCWsZT74SYijrm850BbQMHI6Rq71xqMwTCxcFEPPoCNpP7luVtSS2QBmezFIe-kFYMr9VTrqQjJLLWTnwUDhvMlwKVudOtQs3rB7thWtxzZB9JM-EOsJzrsuk1R1FGLskZOJ19Ekqar5k-rldK5O4o01dKb3iDPbR2D2j2EpazVcRwbpEqqu9T4B1YL94RrHqVaJkKx8QQj2xRiskKnybosCxgFaATgXRvuTZpEY4jViLcNgA4E0nPX98-siowdQKj9HUGpVoJx-3BfLJ7ewFkzjsDpKAusU3WGCdxWas91s09iWX9-UC7nKhmfnBKtkPto9nvSgHJZMQg2Ugjaq42k1Pieg1cl8amOp3J07hSVtSCdAuVKL5OFOJlaUgAa5KBtt5hOrokwOLXqRrUHUoh_x1gkgRYPw_69amZCOfLRPG8MKwKJkE-6OkbDCpYd3Ogivwb0uzuxYJQvknAuDNN0__QfPkdzhSroOIo3I-6Gx0VC3tHyL3m0SkT5Vy58d5djHLstjyFOkSq9wuoMm460xXJnGqt4prIbrKpvSwqnME3kzsgJmXHKjAUVRA0ovTe0STETLDUKEf99XSoJtw9bQGtIS_yhL9GvRY7YAt0nLWRLIpp5kIMeOrv7Ogzj5Qhms0fFw5g359vZrOfnkbb9o-dBnJmdcc5zmSpbDsY3JNwicovb0Q48QMOeSMVRltgWnyB-7MsyOt2IUrOGbF0ytJgkA6ibQXnE2uDxwnNuGSduDDi5K2KUxhf-asBdR9rH7diKYZB2J6N3BSe5MyB8f5eyaw0WaQLL9UU3xv0py7hP7p6SmVQmFsSii5c-p-E7Io3VgORWgyfDbDFOtdjv2hK0px5U_71OGzaTE42kBGWK4MwLAMCGhlluVbETezdD8-8EIF0Lf1gIr-9hqCw7Zz0ZEWF52z7lcFyAa3Ntx6WDqeqZg0gzZHmuM2bgtTQXKgjlkCSe0jSE_ZW_J3pTRaxrL7A-m4RbRyFYVOUeFTrH9oTADveuVAA_Ymjn9fXq38XjaWc-l52TeJi7gUhWwLx2W3aa-ZQkUL2nMIVdGfMNHImcLnuwtRlEJwcreKQZg29-2GkCqz7YvPv0zu8rRh7vVfXUbxcn3xoXKMiu3Dfyxx7WoL19tyugN-gbnRUD3lqP2CMbg2LQ9R8RUMkT3z9JcIIzQhhRw1PRLfF17wwnZKsTJy-ujfsbEpEReWxPbE_24MSIuuzVhbmH6hRm2fLA9b8_FcExdXWicnJEozbKqjPlEbPVjScZahBRBJECm5s6pXzO1Na7wHn9Y2Iosky6Hw5284zNcmBRhGgweA3A8IqffrVKc_I--j79Wfol1kcTVmbjg8o-qcfOmnaLZpapt6AhktekRSs7MmQD2I8wOLO1qRUEmzVWB7PuQtc5U5HicynmxBjyyMXWeernlC27BOHXf6ooqQ6wrHj-HUkuO1fRvGGOOMuYkIgSKpdKgk0Vq92_K_-DsVhvYK8i6HjSoSGgAEdrgZwo61f8lbw9xiqEkX7YMLDDQVU0M5QMZnG-uBct4fLcmOUeFGT8l8dIIqDSL09HYgqpfaBDlC9whuIRlmAgQ7V1MBgjE6yM_d0ptMqX2TW2SPJ-BrN3jhpxAtvTaiO_3FK4pmFtHiH-cnNPkJzDc3fcEtq-RJXGGsp9FtKy1LCcz2Mf-ABljYVSZaCZWGwGobR71UTMQziJk4GJXTp8W7xPuJA2j8XoZ5UfFnuZGtthlJd81IwQmZW9SXK4pE9BxLskfxF1skXHrWgLgTp3Dg5TiwzwDO_CMUqlDyl5dm7VyePyeZEAPcwDeyClfR2qHi1D7uzKGU0Dq4oyD1hRAs2OdrhOM1fy1kKZG_J2QEfP1JjPkMEskw4F2N_Yya86KsYSGVyknMAC1WZ4JxeX4hjI77GXF8uYZIGBZV-mC7BjvqSQ4EOKHdqbbj7CwIr6iFjU3FCKHwnesNbWSADJgRqdV94f8yVLjyOZS9DxVFqkoS6b5bWsqfZ_f6aA3mfxTGX_praT52mfxd5wgtm3QvwzxPMBO1yUDwRFs54tQs8WvNy0puFSlChr2Cr-yy-tm7Nj7DpoP7ARH1Bl_n2c6IPj9HV3Vybdfb8x7oxnQ0rTx3P32IKyIyr_CoQ2WmNoM5gkCkOyrlo-ijzwlrpZh9n92Oc2nuxipuBv0lxKLudYV-y9vF7UkC-dLTodr0TtHkva_xw7XFRiZebBR_6i92kWEQWwvhPa7gwk0GxGRPyDgL_kWKB36DKp3mKeaasM2g5iqY35CaNNAtzJzu1IwXBsA5xtPay17DQEI93QaWDaymmFbjkdflWsAAfsDigWGhBMLdVCyQdeCR685_IceE79nTTZQhgs6Zm9rFngx1UvXji480e2kgzwrR6aVIfWJstjlmRs0eYwA5gjmrReN3S4axcYXCx4uXrni_6TmJX-vUbOg38K7sjBsES2oh3DVe56JbMrEmXaORdn8masCxc9um0YRQ7AX8-5P4pPPASAQ-f0IxyOXxWtyrBxX2OvYdxAIH8L2JfVHe861ozHZhVwaY2qS54A3ipta9gJuL_wpXV9bU5jyhO3fw8lEBumEE2PiSsyukFjOaW-uBbosWclpOS6kKv8VFXrFol4fUo4X0bdetYQWj8ZlcK4gVB5mggx2i-oAeYVuCmTp1971LXLtOzYFSmV5CYeJwwdm_QGXUSMFSMRUt5vlEyOdKClx2Ljiihuk28up9cUNSeE0_QsCyplL-cSJktW-tQ4D-uoGqn9uSL7330NzkDLHiSLczfy7MKLe0k3QW6rxssiBmzBhyF_nlTH1BNWNo23moJROv-GKWc7h02MrHBvj8-pFe_nKWJh3mQa1ByjJ0K09f_tV9NUKmPhgxKFpa0YemnnPb8f1ahPP8g5t-QtIH4tALMHrZona4dTCzr0r7O-RUOnTEsLuVWb7k7SA9ZxrKlfxK33T0UQaTW7MCyO8we7xNkNWqZH-YvO0_YEHLccKwIWO8MYyHsuxRP7zuc88942RLKTaSD5KZo9OFogJqM_XoZETcqG9mPoRVsA5k6WWZOaVIjfYohPySbPC6_5XtBFXKRneUL-OuRJ3AOkqbeM-60_XQ9gfcdmibg8pyMSGbKkxwVGL1rnvJTAZFEG2Z9A6BcQM5ulUvgUT-I3rTsohMkSWaGiVIQTgFf8_IAtx1wnyNoUghbnXxmLe3nCSwHVpijzmE1wiJLIM8rj1vGSYEiCkRv2xglHNaAwMkM9VRZ_Zk7bh8WMZe-IsDtst55UJ1S3y4fnEdeyEBEMa-7ryluubs6n66aPDfEzJ2IF5n8p0xBSAs7o2hIPdsBN5Oby-MymUfbrXEppcxYdJEjjpzQEbOjUwcwopRZ-ZS8IyEd9dBTWR-NVCDLdJfVXiX8SnTBsGcc27r-GKewQKXnhQ95izB8EPTIiDwnouSJLr2RNRAIVM756_ufPfC3E6pnwRPkYwZDcmf1Nb7ckRrr1LH5ZQ3Dh-g-sHJo25LhDsatTQlmI2TObhzgMw12wlkwr_v3QTBR1AEf6z5SltSvAEjNDL1I1aAMwrKPh-lXP8npZhp-z6Da3cq_h9CQLCM1rMWPgLRm2RfFDU7pGgarnwJmnvvSYSPFH2Kx-qqdM2ujRrlQbLWQHsssJwwugyo0JNr0ls3JuGj8DKH8_-vEqGXB9yNDKKu8bSzPxXIbgmLlBwGAGnpzJ16B3WlW1JNL9Ug9tdsg1sTsoxv1pEN5u8YtCi8h5LsUZ4UZyhIK1EksMBZHDswhcvCaA0QVdGIxSvEarBA6azrh43BlVO3YfaW8aAD08sdmlCNS1VlnbXEqZYtms3mI-2TbKykBGHivpZ__rFHrfktBgYTTNZOiIjqw5ym-v6X2ZcPXCpSwFxOyKZymlta2yLHFSPqqFjyREy8c3L8AzNDaUwAcsIj_aCr0dwtlcjc-TnEuRHRaTchd1O_I5YEfKmTDCMoF_yXpPHIGbN0FXmAKmWdFoCM_AasoV9gJ2Q-un3GqXW3ADRIKfYkrjf77WbvVuVlpxO6NjXJ6WMUeldkl9AkFC8HqcpcZ8qJlz5L_B5xnMVwZ6puaC_RPtrzvUoZxF0eGKoP_6HY4Bpq05vRl6DmKjns5Fn_PyDGpHs0eK1rCMsW5paGDOtIN1dikLqo6WWjpiOyOHZZBWbAmoX5SKZTZjAIuJ-cBnZ0cvLwpklQ5U6YOkqVyE04vDXwu23SlzNZ9vLIqqSr5_ukYyYLoZXRH_7e9SURz__uhC04753H3Uir5U_lUGG2x3SEfQ2GQSrnG3EwVlvHKkYB-QQd0wL_5oOpcfFcN6XQ1u8YqaCutqHjMdk4VM-IKxZH6VFfPzLRbxUDuoaxkslrtM3rVQzrhF5uD_k4I2H3Bn-KZAh_SXQHpyanTtX84XvklV7ty_nJyoDtKt8FMDQWGoRF45BOWBAiER1n5PO7aqb11q7cLfI9UyGwlVw5Lf7a9NlpmlDPA1oDasWKP_UiMmjvY1f6Hp0nrjdCsgKcYHsq4gHeUH_zkuBoPQgShb67kToxmcPpt0TNFeVngtHG3ZwnreK91SOmZzkK8Fh8maJ5SpvmSPZcUxQHuOaCNmfIKp6Zrs-InjzmjK_kJ4uY3_cZToYqQH3bd4BYfzOGdYFAdbGwDXCGBHa7He5rp-gUqoz40Am0DsPApVz49rD4v5R51c19lBGeLgAiyLXLWuzNG9gGFGoHvc9kShsHl9YDgj4rKOQN8sMNXpOWxiFzntqeVTRKHRyVhsW34J-z6r7Eq8iGAFHcqTB4Xg0iqQa9XQdtdr2GSqE5qe6Z9p-o5p4wThRobk7-C-zg1EXofNqxwnne6dW-Sawag1TXA16o5NqU8DT_Gs9QDRPU2gP-pGqFesIRf_MBKgftsZG9FyrIcLogv8u-mECMtRo4KIvIQnN7kPMLvEOOK2dpEbm2428HBsAxy2TXRvgF14RV3P0nJOGg-NAiWjRC2KTonPHjjAr-Bcx9F4LzhHTMpUFAm3ZzlokV0c3pmx8Ekx_oI1-F2opNho73fXsedTSlVuq8xq2w5N7q-54xz6CN3rAQz9YfV-UXDLHQC3wqek-OwRa0lOA-8VG6tHln0tdRyUCd9Fd8Lm4dQo0w1joQqXraiz-sr0V54RdivPMsdRgj7chEIo4sRbOH-5AmSexGZX44oxYJuIwJ5fMrp9HmZKfqyVqOZjRhbK1383M-K3br3rQYusHvj2rzRUMOdbqUpAMpomn6IExyRYlmFU7LOgBNrCmoyTebarM4cebjWeTpPC5YbWmU0iVriUn3bD1krCAewV8IJedIkt0i5UfB8sTpP-YLr0P2bKoyPnKp8yxU9iyWPfgmyDQGY3tdGHw5a3pZLwt1Xo3EglbU14KJaX1DwUz2r3iFNt8k-fw7wj8gfSzidaCg7coJk2G0LUZPHvjMMB7MtV0IODI1eMNvZqas2j1gwEpDAmB6A8U3JeHhxJQ6KeH3R7gjrjPbgai7FPUU5Tfk7pQ2p-4gg5YgLUVUM_DRZQZNdQU7JVewomslGO1Qy2VtR1zePEX-WujnU0pzSOnmsnqKbkHtLv4_mLey4YVmDSm5yUCijbS-IMtZQ6PfTV3e3OXzJyvqUHVtbq7BlcmkeFbygWOk6XKik3QhyLijNYttO6spAT16JL0qgLlGsvIWtXRhYp1yjr30-YWHr4nZtmJcNzQUo-Z-EBL6MFy0ZBcPcKeCr4pinGb2-6FBqIU0ixYI9Lo0Qh5sjdboWi0yrCIZduFI1Q_Kn9ZjX_QBmj14j-_3j-8sqSrwKz2rgyYegipdrC5sZhfxz01UU211eSTd0I1mt5cwC8FZD-QdGdwv68-7LmP3CFqc9jkUwqVsvZP4NblAa0i4Zq08MQXkrrZBksWc7mACI1q7mQu_byfIFpP13t3r4rxE-pkc2vujT8POrKZShV9YJi_4SOQpHnsPb9N-xZUHkLsfosXdeCQgKCQ0-sOn4mRJ7AwUpMU8ZG60w_eUvxCvdQnylqRkjx4MpR2DfJrANTBcpjG0aFGjaHD_fSTNNl7XjbFf-uYUZBLj1796RbR1Us-J7OpSI-FnlUXKIZnhT_OT40ieFsyMpgd5Uz219bKnYlixY-10RHkAWSeOZlPKK58-iyj22gx27UI969SXhQiUQUllra7aTLTmNO658MhFzLB7Fj8RHimnYH64ZBvtdTCfaq2XIEerT_-HbZtuHtHJqUKip9ibYk3wtmyN5D7sMmyarVklwRpkEwZsmafNHuWNtno6ncnCRwEPDPMcymfj3ngrZvCaFLFg4O5zp66wNPwGbdqV01UXcI7h9sH1jgngCbzw66o53fwmjGvhXpXywzfu_fmpdKUX-A49PDNSWhEc-dzhEkC0I_rYJeksu_7Pa_3zJBsTGwyVPTzKP9hcq0Va_59GvPaxdDcEJLkiFAzdObuvqE4sI4MfgGo5Nyk2w5Cc0a2wXkN33wPuPInzoLRw_u8cIOuSxeCDBivGe_hnO3woa3w05ptc4jfqWzhSOK1TJZYz9i1RzrClFKixYuUl4YsnHJUaLSZKW-484cAn2Xe43KGIyfbRFLfZ8l0mh4hub9auL168V1EwDUDzXA-s2bLg1_R1f5dS4L2eO2535VUhrCv18Z55o8PYMTaHWKLsFfB9OX24TIZqkUJonPJUUT_LqT9BlztYwsLT2p4rlExAVVBvKR46T2Ac--uEJ97vA84EFXgnK2bboHE000oVzdUhCoAVrKtXBKWzvtn76kf6zMDjkOlpwSDVfnSZWXGdwSdjaTrvWYdsf8PQgVep1-72HfSJ_89IYkU0CzmPTuEFjbT3D2KtUFISOonkuG4OH3ccwwlyh3koNHl4u4SLZ4SstjuVKC4eHO9NkknDtV-JIm4AFeytG-12J7fYQuU029IXlwyRhOuL0dnzYx7YKf_-9bAOdibw6vk0pIcQMamz9fY2vjdwqIVQI2mWV_kjC1Q8CbHFxSoQSqyJCfFgBgFjtD_HKpwKkpzvSV0hZQ47skExb2-Td0tV4bR51MetMtnYLMWCtHHIr6usTFHaH8J-p4xXqFTRQa6V-SrKgFz9jvkG-JMrnveHfJv1um0HNsMfovvr-7jTXHycpjiSCt3vh-lnobqDxuZqvtm14dQJcS-D2IG-VanQlhnCGZr5SlqgnxGc2WChmZ6MTKD2X0Y0Yk1XDcYyfrUSjiYdm9e6Ua8As1xqyS25YLjnskubrG-T4IFJaOpMYFcdpwstlOVc9fBnqUnWDeX9xpDzU0Im4aJJ_F0gyqcS5qsFrfvgn_SccRBgzNJvdYpgnUF29cnais7OzgDkchagoCoKRky_F_Eg8mkBP-KshMavVgg-MxJkrUrqCFWhWqKcEkCWTWeM8o2WPD6dU2WKQq9talX9dHiJqYg03MPMcefuBx6A5eZKjNAR1iktPLI-fpb6-WgYIP4c5jERYmdC3W50lqalOcSbQg93kvMz4QtniLRrqpysmx6O5C3lCwduQxDCImy-ASpUmrznLpWL785_lMq-apa53-8f7uvMfoPDyyQFCzH-JeoniLyueU0LP6s85zoI5Kf4H21gdNq6JiGimrGEI_U6lrTa7TmAuRjK_wDjFMBrSSMBZGyknxG9FKP3L05p6MOO0Bguja0dBvdmStMwqLI80tGP25u8EORigNHFrx01_zWVlrLdXsswKX6LM8svd843zzsHhKUvztMwdx33-GlcEOPlzBLviJ8_XC1wHv7G4LBAKTgLbUTLdvxBKnyj_MG7pFyUcIFDDtNpa2E2qH9M692iPUNeY8Ah72-BetfNR-nPXF2zVOswSqfTp5CmTjBR5duGwfuIv6L3MiB6IiUcuUpbdgnfHNfTgFbQUcQ8cZHetxfdiUsoD61vT-luSUlvIm-Nq39oqvmYaf0gnXmeADF3lYdA5r6_Ldb31yzEgiW9fqcGxbOwYBGNaznB9i9E5UCwZZtCFzE-lMZ1S2nAA5U-9GKvrvcUQU-PElIiH0LFLc2mo8omH8vgxMR1Zg3bizPx9udyE-Ss_5My85YViXHW5f47MiXqvDbT2OZpA2Ot9ZXwtQK2P9dFPK2nrk1NE2ledRgZ2A0zTcFsfKQwkAMJ0kMm41cpuPDJ2cFTxoNE5TyYONqb-k4sqT_H1JlL6B_2kckgAg2uZxzOZUdA9yFl13KxFWk0zJX42le5NAj-2jP8UUmvuqlhAmuKtWcW-Y2c2s50kIw2-4SopjNMLJjVw7zMrl0OAxsH1OmAv4O7RGsJp2xZSq3XAusCiR0ji4bkIY5dI47Xwzyb7lAspvB7IIJyeRg9CeIGJYXbiIc5P6FtQpShIDm8eAQnT2",
+            "summary": []
+          },
+          {
+            "id": "rs_05959b6db16b4e14006aca4aae45dc87d089d7ff7a919c96a0",
+            "type": "reasoning",
+            "content": [],
+            "encrypted_content": "gAAAAABqykqxLRfBkLWr9dYopqjhHoumcfi-dpqux5n7QWK0xh69hFDcPv4wTW0WmMIBOHwu_-VPYP78E62h7N03rrilZZPIYfscCdJLAxCfy0WpjoGd70jxNep1cgiKR53oC79k4romzDMnx8jmYffrqNgeZx8_Q8CXHYn-GEHuzEIFg8lGpUffiIYrMyKkuZr0xVKOkh2DcsMrIASXoBH4eE-pAaVV8wC8N-MzbXwfS6A1hTNVflGSxdTMZo7sz9Mz2ficeM3-dDcFrPQoYXI7jdpBWUjtWNAdFAT54GpDnGWNAk36PJ7yG7LBEj62VS2JjxJFxpzIoDyHA9pZBz32AUPz1BSVv-5_NW_n7tWUrf_BX3LykirpHl_zBrkGD9UlRg4d8Ekk2EOVZ_enlK6J7yhHV4AWlwzsulpG7lmYafvAl4zq2PDZYVKuI7qtR6jFMbvLoDaZK8P6xzplLJ2rFUk78ve1pOETF0M2sVBLmoz0csngXI-wXOem9CwPv1osBuWs6u7FkRqKnyoJx5j2lsrvEcIEBAL8-nzb3azXzskdTD489mMedAbeXyKeJoRuMUr33l1mF-wfH_HF3X3QcJIm5c_tFo7o0xt3PrdR2fGtV9G_gS-WXNz9Tb5s6zmrgYyV6ef5TWY9EGyi7YtSGU-Shq-XkIt1NMeyWuQySqEYID09rO5b6J_MI9a70DXfpBm5-d3lrKnIOx2x4232Ao_0PVCJvEBQf015_hKKvR9fRuOS9yjxMwQTHdPQII7HbWGVquChvpHUoR3Bmgi-l-BG22h-3Rtdapfdy_Ger-t3IpOk4TfDFhYOYnVVk6ao6WAfMinZvTYlQXhnd6qrmJkVuCpTZEZMmou9gzspwvST6GzpoQlqe-b9IxZT1WjwfJ5Sk8msJDzdwPTc33V0ygC0Rsw_LEg7m7Q9jI0w77zdIHdofjcZMbPdEk9RNwZvRTlqaz1dmuyviUsPa4vdgzfGhCOXWmaCphXVN_Z6ZQ4rV_QdfVnY6Ym0DbpF-GCDXoLaKFux9w5UVQYPV-xKSyQr-D7X7Kg8uZxvpRLIQx2bE9Ugm6UlWs1S5tDBMXs5QxpGEAK6NwdPBVqCQamWq72ZGPn4XaNDO2TcD1ZWf0ijzSXQrDKX9UpS32v-MCTzpmOlnDMNyc0S-2kBE7W-4mys_GMmvJt0i0f4PCKCgNPffRbeVLODCtDewceZI-T4-YVXoL8NJ5eAMJJlTKh9RwJQMzxFFYQSl9Lp2ciARKMP7I4LzcgbkvpMZK0kpvq4ImQImSObKP5Om5YQYAEwDdHZDqRvD_bO-Ih2iBP3VH0X6hsn3D60Sd15jVddQT8L5lav-kT6haI2bOUfRWOIOW5-_TR-cvTgKTggXzfMjLIpb6h4eSjN3kOVKwYOOH82BG_TWXD9dx347AwHolSwbeEyTECoeR8YQbJSSsxkxEFTC7du7EQmzNdNUULzMY7saYx5qBPevkpAFIuLVDhkBebh4ImasfTLenEn4tzfE1Uy_wnhUcYp9boazOZuLR3U-e1xC5wkWN4eQlVohCxm8K0D_EpVhGlIf0QxN3NfkvWTAK-Q0dbKz9HHFqQuk7aEhNdo60BIHBw8gp3eUObQabxzc8eIqUWHTyG7kinv8-_32mifXeuqd8nH2BAkZ3N8myf1B9jXfEea0H0Co3vowD5abWQU-326u73tK4XrCxixTkUC__2fuw2EHqUgvh_Z7XCNhPhhPTRa1MKQQnEo0LkDc5SfhfHUbpIjZ2An4FrnNrpQgH_ccHagoextp2u2j2GJoEAv5VrPMNAXVZMD6WV43nAQWK9QkZpBP0CExKRlgA75jeAO1TB2RBgnB2TpJBk7UCWDWW_yySk8J0aD064fEAM0WDH8ZRc4KfKj5npLyD9mLSF70gnlXnXE0J6BwqM71UwyIzz9g_JL7DxR29zmgOWuVoNESnJ0URTqUYAeIhN-sDIjO-07bVxhDFLatBeSS8mqEo2c-ggew5nL7BD5umQFJrFdFG4Y-g5fbVUnVPep0-YNzAVBFbQmhjJZUS1GIqDmCREmSmxb9G39Je2023P4hKpTui0RcO_sMG1YGTGYULYihyXbCeJMV1G5HecCjXXoV3NbGJdruz4O4CbjSdu0vNDj99q6_IjsXuRERZ3ZEP2-SF9Hyj4fyCuXGxkxQ5N4axZEj5nAA-M_1_l4OrGiidPMNj6tRXuRCKxepvBfTPEFxQ9N-uwj2F7CkQbLy6wc3yqfYiiDW65lVUKs5xFRDEAZNL1P8HlxxxAj2TOqsCwbks8LKFWaxJnrUP8b0zsI__B2MloX4zWC37xXhfm_2Qdfb09S8WEyxn7L9vRo8wAehBIvgxeDgatLO9vZh24O23kjDvQh86J9JmQ2rCClov6y20KHF6tONso0c8phkvXEg8tM7wzoE711GxeaCHohtqH_vm2JntfEq3vCUF01odw6BEu0rjKNx6DCHTTlBggj6U0DwrXiP165Nd9ENFZhu7PEQQAXtimdl_Ax6zkierfkNX07s_dL_WeVl0f7hklI4-pBF2-ZUH8og72SZIf8ntd0Wy8xMrG6Rv2nNzFRtEHTzXu-feBRX44YBaJ4VDmtSNV9sep5ZY3LBCSI2yBipL6QuV0k_oT7AgVvWhLts9CHBYqazbVZZzMQ0nlWAFE9myx02GwPI7dSmuFtPBKoPaWTXBcTSfVpTnO52IxNwxZfBBL-hzwKnw4qi9HEsDJMDXRYOR3BAXfPaCyCAxMxhzytmNuwLz8uvvGd-gCv2GSr7PgBdl6AwoJdNrnnQpPi7RMyqAaP-72sLAQUbbUg4Dg4mqrHpGyS0i-B2Mowc10A_V2_TPxvdH3-ivCiznY-svLkYXea7k5IbGQoc8td6eJtzUhSt6FlWzADl8bvaPXEUp4FcQPDbmb6gErXvx8w2277tCL-a6eKaUQqKWIKfoTMPYyckhzHaJErLAyozUMbH7MtHRpEu3VQSImapxQOpGibRhYDqlWSsrnVGQUfzmHFzegkHWt3QTIrWk-u84E_-gESJzZ4gDR-P_fvOpATlgu2Q6CzjyTAg92N1IuO9Zgrc9RIINyRc8qDbuJulxH19xdIiZPAfJJXFKzEps9SzsAF66knQ9y2hidSgi1DFVoPxyvTGTwspDo_mhNoHXYvtKBJX4Pjl5Nq2JcnxSvEBYVJHthTNS-qFG4MwIZx61vLQ_Fep5CdFi1h_OA5mWw3zdqkkokFSCwm-YoQKKq9n76y8-J25Rzxo5J966pgwgPkWegtdOlOCtabcEh_PndupaiqlFbdQ7ZrCGxW_kaF-Si3xXkBzopVxwzYbVeIExWzh2H3e46C6gvv-Avx8VcBincNiktqoL5iiNoLHRYudaSCbresnb2Kg37Eud7d8k_t8UrlI_Sto8mgo5MlE4ItRj6ygcdNAip4lJlTrD5jk05P4aKk1i7O59rVO2zhiRRjPpqMUEcwGjEJ17wNqHVd38sp7Fl_q51ZjG-Glm4u5-tS1Bmu9jZiE_G-dor9wiPnq99zdgutuWdGhXqYBXiQXNE07cj24m3AOG3WaEsOfM6guFIS8VsDT5akDRaK0awdUA5aLPTJXt4A8XN2QODvkmJLid3LUMorWpTyai7gs8QC8YKiQ3lwKvoVA8Ax5My4xtxBPDvM0pKRIWe31vCH1lDIcGz0zxOpNhz3ATD42ckM5-NyIOMPge1y4_LGxSjpTXnun0BZeX87YkyUFPKb1ojAHQ4v1OB--LWYaPnRxlWByeb_dv9jQ1XDN1aIutxPwaBs6YiDip6VTmtNEW_GNMzMLBn6Lm8lBCPOlYmasryzrnz8bK7PNMB5as90z8b_P-pwVVsrpxjxpiZAr7jRd0rNJLfWBNl-CS88dbHr2kYwCd5-Iifrh6pZ5lOXaDRVeUc_ujoTnW7e0_D8-Q==",
+            "summary": []
+          },
+          {
+            "id": "msg_05959b6db16b4e14006aca4aafec0087d0a84d89b695b87491",
+            "type": "message",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "{\"caseId\":\"C1\",\"outcomeType\":\"ERROR\",\"steps\":{\"S1_STEM\":\"PASS\",\"S2_CHOICE\":\"PASS\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"FAIL\",\"S5_JUDGE\":\"PASS\"},\"firstFailedStep\":\"S4_INTERPRET\",\"errors\":[{\"tag\":\"MISREAD_FACT\",\"step\":\"S4_INTERPRET\",\"studentQuote\":\"갑이 출연한 부동산은 회사가 아니라 여전히 갑 개인의 소유예요.\"},{\"tag\":\"SCOPE\",\"step\":\"S4_INTERPRET\",\"studentQuote\":\"대표 이사에게는 정관이나 법령의 자산 운용 절차가 아예 적용되지 않아요.\"}],\"note\":\"법인의 자산은 개인의 출자 여부와 무관하게 법인에 귀속되며, 대표 이사도 정관이나 법령에 따른 자산 운용 절차를 따라야 한다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+              }
+            ],
+            "phase": "final_answer",
+            "role": "assistant"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "prompt_cache_retention": "24h",
+        "reasoning": {
+          "context": "all_turns",
+          "effort": "medium",
+          "mode": "standard",
+          "summary": null
+        },
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "json_schema",
+            "description": null,
+            "name": "thought_diagnosis_v01",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "caseId": {
+                  "type": "string"
+                },
+                "outcomeType": {
+                  "type": "string",
+                  "enum": [
+                    "NONE",
+                    "ERROR",
+                    "INSUFFICIENT",
+                    "POLARITY_MISMATCH",
+                    "SELF_CONTRADICTION",
+                    "UNJUDGEABLE"
+                  ]
+                },
+                "steps": {
+                  "type": "object",
+                  "properties": {
+                    "S1_STEM": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S2_CHOICE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S3_LOCATE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S4_INTERPRET": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    },
+                    "S5_JUDGE": {
+                      "type": "string",
+                      "enum": [
+                        "PASS",
+                        "FAIL",
+                        "NOT_OBSERVED"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "S1_STEM",
+                    "S2_CHOICE",
+                    "S3_LOCATE",
+                    "S4_INTERPRET",
+                    "S5_JUDGE"
+                  ],
+                  "additionalProperties": false
+                },
+                "firstFailedStep": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "S1_STEM",
+                        "S2_CHOICE",
+                        "S3_LOCATE",
+                        "S4_INTERPRET",
+                        "S5_JUDGE"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "errors": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "tag": {
+                        "type": "string",
+                        "enum": [
+                          "POLARITY",
+                          "REFERENT",
+                          "ATTRIBUTION",
+                          "DIRECTION",
+                          "CONDITION",
+                          "SCOPE",
+                          "MAPPING",
+                          "SURFACE_MATCH",
+                          "PARAPHRASE_DISTANCE",
+                          "MULTI_STEP",
+                          "OUTSIDE_KNOWLEDGE",
+                          "MISREAD_FACT"
+                        ]
+                      },
+                      "step": {
+                        "type": "string",
+                        "enum": [
+                          "S1_STEM",
+                          "S2_CHOICE",
+                          "S3_LOCATE",
+                          "S4_INTERPRET",
+                          "S5_JUDGE"
+                        ]
+                      },
+                      "studentQuote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "tag",
+                      "step",
+                      "studentQuote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "note": {
+                  "type": "string"
+                },
+                "unjudgeableReason": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "NO_CONTENT",
+                        "GUESS_ONLY",
+                        "CONTRADICTORY"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "guessed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "caseId",
+                "outcomeType",
+                "steps",
+                "firstFailedStep",
+                "errors",
+                "note",
+                "unjudgeableReason",
+                "guessed"
+              ],
+              "additionalProperties": false
+            },
+            "strict": true
+          },
+          "verbosity": "medium"
+        },
+        "tool_choice": "auto",
+        "tool_usage": {
+          "image_gen": {
+            "input_tokens": 0,
+            "input_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "output_tokens": 0,
+            "output_tokens_details": {
+              "image_tokens": 0,
+              "text_tokens": 0
+            },
+            "total_tokens": 0
+          },
+          "web_search": {
+            "num_requests": 0
+          }
+        },
+        "tools": [],
+        "top_logprobs": 0,
+        "top_p": 0.98,
+        "truncation": "disabled",
+        "usage": {
+          "input_tokens": 4250,
+          "input_tokens_details": {
+            "cache_write_tokens": 2296,
+            "cached_tokens": 1951
+          },
+          "output_tokens": 936,
+          "output_tokens_details": {
+            "reasoning_tokens": 716
+          },
+          "total_tokens": 5186
+        },
+        "user": null,
+        "metadata": {},
+        "output_text": "{\"caseId\":\"C1\",\"outcomeType\":\"ERROR\",\"steps\":{\"S1_STEM\":\"PASS\",\"S2_CHOICE\":\"PASS\",\"S3_LOCATE\":\"PASS\",\"S4_INTERPRET\":\"FAIL\",\"S5_JUDGE\":\"PASS\"},\"firstFailedStep\":\"S4_INTERPRET\",\"errors\":[{\"tag\":\"MISREAD_FACT\",\"step\":\"S4_INTERPRET\",\"studentQuote\":\"갑이 출연한 부동산은 회사가 아니라 여전히 갑 개인의 소유예요.\"},{\"tag\":\"SCOPE\",\"step\":\"S4_INTERPRET\",\"studentQuote\":\"대표 이사에게는 정관이나 법령의 자산 운용 절차가 아예 적용되지 않아요.\"}],\"note\":\"법인의 자산은 개인의 출자 여부와 무관하게 법인에 귀속되며, 대표 이사도 정관이나 법령에 따른 자산 운용 절차를 따라야 한다.\",\"unjudgeableReason\":null,\"guessed\":false}"
+      },
+      "error": null
+    }
+  ],
+  "retryCount": 0,
+  "hasInputImage": false
+}
