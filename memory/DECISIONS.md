@@ -184,3 +184,4 @@
 | [`D-0122`](./decisions/D-0122-answer-path-depth-node-count.md) | accepted | 정답 경로 깊이 | D-0121 깊이 정의 대체: 깊이=선지 노드 수(READ+LINK+APPLY). 층은 지도 구조로만, 지표 아님 |
 | [`D-0123`](./decisions/D-0123-answer-path-explicit-misstatement-priority.md) | accepted | 오답 실패 종류 귀속 | 지문과 어긋나는 사실 진술이 있으면 그 사실의 READ 노드 실패로 기록, 없을 때만 LINK·APPLY |
 | [`D-0124`](./decisions/D-0124-answer-path-element-override-on-evidence.md) | accepted | 오답 실패 요소 | 기본은 실패 노드 요소, 풀이에 다른 요소 오류가 말로 드러날 때만 덮어쓰고 원래 요소·인용 보존 |
+| [`D-0126`](./decisions/D-0126-answer-path-element-metric-failure-distribution.md) | accepted | 요소 누적 지표 | 리포트 요소 지표는 오답의 요소별 실패 분포만, 요소별 성공·실패 비율은 쓰지 않음(정답 수의 재표현) |
