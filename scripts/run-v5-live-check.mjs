@@ -9,7 +9,9 @@ import { ProblemFeedbackV4Controller } from '../packages/app/dist/server/problem
 import { loadProblemSolvingBundle } from '../packages/app/dist/server/content.js';
 import { OpenAIFeedbackEvaluator, FeedbackEvaluationError } from '../packages/pipeline/dist/index.js';
 import { createLedger } from './test-v5-live-connection.mjs';
-import { cases as allCases } from './v5-live-check-cases.mjs';
+// V5_LIVE_CHECK_CASES selects another case module (e.g. ./v5-reselection-cases.mjs); the default is the 2026-10-13 set.
+const casesModule = process.env.V5_LIVE_CHECK_CASES ?? './v5-live-check-cases.mjs';
+const { cases: allCases } = await import(casesModule);
 import { cases as diverse, specs } from './v5-diverse-48-cases.mjs';
 
 // A rerun uses its own folder and case groups (e.g. V5_LIVE_CHECK_DIR=...-r2 V5_LIVE_CHECK_GROUPS=R,V).
@@ -22,7 +24,10 @@ const cases = !set ? allCases : set.split(',').flatMap(item => {
   if (!picked.length) throw new Error(`Unknown case set item: ${item}`);
   return picked.flatMap(c => times ? Array.from({ length: Number(times) }, (_, i) => ({ ...c, id: `${c.id}-r${i + 1}`, full: full && c.full })) : [{ ...c, full: full && c.full }]);
 });
-export const LIMITS = { 'gpt-6.1-sol': { requests: 60, usd: 2.5, input: 2, output: 10 }, 'gpt-6-luna': { requests: 60, usd: 0.5, input: 0.10, output: 0.50 } };
+// V5_LIVE_CHECK_LIMITS='{"gpt-6.1-sol":{"requests":50,"usd":2}}' narrows per-model caps for a run (rates stay fixed).
+const BASE_LIMITS = { 'gpt-6.1-sol': { requests: 60, usd: 2.5, input: 2, output: 10 }, 'gpt-6-luna': { requests: 60, usd: 0.5, input: 0.10, output: 0.50 } };
+const override = JSON.parse(process.env.V5_LIVE_CHECK_LIMITS ?? '{}');
+export const LIMITS = Object.fromEntries(Object.entries(BASE_LIMITS).map(([m, l]) => [m, { ...l, ...(override[m] ? { requests: override[m].requests ?? l.requests, usd: override[m].usd ?? l.usd } : {}) }]));
 const read = p => JSON.parse(readFileSync(p, 'utf8'));
 const hash = x => createHash('sha256').update(x).digest('hex');
 const put = (p, x) => { writeFileSync(p + '.tmp', JSON.stringify(x, null, 2) + '\n'); renameSync(p + '.tmp', p); };
@@ -35,7 +40,7 @@ const runtimePaths = [
   'packages/pipeline/src/problem-solving/feedback-v5-claims.ts', 'packages/pipeline/dist/problem-solving/feedback-v5-claims.js',
   'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md',
   ...questionIds.map(q => `packages/pipeline/fixtures/experiments/problem-solving/public/${q}.json`),
-  'scripts/run-v5-live-check.mjs', 'scripts/v5-live-check-cases.mjs', 'scripts/v5-diverse-48-cases.mjs', 'scripts/test-v5-live-connection.mjs',
+  'scripts/run-v5-live-check.mjs', `scripts/${casesModule.replace(/^\.\//, '')}`, 'scripts/v5-diverse-48-cases.mjs', 'scripts/test-v5-live-connection.mjs',
 ];
 const frozenNow = () => ({ hashes: Object.fromEntries(runtimePaths.map(p => [p, hash(readFileSync(p))])), caseHash: hash(JSON.stringify(cases)), limits: LIMITS });
 const DONE = ['COMPLETED', 'ITEM_REVIEW'];
@@ -112,7 +117,8 @@ export function draft() {
     else if (v.phase === 'AWAITING_END_START') command = { type: 'END_START', accept: true };
     else if (v.phase === 'AWAITING_UNDERSTANDING') command = { type: 'UNDERSTOOD', answer: i % 2 === 0 };
     else if (v.phase === 'AWAITING_RATIONALE' && c.rationale === null) command = { type: 'RATIONALE', rationale: { mode: 'OMITTED' } };
-    else if (v.phase === 'AWAITING_POST_REPAIR_CHOICE') command = { type: c.role === 'A2' && v.postRepairOptions.includes('RESELECT') ? 'RESELECT' : 'REQUEST_EXPLANATION' };
+    else if (v.phase === 'AWAITING_POST_REPAIR_CHOICE') command = { type: (c.role === 'A2' || c.reselect) && v.postRepairOptions.includes('RESELECT') ? 'RESELECT' : 'REQUEST_EXPLANATION' };
+    else if (v.phase === 'AWAITING_RESELECTION' && c.reselect) command = { type: 'SELECT', choiceId: c.reselect.choiceId, rationale: { mode: 'PROVIDED', text: c.reselect.rationale } };
     else if (v.phase === 'AWAITING_RESELECTION' && c.role === 'A2') {
       const k = c.id.split('-')[1], spec = diverse.find(d => d.id === `${k}-CP`);
       command = { type: 'SELECT', choiceId: spec.choiceId, rationale: { mode: 'PROVIDED', text: SUPPORTED[k] } };
@@ -132,7 +138,7 @@ export async function wave(path) {
     try { const response = await (client ??= new OpenAI({ maxRetries: 0 })).responses.create(request, options); put(p + '.response.json', response); return response; }
     catch (e) { put(p + '.error.json', { name: e.name, message: e.message, status: e.status ?? null, at: new Date().toISOString() }); throw e; }
   } };
-  const ledger = createLedger(`${DIR}/ledger.jsonl`, transport, LIMITS), log = [];
+  const ledger = createLedger(`${DIR}/ledger.jsonl`, transport, LIMITS, { releaseUnsent: true }), log = [];
   // Sequential: one case at a time keeps request attribution exact.
   for (const action of actions) {
     const p = `${DIR}/cases/${action.id}.json`, state = read(p);
@@ -188,6 +194,13 @@ export function textChecks(text) {
   if (/학생[은이의을에]/u.test(t)) v.push('THIRD_PERSON');
   return v;
 }
+/** endReason is internal (not in the public view); read it from the saved session records. */
+function endReasonOf(id) {
+  const p = `${DIR}/cases/${id}.records.jsonl`;
+  if (!existsSync(p)) return null;
+  const rows = readFileSync(p, 'utf8').split('\n').filter(Boolean).map(JSON.parse);
+  return rows.map(r => r.session?.pendingEnd?.endReason).filter(Boolean).at(-1) ?? null;
+}
 function caseChecks(state) {
   const violations = [], last = state.steps.at(-1)?.view;
   if (!last) return violations;
@@ -212,8 +225,47 @@ function caseChecks(state) {
     if (!ids.includes('-first-section') || !ids.includes('-answer-section')) violations.push({ check: 'SECTION_MISSING', ids });
     if (ids.includes('-reselection-section') !== reselected) violations.push({ check: 'RESELECTION_SECTION_MISMATCH', ids, reselected });
     for (const m of sections) if (/부터 볼게|다음은 다시 고른|정답인 이유를 볼게/u.test(m.text.replace(/\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자\.$/u, ''))) violations.push({ check: 'CONNECTOR_REPEATED', entry: m.id });
+    // Handoff 2026-10-14-v5-section-lead-sentence: code writes the first sentence; the model part must not judge again.
+    for (const m of sections.filter(m => /-(first|reselection)-section$/u.test(m.id))) {
+      const lead = m.text.match(/^[①-⑤][을를이가은는] (?:고른 건 맞아\.|답이 아니야\.|(?:틀렸|맞)다고 봤지만, [①-⑤][은는] 답이 아니야\.) /u);
+      if (!lead) { violations.push({ check: 'LEAD_MISSING', entry: m.id, text: m.text }); continue; }
+      const next = m.text.slice(lead[0].length).split(/(?<=[.!?])\s/u)[0];
+      if (/고른 건 맞|답이 아니|판단은 맞지 않|(?:틀렸|맞)다고 (?:본|봤|한)/u.test(next)) violations.push({ check: 'LEAD_RESTATED', entry: m.id, sentence: next });
+    }
+    const answer = sections.find(m => m.id.endsWith('-answer-section'));
+    if (answer && /^정답은/u.test(answer.text)) violations.push({ check: 'ANSWER_NUMBER_REPEATED', entry: answer.id });
   }
+  if (state.case.reselect) violations.push(...reselectionChecks(state, last, sections));
   return violations;
+}
+const NUM = '①②③④⑤';
+/** PLAN 2026-10-14 checks 1–5. FLAG_* entries are for semantic review, not automatic failures. */
+function reselectionChecks(state, last, sections) {
+  const v = [], selects = state.steps.filter(s => s.command.type === 'SELECT'), q = last.question;
+  if (selects.length !== 2 || !sections.length) return v;
+  const num = id => NUM[q.choices.find(c => c.choiceId === id).position - 1];
+  const [first, re] = selects.map(s => s.command);
+  const connectors = last.transcript.filter(m => m.sequence === 'CONNECTOR').map(m => m.text);
+  if (!connectors.includes(`다음은 다시 고른 ${num(re.choiceId)}번이야.`)) v.push({ check: 'RESELECTION_CONNECTOR_MISSING', connectors });
+  if (!connectors.includes(`처음에 고른 ${num(first.choiceId)}번부터 볼게.`)) v.push({ check: 'FIRST_CONNECTOR_WRONG', connectors });
+  const firstTexts = [first.rationale.text ?? '', ...state.steps.filter(s => s.command.type === 'CORRECT').map(s => s.command.text)];
+  const reText = re.rationale.text ?? '';
+  const quotes = t => [...t.matchAll(/“([^”]+)”|"([^"\n]+)"/gu)].map(m => (m[1] ?? m[2]).trim());
+  const inFirst = x => firstTexts.some(t => t.includes(x)), inRe = x => reText.includes(x);
+  for (const m of sections) {
+    const kind = m.id.endsWith('-first-section') ? 'first' : m.id.endsWith('-reselection-section') ? 're' : null;
+    if (!kind) continue;
+    for (const x of quotes(m.text)) {
+      if (kind === 'first' && !inFirst(x) && inRe(x)) v.push({ check: 'QUOTE_CROSSED', entry: m.id, quote: x });
+      else if (kind === 're' && !inRe(x) && inFirst(x)) v.push({ check: 'QUOTE_CROSSED', entry: m.id, quote: x });
+      else if (!(kind === 'first' ? inFirst(x) : inRe(x))) v.push({ check: 'FLAG_QUOTE_UNMATCHED', entry: m.id, quote: x });
+    }
+    if (kind === 're' && first.choiceId !== re.choiceId && m.text.includes(num(first.choiceId))) v.push({ check: 'FLAG_FIRST_CHOICE_IN_RESELECTION', entry: m.id });
+  }
+  if (state.case.path === 'CORRECT_UNVERIFIED' && !last.transcript.some(m => m.sequence === 'GATE' && m.text.includes('빠진 연결을 같이 채워 볼게'))) v.push({ check: 'CORRECT_UNVERIFIED_NOTE_MISSING' });
+  const reason = endReasonOf(state.case.id);
+  if (state.case.path && last.phase === 'COMPLETED' && reason !== state.case.path) v.push({ check: 'FLAG_PATH_NOT_REACHED', expected: state.case.path, got: reason });
+  return v;
 }
 function firstJudgment(state) {
   const s = state.steps[0]; if (!s) return null;
@@ -225,7 +277,7 @@ function firstJudgment(state) {
 }
 export function report() {
   const rows = cases.map(c => { const state = read(`${DIR}/cases/${c.id}.json`), last = state.steps.at(-1)?.view;
-    return { id: c.id, group: c.group, steps: state.steps.length, finalPhase: last?.phase ?? null, endReason: last?.result?.endReason ?? null,
+    return { id: c.id, group: c.group, steps: state.steps.length, finalPhase: last?.phase ?? null, endReason: endReasonOf(c.id),
       selfReportedUnderstanding: last?.result?.selfReportedUnderstanding ?? null, first: firstJudgment(state), violations: caseChecks(state) }; });
   const ledger = existsSync(`${DIR}/ledger.jsonl`) ? readFileSync(`${DIR}/ledger.jsonl`, 'utf8').split('\n').filter(Boolean).map(JSON.parse) : [];
   const ends = ledger.filter(r => r.event === 'END');
@@ -233,7 +285,8 @@ export function report() {
     // A question after the first judgment means the rationale was judged (ERROR or selection mismatch), not left unverifiable.
     R: { total: rows.filter(r => r.group === 'R').length, questioned: rows.filter(r => r.group === 'R' && r.first?.phaseAfter === 'AWAITING_CORRECTION').map(r => r.id) },
     V: { total: rows.filter(r => r.group === 'V').length, questioned: rows.filter(r => r.group === 'V' && r.first?.phaseAfter === 'AWAITING_CORRECTION').map(r => r.id), previouslyQuestioned: ['V-I'] },
-    violations: rows.reduce((n, r) => n + r.violations.length, 0),
+    violations: rows.reduce((n, r) => n + r.violations.filter(x => !x.check.startsWith('FLAG_')).length, 0),
+    flags: rows.reduce((n, r) => n + r.violations.filter(x => x.check.startsWith('FLAG_')).length, 0),
     requests: ends.length, errors: ends.filter(r => r.status === 'ERROR').length, costUsd: Number(ends.reduce((n, r) => n + (r.costUsd ?? 0), 0).toFixed(4)),
   };
   put(`${DIR}/RESULTS.json`, { summary, rows });

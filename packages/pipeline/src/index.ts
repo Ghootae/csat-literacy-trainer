@@ -47,6 +47,7 @@ export * from './problem-solving/source-direct-evaluator.js';
 export * from './problem-solving/source-direct-evaluator-runtime.js';
 export * from './problem-solving/feedback-v4.js';
 export * from './problem-solving/feedback-v4-evaluator.js';
+export { feedbackSectionLead } from './problem-solving/feedback-v5-end-explanation.js';
 export * from './problem-solving/selected-option-gold-slice.js';
 export * from './problem-solving/selected-option-rationale-input.js';
 export * from './problem-solving/diagnostic-turn-v2.js';

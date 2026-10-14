@@ -195,7 +195,7 @@ describe('background end explanation and transcript sequencing', () => {
     expect(shown.phase).toBe('AWAITING_UNDERSTANDING');
     expect(records.at(-1)?.session.endExplanation?.firstChoice).toBe('원문에서 중복 게시와 여론의 관계를 비교해 봐.');
     expect(shown.transcript.slice(-5).map(m => [m.sequence, m.text])).toEqual([
-      ['CONNECTOR', '네가 고른 ①번부터 볼게.'], ['SECTION', '원문에서 중복 게시와 여론의 관계를 비교해 봐.\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자.'],
+      ['CONNECTOR', '네가 고른 ①번부터 볼게.'], ['SECTION', '①은 답이 아니야. 원문에서 중복 게시와 여론의 관계를 비교해 봐.\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자.'],
       ['CONNECTOR', '이제 ②번이 정답인 이유를 볼게.'], ['SECTION', '정답은 여론 왜곡의 관계로 확인할 수 있어.'], ['QUESTION', '이해됐어?'],
     ]);
     const done = await submitSettled(c, v.sessionId, request(shown, { type: 'UNDERSTOOD', answer: false }, 'understood'));

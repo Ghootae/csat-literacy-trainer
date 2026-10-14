@@ -185,3 +185,4 @@
 | [`D-0123`](./decisions/D-0123-answer-path-explicit-misstatement-priority.md) | accepted | 오답 실패 종류 귀속 | 지문과 어긋나는 사실 진술이 있으면 그 사실의 READ 노드 실패로 기록, 없을 때만 LINK·APPLY |
 | [`D-0124`](./decisions/D-0124-answer-path-element-override-on-evidence.md) | accepted | 오답 실패 요소 | 기본은 실패 노드 요소, 풀이에 다른 요소 오류가 말로 드러날 때만 덮어쓰고 원래 요소·인용 보존 |
 | [`D-0126`](./decisions/D-0126-answer-path-element-metric-failure-distribution.md) | accepted | 요소 누적 지표 | 리포트 요소 지표는 오답의 요소별 실패 분포만, 요소별 성공·실패 비율은 쓰지 않음(정답 수의 재표현) |
+| [`D-0127`](./decisions/D-0127-section-lead-sentence-fixed-by-code.md) | accepted | 마지막 설명 첫 판정 문장 | 선지 칸 첫 문장(정답 인정·오답 판정)은 코드가 틀로 쓰고 모델은 다음 문장부터 씀. 학생 입장은 근거가 같은 방향일 때만 말함 |

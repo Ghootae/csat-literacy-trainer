@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import {
   FeedbackCommandSchema, FeedbackEvaluationError, OpenAIFeedbackEvaluator,
-  applyFeedbackAssessment, applyFeedbackEndExplanation, createFeedbackSession, feedbackPublicView, submitFeedbackCommand,
+  applyFeedbackAssessment, applyFeedbackEndExplanation, createFeedbackSession, feedbackPublicView, feedbackSectionLead, submitFeedbackCommand,
   type FeedbackEvaluationCall, type FeedbackEvaluator, type FeedbackSession, type SourceDirectProblemBundle,
 } from '@csat/pipeline';
 import { loadProblemSolvingBundle } from './content.js';
@@ -221,10 +221,10 @@ export class ProblemFeedbackV4Controller {
       add('-gate-2', correct ? '네 근거를 하나씩 같이 볼까?' : '네 답을 하나씩 같이 볼까?', 'GATE');
     } else if (s.phase === 'AWAITING_UNDERSTANDING' && s.endExplanation) {
       add('-first-connector', `${s.selections.length === 1 ? '네가 고른' : '처음에 고른'} ${number(s.selections[0]!.choiceId)}번부터 볼게.`, 'CONNECTOR');
-      add('-first-section', s.endExplanation.firstChoice + '\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자.', 'SECTION');
+      add('-first-section', feedbackSectionLead(s, 1) + ' ' + s.endExplanation.firstChoice + '\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자.', 'SECTION');
       if (s.selections.length === 2) {
         add('-reselection-connector', `다음은 다시 고른 ${number(s.selections[1]!.choiceId)}번이야.`, 'CONNECTOR');
-        add('-reselection-section', s.endExplanation.reselection! + '\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자.', 'SECTION');
+        add('-reselection-section', feedbackSectionLead(s, 2) + ' ' + s.endExplanation.reselection! + '\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자.', 'SECTION');
       }
       add('-answer-connector', `이제 ${number(s.source.answerChoiceId)}번이 정답인 이유를 볼게.`, 'CONNECTOR');
       add('-answer-section', s.endExplanation.answer, 'SECTION');

@@ -78,7 +78,10 @@ export async function validateInputs(data) {
 }
 
 export const LIMITS = { [sol]: { requests: 40, usd: 1.2, input: 2, output: 10 }, [luna]: { requests: 80, usd: 0.3, input: 0.10, output: 0.50 } };
-export function createLedger(path, transport, limits = LIMITS) {
+// releaseUnsent (opt-in): an immediate connection error (< 2 s) never reached the server, so its reservation is released.
+// Timeouts and every other error keep their conservative reservation.
+const unsent = end => end?.status === 'ERROR' && end.durationMs < 2000 && /Connection error/u.test(end.error ?? '');
+export function createLedger(path, transport, limits = LIMITS, { releaseUnsent = false } = {}) {
   const rows = existsSync(path) ? readFileSync(path, 'utf8').split('\n').filter(Boolean).map(JSON.parse) : [];
   if (rows.some(s => s.event === 'START' && !rows.some(e => e.event === 'END' && e.requestId === s.requestId))) throw new Error('RUN_LIMIT: START without END; resume refused');
   const record = row => { appendFileSync(path, JSON.stringify(row) + '\n'); rows.push(row); };
@@ -88,7 +91,7 @@ export function createLedger(path, transport, limits = LIMITS) {
       let confirmedUsd = 0, reservedUsd = 0;
       for (const s of starts) {
         const end = rows.find(r => r.event === 'END' && r.requestId === s.requestId);
-        if (Number.isFinite(end?.costUsd)) confirmedUsd += end.costUsd; else reservedUsd += s.reservedUsd;
+        if (Number.isFinite(end?.costUsd)) confirmedUsd += end.costUsd; else if (!(releaseUnsent && unsent(end))) reservedUsd += s.reservedUsd;
       }
       return [model, { requests: starts.length, confirmedUsd, reservedUsd }];
     }));
