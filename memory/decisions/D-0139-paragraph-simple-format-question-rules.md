@@ -26,6 +26,10 @@ supersedes: D-0103 (질문 생성은 축 근거 부분만)
 - 사전 제안 규칙의 첫 조건(H0 선택 ≥ V4)은 충족하지 않았다. 이 결정은 그 규칙의 둘째 갈래(원인 논의)의 결론이다.
 - 판정 쪽 근거는 [D-0138](./D-0138-paragraph-fundamental-review-question-quality-first.md).
 
+## 정정 (2026-10-16)
+
+비교한 기존 질문 10개 중 A 출처 5개는 V4가 아니라 V2 질문 프롬프트가 만든 것이었다. V2 묶음·V4 묶음 모두 H0 2 대 기존 3이라 결정의 근거 방향은 같다([RESULTS 정정 절](../../docs/experiments/question-quality-h0-vs-v4-2026-10-15/RESULTS.md)).
+
 ## 포함하지 않는 것
 
 운영 판정·UI 변경, 프롬프트 확정, API 실행. 새 응답 확보 방법은 별도로 정한다.
