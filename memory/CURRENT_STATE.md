@@ -59,6 +59,7 @@
 ### 문단 요약 대화
 - 청킹·압축 측정 및 그에 따른 보상·처벌은 사용자 요청으로 [보류(D-0012)](./decisions/D-0012-paragraph-compression-measurement-deferred.md).
   현재 작업 논의는 새 판정 규칙과 학생의 선택적 진행으로 한정하며 압축 점수를 추가하지 않는다.
+- **근본 검토 중(2026-10-15, [D-0138](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md)):** 축 구조 전제를 검토 대상으로 두고, 보여 주기 개발자 모드(D-0134~0137) 구현은 멈췄다. 사용자 제안 단순 형식은 H0와 같고 33시점 판정은 V4와 비슷했다. 질문 10쌍 블라인드 비교([결과](../docs/experiments/question-quality-h0-vs-v4-2026-10-15/RESULTS.md)) H0 4·V4 6, 축 우세 없음 → [D-0139](./decisions/D-0139-paragraph-simple-format-question-rules.md) 단순 형식+질문 규칙 4를 후보로, 조정에 안 쓴 새 응답으로 검증 예정. 운영 V4는 그대로다.
 - [D-0013](./decisions/D-0013-paragraph-optional-revision-v4.md)으로 축별 공개·선택적 보완 V4를 구현했다.
   불필요한 개입 최소화를 우선하고 OK는 확인된 부분만 공개·자동 질문하지 않는다.
   학생의 보완 요청은 저장된 1차 판정을 재사용해 2차 질문만 생성한다.
@@ -129,7 +130,6 @@
 - 미처리 80문단의 추가 생산과 감사 고도화는 현재 `PARKED`다.
 
 ### 문제 골드 자산
-
 - 상태: `PARKED_OFFLINE`
 - 2026-09-03 prospective 표본은 원천 입력·API 원응답 24개, 정규화 후 스키마 유효 후보
   23개, 의미 오류로 후보 생성 실패 1개다.
