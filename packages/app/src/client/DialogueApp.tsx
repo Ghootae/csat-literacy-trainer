@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DialogueDeveloperInspection, DialogueDeveloperPassage, DialoguePassageSummary, DialogueSessionView, DialogueStepView, DialogueMode, StudentStateReportView } from '../shared/contract.js';
 import { advanceDialogueSession, fetchAppCapabilities, fetchDialoguePassages, fetchDialogueSession, navigateDialogueSession, requestDialogueQuestion,
-  startLinkedProblemSession, startDialogueSession, submitDialogueResponse, fetchDeveloperMap, fetchDeveloperInspection, fetchStudentStateReport, openDeveloperDialogue } from './api.js';
+  startLinkedProblemSession, startDialogueSession, submitDialogueResponse, submitDialogueRevision, fetchDeveloperMap, fetchDeveloperInspection, fetchStudentStateReport, openDeveloperDialogue } from './api.js';
 
 const outcomeLabel = { UNSTARTED: '미시작', ACTIVE: '진행 중', PASS: '확인 완료', UNRESOLVED: '확인 미완료', SKIPPED: '넘어감' };
 const axisLabel = { PENDING: '응답 전', PASS: '확인했어요', UNCLEAR_OK: '원하면 더 보완해요', UNCLEAR_SERIOUS: '더 확인하고 싶어요', ERROR: '원문과 다시 비교해요' };
 const routeLabel = { SILENT_PASS: '확인했어요', OPTIONAL_REPAIR: '큰 흐름 확인 · 선택적 보완', ASK: '더 확인하고 싶어요', ERROR_QUESTION: '오류 교정 질문' };
-const modeLabel = { v4: '기존 V4', 'conditional-meta-v1': '구체 인정 L1 + 조건부 L2' };
+const modeLabel = { v4: '기존 V4', 'conditional-meta-v1': '구체 인정 L1 + 조건부 L2', 'v4-boundary-show': 'V4 + 경계 보여 주기' };
+const assetNotice = { OK: '', MISSING: '밑줄 자산 없음', HASH_MISMATCH: '밑줄 자산 해시 불일치' };
 const stateDimensionLabel = { CORE_COMPREHENSION: '독립 핵심 이해', GROUNDED_PROBLEM_SOLVING: '근거 기반 문제 해결', REPAIR_RECOVERY: '교정·회복', SELF_MONITORING: '자기 점검' };
 const reliabilityLabel = { INSUFFICIENT: '자료 부족', EARLY_PATTERN: '잠정적 패턴', REPEATED_PATTERN: '반복 확인' };
 const number = (id: string) => id.match(/-q(\d+)$/u)?.[1] ?? '연결';
@@ -27,6 +28,29 @@ function JsonDetail({ label, value }: { label: string; value: unknown }) {
 function ReadingText({ text, guide }: { text: string; guide: DialogueStepView['sourceGuide'] }) {
   if (!guide || text.slice(guide.start, guide.end) !== guide.quote) return <p>{text}</p>;
   return <p>{text.slice(0, guide.start)}<mark title="현재 질문과 관련된 원문">{guide.quote}</mark>{text.slice(guide.end)}</p>;
+}
+function BoundaryShowCard({ view, last, busy, onRevise, onNext }: {
+  view: NonNullable<DialogueSessionView['boundaryShow']>; last: boolean; busy: boolean;
+  onRevise: (text: string) => void; onNext: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState('');
+  if (view.action === 'PASS_THROUGH') return <section className="boundary-show" aria-label="통과"><p>잘 정리했어. 다음 문단으로 넘어가자.</p>
+    <button className="primary" disabled={busy} onClick={onNext}>{last ? '문단 학습 마치기' : '다음 문단'}</button></section>;
+  const parts: React.ReactNode[] = []; let at = 0;
+  view.underlines.forEach((u, i) => { parts.push(view.centralObject.slice(at, u.start), <u key={i} data-axes={u.axisIds.join(' ')}>{view.centralObject.slice(u.start, u.end)}</u>); at = u.end; });
+  parts.push(view.centralObject.slice(at));
+  return <section className="boundary-show" aria-label="경계 보여 주기">
+    <h3>내 요약</h3><p className="boundary-initial">{view.initialResponse}</p>
+    <h3>이 문단에서 담아야 할 것</h3><p className="boundary-central">{parts}</p>
+    {view.assetStatus !== 'OK' && <small className="muted" role="note">개발자 표시: {assetNotice[view.assetStatus]}</small>}
+    <p>{view.guidance === 'ERROR' ? '밑줄 친 부분, 원문과 다르게 이해한 것 같아. 원문에서 다시 확인해 봐.' : '밑줄 친 부분을 원문에서 다시 확인해 봐.'}</p>
+    {view.revision !== null && <p className="boundary-revision" role="status">고쳐 쓴 요약을 남겼어.</p>}
+    {editing && <div><textarea aria-label="고쳐 쓴 요약" value={text} onChange={(e) => setText(e.target.value)} disabled={busy} />
+      <button disabled={busy || !text.trim()} onClick={() => { onRevise(text); setText(''); setEditing(false); }}>고쳐 쓴 요약 남기기</button></div>}
+    <div><button className="primary" disabled={busy} onClick={onNext}>{last ? '문단 학습 마치기' : '다음 문단'}</button>
+      {!editing && <button disabled={busy} onClick={() => setEditing(true)}>요약 고쳐 쓰기</button>}</div>
+  </section>;
 }
 function CurrentUnderstanding({ session, open, onToggle }: {
   session: DialogueSessionView;
@@ -51,7 +75,7 @@ export function DialogueApp(): React.JSX.Element {
   const [map, setMap] = useState<readonly DialogueDeveloperPassage[]>([]);
   const [inspection, setInspection] = useState<DialogueDeveloperInspection | null>(null);
   const [attempts, setAttempts] = useState<Record<string, string>>({});
-  const [mode, setMode] = useState<DialogueMode>(() => developer && getSaved('csat.dialogue.dev.mode') === 'conditional-meta-v1' ? 'conditional-meta-v1' : 'v4');
+  const [mode, setMode] = useState<DialogueMode>(() => { const saved = getSaved('csat.dialogue.dev.mode'); return developer && (saved === 'conditional-meta-v1' || saved === 'v4-boundary-show') ? saved : 'v4'; });
   const attemptKey = (passageId: string, selectedMode = mode) => developer ? `${selectedMode}:${passageId}` : passageId;
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -135,6 +159,7 @@ export function DialogueApp(): React.JSX.Element {
     if (session) await run(async () => { accept(await navigateDialogueSession(session.sessionId, index)); });
   }
   async function nextParagraph() { if (session) await run(async () => accept(await advanceDialogueSession(session.sessionId))); }
+  async function revise(text: string) { if (session) await run(async () => accept(await submitDialogueRevision(session.sessionId, text))); }
   async function ask() { if (session) await run(async () => accept(await requestDialogueQuestion(session.sessionId))); }
   async function problem() {
     if (!session) return;
@@ -208,7 +233,7 @@ export function DialogueApp(): React.JSX.Element {
       <h1>{developer ? '원문과 대화를 나란히, 판단은 투명하게.' : '읽은 내용을 설명하고, 이어서 문제를 풀어보세요.'}</h1>
       <p>{developer ? '개인 테스트용 개발자 화면입니다. 골드·내부 평가가 노출되며, 이 주소는 인증 수단이 아닙니다.' : '자기 말로 설명하고, 필요한 부분만 함께 확인해요.'}</p>
       {developer && <><label>판정 모드 <select aria-label="판정 모드" value={mode} disabled={busy} onChange={(e) => { const next = e.target.value as DialogueMode; setMode(next); save('csat.dialogue.dev.mode', next); }}>
-        <option value="v4">기존 V4</option><option value="conditional-meta-v1">구체 인정 L1 + 조건부 L2 · 실험</option>
+        <option value="v4">기존 V4</option><option value="conditional-meta-v1">구체 인정 L1 + 조건부 L2 · 실험</option><option value="v4-boundary-show">V4 + 경계 보여 주기 · 실험</option>
       </select></label><p>실험 모드는 L1 SERIOUS 축에만 L2를 호출합니다. 테스트 도중 모드는 고정되며 기록은 모드별로 분리됩니다.</p><button onClick={() => setDrawer('map')}>학습 맵</button> <button onClick={() => setDrawer('state')}>상태 리포트</button></>}</header>
       {!developer && studentFeedbackEnabled && <a className="student-feedback-link" href="/progress">학습 돌아보기</a>}
     <section className="dialogue-passage-list" aria-label="학습할 지문">{passages.filter((p) => p.available).map((p) =>
@@ -259,7 +284,7 @@ export function DialogueApp(): React.JSX.Element {
               <div className="chat-message student"><small>{i + 1}차 응답</small><p>{entry.answer}</p></div>
               <div className={`chat-message tutor status-${feedbackStep.status.toLowerCase()} ${turnIndex === i ? 'is-selected' : ''}`}>
                 <small><span>{i + 1}차 피드백 · {feedbackStep.policyAccepted ? '이해 확인' : verdictLabel(feedbackStep.status)}</span><button aria-label={`${i + 1}차 평가 보기`} onClick={() => { setSelectedTurn(i); setMobilePane('inspect'); }}>{i + 1}차 평가 ↗</button></small>
-                <p>{feedbackStep.feedback}</p>
+                {session.boundaryShow && i === transcript.length - 1 && !entry.step.question ? null : <p>{feedbackStep.feedback}</p>}
               </div>
               {entry.step.question && <div className="chat-message tutor question-message">
                 <small><span>{i + 1}차 확인 질문</span><span>{entry.step.questionType === 'CORRECTIVE' ? '교정' : '진단'}</span></small>
@@ -272,19 +297,20 @@ export function DialogueApp(): React.JSX.Element {
               </div>
             </div>;
           })}
+          {session.boundaryShow && session.status !== 'COMPLETED' && <BoundaryShowCard key={`${session.sessionId}:${current.paragraphId}`} view={session.boundaryShow} last={session.currentParagraphIndex + 1 >= session.paragraphCount} busy={busy} onRevise={(text) => void revise(text)} onNext={() => void nextParagraph()} />}
           {busy && <p role="status" className="chat-notice">처리 중이에요. 작성한 답변은 유지됩니다…</p>}
         </div>
         <footer className="chat-footer">{error && <p className="err" role="alert">{error}</p>}
           {(developer || canRespond) && <div className={`dialogue-compose ${!canRespond ? 'is-waiting' : ''}`}><label htmlFor="dialogue-response">{composeLabel}</label>
             <textarea id="dialogue-response" value={draft} onChange={(e) => edit(e.target.value)} disabled={busy || !canRespond} placeholder={canRespond ? '내 생각을 적어보세요…' : '보완 질문을 요청하면 입력할 수 있어요.'}
               onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); void submit(); } }} />
-            <div className="dialogue-compose-row"><small>확인 질문 {session.step?.questionsAnswered ?? 0} / 3 · ⌘/Ctrl + Enter</small><button className="primary" disabled={busy || !canRespond || !draft.trim()} onClick={() => void submit()}>{busy ? '판정 중…' : '제출'}</button></div>
+            <div className="dialogue-compose-row"><small>확인 질문 {session.step?.questionsAnswered ?? 0} / {session.step?.maxQuestions ?? 3} · ⌘/Ctrl + Enter</small><button className="primary" disabled={busy || !canRespond || !draft.trim()} onClick={() => void submit()}>{busy ? '판정 중…' : '제출'}</button></div>
           </div>}
-          {session.status !== 'COMPLETED' ? <div className="chat-progress-actions"><p>{session.step?.policyAccepted && !session.canRequestQuestion && !followUp ? '다음 문단으로 넘어갈 수 있어요.' : '보완하거나, 답하지 않고 다음으로 넘어갈 수 있어요.'}</p><div>
+          {session.status !== 'COMPLETED' && !session.boundaryShow ? <div className="chat-progress-actions"><p>{session.step?.policyAccepted && !session.canRequestQuestion && !followUp ? '다음 문단으로 넘어갈 수 있어요.' : '보완하거나, 답하지 않고 다음으로 넘어갈 수 있어요.'}</p><div>
             {session.canRequestQuestion && <button disabled={busy} onClick={() => void ask()}>{developer ? '보완하기' : '더 보완하기'}</button>}
             <button disabled={busy} onClick={() => void nextParagraph()}>{session.currentParagraphIndex + 1 < session.paragraphCount ? '다음 문단' : '문단 학습 마치기'}</button></div></div>
             : <div className="chat-progress-actions"><p>문단 학습을 마쳤습니다. 이해 확인과 넘어간 기록을 구분해 저장했어요.</p>{session.nextProblemQuestionId && <button className="primary" disabled={busy} onClick={() => void problem()}>{number(session.nextProblemQuestionId)}번 문제 풀기</button>}</div>}
-          {session.status === 'UNRESOLVED' && <p className="chat-notice">이번 문단의 확인 질문은 여기까지입니다.</p>}
+          {session.status === 'UNRESOLVED' && !session.boundaryShow && <p className="chat-notice">이번 문단의 확인 질문은 여기까지입니다.</p>}
         </footer>
       </section>
       {developer && <aside className="inspect-pane workbench-pane" aria-label="개발자 검사"><header className="pane-header"><h2>현재 이해 · 골드 · 평가</h2><small>개발자 전용</small></header>

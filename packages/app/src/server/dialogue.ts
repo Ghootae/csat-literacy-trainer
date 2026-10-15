@@ -7,6 +7,7 @@ import {
   JsonlDialogueSessionLogger,
   JsonlDialogueProgressionLogger,
   TwoStageDialogueEvaluator,
+  boundaryShowAction,
   ConditionalMetaDialogueEvaluator,
   type ConditionalMetaGold,
   createParagraphUnderstandingHandoff,
@@ -19,6 +20,7 @@ import {
 
 import type {
   DialoguePassageSummary,
+  DialogueBoundaryShowView,
   DialogueSessionView,
   DialogueStepView,
   DialogueDeveloperInspection,
@@ -28,6 +30,8 @@ import type {
 import {
   loadDialogueGold,
   loadConditionalMetaGold,
+  loadCentralObjectAxisSpans,
+  appendJsonlLine,
   loadDialoguePassages,
   type DialoguePassageContent,
   type DialoguePassageParagraph,
@@ -43,6 +47,7 @@ interface ParagraphRuntime {
   engine: DialogueSessionEngine;
   readonly goldRef: { readonly version: string; readonly hash: string };
   initialSubmitted: boolean;
+  revision: string | null;
   followUpAnswers: number;
   step: DialogueStep | null;
   outcome: 'ACTIVE' | 'PASS' | 'UNRESOLVED' | 'SKIPPED';
@@ -59,7 +64,11 @@ interface RuntimeSession {
   evidenceLogged: boolean;
 }
 
+const BOUNDARY_SHOW_MODE = 'v4-boundary-show';
+const isKnownMode = (mode: string): mode is DialogueMode => mode === 'v4' || mode === 'conditional-meta-v1' || mode === BOUNDARY_SHOW_MODE;
+
 export interface DialogueControllerOptions {
+  readonly boundaryShowEvaluatorFactory?: () => DialogueEvaluator;
   readonly conditionalEvaluatorFactory?: (assets: ConditionalMetaGold) => DialogueEvaluator;
   readonly evaluator?: DialogueEvaluator;
   readonly passageRoot?: string;
@@ -70,6 +79,8 @@ export interface DialogueControllerOptions {
 
 export class DialogueController {
   private readonly conditionalEvaluatorFactory: (assets: ConditionalMetaGold) => DialogueEvaluator;
+  private readonly boundaryShowEvaluatorFactory: () => DialogueEvaluator;
+  private boundaryShowEvaluator: DialogueEvaluator | undefined;
   private readonly evaluator: DialogueEvaluator;
   private readonly passages: readonly DialoguePassageContent[];
   private readonly sessions = new Map<string, RuntimeSession>();
@@ -81,6 +92,7 @@ export class DialogueController {
   constructor(options: DialogueControllerOptions = {}) {
     this.conditionalEvaluatorFactory = options.conditionalEvaluatorFactory ?? ((assets) => new ConditionalMetaDialogueEvaluator(assets));
     this.evaluator = options.evaluator ?? new TwoStageDialogueEvaluator();
+    this.boundaryShowEvaluatorFactory = options.boundaryShowEvaluatorFactory ?? (() => new TwoStageDialogueEvaluator({ boundaryShow: true }));
     this.logDirectory = options.logDirectory ?? resolve(process.cwd(), '.omc/logs/dialogue-experiment');
     this.progressionLogger = new JsonlDialogueProgressionLogger(resolve(this.logDirectory, 'progression.jsonl'));
     this.evidenceSink = options.evidenceSink ?? null;
@@ -109,7 +121,7 @@ export class DialogueController {
   }
 
   start(passageId: string, developer = false, mode: DialogueMode = 'v4'): DialogueSessionView {
-    if (mode !== 'v4' && mode !== 'conditional-meta-v1') throw new Error('알 수 없는 평가 모드입니다.');
+    if (!isKnownMode(mode)) throw new Error('알 수 없는 평가 모드입니다.');
     if (!developer && mode !== 'v4') throw new Error('실험 모드는 개발자 전용입니다.');
     const passage = this.passages.find((candidate) => candidate.passageId === passageId);
     if (passage === undefined) throw new Error('등록되지 않은 지문입니다.');
@@ -146,7 +158,7 @@ export class DialogueController {
   }
 
   openDeveloper(passageId: string, paragraphIndex: number, sessionId?: string, fresh = false, mode: DialogueMode = 'v4'): DialogueSessionView {
-    if (mode !== 'v4' && mode !== 'conditional-meta-v1') throw new Error('알 수 없는 평가 모드입니다.');
+    if (!isKnownMode(mode)) throw new Error('알 수 없는 평가 모드입니다.');
     const passage = this.passages.find((p) => p.passageId === passageId);
     if (!passage || !Number.isInteger(paragraphIndex) || paragraphIndex < 0 || paragraphIndex >= passage.paragraphs.length) throw new Error('이동할 문단이 없습니다.');
     let existing = sessionId && !fresh ? this.requireSession(sessionId) : [...this.sessions.values()].reverse().find((r) => r.developer && r.passage.passageId === passageId && r.mode === mode);
@@ -176,10 +188,10 @@ export class DialogueController {
     });
   }
 
-  private stepView(step: DialogueStep['evaluation'], question: string | null, durationMs: number, questionsAnswered: number): DialogueStepView {
+  private stepView(step: DialogueStep['evaluation'], question: string | null, durationMs: number, questionsAnswered: number, maxQuestions = 3): DialogueStepView {
     return { status: step.status, feedback: step.studentFeedback, question,
       ...(step.routing ? {policyAccepted: step.routing.accepted} : {}),
-      questionType: step.nextQuestion?.type ?? null, questionsAnswered, maxQuestions: 3, durationMs,
+      questionType: step.nextQuestion?.type ?? null, questionsAnswered, maxQuestions, durationMs,
       effectiveResponse: step.snapshot.effectiveResponse ?? null,
       sourceGuide: question && step.sourceGuide ? step.sourceGuide : null };
   }
@@ -240,6 +252,7 @@ export class DialogueController {
     const runtime = this.requireSession(sessionId);
     const paragraph = this.currentParagraph(runtime);
     if (paragraph.busy) throw new Error('현재 응답을 처리 중입니다.');
+    if (runtime.mode === BOUNDARY_SHOW_MODE) throw new Error('이 모드에서는 보완 질문을 요청할 수 없습니다.');
     paragraph.busy = true;
     try {
       paragraph.step = await paragraph.engine.requestQuestion();
@@ -256,8 +269,8 @@ export class DialogueController {
     if (paragraph.outcome !== 'PASS' && !paragraph.studentContinued) {
       const completed = paragraph.engine.continueWithoutRevision();
       paragraph.outcome = completed.finalStatus === 'PASS' ? 'PASS' : completed.finalStatus === 'UNRESOLVED' ? 'UNRESOLVED' : 'SKIPPED';
-      const progressionLogger = runtime.mode === 'conditional-meta-v1'
-        ? new JsonlDialogueProgressionLogger(resolve(this.logDirectory, 'conditional-meta-v1/progression.jsonl'))
+      const progressionLogger = runtime.mode === 'conditional-meta-v1' || runtime.mode === BOUNDARY_SHOW_MODE
+        ? new JsonlDialogueProgressionLogger(resolve(this.logDirectory, `${runtime.mode}/progression.jsonl`))
         : this.progressionLogger;
       progressionLogger.save({
         sessionId, paragraphSessionId: completed.sessionId, paragraphId: completed.paragraphId,
@@ -271,6 +284,22 @@ export class DialogueController {
       return this.view(runtime);
     }
     return this.navigate(sessionId, runtime.currentParagraphIndex + 1);
+  }
+
+  /** (나″) 고쳐 쓴 요약은 다시 판정하지 않고 기록만 한다. */
+  recordRevision(sessionId: string, text: string): DialogueSessionView {
+    const runtime = this.requireSession(sessionId);
+    if (!runtime.developer || runtime.mode !== BOUNDARY_SHOW_MODE) throw new Error('이 모드에서는 요약 고쳐 쓰기를 쓸 수 없습니다.');
+    const paragraph = this.currentParagraph(runtime);
+    if (paragraph.busy) throw new Error('현재 응답을 처리 중입니다.');
+    const shown = this.boundaryShow(runtime, paragraph);
+    if (shown?.action !== 'SHOW') throw new Error('고쳐 쓸 수 있는 상태가 아닙니다.');
+    const revision = text.trim();
+    if (revision === '') throw new Error('고쳐 쓴 요약이 비어 있습니다.');
+    appendJsonlLine(resolve(this.logDirectory, `${BOUNDARY_SHOW_MODE}/revisions.jsonl`), { sessionId, paragraphId: paragraph.gold.paragraphId, initialResponse: shown.initialResponse,
+      revision, underlinedAxisIds: [...new Set(shown.underlines.flatMap((u) => u.axisIds))], at: new Date().toISOString() });
+    paragraph.revision = revision;
+    return this.view(runtime);
   }
 
   navigate(sessionId: string, paragraphIndex: number): DialogueSessionView {
@@ -312,15 +341,18 @@ export class DialogueController {
       busy: false,
       studentContinued: false,
       engine: new DialogueSessionEngine({
-        evaluator: metaGold ? this.conditionalEvaluatorFactory(metaGold) : this.evaluator,
+        evaluator: metaGold ? this.conditionalEvaluatorFactory(metaGold)
+          : mode === BOUNDARY_SHOW_MODE ? (this.boundaryShowEvaluator ??= this.boundaryShowEvaluatorFactory()) : this.evaluator,
         gold,
         goldVersion,
         goldHash,
-        maxQuestions: 3,
-        logger: new JsonlDialogueSessionLogger(resolve(this.logDirectory, metaGold ? 'conditional-meta-v1/sessions.jsonl' : 'sessions.jsonl')),
+        maxQuestions: mode === BOUNDARY_SHOW_MODE ? 1 : 3,
+        logger: new JsonlDialogueSessionLogger(resolve(this.logDirectory, metaGold ? 'conditional-meta-v1/sessions.jsonl'
+          : mode === BOUNDARY_SHOW_MODE ? `${BOUNDARY_SHOW_MODE}/sessions.jsonl` : 'sessions.jsonl')),
       }),
       goldRef: { version: goldVersion, hash: goldHash },
       initialSubmitted: false,
+      revision: null,
       followUpAnswers: 0,
       step: null,
       outcome: 'ACTIVE',
@@ -369,10 +401,47 @@ export class DialogueController {
     runtime.evidenceLogged = true;
   }
 
+  private boundaryShow(runtime: RuntimeSession, paragraph: ParagraphRuntime): DialogueBoundaryShowView | null {
+    if (runtime.mode !== BOUNDARY_SHOW_MODE || !paragraph.initialSubmitted || paragraph.outcome === 'SKIPPED') return null;
+    const record = paragraph.engine.dialogueRecord;
+    const last = record.turns.at(-1);
+    const axisFeedback = last?.evaluation.snapshot.axisFeedback;
+    if (last === undefined || last.questionShown !== null || axisFeedback === undefined) return null;
+    const action = boundaryShowAction(axisFeedback, record.turns.filter((turn) => turn.questionShown !== null).length);
+    if (action === 'ASK') return null;
+    const centralObject = paragraph.gold.centralObject;
+    const targets = axisFeedback.filter((axis) => axis.status === 'UNCLEAR_SERIOUS' || axis.status === 'ERROR');
+    const base = { action, initialResponse: record.initialResponse, centralObject, revision: paragraph.revision,
+      guidance: targets.some((axis) => axis.status === 'ERROR') ? 'ERROR' as const : 'GAP' as const };
+    if (action === 'PASS_THROUGH') return { ...base, underlines: [], assetStatus: 'OK' };
+    const assets = loadCentralObjectAxisSpans();
+    const entry = assets.paragraphs.get(paragraph.gold.paragraphId);
+    if (entry === undefined) return { ...base, underlines: [], assetStatus: 'MISSING' };
+    if (`sha256:${entry.goldSha256}` !== paragraph.goldRef.hash) return { ...base, underlines: [], assetStatus: 'HASH_MISMATCH' };
+    const ranges: { start: number; end: number; axisId: string }[] = [];
+    for (const target of targets) {
+      for (const span of entry.axes.find((axis) => axis.axisId === target.axisId)?.spans ?? []) {
+        if (span === assets.wholeMarker) { ranges.push({ start: 0, end: centralObject.length, axisId: target.axisId }); continue; }
+        const start = centralObject.indexOf(span);
+        if (start >= 0) ranges.push({ start, end: start + span.length, axisId: target.axisId });
+      }
+    }
+    const underlines: { start: number; end: number; axisIds: string[] }[] = [];
+    for (const range of ranges.sort((a, b) => a.start - b.start || a.end - b.end)) {
+      const previous = underlines.at(-1);
+      if (previous !== undefined && range.start <= previous.end) {
+        previous.end = Math.max(previous.end, range.end);
+        if (!previous.axisIds.includes(range.axisId)) previous.axisIds.push(range.axisId);
+      } else underlines.push({ start: range.start, end: range.end, axisIds: [range.axisId] });
+    }
+    return { ...base, underlines, assetStatus: 'OK' };
+  }
+
   private view(runtime: RuntimeSession): DialogueSessionView {
     const paragraphRuntime = this.currentParagraph(runtime);
     const step = paragraphRuntime.step;
     const record = paragraphRuntime.engine.dialogueRecord;
+    const maxQuestions = runtime.mode === BOUNDARY_SHOW_MODE ? 1 : 3;
     const allFinished = runtime.paragraphs.size === runtime.passage.paragraphs.length &&
       [...runtime.paragraphs.values()].every((paragraph) => paragraph.outcome === 'PASS' || paragraph.studentContinued);
     const status: DialogueSessionView['status'] = allFinished
@@ -394,9 +463,9 @@ export class DialogueController {
       progress: this.progress(runtime),
       transcript: record.turns.map((turn, index) => ({
         answer: index === 0 ? record.initialResponse : record.turns[index - 1]!.studentAnswer ?? '',
-        step: this.stepView(turn.evaluation, turn.questionShown, turn.call.durationMs, index),
+        step: this.stepView(turn.evaluation, turn.questionShown, turn.call.durationMs, index, maxQuestions),
         ...(turn.evaluationBeforeQuestion ? {
-          feedbackStep: this.stepView(turn.evaluationBeforeQuestion, null, turn.call.durationMs, index),
+          feedbackStep: this.stepView(turn.evaluationBeforeQuestion, null, turn.call.durationMs, index, maxQuestions),
         } : {}),
       })),
       axisBoxes: paragraphRuntime.axisIds.map((axisId) => {
@@ -404,7 +473,8 @@ export class DialogueController {
         const policyRoute = step?.evaluation.routing?.axes.find((a)=>a.axisId===axisId)?.route;
         return { axisId, status: axis?.status ?? 'PENDING', revealedText: axis?.revealedText ?? null, ...(policyRoute ? {policyRoute} : {}) };
       }),
-      canRequestQuestion: paragraphRuntime.engine.canRequestQuestion,
+      canRequestQuestion: runtime.mode !== BOUNDARY_SHOW_MODE && paragraphRuntime.engine.canRequestQuestion,
+      ...(runtime.mode === BOUNDARY_SHOW_MODE ? { boundaryShow: this.boundaryShow(runtime, paragraphRuntime) } : {}),
       canRespond: paragraphRuntime.outcome === 'ACTIVE' &&
         (!paragraphRuntime.initialSubmitted || paragraphRuntime.engine.pendingQuestion !== null),
       currentOutcome: paragraphRuntime.outcome,
@@ -417,7 +487,7 @@ export class DialogueController {
           text: paragraph.text,
           state: index === runtime.currentParagraphIndex ? 'CURRENT' : 'COMPLETED',
         })),
-      step: step === null ? null : this.stepView(step.evaluation, step.questionShown, step.call.durationMs, paragraphRuntime.followUpAnswers),
+      step: step === null ? null : this.stepView(step.evaluation, step.questionShown, step.call.durationMs, paragraphRuntime.followUpAnswers, maxQuestions),
       nextProblemQuestionId: allFinished ? runtime.passage.problemQuestionId ?? null : null,
     };
   }

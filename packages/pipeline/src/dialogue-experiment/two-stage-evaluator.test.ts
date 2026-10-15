@@ -15,7 +15,7 @@ import type {
   SelectiveFeedbackInput,
 } from './selective-feedback.js';
 import { selectiveStudentFeedback } from './selective-feedback.js';
-import { TwoStageDialogueEvaluator } from './two-stage-evaluator.js';
+import { TwoStageDialogueEvaluator, boundaryShowAction } from './two-stage-evaluator.js';
 import { ExplicitErrorSchema, StudentRepresentationSnapshotSchema } from './schema.js';
 
 const loaded = loadDiagnosticGold();
@@ -374,5 +374,65 @@ describe('selective two-stage dialogue evaluator', () => {
     expect(evaluated.result.targetAxisId).toBe(loaded.gold.centralAxes[0]!.id);
     expect(parse).toHaveBeenCalledTimes(2);
     expect(evaluated.call.decisionAudit?.contractFailures).toHaveLength(1);
+  });
+  describe('경계 보여 주기 (D-0134)', () => {
+    type S = 'PASS' | 'UNCLEAR_OK' | 'UNCLEAR_SERIOUS' | 'ERROR';
+    const fb = (...statuses: S[]) => statuses.map((status) => ({ status }));
+    it('boundaryShowAction은 표의 모든 행과 경계를 따른다', () => {
+      expect(boundaryShowAction(fb('PASS', 'PASS'), 0)).toBe('PASS_THROUGH');
+      expect(boundaryShowAction(fb('PASS', 'UNCLEAR_OK'), 0)).toBe('PASS_THROUGH');
+      expect(boundaryShowAction(fb('UNCLEAR_OK'), 0)).toBe('PASS_THROUGH');
+      expect(boundaryShowAction(fb('PASS', 'UNCLEAR_SERIOUS'), 0)).toBe('SHOW');
+      expect(boundaryShowAction(fb('UNCLEAR_OK', 'UNCLEAR_SERIOUS'), 0)).toBe('SHOW');
+      expect(boundaryShowAction(fb('UNCLEAR_SERIOUS', 'UNCLEAR_SERIOUS'), 0)).toBe('ASK');
+      expect(boundaryShowAction(fb('UNCLEAR_SERIOUS'), 0)).toBe('ASK');
+      expect(boundaryShowAction(fb('ERROR', 'PASS'), 0)).toBe('ASK');
+      expect(boundaryShowAction(fb('ERROR', 'UNCLEAR_SERIOUS'), 0)).toBe('ASK');
+      expect(boundaryShowAction(fb('PASS', 'PASS'), 1)).toBe('PASS_THROUGH');
+      expect(boundaryShowAction(fb('PASS', 'UNCLEAR_OK'), 1)).toBe('PASS_THROUGH');
+      expect(boundaryShowAction(fb('ERROR', 'PASS'), 1)).toBe('SHOW');
+      expect(boundaryShowAction(fb('UNCLEAR_SERIOUS'), 1)).toBe('SHOW');
+      expect(boundaryShowAction(fb('UNCLEAR_SERIOUS', 'UNCLEAR_SERIOUS'), 2)).toBe('SHOW');
+    });
+
+    function gateWith(statuses: readonly S[]): CentralStoryGateResult {
+      const base = gateResult('UNCLEAR', loaded.gold.centralAxes.map(() => 'partial' as const));
+      return { ...base, axisFeedback: loaded.gold.centralAxes.map((axis, index) => ({
+        axisId: axis.id, status: statuses[index] ?? 'PASS', reason: '근거', revealedText: null,
+      })) };
+    }
+    const oneSerious = (): S[] => ['UNCLEAR_SERIOUS', ...loaded.gold.centralAxes.slice(1).map(() => 'PASS' as const)];
+
+    it('boundaryShow 1차 SERIOUS 일부는 피드백 평가기를 호출하지 않고 질문 없이 반환한다', async () => {
+      const feedback = new RecordingFeedback();
+      const evaluator = new TwoStageDialogueEvaluator({
+        gateEvaluator: new FixedGate(gateWith(oneSerious())), feedbackEvaluator: feedback, boundaryShow: true,
+      });
+      const evaluated = await evaluator.evaluate({ ...input, maxQuestions: 1 });
+      expect(feedback.inputs).toHaveLength(0);
+      expect(evaluated.result.nextQuestion).toBeNull();
+      expect(evaluated.result.status).toBe('UNCLEAR');
+    });
+
+    it('boundaryShow 미지정이면 같은 입력에서 기존처럼 질문을 만든다', async () => {
+      const feedback = new RecordingFeedback();
+      const evaluator = new TwoStageDialogueEvaluator({
+        gateEvaluator: new FixedGate(gateWith(oneSerious())), feedbackEvaluator: feedback,
+      });
+      const evaluated = await evaluator.evaluate({ ...input, maxQuestions: 1 });
+      expect(feedback.inputs).toHaveLength(1);
+      expect(evaluated.result.nextQuestion).not.toBeNull();
+    });
+
+    it('boundaryShow라도 모든 축 SERIOUS이면 V4처럼 질문 1회를 만든다', async () => {
+      const feedback = new RecordingFeedback();
+      const evaluator = new TwoStageDialogueEvaluator({
+        gateEvaluator: new FixedGate(gateWith(loaded.gold.centralAxes.map(() => 'UNCLEAR_SERIOUS' as const))),
+        feedbackEvaluator: feedback, boundaryShow: true,
+      });
+      const evaluated = await evaluator.evaluate({ ...input, maxQuestions: 1 });
+      expect(feedback.inputs).toHaveLength(1);
+      expect(evaluated.result.nextQuestion).not.toBeNull();
+    });
   });
 });

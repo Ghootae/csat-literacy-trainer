@@ -162,7 +162,7 @@ export interface AttemptResponse {
 export type DialogueStatus = 'ACTIVE' | 'AWAITING_NEXT' | 'COMPLETED' | 'UNRESOLVED';
 export type DialogueEvaluationStatus = 'PASS' | 'UNCLEAR' | 'ERROR';
 export type DialogueQuestionType = 'DIAGNOSTIC' | 'CORRECTIVE';
-export type DialogueMode = 'v4' | 'conditional-meta-v1';
+export type DialogueMode = 'v4' | 'conditional-meta-v1' | 'v4-boundary-show';
 
 export interface DialoguePassageSummary {
   readonly passageId: string;
@@ -200,8 +200,20 @@ export interface DialogueAxisBox {
   readonly revealedText: string | null;
 }
 
+/** (나″) 경계 보여 주기. 새 모드에서 현재 문단이 통과/보여 주기 상태일 때만 채운다. */
+export interface DialogueBoundaryShowView {
+  readonly action: 'PASS_THROUGH' | 'SHOW';
+  readonly initialResponse: string;
+  readonly centralObject: string;
+  readonly underlines: readonly { readonly start: number; readonly end: number; readonly axisIds: readonly string[] }[];
+  readonly guidance: 'GAP' | 'ERROR';
+  readonly assetStatus: 'OK' | 'MISSING' | 'HASH_MISMATCH';
+  readonly revision: string | null;
+}
+
 export interface DialogueSessionView {
   readonly mode?: DialogueMode;
+  readonly boundaryShow?: DialogueBoundaryShowView | null;
   readonly transcript?: readonly {
     readonly answer: string;
     readonly step: DialogueStepView;
@@ -300,6 +312,10 @@ export interface StartDialogueRequest {
 }
 
 export interface DialogueResponseRequest {
+  readonly text: string;
+}
+
+export interface DialogueRevisionRequest {
   readonly text: string;
 }
 

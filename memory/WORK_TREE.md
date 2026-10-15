@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-10-14
+갱신: 2026-10-15
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -15,8 +15,10 @@
 │        다음: 재개 여부 결정(Claude 권고: v3 고정·반복 실행·새 문단 검증, 미승인)
 │
 ├─ 문단 요약 응답 판정 — 학생 기본값 V4                                     D-0013
-│  └─● 전체 판정(H0) 그림자 실험 — 질문 여부는 H0, 기록·질문은 축으로 방향 채택   D-0103
-│        다음: REVIEW-SECOND 블라인드 재판정 → 기록/질문 경계 기준 결정        Q-0033
+│  ├─✓ 전체 판정(H0) 그림자 실험 — 판정기는 V4 유지, 경계 규칙 (나″)        D-0132·D-0133
+│  ├─● 보여 주기 개발자 모드 — 구현·첫 사용 피드백 12건, 후속 결정 3건        D-0134~D-0137·CP-E
+│  │     다음: 안내 문구 규칙·축 수별 권고 확정 → UI v2 인계·구현
+│  └─? 축 하나에 한 내용(gold-v2 묶인 축 재분할) — gold 미변경, 법인p1 시험      Q-0036
 │
 ├─ 문항 기호 해석본 생성
 │  └─○ 자동 생성·검수 파이프라인 v2 완성 — 현재 v5(methods)에는 미포함        D-0093·D-0114
@@ -59,10 +61,13 @@
 | D-0111 | [사고 진단 v0](./decisions/D-0111-thought-diagnosis-v0-experiment.md), [v0.1 결과](./checkpoints/2026-10-10-thought-diagnosis-v01-results.md) |
 | D-0115 | [사고 진단 주기 실행·sol 고정](./decisions/D-0115-thought-diagnosis-periodic-sol.md) |
 | D-0112 | [v5 개발자 경로 종료 상태](./decisions/D-0112-v5-developer-path-connection-end-states.md), [연결 기록](./checkpoints/2026-10-10-v5-developer-path-connected.md) |
-| Q-0032·Q-0033·Q-0034 | [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md) |
+| Q-0032·Q-0033·Q-0034·Q-0036 | [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md) |
+| D-0132·D-0133 | [판정기 V4 유지](./decisions/D-0132-paragraph-judge-keep-v4.md), [경계 규칙 (나″)](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md) |
+| D-0134~D-0137 | [개발자 모드](./decisions/D-0134-boundary-show-dev-mode-central-object.md), [오류 축마다 질문](./decisions/D-0135-boundary-show-error-question-per-axis.md), [반말](./decisions/D-0136-boundary-show-banmal-question-feedback.md), [effectiveResponse](./decisions/D-0137-boundary-show-effective-response-restatement.md) |
 | CP-A | [두 단계 생성 v3에서 멈춤](./checkpoints/2026-10-08-two-stage-paused-at-v3.md) |
 | CP-B | [종료 코칭 수정 확인 시험](./checkpoints/2026-10-10-v5-coaching-fix-test.md) |
 | CP-C | [`WORKSTREAM-STATE.md` 문제 골드 절](../docs/WORKSTREAM-STATE.md) (2026-09-08 결정, 역사 자료) |
+| CP-E | [보여 주기 개발자 모드 첫 사용](./checkpoints/2026-10-15-boundary-show-dev-mode-first-use.md) |
 | CP-D | [실모델 확인](./checkpoints/2026-10-11-v5-live-connection-test.md), [48개 세션 기록](./checkpoints/2026-10-12-v5-diverse-48-recorded.md) |
 
 ## 갱신 규칙

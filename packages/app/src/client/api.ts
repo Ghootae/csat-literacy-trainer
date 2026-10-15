@@ -129,6 +129,14 @@ export function fetchDialogueSession(sessionId: string): Promise<DialogueSession
   return jsonFetch<DialogueSessionView>(`/api/dialogue/session/${sessionId}`);
 }
 
+export function submitDialogueRevision(sessionId: string, text: string): Promise<DialogueSessionView> {
+  return jsonFetch<DialogueSessionView>(`/api/dialogue/session/${sessionId}/revision`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+}
+
 export function submitDialogueResponse(
   sessionId: string,
   body: DialogueResponseRequest,

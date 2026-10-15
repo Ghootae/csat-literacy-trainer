@@ -188,3 +188,7 @@
 | [`D-0127`](./decisions/D-0127-section-lead-sentence-fixed-by-code.md) | accepted | 마지막 설명 첫 판정 문장 | 선지 칸 첫 문장(정답 인정·오답 판정)은 코드가 틀로 쓰고 모델은 다음 문장부터 씀. 학생 입장은 근거가 같은 방향일 때만 말함 |
 | [`D-0132`](./decisions/D-0132-paragraph-judge-keep-v4.md) | accepted | 문단 판정기 V4 유지 | D-0103의 "판정은 H0"를 대체. C1(중심 이야기 판정) 진행 안 함. 경계 보여 주기 계산: (나) FA 7→2·질문 필요 8/11 강등, (가) 질문 불변. 사람 재판정 32/33 일관 |
 | [`D-0133`](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md) | accepted | 문단 경계 처리 규칙 (나″) | ERROR·전체 SERIOUS → 질문, 일부 SERIOUS → 문단 끝 중심 이야기 보여 주기, OK만·PASS → 통과. 33시점: 질문 17→9·FA 7→2·질문 필요 7/11 질문. 새 응답 검증·UI는 별도 |
+| [`D-0134`](./decisions/D-0134-boundary-show-dev-mode-central-object.md) | accepted | (나″) 사용감 시험 | 개발자 모드만, 질문 최대 1회, 2차 뒤 미해결은 보여 주기 종료. 보여 주기는 centralObject+놓친 축 구간 밑줄(손 연결 3지문), 반말, 고쳐 쓰기는 기록만. 만족 시 별도·지문 단위 API 생성 |
+| [`D-0135`](./decisions/D-0135-boundary-show-error-question-per-axis.md) | accepted | 보여 주기 모드 오류 축마다 질문 | D-0134 질문 1회 상한 대체: 상한=1차 ERROR 축 수, 축마다 한 번(재질문 없음), 실패는 고정 문구로 알리고 다음 오류 축, 끝나면 남은 ERROR·SERIOUS 모두 표시. 오류 없으면 기존 (나″) |
+| [`D-0136`](./decisions/D-0136-boundary-show-banmal-question-feedback.md) | accepted | 보여 주기 모드 질문·피드백 반말 | 개발자 모드 전용 피드백 프롬프트 변형으로 질문·피드백 반말, 코드 고정 문구도 모드별 반말. 운영 V4는 그대로, 시험 후 같은 버전 운영 반영은 별도 승인 |
+| [`D-0137`](./decisions/D-0137-boundary-show-effective-response-restatement.md) | accepted | 보여 주기 모드 재구성 응답 | 피드백의 학생 응답 재진술과 "내 요약"은 그 시점 게이트 `effectiveResponse`(추가 호출 없음). 그림 문구는 예시. 3인칭 보고체·빠진 내용 언급은 시험에서 관찰 |

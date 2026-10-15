@@ -33,6 +33,22 @@ export interface TwoStageDialogueEvaluatorOptions {
   readonly promptRevision?: 'v3' | 'v3.1' | 'v4';
   readonly gateEvaluator?: CentralStoryGateEvaluator;
   readonly feedbackEvaluator?: SelectiveFeedbackEvaluator;
+  /** (나″) 경계 보여 주기: 1차에서 SHOW이면 질문 생성 호출 없이 끝낸다. 기본 false. */
+  readonly boundaryShow?: boolean;
+}
+
+export type BoundaryShowAction = 'PASS_THROUGH' | 'SHOW' | 'ASK';
+
+/** D-0134 표를 그대로 구현한다. 질문을 이미 했다면 ASK를 반환하지 않는다. */
+export function boundaryShowAction(
+  axisFeedback: readonly { readonly status: 'PASS' | 'UNCLEAR_OK' | 'UNCLEAR_SERIOUS' | 'ERROR' }[],
+  questionsAsked: number,
+): BoundaryShowAction {
+  const serious = axisFeedback.filter((axis) => axis.status === 'UNCLEAR_SERIOUS').length;
+  const errors = axisFeedback.filter((axis) => axis.status === 'ERROR').length;
+  if (serious === 0 && errors === 0) return 'PASS_THROUGH';
+  if (questionsAsked >= 1) return 'SHOW';
+  return errors > 0 || serious === axisFeedback.length ? 'ASK' : 'SHOW';
 }
 
 function usage(calls: readonly DialogueCallMetadata[]): NonNullable<DialogueCallMetadata['usage']> {
@@ -199,11 +215,13 @@ function nonPassResult(
 export class TwoStageDialogueEvaluator implements DialogueEvaluator {
   private readonly gateEvaluator: CentralStoryGateEvaluator;
   private readonly feedbackEvaluator: SelectiveFeedbackEvaluator;
+  private readonly boundaryShow: boolean;
 
   constructor(options: TwoStageDialogueEvaluatorOptions = {}) {
     const promptRevision = options.promptRevision ?? 'v4';
     this.gateEvaluator = options.gateEvaluator ?? new OpenAICentralStoryGateEvaluator({ promptRevision });
     this.feedbackEvaluator = options.feedbackEvaluator ?? new OpenAISelectiveFeedbackEvaluator({ promptRevision });
+    this.boundaryShow = options.boundaryShow === true;
   }
 
   async evaluate(input: DialogueEvaluationInput): Promise<DialogueEvaluationCall> {
@@ -215,7 +233,8 @@ export class TwoStageDialogueEvaluator implements DialogueEvaluator {
 
     if (gate.result.axisFeedback !== undefined &&
       (input.questionsAsked >= input.maxQuestions ||
-        gate.result.axisFeedback.every((axis) => axis.status === 'PASS' || axis.status === 'UNCLEAR_OK'))) {
+        gate.result.axisFeedback.every((axis) => axis.status === 'PASS' || axis.status === 'UNCLEAR_OK') ||
+        (this.boundaryShow && boundaryShowAction(gate.result.axisFeedback, input.questionsAsked) !== 'ASK'))) {
       return {
         result: {
           status: route === 'ERROR' ? 'ERROR' : 'UNCLEAR',

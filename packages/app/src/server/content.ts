@@ -6,8 +6,8 @@
  */
 
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 import {
   ParagraphDiagnosticGoldSchema,
@@ -79,6 +79,32 @@ export function loadDialogueGold(goldPath: string): {
     gold: ParagraphDiagnosticGoldSchema.parse(JSON.parse(raw)),
     goldHash: `sha256:${createHash('sha256').update(raw).digest('hex')}`,
   };
+}
+
+/** 개발자 실험 기록용 JSONL 한 줄 추가. */
+export function appendJsonlLine(path: string, row: unknown): void {
+  mkdirSync(dirname(path), { recursive: true });
+  appendFileSync(path, `${JSON.stringify(row)}\n`, 'utf8');
+}
+
+export interface CentralObjectAxisSpansParagraph {
+  readonly paragraphId: string;
+  readonly goldSha256: string;
+  readonly centralObject: string;
+  readonly axes: readonly { readonly axisId: string; readonly spans: readonly string[] }[];
+}
+
+let centralObjectAxisSpans: { readonly wholeMarker: string; readonly paragraphs: ReadonlyMap<string, CentralObjectAxisSpansParagraph> } | undefined;
+
+/** (나″) 개발자 모드의 축↔중심 대상 구간 자산. 파일은 한 번만 읽고, `goldSha256`은 골드 파일 원문 바이트의 sha256이다. */
+export function loadCentralObjectAxisSpans(): NonNullable<typeof centralObjectAxisSpans> {
+  if (centralObjectAxisSpans === undefined) {
+    const raw = JSON.parse(readFileSync(resolve(process.cwd(),
+      'packages/pipeline/fixtures/experiments/dialogue/central-object-axis-spans/manual-v0.json'), 'utf8')) as
+      { wholeMarker: string; paragraphs: CentralObjectAxisSpansParagraph[] };
+    centralObjectAxisSpans = { wholeMarker: raw.wholeMarker, paragraphs: new Map(raw.paragraphs.map((p) => [p.paragraphId, p])) };
+  }
+  return centralObjectAxisSpans;
 }
 
 /** 개발자 실험 자산은 기존 골드와 분리하고 원본 계보를 확인한 뒤 투영한다. */

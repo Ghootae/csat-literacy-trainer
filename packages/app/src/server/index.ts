@@ -30,6 +30,7 @@ import type {
   AttemptRequest,
   AttemptResponse,
   DialogueResponseRequest,
+  DialogueRevisionRequest,
   ProblemActionResponseRequest,
   ProblemInitialSubmissionRequest,
   ProblemRationaleRequest,
@@ -309,6 +310,10 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
       if (req.method === 'POST' && action === 'navigate') {
         const body = (await readBody(req)) as { paragraphIndex: number };
         return json(res, 200, dialogue.navigate(sessionId, body.paragraphIndex));
+      }
+      if (req.method === 'POST' && action === 'revision') {
+        const body = (await readBody(req)) as DialogueRevisionRequest;
+        return json(res, 200, dialogue.recordRevision(sessionId, body.text));
       }
       if (req.method === 'POST' && action === 'problem') {
         const linked = dialogue.createProblemHandoff(sessionId);
