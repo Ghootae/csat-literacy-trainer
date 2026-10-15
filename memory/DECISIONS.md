@@ -186,3 +186,5 @@
 | [`D-0124`](./decisions/D-0124-answer-path-element-override-on-evidence.md) | accepted | 오답 실패 요소 | 기본은 실패 노드 요소, 풀이에 다른 요소 오류가 말로 드러날 때만 덮어쓰고 원래 요소·인용 보존 |
 | [`D-0126`](./decisions/D-0126-answer-path-element-metric-failure-distribution.md) | accepted | 요소 누적 지표 | 리포트 요소 지표는 오답의 요소별 실패 분포만, 요소별 성공·실패 비율은 쓰지 않음(정답 수의 재표현) |
 | [`D-0127`](./decisions/D-0127-section-lead-sentence-fixed-by-code.md) | accepted | 마지막 설명 첫 판정 문장 | 선지 칸 첫 문장(정답 인정·오답 판정)은 코드가 틀로 쓰고 모델은 다음 문장부터 씀. 학생 입장은 근거가 같은 방향일 때만 말함 |
+| [`D-0132`](./decisions/D-0132-paragraph-judge-keep-v4.md) | accepted | 문단 판정기 V4 유지 | D-0103의 "판정은 H0"를 대체. C1(중심 이야기 판정) 진행 안 함. 경계 보여 주기 계산: (나) FA 7→2·질문 필요 8/11 강등, (가) 질문 불변. 사람 재판정 32/33 일관 |
+| [`D-0133`](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md) | accepted | 문단 경계 처리 규칙 (나″) | ERROR·전체 SERIOUS → 질문, 일부 SERIOUS → 문단 끝 중심 이야기 보여 주기, OK만·PASS → 통과. 33시점: 질문 17→9·FA 7→2·질문 필요 7/11 질문. 새 응답 검증·UI는 별도 |
