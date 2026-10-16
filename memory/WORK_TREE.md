@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-10-15
+갱신: 2026-10-16
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -19,7 +19,7 @@
 │  │     질문 비교 H0 4·V4 6 → 단순 형식+질문 규칙 4 유지(D-0139)
 │  │     검증은 사용자 직접 사용감 기록으로(D-0140), 개발자 모드 인계 작성
 │  │     구현·Claude 검토 완료(테스트 58, 화면 미확인)
-│  │     다음: 사용자 직접 사용·단계 메모 → 사용감 정리
+│  │     다음: 사용자 직접 사용 계속, 피드백 메모 누적(반복 시도·재구성 응답 미구현)
 │  ├─✓ 전체 판정(H0) 그림자 실험 — 판정기는 V4 유지, 경계 규칙 (나″)        D-0132·D-0133
 │  ├─○ 보여 주기 개발자 모드 — 근본 검토 끝날 때까지 구현 중지                D-0134~D-0137·CP-E
 │  └─? 축 하나에 한 내용(gold-v2 묶인 축 재분할) — 근본 검토 결과에 종속      Q-0036
@@ -34,12 +34,14 @@
 │  ├─✓ 교정: 국소 오류만 판정, 선지를 가르는 관계까지 질문                   D-0108·D-0105
 │  ├─✓ 피드백·코칭: 해요체·마크다운 렌더링, 교정 뒤 [다시 선택]/[코칭 보기]  D-0110·D-0106
 │  ├─● 개발자 경로 연결 — 구현·실모델 확인·48가상 세션 기록 완료             D-0112·CP-D
-│  │     다음: UI 메모장 18·19번 종결(19번은 D-0127 반영). 남은 메모장 항목 논의
+│  │     다음: UI 메모장 20번(첫 문장 적절/부적절) 논의, 사용자 UI 검토 계속
 │  ├─○ 학생용 전환 — 개발자 경로 확인 뒤 운영 반영 승인 필요                 CP-B
 │  └─? 경계 응답 판정 기준(짧지만 충분 vs 대상만 언급)                       Q-0032
 │
 ├─ 학습자 생각 진단 — 큰 논의는 문단·문제 안정화 뒤 재개                     Q-0034
 │  ├─✗ 함정 강도·선택률 예측 — LLM·JEV 모두 실패, 목표 재정의                D-0109
+│  ├─○ 문단 분석 지도 — 방향 합의(상향 지도·동결·닫힌 어휘·생성형 판정)    D-0141
+│  │     다음: 분야별 지문 샘플링·라벨 목록 논의(브레인스토밍 단계)
 │  └─● 사고 진단 v0.1 — 가상 풀이 36/36, 과잉 분류 0                         D-0111
 │        운영 방향: 실시간 아닌 주기 실행, 모델 sol 고정(주기 기준 미정)       D-0115
 │        다음: 처음 보는 사례·실제 학생 풀이로 검증
@@ -64,6 +66,7 @@
 | D-0106·D-0110 | [교정 뒤 흐름](./decisions/D-0106-post-repair-choice-reselect-or-coaching.md), [공개 설명 형식](./decisions/D-0110-public-coaching-format-haeyo-and-markdown.md) |
 | D-0109 | [함정 지도 v0](./decisions/D-0109-trap-map-v0-external-rate-experiment.md), [JEV 결과](./checkpoints/2026-10-10-trap-map-jev-choice-results.md) |
 | D-0111 | [사고 진단 v0](./decisions/D-0111-thought-diagnosis-v0-experiment.md), [v0.1 결과](./checkpoints/2026-10-10-thought-diagnosis-v01-results.md) |
+| D-0141 | [문단 분석 지도 방향](./decisions/D-0141-paragraph-analysis-map-direction.md), [논의 기록](../docs/review/paragraph-analysis-map-brainstorm-2026-10-16.md) |
 | D-0115 | [사고 진단 주기 실행·sol 고정](./decisions/D-0115-thought-diagnosis-periodic-sol.md) |
 | D-0112 | [v5 개발자 경로 종료 상태](./decisions/D-0112-v5-developer-path-connection-end-states.md), [연결 기록](./checkpoints/2026-10-10-v5-developer-path-connected.md) |
 | Q-0032·Q-0033·Q-0034·Q-0036 | [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md) |

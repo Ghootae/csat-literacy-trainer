@@ -134,7 +134,7 @@
 | [`D-0089`](./decisions/D-0089-axis-audit-v3-transfer-approved.md) | accepted | 감사기 v3 외부 전송 | 25문단 원문/60축→OpenAI gpt-5.6-terra 최대25회·재시도0 명시 승인 |
 | [`D-0090`](./decisions/D-0090-problem-evaluator-v5-naming.md) | accepted | 문제 판정기 명칭 | 'v3 기반 v4 후보'를 v5로 부름(대화·문서만). v4는 운영 후보로 쓰지 않음 |
 | [`D-0091`](./decisions/D-0091-v3-marker-phase-closed-port-to-v5.md) | accepted | 기호 실험 단계 | v3 기호 실험 마무리. 주장 분리·인용 규칙·승인 해석본을 v5로 옮김, 미해결 과제는 v5에서 |
-| [`D-0092`](./decisions/D-0092-claude-codex-work-division.md) | accepted | 클로드·코덱스 업무 분장 | 클로드=주 사고 파트너, 코덱스=명시 시 보조 논의·확정 설계 실행. 인계 문서·중단 보고·diff 검토 |
+| [`D-0092`](./decisions/D-0092-claude-codex-work-division.md) | superseded | 클로드·코덱스 업무 분장 | 클로드=주 사고 파트너, 코덱스=명시 시 보조 논의·확정 설계 실행. 인계 문서·중단 보고·diff 검토; D-0128로 대체 |
 | [`D-0093`](./decisions/D-0093-v5-composition-auto-gloss-pipeline.md) | accepted | v5 구성·자동 해석본 | v5 규칙 + 자동 중간안 해석본(독립 재도출 대조, 최대 3회차, 실패 시 해석본 없이) + v3 판정 방법. 사람 승인 해석본 미사용. 해석본 사용(2번)은 [D-0114](./decisions/D-0114-v5-current-composition-methods-without-gloss.md)로 보류 |
 
 | [`D-0094`](./decisions/D-0094-source-jev-gold-flow-stopped.md) | accepted | 원문 분할·JEV 골드 흐름 중단 | 골드 생성 방향에서 제외·결과 보존. 최소2축(실질)·문단 기능·관계 기준은 새 방향으로 계승 |
@@ -184,8 +184,13 @@
 | [`D-0122`](./decisions/D-0122-answer-path-depth-node-count.md) | accepted | 정답 경로 깊이 | D-0121 깊이 정의 대체: 깊이=선지 노드 수(READ+LINK+APPLY). 층은 지도 구조로만, 지표 아님 |
 | [`D-0123`](./decisions/D-0123-answer-path-explicit-misstatement-priority.md) | accepted | 오답 실패 종류 귀속 | 지문과 어긋나는 사실 진술이 있으면 그 사실의 READ 노드 실패로 기록, 없을 때만 LINK·APPLY |
 | [`D-0124`](./decisions/D-0124-answer-path-element-override-on-evidence.md) | accepted | 오답 실패 요소 | 기본은 실패 노드 요소, 풀이에 다른 요소 오류가 말로 드러날 때만 덮어쓰고 원래 요소·인용 보존 |
+| [`D-0125`](./decisions/D-0125-first-target-top-tier-middle-school.md) | accepted | 제품 타겟 | 첫 집중 타겟은 상위권 중등. 지문 레벨을 고1 학평까지 넓힐 필요 합의(작업 시점 미정) |
 | [`D-0126`](./decisions/D-0126-answer-path-element-metric-failure-distribution.md) | accepted | 요소 누적 지표 | 리포트 요소 지표는 오답의 요소별 실패 분포만, 요소별 성공·실패 비율은 쓰지 않음(정답 수의 재표현) |
 | [`D-0127`](./decisions/D-0127-section-lead-sentence-fixed-by-code.md) | accepted | 마지막 설명 첫 판정 문장 | 선지 칸 첫 문장(정답 인정·오답 판정)은 코드가 틀로 쓰고 모델은 다음 문장부터 씀. 학생 입장은 근거가 같은 방향일 때만 말함 |
+| [`D-0128`](./decisions/D-0128-claude-subagent-work-division.md) | accepted | 클로드 단독 업무 분장 | 챗GPT 종료로 D-0092 대체. 확정 설계(인계 문서) 실행은 executor 하위 에이전트(sonnet)에 자동 위임, 중단 보고·diff 검토·커밋 확인 유지 |
+| [`D-0129`](./decisions/D-0129-keep-luna-sol-over-gemini-after-price-check.md) | accepted | 판정기 모델 유지 | Gemini 4 출시 뒤 가격 재확인: 3.8 Flash(2027 두 배)·4 Argon(12월 두 배) 모두 sol 대비 가격 이점 없어 D-0104 luna·sol 유지, Gemini 재시험 안 함 |
+| [`D-0130`](./decisions/D-0130-choice-target-error-first.md) | accepted | 선지 대상 혼동 | 선지와 다른 대상을 판단한 주장은 OFF_TARGET → 대상 오류 하나로 묶어 먼저 묻고, 엉뚱한 대상의 내용 오류·선택 불일치 질문은 내지 않음 |
+| [`D-0131`](./decisions/D-0131-selection-mismatch-one-slot-truth-repair.md) | accepted | 선택 불일치 교정 | 질문은 적절/부적절 한 칸, 원문상 참·거짓과 같게 답하면 교정 성공, 다시 고르기 안내는 코드, 정답 선택 뒤 번호 인용 허용 |
 | [`D-0132`](./decisions/D-0132-paragraph-judge-keep-v4.md) | accepted | 문단 판정기 V4 유지 | D-0103의 "판정은 H0"를 대체. C1(중심 이야기 판정) 진행 안 함. 경계 보여 주기 계산: (나) FA 7→2·질문 필요 8/11 강등, (가) 질문 불변. 사람 재판정 32/33 일관 |
 | [`D-0133`](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md) | accepted | 문단 경계 처리 규칙 (나″) | ERROR·전체 SERIOUS → 질문, 일부 SERIOUS → 문단 끝 중심 이야기 보여 주기, OK만·PASS → 통과. 33시점: 질문 17→9·FA 7→2·질문 필요 7/11 질문. 새 응답 검증·UI는 별도 |
 | [`D-0134`](./decisions/D-0134-boundary-show-dev-mode-central-object.md) | accepted | (나″) 사용감 시험 | 개발자 모드만, 질문 최대 1회, 2차 뒤 미해결은 보여 주기 종료. 보여 주기는 centralObject+놓친 축 구간 밑줄(손 연결 3지문), 반말, 고쳐 쓰기는 기록만. 만족 시 별도·지문 단위 API 생성 |
@@ -195,3 +200,4 @@
 | [`D-0138`](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md) | accepted | 문단 요약 근본 검토 | 축 구조 전제를 검토 대상으로 둠. 보여 주기 모드(D-0134~0137) 구현 중지·기록 보존. 첫 확인은 H0 대 V4 질문 10쌍 블라인드 비교(API 0) |
 | [`D-0139`](./decisions/D-0139-paragraph-simple-format-question-rules.md) | accepted | 문단 질문 생성 방향 | D-0103 "질문 생성은 축 근거" 대체. 단순 형식(전체 판정+질문 하나), 가장 큰 구멍=전체 관계의 빈 곳, 질문 규칙 4(전체 관계·답 미노출·반복 금지·하나만). 새 응답 검증 뒤 채택 |
 | [`D-0140`](./decisions/D-0140-paragraph-simple-holistic-dev-mode.md) | accepted | 단순 형식 개발자 모드 | 엄밀 실험 대신 사용자 직접 사용감 기록. `/dialogue/dev/simple`, 기존 6지문, 골드 미사용, 칭찬/재시도 1회/구멍 1/교정 1/오류2+ 즉시 공개, 마무리만 미색, D-0116 말투, 서랍 단계·문단 메모, 학생 상태·문제 판정 미연결 |
+| [`D-0141`](./decisions/D-0141-paragraph-analysis-map-direction.md) | accepted | 문단 분석 지도 방향 | Q-0037 브레인스토밍 합의: 대화용 골드와 분리한 상향 위계 지도(명제→관계→층별 합성), 하향 적용·누적, 1회 생성 후 동결, 분야별 지문 단위 샘플링으로 닫힌 라벨 목록, 생성형 모델 판정(JEV 미사용). 구현 미정 |
