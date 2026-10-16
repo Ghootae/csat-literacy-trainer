@@ -11,3 +11,7 @@
 - 연결 조사(2026-10-16): 문제 풀이 v5는 골드·문단 판정 미사용(교정 질문 미색 표시도 판정 모델의 원문 인용). 축 구조에 묶인 곳은 문단 판정과 학생 상태 모델뿐. 결함 2건과 분석 자료 문제는 Q-0037.
 - [D-0140](../decisions/D-0140-paragraph-simple-holistic-dev-mode.md): 검증 방식을 사용자 직접 사용감 기록으로. 흐름·말투·메모 확정, 프롬프트 v1과 [인계](../../docs/handoffs/2026-10-16-paragraph-simple-holistic-dev-mode.md) 작성.
 - 구현(executor)·Claude 검토 완료: 새 테스트 58/58, typecheck·build 통과, 전체 vitest 기존 실패 2(boundary student-state.ts, axis-architecture ENOENT) 무관. 검토 중 보완 1건: 구멍 질문 뒤 무관·복사 답으로 CLOSE_GAP이면 물었던 빈 곳을 표시(targetGap). 화면 미확인.
+- 첫 사용 메모 2건 기록만([피드백](../../docs/review/simple-holistic-dev-ui-feedback-2026-10-16/README.md)): 반복 시도·시도별 메모(설계 확인), 학생 재구성 응답 보기(세부 미정). 구현은 나중에.
+- 메모 3 추가: 오류 설명과 핵심 내용은 별도 말풍선.
+- 메모 4·5 추가: 재구성 응답은 대화창 밖 별도 칸, 말풍선 상단 상태 표시(명칭 제안 포함).
+- 메모 6 추가(검토): 지문 표시가 작음. 로그상 24~83자·문장 일부, 문장 단위 확장 권고.

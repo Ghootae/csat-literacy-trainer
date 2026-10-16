@@ -1,12 +1,15 @@
 ---
 id: D-0092
-status: accepted
+status: superseded
 date: 2026-10-07
 scope: agent-work-division
 supersedes: none
+superseded_by: D-0128
 ---
 
 # 클로드·코덱스 업무 분장
+
+2026-10-14: 챗GPT 계정 종료로 [D-0128](./D-0128-claude-subagent-work-division.md)로 대체. 실행은 executor 하위 에이전트로 옮기고 인계·검토 규칙은 유지.
 
 ## 사용자 지시
 
