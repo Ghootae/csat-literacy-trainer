@@ -5,6 +5,7 @@ import { App } from './App.js';
 import { DialogueApp } from './DialogueApp.js';
 import { ProblemApp } from './ProblemApp.js';
 import { ProblemFeedbackV4App } from './ProblemFeedbackV4App.js';
+import { SimpleDialogueApp } from './SimpleDialogueApp.js';
 import { StudentFeedbackApp } from './StudentFeedbackApp.js';
 import './styles.css';
 import './dialogue-workbench.css';
@@ -26,6 +27,8 @@ createRoot(el).render(
       ? <ProblemFeedbackV4App />
       : window.location.pathname.startsWith('/problem')
       ? <ProblemApp />
+      : window.location.pathname === '/dialogue/dev/simple'
+      ? <SimpleDialogueApp />
       : window.location.pathname.startsWith('/dialogue')
         ? <DialogueApp />
         : window.location.pathname.startsWith('/legacy')

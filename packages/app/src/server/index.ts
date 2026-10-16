@@ -21,6 +21,7 @@ import {
   type ConditionalMetaGold,
   type SourceDirectProblemEvaluator,
   type FeedbackEvaluator,
+  type SimpleEvaluator,
   evaluateResponse,
   propositionEvidenceEvaluator,
   warmResponsePrefix,
@@ -44,6 +45,7 @@ import type {
 } from '../shared/contract.js';
 import { DialogueController } from './dialogue.js';
 import { ProblemSolvingController } from './problem-solving.js';
+import { SimpleDialogueController } from './dialogue-simple.js';
 import { ProblemFeedbackV4Controller, type FeedbackV4Record } from './problem-feedback-v4.js';
 import {
   findPassageManifestForParagraph,
@@ -127,6 +129,8 @@ export interface LearningServerOptions {
   readonly problemPathEvaluator?: SourceDirectProblemEvaluator;
   readonly problemFeedbackV4Evaluator?: FeedbackEvaluator;
   readonly problemFeedbackV4Save?: (record: FeedbackV4Record) => void;
+  readonly dialogueSimpleEvaluator?: SimpleEvaluator;
+  readonly dialogueSimpleLogDirectory?: string;
   readonly studentEvidencePath?: string;
   readonly studentFeedbackEnabled?: boolean;
   readonly studentFeedbackPublic?: boolean;
@@ -168,6 +172,10 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
   const problemFeedbackV4 = new ProblemFeedbackV4Controller({
     ...(options.problemFeedbackV4Evaluator === undefined ? {} : { evaluator: options.problemFeedbackV4Evaluator }),
     ...(options.problemFeedbackV4Save === undefined ? {} : { save: options.problemFeedbackV4Save }),
+  });
+  const dialogueSimple = new SimpleDialogueController({
+    ...(options.dialogueSimpleEvaluator === undefined ? {} : { evaluator: options.dialogueSimpleEvaluator }),
+    ...(options.dialogueSimpleLogDirectory === undefined ? {} : { logDirectory: options.dialogueSimpleLogDirectory }),
   });
   let spent = 0;
   const lastWarm = new Map<string, number>();
@@ -217,6 +225,30 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
           if (req.method === 'POST') return json(res, 200, await problemFeedbackV4.submit(match[1]!, await readBody(req)));
         }
         return json(res, 404, { error: '등록되지 않은 문제 피드백 API입니다.' });
+      }
+      if (url.pathname.startsWith('/api/developer/dialogue-simple/')) {
+        // 유료 평가기를 새로 노출하므로 문제 피드백 v4와 같은 접근 규칙을 쓴다.
+        if (!loopbackRequest && !(problemFeedbackV4Public && hostname === 'dialogue.cogaxis.net')) return json(res, 404, { error: '단순 형식 문단 API가 이 주소에 공개되지 않았습니다.' });
+        if (req.method === 'POST' && url.pathname === '/api/developer/dialogue-simple/session') {
+          const body = await readBody(req) as { passageId?: unknown };
+          if (typeof body.passageId !== 'string' || !body.passageId.trim()) return json(res, 400, { error: 'passageId가 필요합니다.' });
+          return json(res, 200, dialogueSimple.start(body.passageId));
+        }
+        const simple = /^\/api\/developer\/dialogue-simple\/session\/([^/]+)(?:\/(respond|navigate|inspect|memo))?$/u.exec(url.pathname);
+        if (simple) {
+          const [, id, action] = simple;
+          if (req.method === 'GET' && action === undefined) return json(res, 200, dialogueSimple.get(id!));
+          if (req.method === 'GET' && action === 'inspect') {
+            const raw = url.searchParams.get('paragraphIndex');
+            const index = raw === null || raw === '' ? NaN : Number(raw);
+            if (!Number.isInteger(index) || index < 0) return json(res, 400, { error: 'paragraphIndex가 필요합니다.' });
+            return json(res, 200, dialogueSimple.inspect(id!, index));
+          }
+          if (req.method === 'POST' && action === 'respond') return json(res, 200, await dialogueSimple.respond(id!, await readBody(req)));
+          if (req.method === 'POST' && action === 'navigate') return json(res, 200, dialogueSimple.navigate(id!, await readBody(req)));
+          if (req.method === 'POST' && action === 'memo') return json(res, 200, dialogueSimple.saveMemo(id!, await readBody(req)));
+        }
+        return json(res, 404, { error: '등록되지 않은 단순 형식 문단 API입니다.' });
       }
       if (req.method === 'GET' && url.pathname === '/api/developer/map') return json(res, 200, dialogue.developerMap());
       if (req.method === 'GET' && url.pathname === '/api/developer/problem-inspect') return json(res, 200, problemSolving.inspect(url.searchParams.get('sessionId') ?? ''));

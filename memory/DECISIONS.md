@@ -194,3 +194,4 @@
 | [`D-0137`](./decisions/D-0137-boundary-show-effective-response-restatement.md) | accepted | 보여 주기 모드 재구성 응답 | 피드백의 학생 응답 재진술과 "내 요약"은 그 시점 게이트 `effectiveResponse`(추가 호출 없음). 그림 문구는 예시. 3인칭 보고체·빠진 내용 언급은 시험에서 관찰 |
 | [`D-0138`](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md) | accepted | 문단 요약 근본 검토 | 축 구조 전제를 검토 대상으로 둠. 보여 주기 모드(D-0134~0137) 구현 중지·기록 보존. 첫 확인은 H0 대 V4 질문 10쌍 블라인드 비교(API 0) |
 | [`D-0139`](./decisions/D-0139-paragraph-simple-format-question-rules.md) | accepted | 문단 질문 생성 방향 | D-0103 "질문 생성은 축 근거" 대체. 단순 형식(전체 판정+질문 하나), 가장 큰 구멍=전체 관계의 빈 곳, 질문 규칙 4(전체 관계·답 미노출·반복 금지·하나만). 새 응답 검증 뒤 채택 |
+| [`D-0140`](./decisions/D-0140-paragraph-simple-holistic-dev-mode.md) | accepted | 단순 형식 개발자 모드 | 엄밀 실험 대신 사용자 직접 사용감 기록. `/dialogue/dev/simple`, 기존 6지문, 골드 미사용, 칭찬/재시도 1회/구멍 1/교정 1/오류2+ 즉시 공개, 마무리만 미색, D-0116 말투, 서랍 단계·문단 메모, 학생 상태·문제 판정 미연결 |

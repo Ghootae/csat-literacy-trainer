@@ -8,3 +8,6 @@
 - 질문 비교 결과([RESULTS](../../docs/experiments/question-quality-h0-vs-v4-2026-10-15/RESULTS.md)): 선택 H0 4·V4 6(Q07 근소), Q01~05 적절성 합 16 대 16, 누출 중간 이상 H0 2·V4 3. 사전 제안 규칙 첫 조건 미충족 → 원인 논의 갈래. H0 패배 원인은 누출·반복·겹질문, V4는 지엽·애매. "전체를 아우르는 질문" 선호는 2:2.
 - 사용자 동의 → [D-0139](../decisions/D-0139-paragraph-simple-format-question-rules.md): 단순 형식+질문 규칙 4, 새 응답 검증 뒤 채택. 다음: 새 응답 확보 방법.
 - 정정(2026-10-16): 비교한 기존 질문 중 A 5쌍은 V2 질문 프롬프트 생성. V2·V4 묶음 모두 H0 2 대 기존 3.
+- 연결 조사(2026-10-16): 문제 풀이 v5는 골드·문단 판정 미사용(교정 질문 미색 표시도 판정 모델의 원문 인용). 축 구조에 묶인 곳은 문단 판정과 학생 상태 모델뿐. 결함 2건과 분석 자료 문제는 Q-0037.
+- [D-0140](../decisions/D-0140-paragraph-simple-holistic-dev-mode.md): 검증 방식을 사용자 직접 사용감 기록으로. 흐름·말투·메모 확정, 프롬프트 v1과 [인계](../../docs/handoffs/2026-10-16-paragraph-simple-holistic-dev-mode.md) 작성.
+- 구현(executor)·Claude 검토 완료: 새 테스트 58/58, typecheck·build 통과, 전체 vitest 기존 실패 2(boundary student-state.ts, axis-architecture ENOENT) 무관. 검토 중 보완 1건: 구멍 질문 뒤 무관·복사 답으로 CLOSE_GAP이면 물었던 빈 곳을 표시(targetGap). 화면 미확인.

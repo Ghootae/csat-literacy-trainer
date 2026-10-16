@@ -87,6 +87,12 @@ export function appendJsonlLine(path: string, row: unknown): void {
   appendFileSync(path, `${JSON.stringify(row)}\n`, 'utf8');
 }
 
+/** 개발자 실험 기록 JSONL 읽기. 파일이 없으면 빈 목록. */
+export function readJsonlLines<T>(path: string): T[] {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as T);
+}
+
 export interface CentralObjectAxisSpansParagraph {
   readonly paragraphId: string;
   readonly goldSha256: string;

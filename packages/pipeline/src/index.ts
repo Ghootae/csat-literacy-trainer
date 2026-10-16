@@ -69,3 +69,5 @@ export * from './paragraph-analysis/production-runtime.js';
 export * from './diagnostic-roles/evaluator.js';
 export * from './diagnostic-roles/schema.js';
 export * from './dialogue-experiment/conditional-meta.js';
+// 단순 형식 문단 판정(simple-holistic) 개발자 모드: 행동 표·검증·상태 기계·평가기.
+export * from './paragraph-simple/index.js';

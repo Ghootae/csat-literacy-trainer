@@ -15,9 +15,11 @@
 │        다음: 재개 여부 결정(Claude 권고: v3 고정·반복 실행·새 문단 검증, 미승인)
 │
 ├─ 문단 요약 응답 판정 — 학생 기본값 V4, 근본 검토 중                       D-0013·D-0138
-│  ├─● 근본 검토 — 축 구조 전제 재검토, 단순 형식 후보                       D-0138·D-0139
+│  ├─● 근본 검토 — 축 구조 전제 재검토, 단순 형식 후보                D-0138~D-0140
 │  │     질문 비교 H0 4·V4 6 → 단순 형식+질문 규칙 4 유지(D-0139)
-│  │     다음: 조정에 안 쓴 새 응답 확보 방법 결정 → 검증
+│  │     검증은 사용자 직접 사용감 기록으로(D-0140), 개발자 모드 인계 작성
+│  │     구현·Claude 검토 완료(테스트 58, 화면 미확인)
+│  │     다음: 사용자 직접 사용·단계 메모 → 사용감 정리
 │  ├─✓ 전체 판정(H0) 그림자 실험 — 판정기는 V4 유지, 경계 규칙 (나″)        D-0132·D-0133
 │  ├─○ 보여 주기 개발자 모드 — 근본 검토 끝날 때까지 구현 중지                D-0134~D-0137·CP-E
 │  └─? 축 하나에 한 내용(gold-v2 묶인 축 재분할) — 근본 검토 결과에 종속      Q-0036
@@ -52,7 +54,7 @@
 | 표기 | 연결 |
 |---|---|
 | D-0013 | [문단 선택적 보완 V4](./decisions/D-0013-paragraph-optional-revision-v4.md) |
-| D-0138 | [문단 요약 근본 검토](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md), [질문 비교 묶음](../docs/experiments/question-quality-h0-vs-v4-2026-10-15/README.md), [D-0139 질문 규칙](./decisions/D-0139-paragraph-simple-format-question-rules.md) |
+| D-0138 | [문단 요약 근본 검토](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md), [질문 비교 묶음](../docs/experiments/question-quality-h0-vs-v4-2026-10-15/README.md), [D-0139 질문 규칙](./decisions/D-0139-paragraph-simple-format-question-rules.md), [D-0140 개발자 모드](./decisions/D-0140-paragraph-simple-holistic-dev-mode.md) |
 | D-0090 | [v5 명칭](./decisions/D-0090-problem-evaluator-v5-naming.md) |
 | D-0093·D-0114 | [v5 구성과 자동 해석본](./decisions/D-0093-v5-composition-auto-gloss-pipeline.md), [v5 실제 구성 정정](./decisions/D-0114-v5-current-composition-methods-without-gloss.md) |
 | D-0094 | [원문 분할·JEV 골드 흐름 중단](./decisions/D-0094-source-jev-gold-flow-stopped.md) |
