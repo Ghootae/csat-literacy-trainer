@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { extractDialogues, buildRounds, hasCopiedSource, unitsForParagraph, checkQuotes, combineRound, roundChanges, planJobs, parseJudgePrompt,
-  buildJudgeInput, buildJudgeRequest, limitCheck, isConnectionError, endCost, nextConnErrStreak, circuitTripped, reserveUsd, usageCost, assemble, renderReport, segmentStudentTurn, errorEvents, lowestCommonAncestor, VERSIONS, MAP_PATH, JUDGE_PROMPT_PATH, EXPECTED, LIMITS, JudgmentSchema } from './run-analysis-judge-gongsun.mjs';
+  buildJudgeInput, buildJudgeRequest, limitCheck, isConnectionError, endCost, nextConnErrStreak, circuitTripped, reserveUsd, usageCost, assemble, renderReport, segmentStudentTurn, errorEvents, lowestCommonAncestor, VERSIONS, stanceLabel, loadStanceLabels, STANCE_PATH, trackEvents, loadInputs, FIXED_ROUNDS_PATH, MAP_PATH, JUDGE_PROMPT_PATH, EXPECTED, LIMITS, JudgmentSchema } from './run-analysis-judge-gongsun.mjs';
 import { loadPassage } from './run-analysis-map-gongsun.mjs';
 
 const { passage } = loadPassage();
@@ -243,4 +243,60 @@ test('errorEvents tags: NEW / KEPT / LATE / RESOLVED / DROPPED', () => {
   assert.equal(tag(1, '1|0'), 'NEW'); assert.equal(tag(2, '1|0'), 'KEPT'); assert.equal(tag(2, '1|1'), 'LATE'); assert.equal(tag(2, '2|0'), 'NEW');
   const end = key => ev.ended.find(e => e.key === `${d}|${key}` && e.round === 3)?.tag;
   assert.equal(end('2|0'), 'RESOLVED'); assert.equal(end('1|0'), 'DROPPED'); assert.equal(end('1|1'), 'DROPPED');
+});
+
+test('stanceLabel: four kinds, MIXED sorted by count desc with original order on ties', () => {
+  assert.equal(stanceLabel({ kind: 'AUTHOR', holder: null }), '필자 서술');
+  assert.equal(stanceLabel({ kind: 'COMMON', holder: null }), '상식·통념');
+  assert.equal(stanceLabel({ kind: 'FIGURE', holder: '공손룡' }), '공손룡의 주장');
+  assert.equal(stanceLabel({ kind: 'MIXED', holder: null, parts: [{ kind: 'COMMON', holder: null, count: 1 }, { kind: 'FIGURE', holder: '공손룡', count: 2 }] }), '혼합(공손룡의 주장 2, 상식·통념 1)');
+  assert.equal(stanceLabel({ kind: 'MIXED', holder: null, parts: [{ kind: 'AUTHOR', holder: null, count: 1 }, { kind: 'FIGURE', holder: '후기 묵가', count: 1 }, { kind: 'COMMON', holder: null, count: 3 }] }), '혼합(상식·통념 3, 필자 서술 1, 후기 묵가의 주장 1)');
+  assert.throws(() => stanceLabel({ kind: 'X' }), /STANCE_KIND/);
+});
+test('--prompt v3: separate dir, v3 prompt, schema name, limits, stance flag; v1/v2 have none', () => {
+  assert.ok(VERSIONS.v3.dir.endsWith('/stage2-v3') && VERSIONS.v3.promptPath.endsWith('/JUDGE-PROMPT-v3.md') && VERSIONS.v3.schemaName === 'analysis_judgment_v3' && VERSIONS.v3.stance === true);
+  assert.deepEqual(VERSIONS.v3.limits, { maxRequests: 2000, usdCap: 1 });
+  assert.equal(VERSIONS.v1.stance, undefined); assert.equal(VERSIONS.v2.stance, undefined);
+  const pr = parseJudgePrompt(readFileSync(VERSIONS.v3.promptPath, 'utf8'));
+  assert.ok(pr.node.includes('target.stance') && pr.relation.includes('stance') && !pr.node.includes('## '));
+});
+test('buildJudgeInput: without stances (v1/v2) the body is unchanged; with stances (v3) stance follows sourceQuotes in node/from/to', () => {
+  const round = { dialogue: [S('답')] }, node = { id: 'P2-1', text: 't', sourceQuotes: ['q'] };
+  const rel = { id: 'R1', fromId: 'P2-1', toId: 'G2', from: { text: 'a', sourceQuotes: ['qa'] }, to: { text: 'b', sourceQuotes: ['qb'] }, note: 'n' };
+  assert.equal(JSON.stringify(buildJudgeInput(round, 'node', node)), '{"dialogue":[{"role":"student","text":"답"}],"target":{"text":"t","sourceQuotes":["q"]}}');
+  assert.equal(JSON.stringify(buildJudgeInput(round, 'relation', rel)), '{"dialogue":[{"role":"student","text":"답"}],"relation":{"from":{"text":"a","sourceQuotes":["qa"]},"to":{"text":"b","sourceQuotes":["qb"]},"note":"n"}}');
+  const st = new Map([['P2-1', '필자 서술'], ['G2', '상식·통념']]);
+  assert.equal(JSON.stringify(buildJudgeInput(round, 'node', node, st).target), '{"text":"t","sourceQuotes":["q"],"stance":"필자 서술"}');
+  const r = buildJudgeInput(round, 'relation', rel, st).relation;
+  assert.deepEqual(Object.keys(r), ['from', 'to', 'note']);
+  assert.equal(JSON.stringify(r.from), '{"text":"a","sourceQuotes":["qa"],"stance":"필자 서술"}'); assert.equal(JSON.stringify(r.to), '{"text":"b","sourceQuotes":["qb"],"stance":"상식·통념"}');
+  assert.throws(() => buildJudgeInput(round, 'node', { ...node, id: 'ZZ' }, st), /STANCE_MISSING/);
+});
+test('v3 requests: every judged unit has a stance; body carries only dialogue text, target and stance (no log info)', () => {
+  const stances = loadStanceLabels(STANCE_PATH), pr = parseJudgePrompt(readFileSync(VERSIONS.v3.promptPath, 'utf8'));
+  const rounds = passage.paragraphs.map((p, i) => ({ dialogueId: 'd', source: 'v4', sessionId: 's', paragraphId: p.paragraphId, roundIndex: i + 1, dialogue: [{ role: 'student', text: '답', evaluation: 'LEAK', state: 'LEAK' }] }));
+  for (const j of planJobs(rounds, map)) {
+    const input = buildJudgeInput(j.round, j.unitKind, j.unit, stances), body = JSON.stringify(buildJudgeRequest(pr[j.unitKind], input, VERSIONS.v3.schemaName));
+    assert.ok(JSON.stringify(input).includes('"stance"'));assert.ok(!/LEAK|evaluation|gold|snapshot/u.test(body));
+    assert.deepEqual(Object.keys(input.dialogue[0]), ['role', 'text']);
+  }
+});
+test('trackEvents: unit label change, survived flag, new events', () => {
+  const d = 'd', a = u2.nodes.find(n => n.kind === 'COMPOSITE').childIds[0], R = (dd, r, k, id, l, q) => row(dd, r, k, id, l, q);
+  const ra = [R(d, 1, 'node', a, 'CONTRADICTS', ['갑'])], rb = [R(d, 1, 'node', a, 'ABSENT', []), R(d, 1, 'node', g2.id, 'CONTRADICTS', ['을'])];
+  const rounds = [mkRound(d, 1, [S('갑. 을.')])];
+  const sA = { errors: errorEvents(rounds, ra, map) }, sB = { errors: errorEvents(rounds, rb, map) };
+  const t = trackEvents(sA, sB, ra, rb);
+  assert.equal(t.tracked.length, 1); assert.equal(t.tracked[0].survived, false);
+  assert.deepEqual(t.tracked[0].unitChanges, [{ unitId: a, from: 'CONTRADICTS', to: 'ABSENT' }]);
+  assert.equal(t.newEvents.length, 1); assert.equal(t.newEvents[0].key, `${d}|1|1`);
+});
+
+test('loadInputs with fixed rounds file: no log read, 77 rounds, 1,552 requests, bytes kept', () => {
+  const inp = loadInputs(FIXED_ROUNDS_PATH);
+  assert.equal(inp.rounds.length, 77); assert.equal(inp.jobs.length, 1552);
+  assert.equal(inp.dialogues.length, 47);
+  assert.ok(inp.roundsSource.path === FIXED_ROUNDS_PATH && /^[0-9a-f]{64}$/.test(inp.roundsSource.sha256));
+  assert.equal(Buffer.compare(inp.roundsSource.bytes, readFileSync(FIXED_ROUNDS_PATH)), 0);
+  assert.equal(inp.rounds.map(r => JSON.stringify(r)).join('\n') + '\n', readFileSync(FIXED_ROUNDS_PATH, 'utf8'));
 });

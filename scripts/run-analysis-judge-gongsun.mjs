@@ -1,7 +1,7 @@
 // D-0143 stage 2: top-down judgment of existing gongsun dialogues against the frozen analysis map.
 // Keys are loaded only by Node's --env-file-if-exists. Handoff: docs/handoffs/2026-10-16-analysis-map-gongsun-stage2.md
-// Usage: node --env-file-if-exists=.env scripts/run-analysis-judge-gongsun.mjs [--prompt v2] [--dry-run | --resume | --report-only]
-//        node scripts/run-analysis-judge-gongsun.mjs --compare   (v1 vs v2 comparison report, no network; handoff 2026-10-17-analysis-map-gongsun-stage2-v2.md)
+// Usage: node --env-file-if-exists=.env scripts/run-analysis-judge-gongsun.mjs [--prompt v2|v3] [--rounds-from <rounds.jsonl>] [--dry-run | --resume | --report-only]
+//        node scripts/run-analysis-judge-gongsun.mjs --compare [v2 v3]   (comparison report, no network; default v1 v2; handoffs 2026-10-17-analysis-map-gongsun-stage2-v2.md, -v3.md)
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
@@ -14,6 +14,9 @@ export const MAP_PATH = `${EXP_DIR}/frozen-map.json`;
 export const MAP_SHA256 = '58b6e811712092f463c0b1d26496745b4b718d8b5cf6676ee6b9cfe29c04ae29';
 export const JUDGE_PROMPT_PATH = `${EXP_DIR}/JUDGE-PROMPT.md`;
 export const JUDGE_PROMPT_V2_PATH = `${EXP_DIR}/JUDGE-PROMPT-v2.md`;
+export const JUDGE_PROMPT_V3_PATH = `${EXP_DIR}/JUDGE-PROMPT-v3.md`;
+export const FIXED_ROUNDS_PATH = `${EXP_DIR}/stage2/rounds.jsonl`; // 77라운드 고정 입력(stage2-v2/rounds.jsonl과 동일). --rounds-from·--compare가 쓰며 로그는 읽지 않는다.
+export const STANCE_PATH = `${EXP_DIR}/stance/stance-final.json`;
 export const MAP_PROMPT_PATH = `${EXP_DIR}/MAP-PROMPT.md`;
 export const V4_LOG = '.omc/logs/dialogue-experiment/sessions.jsonl';
 export const SH_LOG = '.omc/logs/dialogue-experiment/simple-holistic/sessions.jsonl';
@@ -25,6 +28,8 @@ export const LIMITS = { maxRequests: 2300, usdCap: 1 };
 export const VERSIONS = {
   v1: { dir: OUT_DIR, promptPath: JUDGE_PROMPT_PATH, schemaName: 'analysis_judgment_v1', limits: LIMITS },
   v2: { dir: `${EXP_DIR}/stage2-v2`, promptPath: JUDGE_PROMPT_V2_PATH, schemaName: 'analysis_judgment_v2', limits: { maxRequests: 2000, usdCap: 1 } },
+  // --prompt v3 (2026-10-17 사용자 승인): v2 + 판정 대상 입장 입력(stance-final.json). 요청 2,000(시도 기준), 실제 청구 $1.
+  v3: { dir: `${EXP_DIR}/stage2-v3`, promptPath: JUDGE_PROMPT_V3_PATH, schemaName: 'analysis_judgment_v3', limits: { maxRequests: 2000, usdCap: 1 }, stance: true },
 };
 export const MAX_CONSECUTIVE_CONNECTION_ERRORS = 10;
 export const MAX_OUTPUT_TOKENS = 2000;
@@ -134,10 +139,25 @@ export function parseJudgePrompt(md) {
   };
   return { node: section('노드 판정 지시문'), relation: section('관계 판정 지시문') };
 }
-export function buildJudgeInput(round, unitKind, unit) {
+// v3: stances = Map(unitId -> 입장 문자열). 없으면(v1·v2) 요청 본문은 이전과 같다.
+export function stanceLabel(stance) {
+  if (stance.kind === 'AUTHOR') return '필자 서술';
+  if (stance.kind === 'COMMON') return '상식·통념';
+  if (stance.kind === 'FIGURE') return `${stance.holder}의 주장`;
+  if (stance.kind === 'MIXED') return `혼합(${stance.parts.map((p, i) => ({ p, i })).sort((a, b) => b.p.count - a.p.count || a.i - b.i).map(({ p }) => `${stanceLabel(p)} ${p.count}`).join(', ')})`;
+  throw new Error(`STANCE_KIND: ${stance.kind}`);
+}
+export function loadStanceLabels(path = STANCE_PATH) {
+  const f = JSON.parse(readFileSync(path, 'utf8')), m = new Map();
+  for (const s of f.stances) m.set(s.id, stanceLabel(s));
+  for (const [id, s] of Object.entries(f.nodeStances)) m.set(id, stanceLabel(s));
+  return m;
+}
+export function buildJudgeInput(round, unitKind, unit, stances = null) {
   const dialogue = round.dialogue.map(t => ({ role: t.role, text: t.text }));
-  if (unitKind === 'node') return { dialogue, target: { text: unit.text, sourceQuotes: unit.sourceQuotes } };
-  return { dialogue, relation: { from: { text: unit.from.text, sourceQuotes: unit.from.sourceQuotes }, to: { text: unit.to.text, sourceQuotes: unit.to.sourceQuotes }, note: unit.note } };
+  const st = id => { if (!stances.has(id)) throw new Error(`STANCE_MISSING: ${id}`); return { stance: stances.get(id) }; };
+  if (unitKind === 'node') return { dialogue, target: { text: unit.text, sourceQuotes: unit.sourceQuotes, ...(stances ? st(unit.id) : {}) } };
+  return { dialogue, relation: { from: { text: unit.from.text, sourceQuotes: unit.from.sourceQuotes, ...(stances ? st(unit.fromId) : {}) }, to: { text: unit.to.text, sourceQuotes: unit.to.sourceQuotes, ...(stances ? st(unit.toId) : {}) }, note: unit.note } };
 }
 export function buildJudgeRequest(instructions, input, schemaName = 'analysis_judgment_v1') {
   return { model: MODEL, instructions, reasoning: { effort: 'medium' }, max_output_tokens: MAX_OUTPUT_TOKENS,
@@ -404,6 +424,7 @@ export const CASES = [
   ['T1', 'sh:578fc718', 'p4', 1, ['P4-11', 'C4-4', 'C4-5', 'G4']], ['T2', 'sh:54bfce80', 'p4', 2, ['P4-4', 'C4-4']], ['T3', 'sh:54bfce80', 'p5', 2, ['P5-4', 'P5-8', 'C5-2']],
   ['T4', 'v4:83601960', 'p2', 1, ['P2-5', 'C2-1']], ['T5', 'sh:578fc718', 'p5', 2, ['P5-6', 'P5-8']], ['T6', 'v4:83601960', 'p2', 2, ['P2-5', 'C2-1']],
 ];
+export const CASES_V3 = [...CASES, ['T7', 'sh:6c177d02', 'p4', 1, ['G4']], ['F8', 'v4:0929fd23', 'p3', 1, ['P3-5']], ['F9', 'sh:6c177d02', 'p3', 1, ['P3-5']]];
 const LABELS = ['DIRECT', 'PARTIAL', 'ABSENT', 'CONTRADICTS'];
 const RANK = { ABSENT: 0, PARTIAL: 1, DIRECT: 2 };
 const okRows = rows => [...latestByJob(rows).values()].filter(r => r.status === 'OK');
@@ -447,23 +468,24 @@ export function transitionTable(rowsV1, rowsV2, unitKind) {
   }
   return { table: t, n };
 }
-export function caseTable(rounds, rowsV1, rowsV2) {
+export function caseTable(rounds, rowsV1, rowsV2, cases = CASES, names = ['v1', 'v2']) {
   const b1 = latestByJob(rowsV1), b2 = latestByJob(rowsV2);
-  return CASES.map(([name, prefix, para, round, units]) => {
+  return cases.map(([name, prefix, para, round, units]) => {
     const ds = [...new Set(rounds.filter(r => r.dialogueId.startsWith(prefix) && r.paragraphId.endsWith(`-${para}`)).map(r => r.dialogueId))];
     return { name, prefix, paragraph: para, round, dialogues: ds.map(d => ({ dialogueId: d, units: units.map(id => {
       const x = rowOf(b1, d, round, id), y = rowOf(b2, d, round, id);
-      return { unitId: id, v1: cellOf(x), v2: cellOf(y) };
+      return { unitId: id, [names[0]]: cellOf(x), [names[1]]: cellOf(y) };
     }) })) };
   });
 }
 const pct = (o, k) => o[k] ?? 0;
-export function renderCompare({ s1, s2, relT, nodeT, cases }) {
+export function renderCompare({ s1, s2, relT, nodeT, cases, names = ['v1', 'v2'], dirs = ['stage2', 'stage2-v2'], tracking = null }) {
+  const [n1, n2] = names;
   const row = (name, a, b) => `| ${name} | ${a} | ${b} |`;
   const dist = o => LABELS.map(k => `${k} ${pct(o, k)}`).join(', ');
-  const L = ['# 분석 지도 공손룡 판정 기준 v1 / v2 비교', '', '결과만 기록한다. 해석·평가 문장 없음. 원자료: `stage2/`(v1), `stage2-v2/`(v2), `compare-v1-v2.json`.', '',
+  const L = [`# 분석 지도 공손룡 판정 기준 ${n1} / ${n2} 비교`, '', `결과만 기록한다. 해석·평가 문장 없음. 원자료: \`${dirs[0]}/\`(${n1}), \`${dirs[1]}/\`(${n2}), \`compare-${n1}-${n2}.json\`.`, '',
     '집계 정의: 라벨은 `finalLabel`(인용 강등 반영), 미판정 제외. 라벨 상승·하락은 라운드 k≥2에서 직전 라운드 대비 ABSENT<PARTIAL<DIRECT 순서의 변화, ✕가 들어간 변화는 별도 행. 평균 인용 길이는 판정 성공 행의 모든 인용 기준.', '',
-    '## 요약 (v1 | v2)', '', '| 항목 | v1 | v2 |', '|---|---|---|',
+    `## 요약 (${n1} | ${n2})`, '', `| 항목 | ${n1} | ${n2} |`, '|---|---|---|',
     row('판정 수(성공)', s1.judgments, s2.judgments), row('노드 라벨 분포', dist(s1.nodeLabels), dist(s2.nodeLabels)), row('관계 라벨 분포', dist(s1.relationLabels), dist(s2.relationLabels)),
     row('원문 복사 대조군 노드 라벨 분포', dist(s1.copiedControlNodeLabels), dist(s2.copiedControlNodeLabels)),
     row('결합 패턴 수', `${s1.patternTotal} (${Object.entries(s1.patterns).map(([k, v]) => `${k} ${v}`).join(', ')})`, `${s2.patternTotal} (${Object.entries(s2.patterns).map(([k, v]) => `${k} ${v}`).join(', ')})`),
@@ -474,23 +496,24 @@ export function renderCompare({ s1, s2, relT, nodeT, cases }) {
     row('unlocated(인용 없는 ✕ 판정)', s1.unlocated, s2.unlocated), row('라운드 k≥2 라벨 상승 / 하락', `${s1.rise} / ${s1.fall}`, `${s2.rise} / ${s2.fall}`),
     row('라운드 k≥2 ✕ 관련 변화', s1.contradictsChanges, s2.contradictsChanges), ''];
   for (const [name, t] of [['노드', nodeT], ['관계', relT]]) {
-    L.push(`## 라벨 전이표: ${name} (행 v1, 열 v2, 양쪽 성공 ${t.n}건)`, '', `| v1 \\ v2 | ${LABELS.join(' | ')} |`, `|---|${LABELS.map(() => '---').join('|')}|`);
+    L.push(`## 라벨 전이표: ${name} (행 ${n1}, 열 ${n2}, 양쪽 성공 ${t.n}건)`, '', `| ${n1} \\ ${n2} | ${LABELS.join(' | ')} |`, `|---|${LABELS.map(() => '---').join('|')}|`);
     for (const a of LABELS) L.push(`| ${a} | ${LABELS.map(b => t.table[a][b]).join(' | ')} |`);
     L.push('');
   }
-  L.push('## 지정 사례표 (v1 라벨(인용) → v2 라벨(인용))', '');
+  L.push(`## 지정 사례표 (${n1} 라벨(인용) → ${n2} 라벨(인용))`, '');
   for (const c of cases) {
     L.push(`### ${c.name}: ${c.prefix} ${c.paragraph} 라운드 ${c.round}`, '');
     if (c.dialogues.length !== 1) L.push(`대화 ${c.dialogues.length}건 찾음${c.dialogues.length ? `: ${c.dialogues.map(d => d.dialogueId).join(', ')}` : ''}`, '');
     for (const d of c.dialogues) {
       if (c.dialogues.length > 1) L.push(`대화 ${d.dialogueId}`, '');
-      L.push('| 단위 | v1 → v2 |', '|---|---|');
-      for (const u of d.units) L.push(`| ${u.unitId} | ${`${u.v1} → ${u.v2}`.replace(/\|/gu, '\\|')} |`);
+      L.push(`| 단위 | ${n1} → ${n2} |`, '|---|---|');
+      for (const u of d.units) L.push(`| ${u.unitId} | ${`${u[n1]} → ${u[n2]}`.replace(/\|/gu, '\\|')} |`);
       L.push('');
     }
   }
+  if (tracking) L.push(...renderTracking(tracking, names));
   L.push('## 오류 사건 목록', '');
-  for (const [name, s] of [['v1', s1], ['v2', s2]]) {
+  for (const [name, s] of [[n1, s1], [n2, s2]]) {
     L.push(`### ${name}`, '');
     const byD = new Map();
     for (const e of [...s.errors.events, ...s.errors.ended]) { const k = `${e.dialogueId}|${e.round}`; if (!byD.has(k)) byD.set(k, []); byD.get(k).push(e); }
@@ -505,31 +528,64 @@ export function renderCompare({ s1, s2, relT, nodeT, cases }) {
   }
   return L.join('\n');
 }
-export function runCompare() {
-  const inp = loadInputs(), r1 = readJsonl(`${VERSIONS.v1.dir}/judgments.jsonl`), r2 = readJsonl(`${VERSIONS.v2.dir}/judgments.jsonl`);
-  const s1 = summarizeRun(inp.rounds, r1, inp.map), s2 = summarizeRun(inp.rounds, r2, inp.map);
-  const nodeT = transitionTable(r1, r2, 'node'), relT = transitionTable(r1, r2, 'relation'), cases = caseTable(inp.rounds, r1, r2);
-  writeFileSync(`${EXP_DIR}/compare-v1-v2.json`, serialize({ v1: s1, v2: s2, nodeTransitions: nodeT, relationTransitions: relT, cases }));
-  writeFileSync(`${EXP_DIR}/COMPARE-v1-v2.md`, renderCompare({ s1, s2, nodeT, relT, cases }) + '\n');
-  return { v1: { ...s1, errors: undefined }, v2: { ...s2, errors: undefined } };
+// 앞 버전(A)의 오류 사건마다 걸린 단위의 라벨 변화와 뒤 버전(B)에 같은 키 사건이 남았는지, 그리고 B에만 있는 사건.
+export function trackEvents(sA, sB, rowsA, rowsB) {
+  const bA = latestByJob(rowsA), bB = latestByJob(rowsB), same = (x, e) => x.dialogueId === e.dialogueId && x.round === e.round && x.key === e.key;
+  const tracked = sA.errors.events.map(e => ({ ...e, unitChanges: [...e.units.nodes.map(id => ['node', id]), ...e.units.relations.map(id => ['relation', id])].map(([kind, id]) => {
+    const a = bA.get(jobId(e.dialogueId, e.round, kind, id)), b = bB.get(jobId(e.dialogueId, e.round, kind, id));
+    return { unitId: id, from: a?.status === 'OK' ? a.finalLabel : '미판정', to: cellOf(b) };
+  }), survived: sB.errors.events.some(x => same(x, e)) }));
+  return { tracked, newEvents: sB.errors.events.filter(e => !sA.errors.events.some(x => same(x, e))) };
+}
+function renderTracking({ tracked, newEvents }, [n1, n2]) {
+  const flat = s => s.trim().replace(/\n/gu, ' ').replace(/\|/gu, '\\|');
+  const L = [`## ${n1} 오류 사건 추적 (${n1} 사건 ${tracked.length}개, ${n2}에 같은 키로 남음 ${tracked.filter(t => t.survived).length}개)`, '', `| 대화 | 라운드 | 학생 구간 | 걸린 단위 ${n1} 라벨 → ${n2} 라벨(인용) | ${n2}에서 |`, '|---|---|---|---|---|'];
+  for (const t of tracked) L.push(`| ${t.dialogueId} | ${t.round} | 차례 ${t.turnIndex} 「${flat(t.segmentText)}」 | ${t.unitChanges.map(u => `${u.unitId} ${u.from} → ${flat(u.to)}`).join('<br>')} | ${t.survived ? '남음' : '사라짐'} |`);
+  L.push('', `## ${n2} 새 오류 사건 (${n2}에만 있는 사건 ${newEvents.length}개)`, '');
+  if (!newEvents.length) L.push('없음');
+  else { L.push('| 대화 | 라운드 | 학생 구간 | 걸린 단위 | 대표 위치 | 꼬리표 |', '|---|---|---|---|---|---|');
+    for (const e of newEvents) L.push(`| ${e.dialogueId} | ${e.round} | 차례 ${e.turnIndex} 「${flat(e.segmentText)}」 | ${[...e.units.nodes, ...e.units.relations].join(', ')} | ${e.representative ?? '-'} | ${e.tag} |`); }
+  L.push('');
+  return L;
+}
+export function runCompare(a = 'v1', b = 'v2') {
+  if (!VERSIONS[a] || !VERSIONS[b]) throw new Error(`COMPARE_VERSIONS: ${a} ${b}`);
+  const inp = loadInputs(FIXED_ROUNDS_PATH), r1 = readJsonl(`${VERSIONS[a].dir}/judgments.jsonl`), r2 = readJsonl(`${VERSIONS[b].dir}/judgments.jsonl`), names = [a, b];
+  const s1 = summarizeRun(inp.rounds, r1, inp.map), s2 = summarizeRun(inp.rounds, r2, inp.map), v3 = b === 'v3';
+  const nodeT = transitionTable(r1, r2, 'node'), relT = transitionTable(r1, r2, 'relation'), cases = caseTable(inp.rounds, r1, r2, v3 ? CASES_V3 : CASES, names);
+  const tracking = v3 ? trackEvents(s1, s2, r1, r2) : null;
+  const dirs = names.map(n => VERSIONS[n].dir.split('/').pop());
+  writeFileSync(`${EXP_DIR}/compare-${a}-${b}.json`, serialize({ [a]: s1, [b]: s2, nodeTransitions: nodeT, relationTransitions: relT, cases, ...(tracking ? { tracking } : {}) }));
+  writeFileSync(`${EXP_DIR}/COMPARE-${a}-${b}.md`, renderCompare({ s1, s2, nodeT, relT, cases, names, dirs, tracking }) + '\n');
+  return { [a]: { ...s1, errors: undefined }, [b]: { ...s2, errors: undefined } };
 }
 
 // ---------- main ----------
-function loadInputs() {
+// roundsFrom: 고정 라운드 파일을 쓰면 로그를 읽지 않는다(대화는 라운드에서 복원). 없으면 기존처럼 로그에서 추출.
+export function loadInputs(roundsFrom = null) {
   const mapBytes = readFileSync(MAP_PATH);
   if (hash(mapBytes) !== MAP_SHA256) throw new Error('FROZEN_MAP_HASH_MISMATCH');
   const map = JSON.parse(mapBytes.toString('utf8')), { passage } = loadPassage();
-  const dialogues = extractDialogues(readJsonl(V4_LOG), readJsonl(SH_LOG), passage);
-  const v4 = dialogues.filter(d => d.source === 'v4').length;
-  if (v4 !== EXPECTED.v4) throw new Error(`EXTRACTION_COUNT: v4 ${v4} != ${EXPECTED.v4}`);
+  let dialogues, rounds, roundsSource = null;
+  if (roundsFrom) {
+    const bytes = readFileSync(roundsFrom);
+    rounds = bytes.toString('utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+    dialogues = [...new Map(rounds.map(r => [r.dialogueId, r])).values()].map(r => ({ dialogueId: r.dialogueId, source: r.source, sessionId: r.sessionId, paragraphId: r.paragraphId,
+      turns: rounds.filter(x => x.dialogueId === r.dialogueId).at(-1).dialogue, copiedSource: r.copiedSource }));
+    roundsSource = { path: roundsFrom, sha256: hash(bytes), bytes };
+  } else {
+    dialogues = extractDialogues(readJsonl(V4_LOG), readJsonl(SH_LOG), passage);
+    const v4 = dialogues.filter(d => d.source === 'v4').length;
+    if (v4 !== EXPECTED.v4) throw new Error(`EXTRACTION_COUNT: v4 ${v4} != ${EXPECTED.v4}`);
+    rounds = dialogues.flatMap(buildRounds);
+  }
   passage.paragraphs.forEach((p, i) => {
     const u = unitsForParagraph(map, p.paragraphId);
     if (u.nodes.length !== EXPECTED.nodes[i] || u.relations.length !== EXPECTED.relations[i]) throw new Error(`UNIT_COUNT: ${p.paragraphId} nodes ${u.nodes.length} relations ${u.relations.length}`);
   });
-  const rounds = dialogues.flatMap(buildRounds);
-  return { map, passage, dialogues, rounds, jobs: planJobs(rounds, map) };
+  return { map, passage, dialogues, rounds, roundsSource, jobs: planJobs(rounds, map) };
 }
-const protectedHashes = cfg => Object.fromEntries([MAP_PATH, JUDGE_PROMPT_PATH, MAP_PROMPT_PATH, ...(cfg.promptPath === JUDGE_PROMPT_PATH ? [] : [cfg.promptPath])].map(p => [p, hash(readFileSync(p))]));
+const protectedHashes = cfg => Object.fromEntries([MAP_PATH, JUDGE_PROMPT_PATH, MAP_PROMPT_PATH, ...(cfg.promptPath === JUDGE_PROMPT_PATH ? [] : [cfg.promptPath]), ...(cfg.stance ? [STANCE_PATH] : [])].map(p => [p, hash(readFileSync(p))]));
 
 function writeResults(inp, run, cfg, version) {
   const judgmentRows = readJsonl(`${cfg.dir}/judgments.jsonl`), combined = assemble(inp.rounds, inp.map, judgmentRows);
@@ -538,14 +594,16 @@ function writeResults(inp, run, cfg, version) {
     ...(version === 'v1' ? {} : { title: `분석 지도 공손룡 2단계 결과 (판정 기준 ${version})` }) }) + '\n');
 }
 
-export async function main({ dryRun = false, resume = false, reportOnly = false, transport, promptVersion = 'v1' } = {}) {
+export async function main({ dryRun = false, resume = false, reportOnly = false, transport, promptVersion = 'v1', roundsFrom = null } = {}) {
   const cfg = VERSIONS[promptVersion];
   if (!cfg) throw new Error(`PROMPT_VERSION: ${promptVersion}`);
   const OUT = cfg.dir, limits = cfg.limits;
-  const inp = loadInputs(), promptMd = readFileSync(cfg.promptPath, 'utf8'), prompts = parseJudgePrompt(promptMd), hashesBefore = protectedHashes(cfg);
+  const inp = loadInputs(roundsFrom), promptMd = readFileSync(cfg.promptPath, 'utf8'), prompts = parseJudgePrompt(promptMd), hashesBefore = protectedHashes(cfg);
   mkdirSync(OUT, { recursive: true });
-  writeFileSync(`${OUT}/rounds.jsonl`, inp.rounds.map(jsonLine).join('\n') + '\n');
-  const makeRequest = j => buildJudgeRequest(prompts[j.unitKind], buildJudgeInput(j.round, j.unitKind, j.unit), cfg.schemaName);
+  if (inp.roundsSource) writeFileSync(`${OUT}/rounds.jsonl`, inp.roundsSource.bytes);
+  else writeFileSync(`${OUT}/rounds.jsonl`, inp.rounds.map(jsonLine).join('\n') + '\n');
+  const stances = cfg.stance ? loadStanceLabels() : null;
+  const makeRequest = j => buildJudgeRequest(prompts[j.unitKind], buildJudgeInput(j.round, j.unitKind, j.unit, stances), cfg.schemaName);
   const stats = { dialoguesBySource: count(inp.dialogues, d => d.source), copiedSource: inp.dialogues.filter(d => d.copiedSource).length,
     rounds: inp.rounds.length, requests: inp.jobs.length };
   if (dryRun) {
@@ -566,8 +624,8 @@ export async function main({ dryRun = false, resume = false, reportOnly = false,
   const priorRun = existsSync(runPath) ? JSON.parse(readFileSync(runPath, 'utf8')) : null;
   const runInfo = { version: 1, startedAtUtc: priorRun?.startedAtUtc ?? new Date().toISOString(), resumes: [...(priorRun?.resumes ?? []), ...(resume ? [new Date().toISOString()] : [])],
     model: MODEL, reasoning: { effort: 'medium' }, maxOutputTokens: MAX_OUTPUT_TOKENS, timeoutMs: TIMEOUT_MS, concurrency: CONCURRENCY, retries: 0, rates: RATES, limits, promptVersion, promptPath: cfg.promptPath, schemaName: cfg.schemaName,
-    judgePromptHash: hash(promptMd), nodeInstructionsHash: hash(prompts.node), relationInstructionsHash: hash(prompts.relation), frozenMapHash: MAP_SHA256,
-    scriptHash: hash(readFileSync(new URL(import.meta.url))), schemaHash: hash(JSON.stringify(JSON_SCHEMA)), plannedRequests: inp.jobs.length, protectedHashesBefore: hashesBefore };
+    judgePromptHash: hash(promptMd), nodeInstructionsHash: hash(prompts.node), relationInstructionsHash: hash(prompts.relation), frozenMapHash: MAP_SHA256, ...(cfg.stance ? { stanceFinalPath: STANCE_PATH, stanceFinalHash: hash(readFileSync(STANCE_PATH)) } : {}),
+    scriptHash: hash(readFileSync(new URL(import.meta.url))), schemaHash: hash(JSON.stringify(JSON_SCHEMA)), plannedRequests: inp.jobs.length, ...(inp.roundsSource ? { roundsSource: { path: inp.roundsSource.path, sha256: inp.roundsSource.sha256 } } : {}), protectedHashesBefore: hashesBefore };
   let client;
   const ledger = row => appendFileSync(ledgerPath, jsonLine(row) + '\n');
   const runOne = async job => {
@@ -617,6 +675,6 @@ export async function main({ dryRun = false, resume = false, reportOnly = false,
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const a = process.argv;
   const pi = a.indexOf('--prompt');
-  if (a.includes('--compare')) console.log(JSON.stringify(runCompare(), null, 2));
-  else console.log(JSON.stringify(await main({ dryRun: a.includes('--dry-run'), resume: a.includes('--resume'), reportOnly: a.includes('--report-only'), promptVersion: pi >= 0 ? a[pi + 1] : 'v1' }), null, 2));
+  if (a.includes('--compare')) { const ci = a.indexOf('--compare'); console.log(JSON.stringify(a[ci + 1] && !a[ci + 1].startsWith('--') ? runCompare(a[ci + 1], a[ci + 2]) : runCompare(), null, 2)); }
+  else console.log(JSON.stringify(await main({ dryRun: a.includes('--dry-run'), resume: a.includes('--resume'), reportOnly: a.includes('--report-only'), promptVersion: pi >= 0 ? a[pi + 1] : 'v1', roundsFrom: a.includes('--rounds-from') ? a[a.indexOf('--rounds-from') + 1] : null }), null, 2));
 }
