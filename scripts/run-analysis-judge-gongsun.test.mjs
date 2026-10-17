@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { extractDialogues, buildRounds, hasCopiedSource, unitsForParagraph, checkQuotes, combineRound, roundChanges, planJobs, parseJudgePrompt,
-  buildJudgeInput, buildJudgeRequest, limitCheck, isConnectionError, endCost, nextConnErrStreak, circuitTripped, reserveUsd, usageCost, assemble, renderReport, MAP_PATH, JUDGE_PROMPT_PATH, EXPECTED, LIMITS, JudgmentSchema } from './run-analysis-judge-gongsun.mjs';
+  buildJudgeInput, buildJudgeRequest, limitCheck, isConnectionError, endCost, nextConnErrStreak, circuitTripped, reserveUsd, usageCost, assemble, renderReport, segmentStudentTurn, errorEvents, lowestCommonAncestor, VERSIONS, MAP_PATH, JUDGE_PROMPT_PATH, EXPECTED, LIMITS, JudgmentSchema } from './run-analysis-judge-gongsun.mjs';
 import { loadPassage } from './run-analysis-map-gongsun.mjs';
 
 const { passage } = loadPassage();
@@ -165,4 +165,82 @@ test('circuit breaker trips after 10 consecutive connection errors, resets on ot
   assert.equal(nextConnErrStreak(streak, null), 0);
   streak = nextConnErrStreak(streak, 'Error: Connection error.');
   assert.equal(circuitTripped(streak), true);
+});
+
+test('--prompt v2: separate dir, v2 prompt and schema name; v1 defaults unchanged', () => {
+  assert.ok(VERSIONS.v1.dir.endsWith('/stage2') && VERSIONS.v1.promptPath === JUDGE_PROMPT_PATH && VERSIONS.v1.schemaName === 'analysis_judgment_v1' && VERSIONS.v1.limits === LIMITS);
+  assert.ok(VERSIONS.v2.dir.endsWith('/stage2-v2') && VERSIONS.v2.promptPath.endsWith('/JUDGE-PROMPT-v2.md') && VERSIONS.v2.schemaName === 'analysis_judgment_v2');
+  assert.equal(VERSIONS.v2.limits.maxRequests, 2000); assert.equal(VERSIONS.v2.limits.usdCap, 1);
+  assert.equal(limitCheck({ requests: 2000, spentUsd: 0, reserved: 0 }, VERSIONS.v2.limits), 'RUN_LIMIT: max requests');
+  assert.equal(limitCheck({ requests: 2000, spentUsd: 0, reserved: 0 }), null);
+  const pr = parseJudgePrompt(readFileSync(VERSIONS.v2.promptPath, 'utf8'));
+  assert.ok(pr.node.includes('가장 짧은 구간') && pr.relation.includes('relation.note'));
+  const input = { dialogue: [], target: { text: 't', sourceQuotes: [] } };
+  assert.equal(buildJudgeRequest(pr.node, input).text.format.name, 'analysis_judgment_v1');
+  assert.equal(buildJudgeRequest(pr.node, input, VERSIONS.v2.schemaName).text.format.name, 'analysis_judgment_v2');
+});
+
+test('segmentStudentTurn: sentence, comma, newline splits; delimiters stay on the preceding segment; blanks dropped; offsets are original', () => {
+  const text = '가는 나다. 다는 라다, 마는 바다\n사는 아다? 자  ';
+  const segs = segmentStudentTurn(text, 2);
+  assert.deepEqual(segs.map(s => s.text), ['가는 나다.', ' 다는 라다,', ' 마는 바다\n', '사는 아다?', ' 자  ']);
+  for (const s of segs) { assert.equal(text.slice(s.start, s.end), s.text); assert.equal(s.turnIndex, 2); }
+  assert.deepEqual(segs.map(s => s.segmentIndex), [0, 1, 2, 3, 4]);
+  assert.deepEqual(segmentStudentTurn('a;b/c。d!', 1).map(s => s.text), ['a;', 'b/', 'c。', 'd!']);
+  assert.deepEqual(segmentStudentTurn('끝?! 그리고...  \n', 1).map(s => s.text), ['끝?!', ' 그리고...']);
+  assert.deepEqual(segmentStudentTurn('  \n ', 1), []);
+});
+
+// error events on the real p2 tree
+const pp = passage.paragraphs[1].paragraphId;
+const row = (d, r, kind, id, label, quotes, extra = {}) => ({ jobId: `${d}|${r}|${kind}|${id}`, dialogueId: d, roundIndex: r, unitKind: kind, unitId: id, status: 'OK', finalLabel: label,
+  quotes, quoteChecks: quotes.map(q => ({ quote: q, valid: extra.invalid ? false : true })) });
+const mkRound = (d, k, dialogue) => ({ dialogueId: d, roundIndex: k, paragraphId: pp, dialogue });
+const nodeIds = u2.nodes.map(n => n.id);
+test('lowestCommonAncestor: single node, siblings -> parent, cross-branch -> higher', () => {
+  const c = u2.nodes.find(n => n.kind === 'COMPOSITE');
+  assert.equal(lowestCommonAncestor(map, [c.childIds[0]]), c.childIds[0]);
+  assert.equal(lowestCommonAncestor(map, [c.childIds[0], c.childIds[1]]), c.id);
+  assert.equal(lowestCommonAncestor(map, [c.childIds[0], g2.id]), g2.id);
+});
+test('errorEvents: same segment, many units -> 1 event; quote across two segments -> 2 events; invalid quote -> unlocated', () => {
+  const d = 'd', c = u2.nodes.find(n => n.kind === 'COMPOSITE'), [a, b] = c.childIds;
+  const r = mkRound(d, 1, [S('갑은 을이다. 병은 정이다')]);
+  const rows = [row(d, 1, 'node', a, 'CONTRADICTS', ['갑은 을이다']), row(d, 1, 'node', b, 'CONTRADICTS', ['갑은']),
+    row(d, 1, 'node', g2.id, 'CONTRADICTS', ['을이다. 병은']), row(d, 1, 'node', nodeIds.find(i => ![a, b, g2.id].includes(i)), 'CONTRADICTS', ['없는 말'], { invalid: true })];
+  const ev = errorEvents([r], rows, map);
+  assert.equal(ev.events.length, 2);
+  const e0 = ev.events.find(e => e.key === `${d}|1|0`), e1 = ev.events.find(e => e.key === `${d}|1|1`);
+  assert.deepEqual(e0.units.nodes.sort(), [a, b, g2.id].sort()); assert.deepEqual(e1.units.nodes, [g2.id]);
+  assert.equal(e0.representative, g2.id); assert.equal(e1.representative, g2.id);
+  assert.equal(ev.unlocated.length, 1);
+});
+test('errorEvents: representative for single node, siblings, relation-only', () => {
+  const d = 'd', c = u2.nodes.find(n => n.kind === 'COMPOSITE'), [a, b] = c.childIds, rel = u2.relations[0];
+  const one = errorEvents([mkRound(d, 1, [S('하나.')])], [row(d, 1, 'node', a, 'CONTRADICTS', ['하나'])], map).events[0];
+  assert.equal(one.representative, a);
+  const sib = errorEvents([mkRound(d, 1, [S('하나.')])], [row(d, 1, 'node', a, 'CONTRADICTS', ['하나']), row(d, 1, 'node', b, 'CONTRADICTS', ['하나'])], map).events[0];
+  assert.equal(sib.representative, c.id);
+  const own = [rel.fromId, rel.toId].filter(id => u2.nodes.some(n => n.id === id));
+  const ro = errorEvents([mkRound(d, 1, [S('하나.')])], [row(d, 1, 'relation', rel.id, 'CONTRADICTS', ['하나'])], map).events[0];
+  assert.deepEqual(ro.units, { nodes: [], relations: [rel.id] }); assert.equal(ro.representative, lowestCommonAncestor(map, own));
+});
+test('errorEvents tags: NEW / KEPT / LATE / RESOLVED / DROPPED', () => {
+  const d = 'd', [a, b] = u2.nodes.find(n => n.kind === 'COMPOSITE').childIds;
+  const t1 = S('첫 오류 문장. 둘째 오류 문장.'), t2 = S('새 발화. 고침 문장.'), t3 = S('마지막.');
+  const r1 = mkRound(d, 1, [t1]), r2 = mkRound(d, 2, [t1, T('q'), t2]), r3 = mkRound(d, 3, [t1, T('q'), t2, T('q'), t3]);
+  const rows = [
+    row(d, 1, 'node', a, 'CONTRADICTS', ['첫 오류 문장']),                       // r1: event 1|0 (NEW)
+    row(d, 2, 'node', a, 'CONTRADICTS', ['첫 오류 문장']),                       // r2: same key -> KEPT
+    row(d, 2, 'node', b, 'CONTRADICTS', ['둘째 오류 문장']),                     // r2: key 1|1 not in r1 -> LATE
+    row(d, 2, 'node', g2.id, 'CONTRADICTS', ['새 발화']),                       // r2: new turn -> NEW
+    row(d, 3, 'node', a, 'PARTIAL', ['고침 문장']),                             // r3: a fixed with quote in turn 2 (not the new turn 3) -> DROPPED for 1|0
+    row(d, 3, 'node', g2.id, 'DIRECT', ['마지막']),                              // r3: g2 event (2|0) resolved by quote in new turn 3
+    row(d, 3, 'node', b, 'ABSENT', []),                                          // r3: 1|1 gone, no support -> DROPPED
+  ];
+  const ev = errorEvents([r1, r2, r3], rows, map);
+  const tag = (round, key) => ev.events.find(e => e.round === round && e.key === `${d}|${key}`)?.tag;
+  assert.equal(tag(1, '1|0'), 'NEW'); assert.equal(tag(2, '1|0'), 'KEPT'); assert.equal(tag(2, '1|1'), 'LATE'); assert.equal(tag(2, '2|0'), 'NEW');
+  const end = key => ev.ended.find(e => e.key === `${d}|${key}` && e.round === 3)?.tag;
+  assert.equal(end('2|0'), 'RESOLVED'); assert.equal(end('1|0'), 'DROPPED'); assert.equal(end('1|1'), 'DROPPED');
 });
