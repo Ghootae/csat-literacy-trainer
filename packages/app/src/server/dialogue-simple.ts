@@ -151,15 +151,16 @@ export class SimpleDialogueController {
     const input: SimpleEvaluationInput = {
       passage: { title: r.passage.title, paragraphs: r.passage.paragraphs.map(({ paragraphId, text }) => ({ paragraphId, text })) },
       targetParagraph: { paragraphId: paragraph.paragraphId, text: paragraph.text },
-      stage: p.state.stage, dialogue: p.transcript.map(({ role, text }) => ({ role, text })), targetError: p.state.targetError,
-      targetGap: p.state.stage === 'AFTER_GAP' ? p.state.targetGap : null,
+      stage: p.state.stage, dialogue: p.transcript.map(({ role, text, items }) => ({ role, text: items ? `${text}\n${items.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : text })),
+      targetError: p.state.targetError, targetGaps: p.state.stage === 'AFTER_GAP' ? p.state.targetGaps : null,
     };
     try {
+      const stage = p.state.stage;
       const result = await evaluateSimple(this.evaluator, input);
       const next = applySimpleAction(p.state, result.output);
       const step = this.buildStep(p, paragraph.text, studentText, result, next);
       p.steps.push(step); p.state = next; p.status = 'IDLE';
-      p.transcript.push(...this.tutorMessages(result.output));
+      p.transcript.push(...this.tutorMessages(result.output, stage));
       this.log(r, index, p, 'STEP', null, result.validationFailures);
     } catch (error) {
       p.status = 'RETRYABLE_ERROR';
@@ -168,12 +169,16 @@ export class SimpleDialogueController {
     }
     return this.view(r);
   }
-  /** CLOSE_ERRORS: 도입 → 오류마다 → 문단 핵심. CLOSE_NO_RESPONSE: 도입+핵심 상자 한 말풍선. */
-  private tutorMessages(o: SimpleOutput): SimpleMessageView[] {
+  /** GAP_QUESTION: 리액션+번호 질문 한 말풍선. 질문 뒤 PRAISE·CLOSE_GAP: 문단 핵심 -> 피드백/빠진 내용. CLOSE_ERRORS: 도입 -> 오류마다 -> (missingNote) 빠진 내용 -> 문단 핵심. CLOSE_NO_RESPONSE: 도입+핵심 상자 한 말풍선. */
+  private tutorMessages(o: SimpleOutput, stage: SimpleParagraphState['stage']): SimpleMessageView[] {
     const tutor = (m: Omit<SimpleMessageView, 'role'>): SimpleMessageView => ({ role: 'tutor', ...m });
+    const core = () => tutor({ text: o.coreIntro ?? '', box: o.coreSummary ?? '', label: '문단 핵심' });
+    if (o.action === 'GAP_QUESTION') return [tutor({ text: o.message, items: o.gaps.map(g => g.question), label: '생각해 보기' })];
+    if (o.action === 'PRAISE' && (stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP')) return [core(), tutor({ text: o.message, label: '피드백' })];
+    if (o.action === 'CLOSE_GAP') return [core(), tutor({ text: o.message, label: '빠진 내용' })];
     if (o.action === 'CLOSE_ERRORS') return [tutor({ text: o.message, label: '바로잡기' }),
       ...o.errors.map(e => tutor({ text: e.feedback, quote: e.studentQuote, label: '바로잡기' })),
-      tutor({ text: o.coreIntro ?? '', box: o.coreSummary ?? '', label: '문단 핵심' })];
+      ...(o.missingNote ? [tutor({ text: o.missingNote, label: '빠진 내용' })] : []), core()];
     if (o.action === 'CLOSE_NO_RESPONSE') return [tutor({ text: o.message, box: o.coreSummary ?? '', label: '문단 핵심' })];
     return [tutor({ text: o.message, label: tutorLabel[o.action] })];
   }

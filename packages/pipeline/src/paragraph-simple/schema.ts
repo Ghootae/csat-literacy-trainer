@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 
-/** 단순 형식 문단 판정(simple-holistic) 계약. 프롬프트: experiments/dialogue/paragraph-simple-holistic-prompt-v3.md */
-export const PARAGRAPH_SIMPLE_PROMPT_VERSION = 'paragraph-simple-holistic-v3';
+/** 단순 형식 문단 판정(simple-holistic) 계약. 프롬프트: experiments/dialogue/paragraph-simple-holistic-prompt-v4.1.md */
+export const PARAGRAPH_SIMPLE_PROMPT_VERSION = 'paragraph-simple-holistic-v4.1';
 
 export const SimpleCategorySchema = z.enum(['CAPTURED', 'GAP', 'ONE_ERROR', 'MULTI_ERROR', 'IRRELEVANT', 'COPY']);
 export const SimpleActionSchema = z.enum([
@@ -13,26 +13,33 @@ export const SimpleErrorSchema = z.object({
   studentQuote: z.string(),
   correction: z.string(),
   sourceQuote: z.string(),
+  gapIndex: z.number().int().nullable(),
   feedback: z.string(),
 }).strict();
+
+export const SimpleGapSchema = z.object({ description: z.string(), sourceQuote: z.string(), question: z.string() }).strict();
 
 export const SimpleOutputSchema = z.object({
   category: SimpleCategorySchema,
   reason: z.string(),
   errors: z.array(SimpleErrorSchema),
-  gap: z.object({ description: z.string(), sourceQuote: z.string() }).strict().nullable(),
+  gaps: z.array(SimpleGapSchema),
   targetErrorResolved: z.boolean().nullable(),
+  targetGapReadings: z.array(z.string()).nullable(),
+  targetGapsFilled: z.array(z.boolean()).nullable(),
   restatedSummary: z.string(),
   action: SimpleActionSchema,
   message: z.string(),
   coreIntro: z.string().nullable(),
   coreSummary: z.string().nullable(),
+  missingNote: z.string().nullable(),
   coreSourceQuote: z.string().nullable(),
 }).strict();
 
 export type SimpleCategory = z.infer<typeof SimpleCategorySchema>;
 export type SimpleAction = z.infer<typeof SimpleActionSchema>;
 export type SimpleStage = z.infer<typeof SimpleStageSchema>;
+export type SimpleGap = z.infer<typeof SimpleGapSchema>;
 export type SimpleError = z.infer<typeof SimpleErrorSchema>;
 export type SimpleOutput = z.infer<typeof SimpleOutputSchema>;
 
@@ -45,6 +52,6 @@ export interface SimpleEvaluationInput {
   stage: SimpleStage;
   dialogue: SimpleDialogueMessage[];
   targetError: SimpleError | null;
-  targetGap: { description: string; sourceQuote: string } | null;
+  targetGaps: SimpleGap[] | null;
   validationFeedback?: string;
 }

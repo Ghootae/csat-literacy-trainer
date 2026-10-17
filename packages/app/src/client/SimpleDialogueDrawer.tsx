@@ -10,11 +10,11 @@ const attemptStatusLabel = (a: SimpleAttemptInspection) =>
   a.status === 'DONE' ? `완료 · ${outcomeLabel[a.state.outcome ?? ''] ?? a.state.outcome}` : a.status === 'ABANDONED' ? '중단' : '진행 중';
 const AUTOSAVE_MS = 1000;
 
-/** 대화 말풍선. 학생 발화 인용(quote)과 문단 핵심 상자(box)가 있으면 함께 그린다. */
+/** 대화 말풍선. 학생 발화 인용(quote), 번호 목록(items), 문단 핵심 상자(box)가 있으면 함께 그린다. */
 export function SimpleBubble({ message: m }: { message: SimpleMessageView }) {
   return <div className={`chat-message ${m.role}`}><small className="simple-label">{m.label}</small>
     {m.quote && <blockquote className="simple-bubble-quote">“{m.quote}”</blockquote>}
-    <p>{m.text}</p>{m.box && <p className="simple-bubble-box">{m.box}</p>}</div>;
+    <p>{m.text}</p>{m.items && <ol className="simple-bubble-items">{m.items.map((q, i) => <li key={i}>{q}</li>)}</ol>}{m.box && <p className="simple-bubble-box">{m.box}</p>}</div>;
 }
 
 /** 입력이 멈춘 뒤 1초 또는 포커스를 잃을 때 자동 저장한다. */
@@ -41,19 +41,21 @@ function MemoField({ label, initial, save }: { label: string; initial: string; s
 }
 
 function Step({ step, memo, save }: { step: SimpleStepInspection; memo: string; save: (text: string) => Promise<unknown> }) {
-  const out = step.output as { category: string; reason: string; errors: { studentQuote: string; correction: string; sourceQuote: string; feedback: string }[];
-    gap: { description: string; sourceQuote: string } | null; targetErrorResolved: boolean | null; restatedSummary: string; coreIntro: string | null; coreSummary: string | null; coreSourceQuote: string | null };
+  const out = step.output as { category: string; reason: string; errors: { studentQuote: string; correction: string; sourceQuote: string; gapIndex: number | null; feedback: string }[];
+    gaps: { description: string; sourceQuote: string; question: string }[]; targetErrorResolved: boolean | null; targetGapReadings: string[] | null; targetGapsFilled: boolean[] | null; restatedSummary: string; coreIntro: string | null; coreSummary: string | null; missingNote: string | null; coreSourceQuote: string | null };
   return <article className="evaluation-card simple-step">
     <h3>{step.stepIndex + 1}단계 · {step.stage}</h3>
     <blockquote>{step.studentText}</blockquote>
-    <p><strong>분류</strong> {out.category}{out.targetErrorResolved !== null && ` · 고치게 한 오류 해결=${String(out.targetErrorResolved)}`}</p>
+    <p><strong>분류</strong> {out.category}{out.targetErrorResolved !== null && ` · 고치게 한 오류 해결=${String(out.targetErrorResolved)}`}{out.targetGapsFilled !== null && ` · 물은 빈 곳 채움: [${out.targetGapsFilled.join(', ')}]`}</p>
     <p><strong>기대 행동</strong> {step.expectedAction} · <strong>적용 행동</strong> {step.action}{step.expectedAction === step.action ? '' : ' (불일치)'}</p>
     <p>{out.reason}</p>
-    {out.errors.map((e, i) => <div key={i} className="simple-quote"><small>오류 {i + 1}</small><p>학생: “{e.studentQuote}”</p><p>정정: {e.correction}</p><p>원문: “{e.sourceQuote}”</p>{e.feedback && <p>바로잡기 말: {e.feedback}</p>}</div>)}
-    {out.gap && <div className="simple-quote"><small>구멍</small><p>{out.gap.description}</p><p>원문: “{out.gap.sourceQuote}”</p></div>}
+    {out.targetGapReadings && out.targetGapsFilled && <div className="simple-quote">{out.targetGapReadings.map((r, i) => <p key={i}>질문 {i + 1}번 · 학생 답 읽기: {r || '(읽을 답 없음)'} · 채움={String(out.targetGapsFilled![i])}</p>)}</div>}
+    {out.errors.map((e, i) => <div key={i} className="simple-quote"><small>오류 {i + 1}{e.gapIndex !== null && ` · 질문 ${e.gapIndex + 1}번`}</small><p>학생: “{e.studentQuote}”</p><p>정정: {e.correction}</p><p>원문: “{e.sourceQuote}”</p>{e.feedback && <p>바로잡기 말: {e.feedback}</p>}</div>)}
+    {out.gaps.map((g, i) => <div key={i} className="simple-quote"><small>구멍 {i + 1}</small><p>{g.description}</p><p>질문: {g.question}</p><p>원문: “{g.sourceQuote}”</p></div>)}
     <p><strong>다시 정리한 요약</strong> {out.restatedSummary || '(없음)'}</p>
     {out.coreIntro && <p><strong>핵심 도입</strong> {out.coreIntro}</p>}
     {out.coreSummary && <p><strong>핵심 정리</strong> {out.coreSummary}</p>}
+    {out.missingNote && <p><strong>빠진 내용</strong> {out.missingNote}</p>}
     {out.coreSourceQuote && <p><strong>핵심 근거 문장</strong> “{out.coreSourceQuote}”</p>}
     <p><strong>학생에게 보인 말</strong> {step.message}</p>
     {!!step.validationFailures.length && <details open><summary>검증 실패 이력 · {step.validationFailures.length}회</summary>
