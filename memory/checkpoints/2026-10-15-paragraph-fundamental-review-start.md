@@ -14,4 +14,13 @@
 - 첫 사용 메모 2건 기록만([피드백](../../docs/review/simple-holistic-dev-ui-feedback-2026-10-16/README.md)): 반복 시도·시도별 메모(설계 확인), 학생 재구성 응답 보기(세부 미정). 구현은 나중에.
 - 메모 3 추가: 오류 설명과 핵심 내용은 별도 말풍선.
 - 메모 4·5 추가: 재구성 응답은 대화창 밖 별도 칸, 말풍선 상단 상태 표시(명칭 제안 포함).
-- 메모 6 추가(검토): 지문 표시가 작음. 로그상 24~83자·문장 일부, 문장 단위 확장 권고.
+- 메모 6 추가: 지문 표시가 작음(로그상 24~83자·문장 일부) → 사용자 확정: 프롬프트에서 해당 내용이 담긴 문장 전체를 인용.
+- 재구성 응답 확정(사용자): 학생 누적 발화만 합친 요약(원문 덧붙임·오류 수정 없음), 판정마다 갱신. 문제 풀이 적용 없음. → [D-0142](../decisions/D-0142-paragraph-simple-v2-restated-summary-attempts.md), 프롬프트 v2, [인계](../../docs/handoffs/2026-10-16-paragraph-simple-holistic-v2-feedback.md).
+- v2 구현(executor)·Claude diff 검토 완료: 메모 1~6 반영, 관련 테스트 67/67, 전체 vitest 1273 통과·기존 실패 2, typecheck·build 통과. 개발 서버 재시작(메모리 내 세션 초기화, 로그·메모 파일 유지). 실모델 출력·화면은 사용자 사용으로 확인.
+- v2 사용 메모 1 기록만([피드백](../../docs/review/simple-holistic-dev-ui-feedback-2026-10-16/README.md)): 문단 핵심 말풍선에 모델이 쓰는 도입 문장(`coreIntro`) + 핵심은 옅은 배경 상자, CLOSE_NO_RESPONSE도 같은 형식. 구현은 나중(프롬프트 v3).
+- v2 사용 메모 2 확정·기록만: 지문 표시가 여러 문장(v2 지시)으로 너무 넓음 → 가장 직접 담은 문장 하나 전체만 인용(프롬프트 v3, 메모 1과 함께).
+- v2 사용 메모 3 확정·기록만: CLOSE_GAP 코멘트는 학생 답에 없는 핵심 하나만 짚고 빠졌다고 명시(이미 말한 내용 반복 금지, "내가 보기엔"), AFTER_GAP 입력에 `targetGap` 추가(현재 미전달 — 골드 없는 일관성 장치). 프롬프트 v3.
+- v2 사용 메모 4 확정: 표시 규칙을 "칭찬이 아닌 마무리면 항상 근거 문장 표시"로(CLOSE_NO_RESPONSE 추가, `coreSourceQuote` 필드). 사용자 원안(확인하기 질문 중 표시)은 누출 우려로 보류, 사용 후 재검토 가능.
+- v2 사용 메모 5 확정: CLOSE_ERRORS를 도입 → 오류별 말풍선(학생 인용 + 바로잡기) → 문단 핵심으로 분리. 예시 문구는 형식 예시. 프롬프트 v3.
+- v2 사용 메모 6(중요): 이미 말한 관계를 다른 형태로 말하면 GAP 판정 → 불필요 질문. gpt-6-luna 1회 시험은 같은 입력을 CAPTURED로 판정. 사용자 승인으로 개발 서버를 `PARAGRAPH_SIMPLE_OPENAI_MODEL=gpt-6-luna`로 재시작, 프롬프트 v2.1 수정은 보류(재발 시 적용).
+- (2026-10-17) 시작 화면에서 문단 골라 시작(클라이언트만). v2 사용 메모 1~5를 프롬프트 v3로 구현(executor)·Claude diff 검토: [D-0144](../decisions/D-0144-paragraph-simple-v3-closing-bubbles-highlights.md), [인계](../../docs/handoffs/2026-10-17-paragraph-simple-holistic-v3.md). 관련 테스트 72, 전체 1278 통과·기존 실패 2, typecheck·build 통과. 개발 서버 v3·gpt-6-luna로 재시작. 실모델 출력은 미확인.
