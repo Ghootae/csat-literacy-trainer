@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 
-/** 단순 형식 문단 판정(simple-holistic) 계약. 프롬프트: experiments/dialogue/paragraph-simple-holistic-prompt-v1.md */
-export const PARAGRAPH_SIMPLE_PROMPT_VERSION = 'paragraph-simple-holistic-v1';
+/** 단순 형식 문단 판정(simple-holistic) 계약. 프롬프트: experiments/dialogue/paragraph-simple-holistic-prompt-v3.md */
+export const PARAGRAPH_SIMPLE_PROMPT_VERSION = 'paragraph-simple-holistic-v3';
 
 export const SimpleCategorySchema = z.enum(['CAPTURED', 'GAP', 'ONE_ERROR', 'MULTI_ERROR', 'IRRELEVANT', 'COPY']);
 export const SimpleActionSchema = z.enum([
@@ -13,6 +13,7 @@ export const SimpleErrorSchema = z.object({
   studentQuote: z.string(),
   correction: z.string(),
   sourceQuote: z.string(),
+  feedback: z.string(),
 }).strict();
 
 export const SimpleOutputSchema = z.object({
@@ -21,9 +22,12 @@ export const SimpleOutputSchema = z.object({
   errors: z.array(SimpleErrorSchema),
   gap: z.object({ description: z.string(), sourceQuote: z.string() }).strict().nullable(),
   targetErrorResolved: z.boolean().nullable(),
+  restatedSummary: z.string(),
   action: SimpleActionSchema,
   message: z.string(),
+  coreIntro: z.string().nullable(),
   coreSummary: z.string().nullable(),
+  coreSourceQuote: z.string().nullable(),
 }).strict();
 
 export type SimpleCategory = z.infer<typeof SimpleCategorySchema>;
@@ -41,5 +45,6 @@ export interface SimpleEvaluationInput {
   stage: SimpleStage;
   dialogue: SimpleDialogueMessage[];
   targetError: SimpleError | null;
+  targetGap: { description: string; sourceQuote: string } | null;
   validationFeedback?: string;
 }

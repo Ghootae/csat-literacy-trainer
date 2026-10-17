@@ -3,28 +3,44 @@ import { resolve } from 'node:path';
 import { z } from 'zod/v4';
 import {
   OpenAISimpleEvaluator, SimpleEvaluationError, applySimpleAction, evaluateSimple, expectedAction, initialSimpleState,
-  type SimpleDialogueMessage, type SimpleEvaluationInput, type SimpleEvaluationResult, type SimpleEvaluator, type SimpleOutput, type SimpleParagraphState,
+  type SimpleAction, type SimpleEvaluationInput, type SimpleEvaluationResult, type SimpleEvaluator, type SimpleOutput, type SimpleParagraphState,
 } from '@csat/pipeline';
 import { appendJsonlLine, loadDialoguePassages, readJsonlLines, type DialoguePassageContent } from './content.js';
 import type {
-  SimpleDialogueView, SimpleHighlightView, SimpleInspection, SimpleMemoRecord, SimpleStepInspection,
+  SimpleAttemptInspection, SimpleDialogueView, SimpleHighlightView, SimpleInspection, SimpleMemoRecord, SimpleMessageLabel, SimpleMessageView, SimpleStepInspection,
 } from '../shared/dialogue-simple.js';
 
 export const SimpleRespondSchema = z.object({
   transitionId: z.string().trim().min(1), paragraphIndex: z.number().int().nonnegative(), text: z.string().trim().min(1),
 }).strict();
 export const SimpleNavigateSchema = z.object({ paragraphIndex: z.number().int().nonnegative() }).strict();
+export const SimpleNewAttemptSchema = z.object({ paragraphIndex: z.number().int().nonnegative() }).strict();
 export const SimpleMemoSchema = z.object({
-  paragraphIndex: z.number().int().nonnegative(), stepIndex: z.number().int().nonnegative().nullable(), text: z.string(),
+  paragraphIndex: z.number().int().nonnegative(), attemptNumber: z.number().int().positive().nullable(),
+  stepIndex: z.number().int().nonnegative().nullable(), text: z.string(),
 }).strict();
 
 type Step = SimpleStepInspection;
-interface ParagraphRuntime {
+interface AttemptRuntime {
+  attemptNumber: number;
   state: SimpleParagraphState;
-  transcript: SimpleDialogueMessage[];
+  /** 라벨 포함 대화. 모델 입력에는 role·text만 넣는다. */
+  transcript: SimpleMessageView[];
   steps: Step[];
   status: 'IDLE' | 'PROCESSING' | 'RETRYABLE_ERROR';
+  abandoned: boolean;
 }
+/** 마지막 시도가 현재 시도다. */
+interface ParagraphRuntime { attempts: AttemptRuntime[] }
+const newAttempt = (attemptNumber: number): AttemptRuntime =>
+  ({ attemptNumber, state: initialSimpleState(), transcript: [], steps: [], status: 'IDLE', abandoned: false });
+const studentLabel: Record<SimpleParagraphState['stage'], SimpleMessageLabel> =
+  { INITIAL: '나의 요약', RETRY: '다시 쓴 요약', AFTER_CORRECTION: '나의 답', AFTER_GAP: '나의 답' };
+const tutorLabel: Record<SimpleAction, SimpleMessageLabel> = {
+  PRAISE: '피드백', RETRY_PROMPT: '다시 써 보기', CORRECTION_QUESTION: '확인하기', GAP_QUESTION: '생각해 보기',
+  CLOSE_GAP: '빠진 내용', CLOSE_NO_RESPONSE: '문단 핵심', CLOSE_ERRORS: '바로잡기',
+};
+type LogEvent = 'STEP' | 'EVALUATION_FAILED' | 'ATTEMPT_STARTED' | 'ATTEMPT_ABANDONED';
 interface Runtime {
   sessionId: string;
   passage: DialoguePassageContent;
@@ -73,12 +89,12 @@ export class SimpleDialogueController {
       if (prior.fingerprint !== fingerprint) throw new Error('같은 transitionId에 다른 요청을 사용할 수 없습니다.');
       return prior.promise;
     }
-    const p = this.paragraphAt(r, request.paragraphIndex);
+    const p = this.current(this.paragraphAt(r, request.paragraphIndex));
     if (p.status === 'PROCESSING') throw new Error('평가 중입니다. 현재 요청 결과를 기다리세요.');
     if (p.state.done) throw new Error('이미 끝난 문단입니다.');
     // 평가 실패로 남은 학생 발화는 새 제출이 대체한다(같은 문장이면 그대로 다시 시도).
     if (p.status === 'RETRYABLE_ERROR') p.transcript.pop();
-    p.transcript.push({ role: 'student', text: request.text });
+    p.transcript.push({ role: 'student', text: request.text, label: studentLabel[p.state.stage] });
     p.status = 'PROCESSING';
     r.currentIndex = request.paragraphIndex;
     const promise = this.evaluate(r, request.paragraphIndex, p, request.text);
@@ -86,37 +102,64 @@ export class SimpleDialogueController {
     return promise;
   }
 
+  /** 이전 시도는 보존한다. 끝나지 않은 시도는 중단으로 표시한다. */
+  startAttempt(sessionId: string, raw: unknown): SimpleDialogueView {
+    const r = this.require(sessionId);
+    const { paragraphIndex } = SimpleNewAttemptSchema.parse(raw);
+    const paragraph = this.paragraphAt(r, paragraphIndex);
+    const prev = this.current(paragraph);
+    if (prev.status === 'PROCESSING') throw new Error('평가 중입니다. 현재 요청 결과를 기다리세요.');
+    if (!prev.transcript.some(m => m.role === 'student')) throw new Error('이미 새 시도입니다.');
+    if (!prev.state.done) { prev.abandoned = true; this.log(r, paragraphIndex, prev, 'ATTEMPT_ABANDONED', null, []); }
+    const next = newAttempt(prev.attemptNumber + 1);
+    paragraph.attempts.push(next);
+    r.currentIndex = paragraphIndex;
+    this.log(r, paragraphIndex, next, 'ATTEMPT_STARTED', null, []);
+    return this.view(r);
+  }
+
   inspect(sessionId: string, paragraphIndex: number): SimpleInspection {
     const r = this.require(sessionId);
-    const p = this.paragraphAt(r, paragraphIndex);
-    const { stage, retryUsed, questionsAsked, done, outcome } = p.state;
+    const paragraph = this.paragraphAt(r, paragraphIndex);
+    const memos = this.memos(r, paragraphIndex);
+    const attempts = paragraph.attempts.map((a): SimpleAttemptInspection => {
+      const { stage, retryUsed, questionsAsked, done, outcome } = a.state;
+      return { attemptNumber: a.attemptNumber, status: done ? 'DONE' : a.abandoned ? 'ABANDONED' : 'IN_PROGRESS',
+        state: { stage, retryUsed, questionsAsked, done, outcome }, messages: a.transcript, steps: a.steps,
+        memos: memos.attempts[a.attemptNumber] ?? { attempt: '', steps: {} } };
+    });
     return structuredClone({ paragraphIndex, paragraphId: r.passage.paragraphs[paragraphIndex]!.paragraphId,
-      state: { stage, retryUsed, questionsAsked, done, outcome }, steps: p.steps, memos: this.memos(r, paragraphIndex) });
+      currentAttemptNumber: this.current(paragraph).attemptNumber, attempts, memos: { paragraph: memos.paragraph } });
   }
 
   saveMemo(sessionId: string, raw: unknown): SimpleMemoRecord {
     const r = this.require(sessionId);
-    const { paragraphIndex, stepIndex, text } = SimpleMemoSchema.parse(raw);
-    const p = this.paragraphAt(r, paragraphIndex);
-    if (stepIndex !== null && stepIndex >= p.steps.length) throw new Error('존재하지 않는 단계입니다.');
+    const { paragraphIndex, attemptNumber, stepIndex, text } = SimpleMemoSchema.parse(raw);
+    const paragraph = this.paragraphAt(r, paragraphIndex);
+    if (attemptNumber === null && stepIndex !== null) throw new Error('단계 메모에는 시도 번호가 필요합니다.');
+    const attempt = attemptNumber === null ? null : paragraph.attempts.find(a => a.attemptNumber === attemptNumber);
+    if (attempt === undefined) throw new Error('존재하지 않는 시도입니다.');
+    if (stepIndex !== null && stepIndex >= attempt!.steps.length) throw new Error('존재하지 않는 단계입니다.');
     const record: SimpleMemoRecord = { savedAt: new Date().toISOString(), sessionId, passageId: r.passage.passageId,
-      paragraphId: r.passage.paragraphs[paragraphIndex]!.paragraphId, stepIndex, text };
+      paragraphId: r.passage.paragraphs[paragraphIndex]!.paragraphId, attemptNumber, stepIndex, text };
     appendJsonlLine(resolve(this.logDirectory, 'memos.jsonl'), record);
     return record;
   }
 
-  private async evaluate(r: Runtime, index: number, p: ParagraphRuntime, studentText: string): Promise<SimpleDialogueView> {
+  private async evaluate(r: Runtime, index: number, p: AttemptRuntime, studentText: string): Promise<SimpleDialogueView> {
     const paragraph = r.passage.paragraphs[index]!;
     const input: SimpleEvaluationInput = {
       passage: { title: r.passage.title, paragraphs: r.passage.paragraphs.map(({ paragraphId, text }) => ({ paragraphId, text })) },
       targetParagraph: { paragraphId: paragraph.paragraphId, text: paragraph.text },
-      stage: p.state.stage, dialogue: structuredClone(p.transcript), targetError: p.state.targetError,
+      stage: p.state.stage, dialogue: p.transcript.map(({ role, text }) => ({ role, text })), targetError: p.state.targetError,
+      targetGap: p.state.stage === 'AFTER_GAP' ? p.state.targetGap : null,
     };
     try {
       const result = await evaluateSimple(this.evaluator, input);
       const next = applySimpleAction(p.state, result.output);
       const step = this.buildStep(p, paragraph.text, studentText, result, next);
-      p.steps.push(step); p.state = next; p.transcript.push({ role: 'tutor', text: result.output.message }); p.status = 'IDLE';
+      p.steps.push(step); p.state = next; p.status = 'IDLE';
+      p.transcript.push(...this.tutorMessages(result.output));
       this.log(r, index, p, 'STEP', null, result.validationFailures);
     } catch (error) {
       p.status = 'RETRYABLE_ERROR';
@@ -125,7 +168,16 @@ export class SimpleDialogueController {
     }
     return this.view(r);
   }
-  private buildStep(p: ParagraphRuntime, paragraphText: string, studentText: string, result: SimpleEvaluationResult, next: SimpleParagraphState): Step {
+  /** CLOSE_ERRORS: 도입 → 오류마다 → 문단 핵심. CLOSE_NO_RESPONSE: 도입+핵심 상자 한 말풍선. */
+  private tutorMessages(o: SimpleOutput): SimpleMessageView[] {
+    const tutor = (m: Omit<SimpleMessageView, 'role'>): SimpleMessageView => ({ role: 'tutor', ...m });
+    if (o.action === 'CLOSE_ERRORS') return [tutor({ text: o.message, label: '바로잡기' }),
+      ...o.errors.map(e => tutor({ text: e.feedback, quote: e.studentQuote, label: '바로잡기' })),
+      tutor({ text: o.coreIntro ?? '', box: o.coreSummary ?? '', label: '문단 핵심' })];
+    if (o.action === 'CLOSE_NO_RESPONSE') return [tutor({ text: o.message, box: o.coreSummary ?? '', label: '문단 핵심' })];
+    return [tutor({ text: o.message, label: tutorLabel[o.action] })];
+  }
+  private buildStep(p: AttemptRuntime, paragraphText: string, studentText: string, result: SimpleEvaluationResult, next: SimpleParagraphState): Step {
     const output: SimpleOutput = result.output;
     return { stepIndex: p.steps.length, stage: p.state.stage, studentText, output, expectedAction: expectedAction(p.state.stage, output),
       action: output.action, validationFailures: result.validationFailures, call: result.call, message: output.message,
@@ -135,21 +187,24 @@ export class SimpleDialogueController {
     const start = text.indexOf(quote);
     return start < 0 ? null : { start, end: start + quote.length, text: quote, location: 'PASSAGE' };
   }
-  private log(r: Runtime, index: number, p: ParagraphRuntime, event: 'STEP' | 'EVALUATION_FAILED', error: string | null,
+  private log(r: Runtime, index: number, p: AttemptRuntime, event: LogEvent, error: string | null,
     validationFailures: { rawOutput: unknown; problems: string[] }[]) {
-    appendJsonlLine(resolve(this.logDirectory, 'sessions.jsonl'), structuredClone({ schemaVersion: 'dialogue-simple-holistic-record-v1',
-      savedAt: new Date().toISOString(), event, sessionId: r.sessionId, passageId: r.passage.passageId, paragraphIndex: index,
+    appendJsonlLine(resolve(this.logDirectory, 'sessions.jsonl'), structuredClone({ schemaVersion: 'dialogue-simple-holistic-record-v2',
+      savedAt: new Date().toISOString(), event, sessionId: r.sessionId, passageId: r.passage.passageId, paragraphIndex: index, attemptNumber: p.attemptNumber,
       paragraphId: r.passage.paragraphs[index]!.paragraphId, state: p.state, transcript: p.transcript,
       step: event === 'STEP' ? p.steps.at(-1) : null, error, validationFailures }));
   }
 
-  /** 같은 키의 마지막 줄이 현재 값이다. */
-  private memos(r: Runtime, index: number): SimpleInspection['memos'] {
-    const memos: SimpleInspection['memos'] = { paragraph: '', steps: {} };
+  /** 같은 키의 마지막 줄이 현재 값이다. 옛 줄(attemptNumber 없음)은 stepIndex null=문단, 숫자=시도 1의 단계로 읽는다. */
+  private memos(r: Runtime, index: number): { paragraph: string; attempts: Record<number, SimpleAttemptInspection['memos']> } {
+    const memos: ReturnType<SimpleDialogueController['memos']> = { paragraph: '', attempts: {} };
     const paragraphId = r.passage.paragraphs[index]!.paragraphId;
-    for (const m of readJsonlLines<SimpleMemoRecord>(resolve(this.logDirectory, 'memos.jsonl'))) {
+    for (const m of readJsonlLines<Omit<SimpleMemoRecord, 'attemptNumber'> & { attemptNumber?: number | null }>(resolve(this.logDirectory, 'memos.jsonl'))) {
       if (m.sessionId !== r.sessionId || m.paragraphId !== paragraphId) continue;
-      if (m.stepIndex === null) memos.paragraph = m.text; else memos.steps[m.stepIndex] = m.text;
+      const attemptNumber = m.attemptNumber === undefined ? (m.stepIndex === null ? null : 1) : m.attemptNumber;
+      if (attemptNumber === null) { memos.paragraph = m.text; continue; }
+      const entry = memos.attempts[attemptNumber] ??= { attempt: '', steps: {} };
+      if (m.stepIndex === null) entry.attempt = m.text; else entry.steps[m.stepIndex] = m.text;
     }
     return memos;
   }
@@ -157,21 +212,25 @@ export class SimpleDialogueController {
   private paragraphAt(r: Runtime, index: number): ParagraphRuntime {
     if (index >= r.passage.paragraphs.length) throw new Error('존재하지 않는 문단입니다.');
     let p = r.paragraphs.get(index);
-    if (!p) { p = { state: initialSimpleState(), transcript: [], steps: [], status: 'IDLE' }; r.paragraphs.set(index, p); }
+    if (!p) { p = { attempts: [newAttempt(1)] }; r.paragraphs.set(index, p); }
     return p;
   }
+  private current(p: ParagraphRuntime): AttemptRuntime { return p.attempts.at(-1)!; }
   private require(id: string): Runtime {
     const r = this.sessions.get(id); if (!r) throw new Error('단순 형식 문단 세션을 찾을 수 없습니다.'); return r;
   }
   /** 판정·이유·원출력은 inspect에서만 준다. */
   private view(r: Runtime): SimpleDialogueView {
-    const done = r.passage.paragraphs.map((_, i) => r.paragraphs.get(i)?.state.done === true);
-    const p = this.paragraphAt(r, r.currentIndex);
+    const done = r.passage.paragraphs.map((_, i) => r.paragraphs.get(i)?.attempts.some(a => a.state.done) === true);
+    const paragraph = this.paragraphAt(r, r.currentIndex);
+    const p = this.current(paragraph);
     const allDone = done.every(Boolean);
     return structuredClone({
       sessionId: r.sessionId, passageId: r.passage.passageId, title: r.passage.title, exam: r.passage.exam, currentIndex: r.currentIndex,
       paragraphs: r.passage.paragraphs.map((q, i) => ({ paragraphId: q.paragraphId, position: q.position, text: q.text, done: done[i]! })),
-      current: { index: r.currentIndex, messages: p.transcript, done: p.state.done,
+      current: { index: r.currentIndex, messages: p.transcript, done: p.state.done, attemptNumber: p.attemptNumber, attemptCount: paragraph.attempts.length,
+        restatedSummary: p.steps.length ? (p.steps.at(-1)!.output as SimpleOutput).restatedSummary : null,
+        canStartNewAttempt: p.transcript.some(m => m.role === 'student') && p.status !== 'PROCESSING',
         highlights: p.state.done ? p.steps.at(-1)?.highlights ?? [] : [],
         canRespond: !p.state.done && p.status !== 'PROCESSING', evaluationStatus: p.status,
         evaluationError: p.status === 'RETRYABLE_ERROR' ? '피드백을 만들지 못했어. 쓴 내용은 저장돼 있으니 다시 시도해 줘.' : null },

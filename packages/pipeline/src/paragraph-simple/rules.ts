@@ -55,6 +55,13 @@ export function validateSimpleOutput(input: SimpleEvaluationInput, output: Simpl
 
   const needsSummary = output.action === 'CLOSE_ERRORS' || output.action === 'CLOSE_NO_RESPONSE';
   if (needsSummary ? !output.coreSummary?.trim() : output.coreSummary !== null) problems.push('coreSummary는 CLOSE_ERRORS·CLOSE_NO_RESPONSE에서만 비어 있지 않은 문자열이고 그 밖에는 null이어야 한다.');
+  const closeErrors = output.action === 'CLOSE_ERRORS';
+  output.errors.forEach((e, i) => {
+    if (closeErrors ? !e.feedback.trim() : e.feedback !== '') problems.push(`errors[${i}].feedback은 CLOSE_ERRORS에서만 비어 있지 않은 문자열이고 그 밖에는 빈 문자열이어야 한다.`);
+  });
+  if (closeErrors ? !output.coreIntro?.trim() || output.coreIntro.length > 60 : output.coreIntro !== null) problems.push('coreIntro는 CLOSE_ERRORS에서만 비어 있지 않은 60자 이하 문자열이고 그 밖에는 null이어야 한다.');
+  const noResponse = output.action === 'CLOSE_NO_RESPONSE';
+  if (noResponse ? !output.coreSourceQuote || !input.targetParagraph.text.includes(output.coreSourceQuote) : output.coreSourceQuote !== null) problems.push('coreSourceQuote는 CLOSE_NO_RESPONSE에서만 비어 있지 않은 대상 문단의 연속 부분 문자열이고 그 밖에는 null이어야 한다.');
   if (!output.message.trim()) problems.push('message가 비어 있다.');
   return problems;
 }
@@ -78,7 +85,7 @@ export interface SimpleParagraphState {
   targetGap: NonNullable<SimpleOutput['gap']> | null;
   done: boolean;
   outcome: SimpleOutcome | null;
-  /** 마무리 행동(CLOSE_GAP, CLOSE_ERRORS)에서만 채워지는 표시 구절. */
+  /** 마무리 행동(CLOSE_GAP, CLOSE_ERRORS, CLOSE_NO_RESPONSE)에서만 채워지는 표시 구절. */
   revealQuotes: string[];
 }
 
@@ -93,7 +100,7 @@ export function applySimpleAction(state: SimpleParagraphState, output: SimpleOut
   switch (output.action) {
     case 'PRAISE': return { ...next, done: true, outcome: 'CAPTURED' };
     case 'RETRY_PROMPT': return { ...next, stage: 'RETRY', retryUsed: true };
-    case 'CLOSE_NO_RESPONSE': return { ...next, done: true, outcome: 'NO_RESPONSE' };
+    case 'CLOSE_NO_RESPONSE': return { ...next, done: true, outcome: 'NO_RESPONSE', revealQuotes: output.coreSourceQuote ? [output.coreSourceQuote] : [] };
     case 'GAP_QUESTION':
     case 'CORRECTION_QUESTION': {
       if (state.questionsAsked >= MAX_SIMPLE_QUESTIONS) throw new Error('불변식 위반: 문단당 질문은 최대 2회다.');

@@ -3,8 +3,8 @@ import type { DialoguePassageSummary } from '../shared/contract.js';
 import type { SimpleDialogueView } from '../shared/dialogue-simple.js';
 import { fetchDialoguePassages } from './api.js';
 import { AnnotatedText } from './annotated-text.js';
-import { SimpleDialogueDrawer } from './SimpleDialogueDrawer.js';
-import { getSimple, navigateSimple, respondSimple, startSimple } from './simple-dialogue-api.js';
+import { SimpleBubble, SimpleDialogueDrawer } from './SimpleDialogueDrawer.js';
+import { getSimple, navigateSimple, newAttemptSimple, respondSimple, startSimple } from './simple-dialogue-api.js';
 import './simple-dialogue.css';
 
 const base = '/dialogue/dev/simple';
@@ -44,7 +44,12 @@ export function SimpleDialogueApp(): React.JSX.Element {
       <p>개발자 전용 화면입니다. 문단마다 직접 요약을 쓰고, 단계별 판정과 인상을 메모합니다. 골드와 축은 쓰지 않습니다.</p></header>
     <section className="dialogue-passage-list" aria-label="학습할 지문">{passages.filter(p => p.available).map(p =>
       <article className="dialogue-passage-card" key={p.passageId}><div><h2>{p.title}</h2><p>{p.exam}</p><span>{p.paragraphCount}개 문단</span></div>
-        <button className="primary" disabled={busy} onClick={() => void run(async () => accept(await startSimple(p.passageId)))}>시작</button></article>)}</section>
+        <div className="simple-start-actions"><button className="primary" disabled={busy} onClick={() => void run(async () => accept(await startSimple(p.passageId)))}>시작</button>
+          <nav aria-label={`${p.title} 시작 문단 선택`}>{Array.from({ length: p.paragraphCount }, (_, i) =>
+            <button key={i} disabled={busy} onClick={() => void run(async () => {
+              const started = await startSimple(p.passageId);
+              accept(i === 0 ? started : await navigateSimple(started.sessionId, i));
+            })}>문단 {i + 1}</button>)}</nav></div></article>)}</section>
     {error && <p className="err" role="alert">{error}</p>}
   </main>;
 
@@ -60,6 +65,11 @@ export function SimpleDialogueApp(): React.JSX.Element {
       if (next.current.evaluationStatus !== 'RETRYABLE_ERROR') setDrafts(old => ({ ...old, [current.index]: '' }));
       accept(next);
     });
+  };
+  const startAttempt = () => {
+    if (!current.canStartNewAttempt || busy) return;
+    if (!current.done && !window.confirm('지금 시도를 중단하고 새로 시작할까?')) return;
+    void run(async () => accept(await newAttemptSimple(view.sessionId, current.index)));
   };
   const go = (index: number) => void run(async () => accept(await navigateSimple(view.sessionId, index)));
   return <main className="reading-workbench is-developer simple-workbench" data-pane={mobilePane}>
@@ -82,11 +92,15 @@ export function SimpleDialogueApp(): React.JSX.Element {
             : <details className="previous-paragraph" key={p.paragraphId}><summary>문단 {p.position}<small>{p.done ? '완료' : '다시 읽기'}</small></summary><p>{p.text}</p></details>)}
         </div>
       </section>
-      <section className="chat-pane workbench-pane" aria-label="응답과 피드백"><header className="pane-header"><h2>생각을 나누는 공간</h2><small>문단 {current.index + 1}</small></header>
+      <section className="chat-pane workbench-pane" aria-label="응답과 피드백"><header className="pane-header"><h2>생각을 나누는 공간</h2>
+        <small>문단 {current.index + 1} · 시도 {current.attemptNumber}</small>
+        <button disabled={busy || !current.canStartNewAttempt} onClick={startAttempt}>새 시도</button></header>
+        <section className="simple-restated" aria-label="지금까지 내 요약"><small>지금까지 내 요약</small>
+          <p>{current.restatedSummary === null ? '첫 요약을 보내면 여기에 정리돼.' : current.restatedSummary === '' ? '아직 이 문단에 대한 내용이 없어.' : current.restatedSummary}</p></section>
         <div className="chat-scroll" ref={chatRef} aria-label="대화 기록" aria-live="polite">
           {!current.messages.length && <p className="chat-welcome">이 문단의 중심 내용과 관계를 자기 말로 써 보세요.</p>}
           {current.messages.map((m, i) => <div className="chat-round" key={i}>
-            <div className={`chat-message ${m.role}`}><small>{m.role === 'student' ? '나' : '튜터'}</small><p>{m.text}</p></div></div>)}
+            <SimpleBubble message={m} /></div>)}
           {current.evaluationStatus === 'PROCESSING' && <p role="status" className="chat-notice">판정하는 중이에요…</p>}
           {current.evaluationError && <p role="alert" className="chat-notice">{current.evaluationError}</p>}
         </div>
@@ -104,6 +118,6 @@ export function SimpleDialogueApp(): React.JSX.Element {
         </footer>
       </section>
     </div>
-    {drawer && <SimpleDialogueDrawer sessionId={view.sessionId} paragraphIndex={current.index} close={() => setDrawer(false)} />}
+    {drawer && <SimpleDialogueDrawer sessionId={view.sessionId} paragraphIndex={current.index} attemptNumber={current.attemptNumber} attemptCount={current.attemptCount} close={() => setDrawer(false)} />}
   </main>;
 }

@@ -21,9 +21,9 @@ afterEach(async () => {
 });
 const passage = loadDialoguePassages().find(p => p.paragraphs.length > 0)!;
 const root = '/api/developer/dialogue-simple/session';
-const praise: SimpleOutput = { category: 'CAPTURED', reason: 'r', errors: [], gap: null, targetErrorResolved: null, action: 'PRAISE', message: '잘 잡았어', coreSummary: null };
+const praise: SimpleOutput = { category: 'CAPTURED', reason: 'r', errors: [], gap: null, targetErrorResolved: null, restatedSummary: '요약', action: 'PRAISE', message: '잘 잡았어', coreIntro: null, coreSummary: null, coreSourceQuote: null };
 const evaluator: SimpleEvaluator = { async complete() {
-  return { rawOutput: praise, metadata: { provider: 'mock', model: 'mock', promptVersion: 'paragraph-simple-holistic-v1', durationMs: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0 } };
+  return { rawOutput: praise, metadata: { provider: 'mock', model: 'mock', promptVersion: 'paragraph-simple-holistic-v3', durationMs: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0 } };
 } };
 async function server(options: Parameters<typeof createLearningServer>[0] = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'simple-http-')); dirs.push(dir);
@@ -67,21 +67,26 @@ describe('dialogue-simple HTTP', () => {
     expect(responded.status).toBe(200);
     const view = await responded.json() as SimpleDialogueView;
     expect(view.current).toMatchObject({ done: true, evaluationStatus: 'IDLE' });
-    expect(view.current.messages.at(-1)).toEqual({ role: 'tutor', text: '잘 잡았어' });
+    expect(view.current.messages.at(-1)).toEqual({ role: 'tutor', text: '잘 잡았어', label: '피드백' });
     const last = passage.paragraphs.length - 1;
     const nav = await (await send(`${base}${root}/${created.sessionId}/navigate`, 'POST', { paragraphIndex: last })).json() as SimpleDialogueView;
     expect(nav.currentIndex).toBe(last);
     expect(((await (await send(`${base}${root}/${created.sessionId}`, 'GET')).json()) as SimpleDialogueView).currentIndex).toBe(last);
     const inspect = await (await send(`${base}${root}/${created.sessionId}/inspect?paragraphIndex=0`, 'GET')).json() as SimpleInspection;
-    expect(inspect.steps[0]).toMatchObject({ action: 'PRAISE', expectedAction: 'PRAISE', studentText: '내 요약' });
-    const memo = await send(`${base}${root}/${created.sessionId}/memo`, 'POST', { paragraphIndex: 0, stepIndex: 0, text: '인상' });
+    expect(inspect.attempts[0]!.steps[0]).toMatchObject({ action: 'PRAISE', expectedAction: 'PRAISE', studentText: '내 요약' });
+    const memo = await send(`${base}${root}/${created.sessionId}/memo`, 'POST', { paragraphIndex: 0, attemptNumber: 1, stepIndex: 0, text: '인상' });
     expect(memo.status).toBe(200);
-    await send(`${base}${root}/${created.sessionId}/memo`, 'POST', { paragraphIndex: 0, stepIndex: null, text: '문단 인상' });
+    await send(`${base}${root}/${created.sessionId}/memo`, 'POST', { paragraphIndex: 0, attemptNumber: null, stepIndex: null, text: '문단 인상' });
     const again = await (await send(`${base}${root}/${created.sessionId}/inspect?paragraphIndex=0`, 'GET')).json() as SimpleInspection;
-    expect(again.memos).toEqual({ paragraph: '문단 인상', steps: { 0: '인상' } });
+    expect(again.memos).toEqual({ paragraph: '문단 인상' }); expect(again.attempts[0]!.memos.steps).toEqual({ 0: '인상' });
     expect(readFileSync(join(dir, 'memos.jsonl'), 'utf8').trim().split('\n')).toHaveLength(2);
     expect(existsSync(join(dir, 'sessions.jsonl'))).toBe(true);
     expect(existsSync(studentEvidencePath)).toBe(false);
+    const second = await send(`${base}${root}/${created.sessionId}/attempt`, 'POST', { paragraphIndex: 0 });
+    expect(second.status).toBe(200);
+    expect(((await second.json()) as SimpleDialogueView).current).toMatchObject({ attemptNumber: 2, messages: [], restatedSummary: null });
+    expect((await send(`${base}${root}/${created.sessionId}/attempt`, 'POST', { paragraphIndex: 0 })).status).toBeGreaterThanOrEqual(400);
+    expect((await send(`${base}${root}/${created.sessionId}/attempt`, 'POST', { paragraphIndex: 0 }, { host: 'other.example.org' })).status).toBe(404);
     expect((await send(`${base}${root}/${created.sessionId}/inspect`, 'GET')).status).toBe(400);
     expect((await send(`${base}${root}/${created.sessionId}/unknown`, 'POST', {})).status).toBe(404);
   });

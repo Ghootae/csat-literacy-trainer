@@ -16,6 +16,7 @@ export const startSimple = (passageId: string) => request<SimpleDialogueView>(ro
 export const getSimple = (id: string) => request<SimpleDialogueView>(at(id));
 export const respondSimple = (id: string, body: SimpleRespondRequest) => request<SimpleDialogueView>(at(id, '/respond'), body);
 export const navigateSimple = (id: string, paragraphIndex: number) => request<SimpleDialogueView>(at(id, '/navigate'), { paragraphIndex });
+export const newAttemptSimple = (id: string, paragraphIndex: number) => request<SimpleDialogueView>(at(id, '/attempt'), { paragraphIndex });
 export const inspectSimple = (id: string, paragraphIndex: number) => request<SimpleInspection>(at(id, `/inspect?paragraphIndex=${paragraphIndex}`));
-export const saveSimpleMemo = (id: string, body: { paragraphIndex: number; stepIndex: number | null; text: string }) =>
+export const saveSimpleMemo = (id: string, body: { paragraphIndex: number; attemptNumber: number | null; stepIndex: number | null; text: string }) =>
   request<SimpleMemoRecord>(at(id, '/memo'), body);

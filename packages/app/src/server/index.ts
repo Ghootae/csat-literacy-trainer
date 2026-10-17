@@ -234,7 +234,7 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
           if (typeof body.passageId !== 'string' || !body.passageId.trim()) return json(res, 400, { error: 'passageId가 필요합니다.' });
           return json(res, 200, dialogueSimple.start(body.passageId));
         }
-        const simple = /^\/api\/developer\/dialogue-simple\/session\/([^/]+)(?:\/(respond|navigate|inspect|memo))?$/u.exec(url.pathname);
+        const simple = /^\/api\/developer\/dialogue-simple\/session\/([^/]+)(?:\/(respond|navigate|attempt|inspect|memo))?$/u.exec(url.pathname);
         if (simple) {
           const [, id, action] = simple;
           if (req.method === 'GET' && action === undefined) return json(res, 200, dialogueSimple.get(id!));
@@ -246,6 +246,7 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
           }
           if (req.method === 'POST' && action === 'respond') return json(res, 200, await dialogueSimple.respond(id!, await readBody(req)));
           if (req.method === 'POST' && action === 'navigate') return json(res, 200, dialogueSimple.navigate(id!, await readBody(req)));
+          if (req.method === 'POST' && action === 'attempt') return json(res, 200, dialogueSimple.startAttempt(id!, await readBody(req)));
           if (req.method === 'POST' && action === 'memo') return json(res, 200, dialogueSimple.saveMemo(id!, await readBody(req)));
         }
         return json(res, 404, { error: '등록되지 않은 단순 형식 문단 API입니다.' });
