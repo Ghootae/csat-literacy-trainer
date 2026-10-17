@@ -1,6 +1,6 @@
 // D-0143 stage 1: hierarchical analysis-map generation for one passage (gongsun-long-later-mohists).
 // Keys are loaded only by Node's --env-file-if-exists. Handoff: docs/handoffs/2026-10-16-analysis-map-gongsun-stage1.md
-// Usage: node --env-file-if-exists=.env scripts/run-analysis-map-gongsun.mjs [--dry-run]
+// Usage: node --env-file-if-exists=.env scripts/run-analysis-map-gongsun.mjs [--dry-run] [--passage <id>] [--exp-dir <dir>] [--prompt <path>] [--paragraphs <n>]
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
@@ -31,13 +31,13 @@ export const OutputSchema = z.strictObject({
 });
 export const JSON_SCHEMA = z.toJSONSchema(OutputSchema);
 
-export function loadPassage(dir = PASSAGES_DIR) {
+export function loadPassage(dir = PASSAGES_DIR, passageId = PASSAGE_ID) {
   for (const name of readdirSync(dir).filter(n => n.endsWith('.json'))) {
     const bytes = readFileSync(resolve(dir, name));
     const p = JSON.parse(bytes.toString('utf8'));
-    if (p.passageId === PASSAGE_ID) return { passage: p, file: `${dir}/${name}`, fileHash: hash(bytes) };
+    if (p.passageId === passageId) return { passage: p, file: `${dir}/${name}`, fileHash: hash(bytes) };
   }
-  throw new Error(`SOURCE_NOT_FOUND: ${PASSAGE_ID}`);
+  throw new Error(`SOURCE_NOT_FOUND: ${passageId}`);
 }
 // User content: passage id and per-paragraph { paragraphId, index, text } only. No gold, axes, or student responses.
 export function buildInput(passage) {
@@ -214,8 +214,8 @@ export function renderTree(map) {
   return lines.join('\n');
 }
 const jsonLine = o => JSON.stringify(o);
-export function renderMaps(dir = EXP_DIR) {
-  const out = ['# 분석 지도 생성 결과 (공손룡 1단계)', '', '해석·평가 없음. 원자료는 `runs/`, 요청 기록은 `ledger.jsonl`, 실행 설정은 `RUN.json`.', ''];
+export function renderMaps(dir = EXP_DIR, title = '분석 지도 생성 결과 (공손룡 1단계)') {
+  const out = [`# ${title}`, '', '해석·평가 없음. 원자료는 `runs/`, 요청 기록은 `ledger.jsonl`, 실행 설정은 `RUN.json`.', ''];
   for (const r of [1, 2, 3]) {
     const base = `${dir}/runs/map-r${r}`;
     out.push(`## 회차 ${r}`, '');
@@ -239,30 +239,31 @@ export function renderMaps(dir = EXP_DIR) {
   return out.join('\n');
 }
 
-export async function main({ dryRun = false, transport } = {}) {
-  const { passage, file, fileHash } = loadPassage();
-  if (passage.paragraphs.length !== 5) throw new Error(`PARAGRAPH_COUNT: ${passage.paragraphs.length}`);
-  const promptBytes = readFileSync(PROMPT_PATH), promptHashBefore = hash(promptBytes);
+// Options default to the gongsun stage-1 setup (D-0146: passage id, experiment dir, prompt path, expected paragraph count).
+export async function main({ dryRun = false, transport, passageId = PASSAGE_ID, expDir = EXP_DIR, promptPath = PROMPT_PATH, paragraphs = 5 } = {}) {
+  const { passage, file, fileHash } = loadPassage(PASSAGES_DIR, passageId);
+  if (passage.paragraphs.length !== paragraphs) throw new Error(`PARAGRAPH_COUNT: ${passage.paragraphs.length}`);
+  const promptBytes = readFileSync(promptPath), promptHashBefore = hash(promptBytes);
   const instructions = instructionsFrom(promptBytes.toString('utf8')), input = buildInput(passage), request = buildRequest(instructions, input);
-  mkdirSync(`${EXP_DIR}/runs`, { recursive: true });
+  mkdirSync(`${expDir}/runs`, { recursive: true });
   if (dryRun) {
-    writeFileSync(`${EXP_DIR}/runs/dry-run.request.json`, serialize(request));
+    writeFileSync(`${expDir}/runs/dry-run.request.json`, serialize(request));
     const v = validateMap(exampleMap(passage), passage);
-    writeFileSync(`${EXP_DIR}/runs/dry-run.validation.json`, serialize(v));
+    writeFileSync(`${expDir}/runs/dry-run.validation.json`, serialize(v));
     return { dryRun: true, externalRequests: 0, reserveUsdPerRequest: reserveUsd(request), exampleAllPass: v.allPass, inputBytes: Buffer.byteLength(JSON.stringify(request)) };
   }
-  const ledgerPath = `${EXP_DIR}/ledger.jsonl`;
-  if (existsSync(ledgerPath) || existsSync(`${EXP_DIR}/RUN.json`)) throw new Error('RUN_EXISTS: refusing to rerun (no retries)');
+  const ledgerPath = `${expDir}/ledger.jsonl`;
+  if (existsSync(ledgerPath) || existsSync(`${expDir}/RUN.json`)) throw new Error('RUN_EXISTS: refusing to rerun (no retries)');
   const runInfo = { version: 1, startedAtUtc: new Date().toISOString(), model: MODEL, reasoning: { effort: 'medium' }, maxOutputTokens: MAX_OUTPUT_TOKENS, timeoutMs: TIMEOUT_MS,
-    rates: RATES, limits: LIMITS, retries: 0, promptFile: PROMPT_PATH, promptFileHashBefore: promptHashBefore, instructionsHash: hash(instructions),
-    sourceFile: file, sourceFileHash: fileHash, inputHash: hash(JSON.stringify(input)), requestHash: hash(JSON.stringify(request)), schemaHash: hash(JSON.stringify(JSON_SCHEMA)), schema: JSON_SCHEMA };
+    rates: RATES, limits: LIMITS, retries: 0, promptFile: promptPath, promptFileHashBefore: promptHashBefore, instructionsHash: hash(instructions),
+    passageId, sourceFile: file, sourceFileHash: fileHash, inputHash: hash(JSON.stringify(input)), requestHash: hash(JSON.stringify(request)), schemaHash: hash(JSON.stringify(JSON_SCHEMA)), schema: JSON_SCHEMA };
   let spent = 0, requests = 0, stop = null, client;
   const record = row => appendFileSync(ledgerPath, jsonLine(row) + '\n');
   for (const r of [1, 2, 3]) {
     const reserved = reserveUsd(request);
     stop = limitCheck({ requests, spentUsd: spent, reserved });
     if (stop) { record({ event: 'STOP', round: r, reason: stop, atUtc: new Date().toISOString() }); break; }
-    const base = `${EXP_DIR}/runs/map-r${r}`, requestId = `map-r${r}`, t0 = performance.now(); requests++;
+    const base = `${expDir}/runs/map-r${r}`, requestId = `map-r${r}`, t0 = performance.now(); requests++;
     record({ event: 'START', requestId, round: r, model: MODEL, atUtc: new Date().toISOString(), reservedUsd: reserved });
     const outcome = { round: r, requestStatus: null, error: null, validation: null };
     let response = null;
@@ -286,13 +287,15 @@ export async function main({ dryRun = false, transport } = {}) {
     }
     writeFileSync(`${base}.validation.json`, serialize(outcome), { flag: 'wx' });
   }
-  const promptHashAfter = hash(readFileSync(PROMPT_PATH));
-  writeFileSync(`${EXP_DIR}/RUN.json`, serialize({ ...runInfo, finishedAtUtc: new Date().toISOString(), requests, totalCostUsd: spent, stop, promptFileHashAfter: promptHashAfter, promptUnchanged: promptHashAfter === promptHashBefore }));
-  writeFileSync(`${EXP_DIR}/MAPS.md`, renderMaps() + '\n');
+  const promptHashAfter = hash(readFileSync(promptPath));
+  writeFileSync(`${expDir}/RUN.json`, serialize({ ...runInfo, finishedAtUtc: new Date().toISOString(), requests, totalCostUsd: spent, stop, promptFileHashAfter: promptHashAfter, promptUnchanged: promptHashAfter === promptHashBefore }));
+  writeFileSync(`${expDir}/MAPS.md`, renderMaps(expDir, passageId === PASSAGE_ID ? undefined : `분석 지도 생성 결과 (${passageId} 1단계)`) + '\n');
   return { requests, totalCostUsd: spent, stop, promptUnchanged: promptHashAfter === promptHashBefore };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  const result = await main({ dryRun: process.argv.includes('--dry-run') });
+  const argv = process.argv, opt = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
+  const result = await main({ dryRun: argv.includes('--dry-run'), passageId: opt('--passage'), expDir: opt('--exp-dir'),
+    promptPath: opt('--prompt'), paragraphs: opt('--paragraphs') ? Number(opt('--paragraphs')) : undefined });
   console.log(JSON.stringify(result, null, 2));
 }

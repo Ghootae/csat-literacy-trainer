@@ -1,15 +1,18 @@
 // D-0143 stance marking: per-proposition stance (AUTHOR/FIGURE/COMMON) for the frozen gongsun map, one sol request.
 // Keys are loaded only by Node's --env-file-if-exists. Handoff: docs/handoffs/2026-10-17-analysis-map-gongsun-stance.md
-// Usage: node --env-file-if-exists=.env scripts/run-analysis-stance-gongsun.mjs [--dry-run]
+// Usage: node --env-file-if-exists=.env scripts/run-analysis-stance-gongsun.mjs [--dry-run] [--passage <id> --exp-dir <dir>]
+// Other passages (D-0146) reuse the gongsun STANCE-PROMPT.md unchanged; map and outputs come from --exp-dir.
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import OpenAI from 'openai';
 import { z } from 'zod/v4';
-import { loadPassage, instructionsFrom, usageCost, reserveUsd, hash, EXP_DIR, MODEL, RATES } from './run-analysis-map-gongsun.mjs';
+import { loadPassage, instructionsFrom, usageCost, reserveUsd, hash, EXP_DIR, MODEL, RATES, PASSAGES_DIR } from './run-analysis-map-gongsun.mjs';
 
 export const STANCE_DIR = `${EXP_DIR}/stance`;
+const DEFAULT_STANCE_DIR = STANCE_DIR;
 export const PROMPT_PATH = `${EXP_DIR}/STANCE-PROMPT.md`;
 export const MAP_PATH = `${EXP_DIR}/frozen-map.json`;
+const DEFAULT_MAP_PATH = MAP_PATH;
 export const LIMITS = { maxRequests: 1, usdCap: 0.5 };
 export const MAX_OUTPUT_TOKENS = 16000;
 export const TIMEOUT_MS = 900000;
@@ -128,8 +131,9 @@ export function renderStances(map, out, validation, nodeStances) {
   return lines.join('\n') + '\n';
 }
 
-export async function main({ dryRun = false, transport } = {}) {
-  const { passage, file, fileHash } = loadPassage();
+export async function main({ dryRun = false, transport, passageId, expDir } = {}) {
+  const STANCE_DIR = expDir ? `${expDir}/stance` : DEFAULT_STANCE_DIR, MAP_PATH = expDir ? `${expDir}/frozen-map.json` : DEFAULT_MAP_PATH;
+  const { passage, file, fileHash } = passageId ? loadPassage(PASSAGES_DIR, passageId) : loadPassage();
   const mapBytes = readFileSync(MAP_PATH), map = JSON.parse(mapBytes.toString('utf8'));
   const promptBytes = readFileSync(PROMPT_PATH), promptHashBefore = hash(promptBytes);
   const instructions = instructionsFrom(promptBytes.toString('utf8')), input = buildInput(passage, map), request = buildRequest(instructions, input);
@@ -146,7 +150,7 @@ export async function main({ dryRun = false, transport } = {}) {
   if (reserved > LIMITS.usdCap) throw new Error(`RUN_LIMIT: usd cap (reserve ${reserved})`);
   const runInfo = { version: 1, startedAtUtc: new Date().toISOString(), model: MODEL, reasoning: { effort: 'medium' }, maxOutputTokens: MAX_OUTPUT_TOKENS, timeoutMs: TIMEOUT_MS,
     rates: RATES, limits: LIMITS, retries: 0, promptFile: PROMPT_PATH, promptFileHashBefore: promptHashBefore, instructionsHash: hash(instructions),
-    mapFile: MAP_PATH, mapFileHash: hash(mapBytes), sourceFile: file, sourceFileHash: fileHash, inputHash: hash(JSON.stringify(input)),
+    passageId: passage.passageId, mapFile: MAP_PATH, mapFileHash: hash(mapBytes), sourceFile: file, sourceFileHash: fileHash, inputHash: hash(JSON.stringify(input)),
     requestHash: hash(JSON.stringify(request)), schemaHash: hash(JSON.stringify(JSON_SCHEMA)), schema: JSON_SCHEMA };
   const record = row => appendFileSync(ledgerPath, JSON.stringify(row) + '\n');
   const requestId = 'stance-r1', t0 = performance.now();
@@ -182,6 +186,7 @@ export async function main({ dryRun = false, transport } = {}) {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  const result = await main({ dryRun: process.argv.includes('--dry-run') });
+  const argv = process.argv, opt = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
+  const result = await main({ dryRun: argv.includes('--dry-run'), passageId: opt('--passage'), expDir: opt('--exp-dir') });
   console.log(JSON.stringify(result, null, 2));
 }

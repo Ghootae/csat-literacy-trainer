@@ -88,3 +88,31 @@ test('instructions start at the heading section body, not the preamble mention',
   assert.ok(ins.startsWith('너는 수능 국어'));
   assert.ok(!ins.includes('아래 `## 지시문` 절'));
 });
+test('options: default dry-run request unchanged; dopamine request carries only its 4 paragraphs', async () => {
+  const { mkdtempSync, readFileSync: rf, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { main, hash } = await import('./run-analysis-map-gongsun.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'map-dry-'));
+  try {
+    // default options: same request as built directly from the gongsun constants
+    await main({ dryRun: true, expDir: dir });
+    const def = rf(`${dir}/runs/dry-run.request.json`, 'utf8');
+    const expected = JSON.stringify(buildRequest(instructionsFrom(readFileSync(PROMPT_PATH, 'utf8')), buildInput(passage)), null, 2) + '\n';
+    assert.equal(hash(def), hash(expected));
+    assert.equal((await main({ dryRun: true, expDir: dir, paragraphs: 5 })).dryRun, true);
+    // dopamine
+    const d = loadPassage(undefined, 'dopamine-motor-control').passage;
+    await assert.rejects(main({ dryRun: true, expDir: dir, passageId: 'dopamine-motor-control' }), /PARAGRAPH_COUNT: 4/);
+    const r = await main({ dryRun: true, expDir: dir, passageId: 'dopamine-motor-control', paragraphs: 4 });
+    assert.equal(r.exampleAllPass, true);
+    const req = JSON.parse(rf(`${dir}/runs/dry-run.request.json`, 'utf8'));
+    const input = JSON.parse(req.input[0].content[0].text);
+    assert.equal(input.passageId, 'dopamine-motor-control');
+    assert.deepEqual(input.paragraphs.map(p => p.text), d.paragraphs.map(p => p.text));
+    assert.equal(input.paragraphs.length, 4);
+    const body = JSON.stringify(req);
+    for (const word of ['goldPath', 'candidateGoldPath', 'centralAxes', 'centralStory', 'student', 'answer', 'rationale']) assert.ok(!body.includes(word), word);
+    assert.throws(() => loadPassage(undefined, 'no-such-passage'), /SOURCE_NOT_FOUND/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

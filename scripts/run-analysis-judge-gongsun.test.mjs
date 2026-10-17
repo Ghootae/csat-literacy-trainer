@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { extractDialogues, buildRounds, hasCopiedSource, unitsForParagraph, checkQuotes, combineRound, roundChanges, planJobs, parseJudgePrompt,
-  buildJudgeInput, buildJudgeRequest, limitCheck, isConnectionError, endCost, nextConnErrStreak, circuitTripped, reserveUsd, usageCost, assemble, renderReport, segmentStudentTurn, errorEvents, lowestCommonAncestor, VERSIONS, stanceLabel, loadStanceLabels, STANCE_PATH, trackEvents, loadInputs, FIXED_ROUNDS_PATH, MAP_PATH, JUDGE_PROMPT_PATH, EXPECTED, LIMITS, JudgmentSchema } from './run-analysis-judge-gongsun.mjs';
+  buildJudgeInput, buildJudgeRequest, limitCheck, isConnectionError, endCost, nextConnErrStreak, circuitTripped, reserveUsd, usageCost, assemble, renderReport, segmentStudentTurn, errorEvents, lowestCommonAncestor, VERSIONS, stanceLabel, loadStanceLabels, STANCE_PATH, trackEvents, loadInputs, FIXED_ROUNDS_PATH, MAP_PATH, JUDGE_PROMPT_PATH, EXPECTED, LIMITS, JudgmentSchema, extraDialogues, scoreTestResponse, scoreRun, renderScore, GENERALIZED_LIMITS } from './run-analysis-judge-gongsun.mjs';
 import { loadPassage } from './run-analysis-map-gongsun.mjs';
 
 const { passage } = loadPassage();
@@ -299,4 +299,70 @@ test('loadInputs with fixed rounds file: no log read, 77 rounds, 1,552 requests,
   assert.ok(inp.roundsSource.path === FIXED_ROUNDS_PATH && /^[0-9a-f]{64}$/.test(inp.roundsSource.sha256));
   assert.equal(Buffer.compare(inp.roundsSource.bytes, readFileSync(FIXED_ROUNDS_PATH)), 0);
   assert.equal(inp.rounds.map(r => JSON.stringify(r)).join('\n') + '\n', readFileSync(FIXED_ROUNDS_PATH, 'utf8'));
+});
+
+// ---------- 도파민 일반화 (인계 2026-10-18) ----------
+const DOP = 'docs/experiments/analysis-map-dopamine-2026-10-18', DOP_PASSAGE = 'dopamine-motor-control';
+test('gongsun default: v3 request bodies and rounds are byte-identical to the stored stage2-v3 dry-run sample and rounds', () => {
+  const dir = 'docs/experiments/analysis-map-gongsun-2026-10-16/stage2-v3';
+  const inp = loadInputs(`${dir}/rounds.jsonl`), stances = loadStanceLabels(STANCE_PATH), pr = parseJudgePrompt(readFileSync(VERSIONS.v3.promptPath, 'utf8'));
+  assert.equal(inp.rounds.map(r => JSON.stringify(r)).join('\n') + '\n', readFileSync(`${dir}/rounds.jsonl`, 'utf8'));
+  const stored = JSON.parse(readFileSync(`${dir}/dry-run.requests-sample.json`, 'utf8')).samples;
+  for (const smp of stored) {
+    const job = inp.jobs.find(j => j.jobId === smp.jobId);
+    assert.equal(JSON.stringify(buildJudgeRequest(pr[job.unitKind], buildJudgeInput(job.round, job.unitKind, job.unit, stances), VERSIONS.v3.schemaName)), JSON.stringify(smp.request));
+  }
+});
+test('extraDialogues: test responses become one-student-turn dialogues, copy controls one full-paragraph turn per paragraph', () => {
+  const dp = loadPassage(undefined, DOP_PASSAGE).passage, tr = JSON.parse(readFileSync(`${DOP}/test-responses.json`, 'utf8')).responses;
+  const out = extraDialogues(dp, { testResponsesPath: `${DOP}/test-responses.json`, copyControls: true });
+  assert.equal(out.length, tr.length + dp.paragraphs.length);
+  const t0 = out[0];
+  assert.deepEqual([t0.dialogueId, t0.source, t0.paragraphId, t0.turns], [`test:${tr[0].id}`, 'test', tr[0].paragraphId, [{ role: 'student', text: tr[0].text }]]);
+  const c0 = out.find(d => d.source === 'copy');
+  assert.deepEqual([c0.dialogueId, c0.copiedSource, c0.turns[0].text], [`copy:${dp.paragraphs[0].paragraphId}`, true, dp.paragraphs[0].text]);
+  assert.equal(buildRounds(c0).length, 1);
+  assert.deepEqual(extraDialogues(dp, {}), []);
+});
+test('other passage: units assigned without gongsun expected-count check; limits 1000/$0.5; test/copy rounds counted', () => {
+  const inp = loadInputs(null, { passageId: DOP_PASSAGE, mapPath: `${DOP}/frozen-map.json`, paragraphs: 4, testResponsesPath: `${DOP}/test-responses.json`, copyControls: true });
+  assert.equal(inp.passage.paragraphs.length, 4);
+  for (const p of inp.passage.paragraphs) assert.ok(inp.unitCounts[p.paragraphId].nodes > 0);
+  assert.equal(inp.rounds.filter(r => r.source === 'copy').length, 4); assert.equal(inp.rounds.filter(r => r.source === 'test').length, 8);
+  assert.ok(inp.rounds.filter(r => r.source === 'v4').every(r => r.paragraphId.startsWith(`${DOP_PASSAGE}-`)));
+  assert.deepEqual(GENERALIZED_LIMITS, { maxRequests: 1000, usdCap: 0.5 });
+  assert.throws(() => loadInputs(null, { passageId: DOP_PASSAGE, mapPath: `${DOP}/frozen-map.json`, paragraphs: 5 }), /PARAGRAPH_COUNT/);
+});
+const okRow = (dialogueId, unitKind, unitId, finalLabel, quotes, reason = 'r') => ({ jobId: `${dialogueId}|1|${unitKind}|${unitId}`, dialogueId, roundIndex: 1, unitKind, unitId, status: 'OK', finalLabel, reason,
+  quoteChecks: quotes.map(q => ({ quote: q, valid: !q.startsWith('!') })) });
+test('scoreTestResponse: overlap detects, non-overlap is a false-positive candidate, invalid quote is unlocated, non-contradicts ignored', () => {
+  const resp = { id: 'T', text: '가나다라. 마바사아. 자차카타.', errors: [{ id: 'E1', type: 't', errorSpan: '마바사아' }, { id: 'E2', type: 't', errorSpan: '자차' }] };
+  const rows = [okRow('test:T', 'node', 'P1', 'CONTRADICTS', ['사아. 자']),     // overlaps E1 end and E2 start -> detects both
+    okRow('test:T', 'node', 'P2', 'CONTRADICTS', ['가나다']),                    // no overlap -> candidate
+    okRow('test:T', 'relation', 'R1', 'CONTRADICTS', ['!없는']),                 // invalid -> unlocated
+    okRow('test:T', 'node', 'P3', 'DIRECT', ['마바'])];                          // not contradicts -> ignored
+  const r = scoreTestResponse(resp, rows);
+  assert.deepEqual(r.errors.map(e => [e.id, e.detected]), [['E1', true], ['E2', true]]);
+  assert.deepEqual(r.errors[0].detectedBy, [{ unitKind: 'node', unitId: 'P1', quotes: ['사아. 자'] }]);
+  assert.deepEqual(r.falsePositiveCandidates.map(c => [c.unitId, c.quotes]), [['P2', ['가나다']]]);
+  assert.deepEqual(r.unlocated.map(u => u.unitId), ['R1']);
+  const touching = scoreTestResponse(resp, [okRow('test:T', 'node', 'P1', 'CONTRADICTS', ['마바사아.'.slice(4, 5) + ' 자'])]); // '. 자' adjacent: overlaps E2? starts at E1 end
+  assert.equal(touching.errors[0].detected, false);
+});
+test('scoreRun: control criteria, detection rate, record-response events', () => {
+  const dp = loadPassage(undefined, DOP_PASSAGE).passage, dmap = JSON.parse(readFileSync(`${DOP}/frozen-map.json`, 'utf8'));
+  const pid = dp.paragraphs[0].paragraphId, un = unitsForParagraph(dmap, pid), nid = un.nodes[0].id;
+  const mkr = (dialogueId, source, text) => ({ dialogueId, source, sessionId: dialogueId, paragraphId: pid, roundIndex: 1, dialogue: [S(text)], copiedSource: false });
+  const dialogues = [{ dialogueId: 'copy:x', source: 'copy' }, { dialogueId: 'test:T', source: 'test' }, { dialogueId: 'v4:a', source: 'v4' }];
+  const rounds = [mkr('copy:x', 'copy', '복사'), mkr('test:T', 'test', '틀린 문장. 다른 문장.'), mkr('v4:a', 'v4', '기록 오류. 정상.')];
+  const rows = [okRow('copy:x', 'node', nid, 'DIRECT', []), okRow('copy:x', 'node', un.nodes[1].id, 'ABSENT', []),
+    okRow('test:T', 'node', nid, 'CONTRADICTS', ['틀린 문장'], '반대'), okRow('v4:a', 'node', nid, 'CONTRADICTS', ['기록 오류'], '모순 이유')];
+  const sc = scoreRun({ rounds, dialogues, map: dmap, judgmentRows: rows, testResponses: { responses: [{ id: 'T', paragraphId: pid, text: '틀린 문장. 다른 문장.', errors: [{ id: 'E1', type: 't', errorSpan: '틀린 문장' }] }] } });
+  assert.equal(sc.control.contradicts, 0); assert.equal(sc.control.directRatio, 0.5); assert.equal(sc.control.pass, false);
+  assert.deepEqual([sc.detection.detected, sc.detection.total, sc.detection.pass], [1, 1, true]);
+  assert.equal(sc.falsePositiveCandidates.length, 0);
+  assert.equal(sc.recordEvents.length, 1); assert.deepEqual([sc.recordEvents[0].segmentText, sc.recordEvents[0].reason, sc.recordEvents[0].tag], ['기록 오류.', '모순 이유', 'NEW']);
+  assert.deepEqual([sc.sources.copy.judgments, sc.sources.test.rounds, sc.sources.v4.dialogues], [2, 1, 1]);
+  const md = renderScore(sc);
+  assert.ok(md.includes('## 심은 오류 검출') && md.includes('E1') && md.includes('모순 이유'));
 });
