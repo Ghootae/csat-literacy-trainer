@@ -24,3 +24,7 @@
 - v2 사용 메모 5 확정: CLOSE_ERRORS를 도입 → 오류별 말풍선(학생 인용 + 바로잡기) → 문단 핵심으로 분리. 예시 문구는 형식 예시. 프롬프트 v3.
 - v2 사용 메모 6(중요): 이미 말한 관계를 다른 형태로 말하면 GAP 판정 → 불필요 질문. gpt-6-luna 1회 시험은 같은 입력을 CAPTURED로 판정. 사용자 승인으로 개발 서버를 `PARAGRAPH_SIMPLE_OPENAI_MODEL=gpt-6-luna`로 재시작, 프롬프트 v2.1 수정은 보류(재발 시 적용).
 - (2026-10-17) 시작 화면에서 문단 골라 시작(클라이언트만). v2 사용 메모 1~5를 프롬프트 v3로 구현(executor)·Claude diff 검토: [D-0144](../decisions/D-0144-paragraph-simple-v3-closing-bubbles-highlights.md), [인계](../../docs/handoffs/2026-10-17-paragraph-simple-holistic-v3.md). 관련 테스트 72, 전체 1278 통과·기존 실패 2, typecheck·build 통과. 개발 서버 v3·gpt-6-luna로 재시작. 실모델 출력은 미확인.
+- (2026-10-17) v3 사용 메모 1: 질문 하나 규칙이 묻지 않은 구멍으로 학생을 깎아내림(빠진 쪽이 번갈아 "더 중요") → [D-0145](../decisions/D-0145-paragraph-simple-multi-gap-questions.md) 구멍 번호 질문·핵심 공개 마무리. 현재 규칙 수형도 아티팩트 공개(https://claude.ai/artifact/JAWwxjcE8DKbTRsH41Voeb). 구현은 프롬프트 v4로 나중에.
+- (2026-10-17) D-0145를 프롬프트 v4로 구현(executor)·Claude diff 검토: gaps 번호 질문, targetGaps/targetGapsFilled, 질문 뒤 마무리 핵심 공개. 관련 테스트 79, 전체 1285 통과·기존 실패 2, typecheck·build 통과. 개발 서버 v4·gpt-6-luna 재시작. 실모델 출력 미확인.
+- (2026-10-17) v4 사용 메모 1: 조각 답을 질문과 합쳐 읽지 않아 둘째 오류 누락 + 못 채운 항목 무응답 → 프롬프트 v4.1(targetGapReadings, errors[].gapIndex, missingNote) 작성, 루나 3사례 각 1회 3/3 기대대로. 코드 미구현.
+- (2026-10-17) v4.1 구현(executor)·Claude diff 검토: targetGapReadings·errors[].gapIndex·missingNote 검증, 질문 뒤 바로잡기에 빠진 내용 말풍선·표시. 관련 테스트 83, 전체 1289 통과·기존 실패 2. 개발 서버 v4.1·gpt-6-luna 재시작.
