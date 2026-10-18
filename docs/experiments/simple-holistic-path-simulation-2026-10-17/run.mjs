@@ -1,18 +1,21 @@
 // 시뮬레이션 사례를 UI 없이 실제 모델로 실행한다. 서버와 같은 판정 경로(evaluateSimple: 검증 실패 시 1회 재요청)와 상태 전이(applySimpleAction)를 쓴다.
-// node --env-file=.env docs/experiments/simple-holistic-path-simulation-2026-10-17/run.mjs [runs=3] [model=gpt-6-luna] [usdCap=1]
+// node --env-file=.env docs/experiments/simple-holistic-path-simulation-2026-10-17/run.mjs [runs=3] [model=gpt-6-luna] [usdCap=1] [label] [previousResults]
+// previousResults를 주면 그 실행에서 3회 모두 구조 일치한 사례는 1회만(회귀 확인), 나머지는 runs회 돌린다.
 // 저장소 루트에서 실행한다(프롬프트 경로가 cwd 기준). 출력: runs/<날짜>/calls.jsonl, results.json, REVIEW.md
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { OpenAISimpleEvaluator, SimpleEvaluationError, applySimpleAction, evaluateSimple, initialSimpleState, PARAGRAPH_SIMPLE_PROMPT_VERSION } from '../../../packages/pipeline/dist/index.js';
+import { OpenAISimpleEvaluator, PARAGRAPH_SIMPLE_PROMPT_VERSION as PV, SimpleEvaluationError, applySimpleAction, evaluateSimple, initialSimpleState } from '../../../packages/pipeline/dist/index.js';
+const PARAGRAPH_SIMPLE_PROMPT_VERSION = PV;
 import { loadDialoguePassages } from '../../../packages/app/dist/server/content.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const [runs = 3, model = 'gpt-6-luna', usdCap = 1] = process.argv.slice(2).map((v, i) => (i === 1 ? v : Number(v)));
+const argv = process.argv.slice(2);
+const runs = Number(argv[0] ?? 3), model = argv[1] ?? 'gpt-6-luna', usdCap = Number(argv[2] ?? 1), label = argv[3], previous = argv[4];
 const PRICE = { input: 0.10, output: 0.50 }; // 백만 토큰당 USD(저장소 기존 스크립트 단가, 캐시 입력도 정가로 보수 계산)
 const { meta, cases } = JSON.parse(readFileSync(join(here, 'cases.json'), 'utf8'));
 const passages = loadDialoguePassages();
-const outDir = join(here, 'runs', new Date().toISOString().slice(0, 10));
+const outDir = join(here, 'runs', label ?? `${new Date().toISOString().slice(0, 10)}-${PARAGRAPH_SIMPLE_PROMPT_VERSION.replace('paragraph-simple-holistic-', '')}`);
 mkdirSync(outDir, { recursive: true });
 const callsPath = join(outDir, 'calls.jsonl');
 const evaluator = new OpenAISimpleEvaluator({ model, timeoutMs: 120_000 });
@@ -44,6 +47,7 @@ async function runCase(c, run) {
       targetParagraph: { paragraphId: paragraph.paragraphId, text: paragraph.text },
       stage: state.stage, dialogue: structuredClone(dialogue), targetError: state.targetError,
       targetGaps: state.stage === 'AFTER_GAP' ? state.targetGaps : null,
+      ...('coreParts' in state ? { coreParts: state.stage === 'INITIAL' ? null : state.coreParts } : {}),
     };
     let result;
     try { result = await evaluateSimple(evaluator, input); }
@@ -57,6 +61,8 @@ async function runCase(c, run) {
     usd += (result.call.inputTokens * PRICE.input + result.call.outputTokens * PRICE.output) / 1e6;
     if (usd > usdCap) stopped = true;
     const o = result.output;
+    // 서버와 같게: 원문 옮겨 적기로 판정된 발화는 이후 판정 입력에서 copied로 표시(v4.3).
+    if (o.category === 'COPY') dialogue.at(-1).copied = true;
     const next = applySimpleAction(state, o);
     appendFileSync(callsPath, JSON.stringify({ caseId: c.caseId, run, step: i, input, output: o, call: result.call, validationFailures: result.validationFailures }) + '\n');
     const e = s.expect;
@@ -65,6 +71,7 @@ async function runCase(c, run) {
       gaps: o.gaps.map(g => ({ question: g.question, sentence: sentenceKey(c.paragraphKey, g.sourceQuote) })),
       targetGapReadings: o.targetGapReadings, targetGapsFilled: o.targetGapsFilled,
       errors: o.errors.map(x => ({ studentQuote: x.studentQuote, gapIndex: x.gapIndex, sentence: sentenceKey(c.paragraphKey, x.sourceQuote), feedback: x.feedback })),
+      coreParts: o.coreParts?.map(x => ({ description: x.description, sentence: sentenceKey(c.paragraphKey, x.sourceQuote) })), corePartsCovered: o.corePartsCovered,
       missingNote: o.missingNote, bubbles: bubblesOf(o, input.stage), highlights: next.revealQuotes.map(q => sentenceKey(c.paragraphKey, q)),
       message: o.message, coreIntro: o.coreIntro, coreSummary: o.coreSummary, restatedSummary: o.restatedSummary, reason: o.reason, retries: result.call.attempts - 1,
     };
@@ -83,6 +90,9 @@ async function runCase(c, run) {
     };
     steps.push({ step: i, stage: input.stage, student: s.student, actual, check });
     if (!check.action) return { caseId: c.caseId, run, steps, status: 'DIVERGED', divergedAt: i };
+    // 구멍 질문이 기대와 다른 빈 곳(근거 문장 기준)을 물으면, 미리 써 둔 답으로는 이후를 비교할 수 없다.
+    if (o.action === 'GAP_QUESTION' && e.gaps && JSON.stringify(actual.gaps.map(g => g.sentence).sort()) !== JSON.stringify([...e.gaps].sort()))
+      return { caseId: c.caseId, run, steps, status: 'QUESTION_MISMATCH', divergedAt: i };
     state = next;
     if (state.done) break;
     dialogue.push({ role: 'tutor', text: tutorText(o) });
@@ -92,7 +102,13 @@ async function runCase(c, run) {
 
 // 동시 실행 6개
 const jobs = [];
-for (let run = 1; run <= runs; run++) for (const c of cases) jobs.push([c, run]);
+const prevOk = new Set();
+if (previous) {
+  const prev = JSON.parse(readFileSync(previous, 'utf8')).results;
+  for (const c of cases) { const rs = prev.filter(r => r.caseId === c.caseId); if (rs.length && rs.every(r => r.status === 'COMPLETED' && r.steps.every(s => s.check && Object.values(s.check).every(Boolean)))) prevOk.add(c.caseId); }
+}
+for (let run = 1; run <= runs; run++) for (const c of cases) if (run === 1 || !prevOk.has(c.caseId)) jobs.push([c, run]);
+console.error(`jobs ${jobs.length} (회귀 확인 1회 ${prevOk.size}사례)`);
 const results = [];
 let cursor = 0;
 await Promise.all(Array.from({ length: 6 }, async () => {
@@ -116,7 +132,7 @@ const lines = [`# 전체 경로 시뮬레이션 실행 결과 (${outDir.split('/
 const keys = ['action', 'category', 'targetErrorResolved', 'gapsCount', 'targetGapsFilled', 'errorsCount', 'gapIndex', 'missingNote', 'bubbles', 'highlights'];
 for (const c of cases) {
   const rs = results.filter(r => r.caseId === c.caseId);
-  const verdict = rs.map(r => r.status === 'COMPLETED' && r.steps.every(s => s.check && Object.values(s.check).every(Boolean)) ? '일치' : r.status === 'COMPLETED' ? '부분' : r.status === 'DIVERGED' ? `갈라짐@${r.divergedAt + 1}` : r.status).join(' / ');
+  const verdict = rs.map(r => r.status === 'COMPLETED' && r.steps.every(s => s.check && Object.values(s.check).every(Boolean)) ? '일치' : r.status === 'COMPLETED' ? '부분' : r.status === 'DIVERGED' ? `갈라짐@${r.divergedAt + 1}` : r.status === 'QUESTION_MISMATCH' ? `질문 다름@${r.divergedAt + 1}` : r.status).join(' / ');
   lines.push(`## ${c.caseId} · ${c.name}`, '', `회차별: ${verdict}`, '');
   c.steps.forEach((s, i) => {
     const e = s.expect;
@@ -131,6 +147,8 @@ for (const c of cases) {
       const bad = keys.filter(k => !st.check[k]);
       lines.push(`- **${r.run}회** ${bad.length ? `✗ ${bad.join(',')}` : '✓'}: ${a.category} → ${a.action}${a.targetGapsFilled ? ` · 채움 ${JSON.stringify(a.targetGapsFilled)}` : ''}${a.errors.length ? ` · 오류 ${a.errors.map(x => `“${x.studentQuote}”(${x.gapIndex ?? '-'})`).join(',')}` : ''} · 말풍선 ${a.bubbles.join('→')} · 표시 ${a.highlights.join('·') || '없음'}${a.retries ? ` · 재요청 ${a.retries}` : ''}`);
       if (a.targetGapReadings) lines.push(`  - 읽기: ${a.targetGapReadings.map(x => `“${x}”`).join(' / ')}`);
+      if (a.coreParts?.length) lines.push(`  - 핵심 부분: ${a.coreParts.map((x, j) => `${j}. ${x.description}(${x.sentence})`).join(' ')}`);
+      if (a.corePartsCovered) lines.push(`  - 부분 담음: ${JSON.stringify(a.corePartsCovered)}`);
       if (a.gaps.length) lines.push(`  - 질문: ${a.gaps.map((g, j) => `${j + 1}. ${g.question}(${g.sentence})`).join(' ')}`);
       lines.push(`  - 말: ${a.message.replace(/\n/g, ' ')}`);
       for (const x of a.errors) if (x.feedback) lines.push(`  - 바로잡기: (“${x.studentQuote}”) ${x.feedback}`);

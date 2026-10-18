@@ -1,6 +1,8 @@
 // 단순 형식 문단 v4.1 전체 경로(29) 시뮬레이션 생성기. 문단 두 개 × 29 경로 = 58 사례.
 // node docs/experiments/simple-holistic-path-simulation-2026-10-17/build.mjs
 // 출력: cases.json(실험 스크립트용), SIMULATION.md(사람이 읽는 기대 대화)
+// 2026-10-19: 구멍 하나 질문에 질문과 무관한 틀린 말(도파민 'D1이 억제성…')은 판정하지 않는다(사용자 원칙, v4.4). 공손룡 쪽은 이유를 물은 질문에 틀린 이유를 댄 것이라 오류 그대로.
+// 2026-10-18: gongsun oneErrWithB를 오류 하나로 고침(이전 문장은 '그래야 혼란이 줄어든다'가 둘째 오류였다 — 1차 실행 RESULTS 6).
 // 기대 말풍선 문구는 방향 예시다. 비교 기준은 분류·행동·항목 판정·말풍선 구성·짚는 내용의 방향이다.
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -27,7 +29,7 @@ const P = {
       irrelevant: '잘 모르겠어.',
       nonCore: '공손룡은 명가의 사상가였다.',
       onlyA: '공손룡은 명과 실이 일대일로 대응해야 한다고 주장했다.',
-      oneErrWithB: '공손룡은 하나의 명이 여러 실을 가리켜도 된다고 봤다. 그래야 혼란이 줄어든다.',
+      oneErrWithB: '공손룡은 하나의 명이 여러 실을 가리켜도 된다고 봤다. 그리고 명과 실의 관계를 정해서 혼란을 막으려 했다.',
       oneErrNoB: '공손룡은 하나의 명이 여러 실을 가리켜도 된다고 봤다.',
       multi: '공손룡은 명과 실이 다대다로 대응해도 된다고 봤고, 그래야 이름을 자유롭게 바꿔 쓰며 유연하게 소통할 수 있다고 했다.',
       fixResolvedFull: '아, 하나의 명은 하나의 실만 가리켜야 한다고 봤네.',
@@ -44,6 +46,7 @@ const P = {
       g1Error: '이름을 상황에 따라 바꿔 쓸 수 있게 하려고.',
       g1OtherError: '하나의 명이 여러 실을 가리켜야 하니까 그런 거 아닐까?',
     },
+    g1OtherRelevant: true,
     errors: {
       relMany: { quote: '하나의 명이 여러 실을 가리켜도 된다고 봤다', part: 'A', fix: '공손룡은 오히려 하나의 명이 하나의 실만 가리켜야 한다고 주장했어.' },
       relManyMulti: { quote: '명과 실이 다대다로 대응해도 된다고 봤고', part: 'A', fix: '다대다가 아니라, 명과 실이 하나씩 엄격하게 대응해야 한다고 봤어.' },
@@ -101,6 +104,7 @@ const P = {
       g1Error: '운동이 차단돼.',
       g1OtherError: 'D1이 억제성이라서 그런 거 아닐까?',
     },
+    g1OtherRelevant: false,
     errors: {
       relMany: { quote: '직접 경로를 억제하고 간접 경로를 활성화', part: 'A', fix: '반대야. 도파민은 직접 경로는 활성화하고 간접 경로는 억제해.' },
       relManyMulti: { quote: '직접 경로에는 D2 수용체가, 간접 경로에는 D1 수용체가 있어서', part: 'A', fix: '수용체가 뒤바뀌었어. 직접 경로에는 D1, 간접 경로에는 D2가 밀집해 있어.' },
@@ -195,6 +199,9 @@ const G = {
     ? step('AFTER_GAP', p.say.g2ErrorPlusBlank,
       { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false, false], targetGapReadingsNote: '둘째 읽기는 빈 문자열', errors: [{ key: 'relNone', part: 'A', gapIndex: 0 }], missingNote: true, bubbles: ['바로잡기(도입)', '바로잡기', '빠진 내용', '문단 핵심'], highlights: ['A', 'B'], points: ['질문 1 답은 오류(gapIndex 0)', '질문 2 "모르겠어"는 오류 아님·못 채움 → 빠진 내용 말풍선', '물은 항목 모두 응답받음'] },
       [...fixBubbles(p, ['relNone'], '네 답에서 지문과 다른 점을 짚어 볼게.'), { label: '빠진 내용', text: p.reply.missingB(false) }, coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')])
+    : !p.g1OtherRelevant ? step('AFTER_GAP', p.say.g1OtherError,
+      { category: 'GAP', action: 'CLOSE_GAP', targetGapsFilled: [false], bubbles: ['문단 핵심', '빠진 내용'], highlights: ['B'], points: ['질문과 무관한 말(다른 대상의 성질)은 맞든 틀리든 판정하지 않음(오류로 세지 않고 바로잡지 않음)', '빠진 내용에서 질문과 다른 이야기였다고 짧게 짚고 B가 빠졌다고 말함'] },
+      [coreBubble(p, '내가 생각한 이 문단의 핵심 내용은 이거야.'), { label: '빠진 내용', text: `질문과는 다른 이야기를 했어. ${p.reply.missingB(true)}` }])
     : step('AFTER_GAP', p.say.g1OtherError,
       { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false], errors: [{ key: 'relManyOther', part: 'A', gapIndex: null }], missingNote: true, bubbles: ['바로잡기(도입)', '바로잡기', '빠진 내용', '문단 핵심'], highlights: ['A', 'B'], points: ['답이 물은 B가 아니라 A를 틀리게 말함 → 오류(gapIndex null)', '물은 B는 못 채움 → 빠진 내용 말풍선'] },
       [...fixBubbles(p, ['relManyOther'], '네 답에서 지문과 다른 점을 짚어 볼게.'), { label: '빠진 내용', text: p.reply.missingB(false) }, coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]),
