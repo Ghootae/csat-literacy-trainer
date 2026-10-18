@@ -1,7 +1,7 @@
 /** 단순 형식 문단 개발자 모드(simple-holistic)의 서버-클라이언트 계약. */
 export type SimpleMessageLabel = '나의 요약' | '다시 쓴 요약' | '나의 답' | '피드백' | '다시 써 보기' | '확인하기' | '생각해 보기' | '빠진 내용' | '바로잡기' | '문단 핵심';
 /** `quote`: 말풍선 위에 작게 보일 학생 발화 인용. `box`: 말풍선 안 옅은 배경 상자에 보일 문단 핵심. `items`: 말풍선 안 번호 목록(빈 곳 질문). */
-export interface SimpleMessageView { role: 'student' | 'tutor'; text: string; label: SimpleMessageLabel; quote?: string; box?: string; items?: string[] }
+export interface SimpleMessageView { role: 'student' | 'tutor'; text: string; label: SimpleMessageLabel; quote?: string; box?: string; items?: string[]; copied?: true }
 export interface SimpleHighlightView { start: number; end: number; text: string; location: 'PASSAGE' }
 
 export interface SimpleDialogueView {

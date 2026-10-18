@@ -151,8 +151,8 @@ export class SimpleDialogueController {
     const input: SimpleEvaluationInput = {
       passage: { title: r.passage.title, paragraphs: r.passage.paragraphs.map(({ paragraphId, text }) => ({ paragraphId, text })) },
       targetParagraph: { paragraphId: paragraph.paragraphId, text: paragraph.text },
-      stage: p.state.stage, dialogue: p.transcript.map(({ role, text, items }) => ({ role, text: items ? `${text}\n${items.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : text })),
-      targetError: p.state.targetError, targetGaps: p.state.stage === 'AFTER_GAP' ? p.state.targetGaps : null,
+      stage: p.state.stage, dialogue: p.transcript.map(({ role, text, items, copied }) => ({ role, text: items ? `${text}\n${items.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : text, ...(copied ? { copied } : {}) })),
+      coreParts: p.state.stage === 'INITIAL' ? null : p.state.coreParts, targetError: p.state.targetError, targetGaps: p.state.stage === 'AFTER_GAP' ? p.state.targetGaps : null,
     };
     try {
       const stage = p.state.stage;
@@ -160,6 +160,8 @@ export class SimpleDialogueController {
       const next = applySimpleAction(p.state, result.output);
       const step = this.buildStep(p, paragraph.text, studentText, result, next);
       p.steps.push(step); p.state = next; p.status = 'IDLE';
+      // 원문 옮겨 적기로 판정된 발화는 표시해 두고, 이후 판정 입력에서 학생 이해로 치지 않게 한다.
+      if (result.output.category === 'COPY') p.transcript.at(-1)!.copied = true;
       p.transcript.push(...this.tutorMessages(result.output, stage));
       this.log(r, index, p, 'STEP', null, result.validationFailures);
     } catch (error) {

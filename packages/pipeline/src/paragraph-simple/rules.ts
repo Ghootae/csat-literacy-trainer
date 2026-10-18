@@ -1,6 +1,6 @@
 import {
   SimpleOutputSchema,
-  type SimpleAction, type SimpleError, type SimpleGap, type SimpleEvaluationInput, type SimpleOutput, type SimpleStage,
+  type SimpleAction, type SimpleCorePart, type SimpleError, type SimpleGap, type SimpleEvaluationInput, type SimpleOutput, type SimpleStage,
 } from './schema.js';
 
 /** 행동 표. 프롬프트의 표와 같다. */
@@ -49,9 +49,40 @@ export function validateSimpleOutput(input: SimpleEvaluationInput, output: Simpl
     if (!studentTexts.some(t => t.includes(e.studentQuote)) || e.studentQuote === '') problems.push(`errors[${i}].studentQuote가 학생 발화의 연속 부분 문자열이 아니다.`);
     if (e.sourceQuote === '' || !input.targetParagraph.text.includes(e.sourceQuote)) problems.push(`errors[${i}].sourceQuote가 대상 문단의 연속 부분 문자열이 아니다.`);
   });
+  const initial = input.stage === 'INITIAL';
+  const parts = initial ? output.coreParts : input.coreParts ?? [];
+  if (initial) {
+    if (output.coreParts.length < 1 || output.coreParts.length > 3) problems.push('INITIAL의 coreParts는 1~3개여야 한다.');
+    output.coreParts.forEach((c, i) => {
+      if (!c.description.trim()) problems.push(`coreParts[${i}].description이 비어 있다.`);
+      if (c.sourceQuote === '' || !input.targetParagraph.text.includes(c.sourceQuote)) problems.push(`coreParts[${i}].sourceQuote가 대상 문단의 연속 부분 문자열이 아니다.`);
+    });
+  } else if (output.coreParts.length !== 0) problems.push('coreParts는 INITIAL에서만 채우고 그 밖에는 빈 배열이어야 한다.');
+  const covered = output.corePartsCovered;
+  if (covered.length !== parts.length) problems.push('corePartsCovered는 기준 핵심 부분과 같은 길이여야 한다.');
+  const usedParts = new Set<number>();
+  output.errors.forEach((e, i) => {
+    if (e.corePartIndex < 0 || e.corePartIndex >= parts.length) problems.push(`errors[${i}].corePartIndex가 핵심 부분 범위 밖이다.`);
+    else if (usedParts.has(e.corePartIndex)) problems.push(`errors[${i}].corePartIndex가 다른 오류와 겹친다(핵심 부분 하나에 오류는 최대 하나).`);
+    else if (covered[e.corePartIndex] !== false) problems.push(`errors[${i}].corePartIndex가 가리키는 부분의 corePartsCovered가 false여야 한다.`);
+    usedParts.add(e.corePartIndex);
+  });
+  if (input.stage !== 'AFTER_GAP' && output.errors.length === 0 && covered.length === parts.length) {
+    if (output.category === 'CAPTURED' && !covered.every(Boolean)) problems.push('CAPTURED면 corePartsCovered가 모두 true여야 한다.');
+    else if (output.category === 'GAP' && covered.every(Boolean)) problems.push('GAP이면 corePartsCovered에 false가 하나 이상 있어야 한다.');
+    else if ((output.category === 'IRRELEVANT' || output.category === 'COPY') && covered.some(Boolean)) problems.push(`${output.category}면 corePartsCovered가 모두 false여야 한다.`);
+  }
   if (output.action === 'GAP_QUESTION') {
     if (output.gaps.length < 1 || output.gaps.length > 2) problems.push('GAP_QUESTION은 gaps가 1개 또는 2개여야 한다.');
+    const falseCount = covered.filter(c => !c).length;
+    if (output.gaps.length !== Math.min(2, falseCount)) problems.push(`gaps는 담지 못한 핵심 부분 수와 맞아야 한다(min(2, ${falseCount})개).`);
+    const usedGapParts = new Set<number>();
     output.gaps.forEach((g, i) => {
+      if (g.corePartIndex < 0 || g.corePartIndex >= parts.length) problems.push(`gaps[${i}].corePartIndex가 핵심 부분 범위 밖이다.`);
+      else if (usedGapParts.has(g.corePartIndex)) problems.push(`gaps[${i}].corePartIndex가 다른 항목과 겹친다.`);
+      else if (covered[g.corePartIndex] !== false) problems.push(`gaps[${i}].corePartIndex가 가리키는 부분의 corePartsCovered가 false여야 한다.`);
+      usedGapParts.add(g.corePartIndex);
+      if (!g.asksOneThing) problems.push(`gaps[${i}].asksOneThing이 true여야 한다(한 가지만 묻도록 질문을 고쳐라).`);
       if (!g.description.trim()) problems.push(`gaps[${i}].description이 비어 있다.`);
       if (!g.question.trim()) problems.push(`gaps[${i}].question이 비어 있다.`);
       if (g.sourceQuote === '' || !input.targetParagraph.text.includes(g.sourceQuote)) problems.push(`gaps[${i}].sourceQuote가 대상 문단의 연속 부분 문자열이 아니다.`);
@@ -107,6 +138,8 @@ export interface SimpleParagraphState {
   stage: SimpleStage;
   retryUsed: boolean;
   questionsAsked: number;
+  /** 첫 판정(INITIAL)에서 모델이 정한 핵심 부분. 이후 모든 판정 입력에 쓴다. */
+  coreParts: SimpleCorePart[];
   targetError: SimpleError | null;
   /** 번호 질문으로 물은 빈 곳 목록. 마무리 표시(못 채운 곳의 근거 문장)에 쓴다. */
   targetGaps: SimpleGap[];
@@ -117,13 +150,13 @@ export interface SimpleParagraphState {
 }
 
 export function initialSimpleState(): SimpleParagraphState {
-  return { stage: 'INITIAL', retryUsed: false, questionsAsked: 0, targetError: null, targetGaps: [], done: false, outcome: null, revealQuotes: [] };
+  return { stage: 'INITIAL', retryUsed: false, questionsAsked: 0, coreParts: [], targetError: null, targetGaps: [], done: false, outcome: null, revealQuotes: [] };
 }
 
 /** 검증을 통과한 출력을 문단 상태에 적용한다. 순수 함수. */
 export function applySimpleAction(state: SimpleParagraphState, output: SimpleOutput): SimpleParagraphState {
   if (state.done) throw new Error('이미 끝난 문단에는 행동을 적용할 수 없다.');
-  const next: SimpleParagraphState = { ...state, revealQuotes: [] };
+  const next: SimpleParagraphState = { ...state, revealQuotes: [], coreParts: state.stage === 'INITIAL' ? output.coreParts : state.coreParts };
   switch (output.action) {
     case 'PRAISE': return { ...next, done: true, outcome: 'CAPTURED' };
     case 'RETRY_PROMPT': return { ...next, stage: 'RETRY', retryUsed: true };

@@ -53,7 +53,7 @@ export interface SimpleTransport {
   }>;
 }
 export const PARAGRAPH_SIMPLE_DEFAULT_MODEL = 'gpt-5.6-terra';
-const PROMPT_PATH = 'packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.1.md';
+const PROMPT_PATH = 'packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.4.md';
 
 export class OpenAISimpleEvaluator implements SimpleEvaluator {
   private client: OpenAI | undefined;

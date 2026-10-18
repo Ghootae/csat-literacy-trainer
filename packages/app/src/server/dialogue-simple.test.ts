@@ -13,13 +13,14 @@ const passage: DialoguePassageContent = {
   passageId: 'ps', title: '광합성', exam: '테스트', source: { status: 'exact-local-source' }, problemQuestionId: 'q-1',
   paragraphs: [{ paragraphId: 'p1', position: 1, text: P1, goldPath: 'SECRET/gold.json' }, { paragraphId: 'p2', position: 2, text: P2, goldPath: null }],
 };
-const metadata = { provider: 'mock' as const, model: 'mock', promptVersion: 'paragraph-simple-holistic-v4.1', durationMs: 1, inputTokens: 1, outputTokens: 1, cachedTokens: 0 };
-const base: SimpleOutput = { category: 'CAPTURED', reason: '이유', errors: [], gaps: [], targetErrorResolved: null, targetGapReadings: null, targetGapsFilled: null, restatedSummary: '요약', action: 'PRAISE', message: '잘 잡았어', coreIntro: null, coreSummary: null, missingNote: null, coreSourceQuote: null };
-const err = { studentQuote: '빛을 소금으로', correction: '빛에너지가 화학에너지로 바뀐다', sourceQuote: '빛에너지를 화학에너지로 바꾼다', gapIndex: null, feedback: '' };
-const err2 = { studentQuote: '산소를 먹는다', correction: '산소가 나온다', sourceQuote: '산소가 나온다', gapIndex: null, feedback: '' };
+const metadata = { provider: 'mock' as const, model: 'mock', promptVersion: 'paragraph-simple-holistic-v4.2', durationMs: 1, inputTokens: 1, outputTokens: 1, cachedTokens: 0 };
+const parts = [{ description: '에너지 전환', sourceQuote: '빛에너지를 화학에너지로 바꾼다' }, { description: '산소 발생', sourceQuote: '산소가 나온다' }];
+const base: SimpleOutput = { category: 'CAPTURED', reason: '이유', coreParts: [], corePartsCovered: [], errors: [], gaps: [], targetErrorResolved: null, targetGapReadings: null, targetGapsFilled: null, restatedSummary: '요약', action: 'PRAISE', message: '잘 잡았어', coreIntro: null, coreSummary: null, missingNote: null, coreSourceQuote: null };
+const err = { studentQuote: '빛을 소금으로', correction: '빛에너지가 화학에너지로 바뀐다', sourceQuote: '빛에너지를 화학에너지로 바꾼다', corePartIndex: 0, gapIndex: null, feedback: '' };
+const err2 = { studentQuote: '산소를 먹는다', correction: '산소가 나온다', sourceQuote: '산소가 나온다', corePartIndex: 1, gapIndex: null, feedback: '' };
 const fb = (e: typeof err, feedback: string) => ({ ...e, feedback });
-const gap = { description: '산소', sourceQuote: '산소가 나온다', question: '이 과정에서 무엇이 생기는지 다시 볼래?' };
-const gap2 = { description: '에너지', sourceQuote: '빛에너지를 화학에너지로 바꾼다', question: '무엇이 무엇으로 바뀌는지 말해 볼래?' };
+const gap = { corePartIndex: 1, description: '산소', sourceQuote: '산소가 나온다', question: '이 과정에서 무엇이 생기는지 다시 볼래?', asksOneThing: true };
+const gap2 = { corePartIndex: 0, description: '에너지', sourceQuote: '빛에너지를 화학에너지로 바꾼다', question: '무엇이 무엇으로 바뀌는지 말해 볼래?', asksOneThing: true };
 const after = { coreIntro: '내가 파악한 핵심은 이거야.', coreSummary: '핵심 정리' };
 const out = (patch: Partial<SimpleOutput>): SimpleOutput => ({ ...base, ...patch });
 
@@ -27,13 +28,23 @@ let dir: string;
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'simple-')); });
 afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
 
+/** 흐름 시나리오는 핵심 부분을 겨냥하지 않으므로, 비워 둔 coreParts·corePartsCovered는 기본 부분과 오류·빈 곳 번호로 일관되게 채운다. 명시한 값은 그대로 둔다. */
+const fit = (o: SimpleOutput, input: SimpleEvaluationInput): SimpleOutput => {
+  const initial = input.stage === 'INITIAL';
+  const coreParts = initial && o.coreParts.length === 0 ? (input.targetParagraph.text === P1 ? parts : [{ description: '핵심', sourceQuote: input.targetParagraph.text }]) : o.coreParts;
+  const basis = initial ? coreParts : input.coreParts ?? [];
+  const missed = o.category === 'IRRELEVANT' || o.category === 'COPY';
+  const corePartsCovered = o.corePartsCovered.length > 0 ? o.corePartsCovered
+    : basis.map((_, k) => !(missed || o.errors.some(e => e.corePartIndex === k) || o.gaps.some(g => g.corePartIndex === k)));
+  return { ...o, coreParts, corePartsCovered };
+};
 function setup(...scripted: (SimpleOutput | Error)[]) {
   const inputs: SimpleEvaluationInput[] = [];
   const evaluator: SimpleEvaluator = { async complete(input) {
     inputs.push(input);
     const next = scripted.shift(); if (!next) throw new Error('script exhausted');
     if (next instanceof Error) throw next;
-    return { rawOutput: next, metadata };
+    return { rawOutput: fit(next, input), metadata };
   } };
   const controller = new SimpleDialogueController({ evaluator, passages: [passage], logDirectory: dir });
   return { controller, inputs, view: controller.start('ps') };
@@ -59,13 +70,17 @@ describe('흐름 시나리오 8개', () => {
     expect(v.current.done).toBe(true);
     expect(inputs.map(i => i.stage)).toEqual(['INITIAL', 'RETRY']);
     expect(inputs[1]!.dialogue.map(m => m.role)).toEqual(['student', 'tutor', 'student']);
+    expect(inputs[1]!.dialogue.some(m => m.copied)).toBe(false);
     expect(c.inspect(v.sessionId, 0).attempts[0]!.state).toMatchObject({ outcome: 'CAPTURED', retryUsed: true });
   });
   it('3. 무관 -> 재시도 -> 무관 종료(응답 없음으로 넘어감)', async () => {
-    const { controller: c, view } = setup(out({ category: 'COPY', action: 'RETRY_PROMPT' }),
+    const { controller: c, view, inputs } = setup(out({ category: 'COPY', action: 'RETRY_PROMPT' }),
       out({ category: 'COPY', action: 'CLOSE_NO_RESPONSE', coreSummary: '빛에너지가 화학에너지가 된다', coreSourceQuote: '산소가 나온다', message: '핵심은 이거야' }));
     const v = await say(c, await say(c, view, P1), P1);
     expect(v.current).toMatchObject({ done: true });
+    // 옮겨 적기로 판정된 첫 발화만 다음 판정 입력에서 copied로 표시된다.
+    expect(inputs[0]!.dialogue[0]!.copied).toBeUndefined();
+    expect(inputs[1]!.dialogue.map(m => m.copied ?? false)).toEqual([true, false, false]);
     expect(v.current.highlights.map(h => h.text)).toEqual(['산소가 나온다']);
     expect(c.inspect(v.sessionId, 0).attempts[0]!.state).toMatchObject({ outcome: 'NO_RESPONSE', questionsAsked: 0 });
   });
@@ -121,7 +136,7 @@ describe('입력·공개 범위', () => {
   it('모델 입력에 골드·축이 없고, 공개 view에 판정·원출력이 없다', async () => {
     const { controller: c, view, inputs } = setup(out({}));
     const v = await say(c, view, '답');
-    expect(Object.keys(inputs[0]!).sort()).toEqual(['dialogue', 'passage', 'stage', 'targetError', 'targetGaps', 'targetParagraph']);
+    expect(Object.keys(inputs[0]!).sort()).toEqual(['coreParts', 'dialogue', 'passage', 'stage', 'targetError', 'targetGaps', 'targetParagraph']);
     expect(JSON.stringify(inputs[0])).not.toContain('SECRET');
     expect(JSON.stringify(v)).not.toMatch(/category|reason|SECRET|rawOutput|expectedAction/);
   });
@@ -154,7 +169,7 @@ describe('평가 실패와 멱등성', () => {
     let release!: () => void;
     const gate = new Promise<void>(r => { release = r; });
     let calls = 0;
-    const evaluator: SimpleEvaluator = { async complete() { calls++; await gate; return { rawOutput: out({}), metadata }; } };
+    const evaluator: SimpleEvaluator = { async complete(input) { calls++; await gate; return { rawOutput: fit(out({}), input), metadata }; } };
     const c = new SimpleDialogueController({ evaluator, passages: [passage], logDirectory: dir });
     const v = c.start('ps');
     const req = { transitionId: 'same', paragraphIndex: 0, text: '답' };
@@ -227,7 +242,8 @@ describe('v2: 라벨·재구성 요약', () => {
     let v = await say(c, view, P1);
     v = await say(c, v, quoted); v = await say(c, v, '고쳤어'); v = await say(c, v, '글쎄');
     expect(v.current.messages.map(m => m.label)).toEqual(['나의 요약', '다시 써 보기', '다시 쓴 요약', '확인하기', '나의 답', '생각해 보기', '나의 답', '문단 핵심', '빠진 내용']);
-    for (const i of inputs) for (const m of i.dialogue) expect(Object.keys(m).sort()).toEqual(['role', 'text']);
+    // 라벨은 넣지 않는다. 옮겨 적기로 판정된 발화에만 copied가 붙는다.
+    for (const i of inputs) for (const m of i.dialogue) expect(Object.keys(m).filter(k => k !== 'copied').sort()).toEqual(['role', 'text']);
   });
   it('PRAISE·CLOSE_NO_RESPONSE 라벨, CLOSE_ERRORS는 바로잡기·문단 핵심 두 말풍선', async () => {
     const a = setup(out({}));
@@ -283,6 +299,20 @@ describe('v2: 라벨·재구성 요약', () => {
     const done = await say(f.controller, f.view, quoted);
     expect(done.current.messages.some(m => m.quote !== undefined && m.box === undefined)).toBe(true);
     for (const i of [...f.inputs, ...g.inputs, ...e.inputs]) for (const m of i.dialogue) expect(Object.keys(m).sort()).toEqual(['role', 'text']);
+  });
+  it('v4.2: INITIAL 입력 coreParts는 null이고, 이후 단계 입력에는 INITIAL 출력의 coreParts가 그대로 들어가며, 새 시도 INITIAL에서 다시 null이다', async () => {
+    const mine = [{ description: '핵심 하나', sourceQuote: '산소가 나온다' }];
+    const { controller: c, view, inputs } = setup(
+      out({ coreParts: mine, corePartsCovered: [false], category: 'GAP', gaps: [{ ...gap, corePartIndex: 0 }], action: 'GAP_QUESTION' }),
+      out({ ...after, corePartsCovered: [true], targetGapReadings: ['읽기'], targetGapsFilled: [true] }),
+      out({ coreParts: mine, corePartsCovered: [true] }));
+    const asked = await say(c, view, 'a');
+    const done = await say(c, asked, 'b');
+    expect(inputs.map(i => i.coreParts)).toEqual([null, mine]);
+    expect(inputs.map(i => i.stage)).toEqual(['INITIAL', 'AFTER_GAP']);
+    await say(c, c.startAttempt(done.sessionId, { paragraphIndex: 0 }), 'c');
+    expect(inputs.map(i => i.coreParts)).toEqual([null, mine, null]);
+    expect(inputs[2]!.stage).toBe('INITIAL');
   });
   it('v4: GAP_QUESTION은 한 말풍선(text+items)이고 모델 입력 dialogue에는 번호 질문이 텍스트로 들어간다', async () => {
     const { controller: c, view, inputs } = setup(out({ category: 'GAP', gaps: [gap, gap2], action: 'GAP_QUESTION', message: '두 가지 확인할게' }), out({ ...after, targetGapReadings: ['읽기', '읽기'], targetGapsFilled: [true, true] }));
@@ -368,7 +398,7 @@ describe('v2: 새 시도', () => {
     expect(() => newAttempt(c, view)).toThrow(/이미 새 시도/);
     let release!: () => void;
     const gate = new Promise<void>(r => { release = r; });
-    const evaluator: SimpleEvaluator = { async complete() { await gate; return { rawOutput: out({}), metadata }; } };
+    const evaluator: SimpleEvaluator = { async complete(input) { await gate; return { rawOutput: fit(out({}), input), metadata }; } };
     const c2 = new SimpleDialogueController({ evaluator, passages: [passage], logDirectory: dir });
     const v = c2.start('ps');
     const pending = c2.respond(v.sessionId, { transitionId: 'p', paragraphIndex: 0, text: '답' });

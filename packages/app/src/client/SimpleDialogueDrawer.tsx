@@ -41,17 +41,20 @@ function MemoField({ label, initial, save }: { label: string; initial: string; s
 }
 
 function Step({ step, memo, save }: { step: SimpleStepInspection; memo: string; save: (text: string) => Promise<unknown> }) {
-  const out = step.output as { category: string; reason: string; errors: { studentQuote: string; correction: string; sourceQuote: string; gapIndex: number | null; feedback: string }[];
-    gaps: { description: string; sourceQuote: string; question: string }[]; targetErrorResolved: boolean | null; targetGapReadings: string[] | null; targetGapsFilled: boolean[] | null; restatedSummary: string; coreIntro: string | null; coreSummary: string | null; missingNote: string | null; coreSourceQuote: string | null };
+  const out = step.output as { category: string; reason: string; coreParts: { description: string; sourceQuote: string }[]; corePartsCovered: boolean[];
+    errors: { studentQuote: string; correction: string; sourceQuote: string; corePartIndex: number; gapIndex: number | null; feedback: string }[];
+    gaps: { corePartIndex: number; description: string; sourceQuote: string; question: string; asksOneThing: boolean }[]; targetErrorResolved: boolean | null; targetGapReadings: string[] | null; targetGapsFilled: boolean[] | null; restatedSummary: string; coreIntro: string | null; coreSummary: string | null; missingNote: string | null; coreSourceQuote: string | null };
   return <article className="evaluation-card simple-step">
     <h3>{step.stepIndex + 1}단계 · {step.stage}</h3>
     <blockquote>{step.studentText}</blockquote>
     <p><strong>분류</strong> {out.category}{out.targetErrorResolved !== null && ` · 고치게 한 오류 해결=${String(out.targetErrorResolved)}`}{out.targetGapsFilled !== null && ` · 물은 빈 곳 채움: [${out.targetGapsFilled.join(', ')}]`}</p>
     <p><strong>기대 행동</strong> {step.expectedAction} · <strong>적용 행동</strong> {step.action}{step.expectedAction === step.action ? '' : ' (불일치)'}</p>
     <p>{out.reason}</p>
+    {!!out.coreParts.length && <div className="simple-quote"><small>핵심 부분 (이 문단의 기준)</small>{out.coreParts.map((c, i) => <p key={i}>부분 {i + 1}: {c.description} · 원문 “{c.sourceQuote}”</p>)}</div>}
+    <p><strong>핵심 부분 담음</strong> {out.corePartsCovered.length ? out.corePartsCovered.map((c, i) => `부분 ${i + 1}: ${c ? '담음' : '못 담음'}`).join(' · ') : '(기준 부분 없음)'}</p>
     {out.targetGapReadings && out.targetGapsFilled && <div className="simple-quote">{out.targetGapReadings.map((r, i) => <p key={i}>질문 {i + 1}번 · 학생 답 읽기: {r || '(읽을 답 없음)'} · 채움={String(out.targetGapsFilled![i])}</p>)}</div>}
-    {out.errors.map((e, i) => <div key={i} className="simple-quote"><small>오류 {i + 1}{e.gapIndex !== null && ` · 질문 ${e.gapIndex + 1}번`}</small><p>학생: “{e.studentQuote}”</p><p>정정: {e.correction}</p><p>원문: “{e.sourceQuote}”</p>{e.feedback && <p>바로잡기 말: {e.feedback}</p>}</div>)}
-    {out.gaps.map((g, i) => <div key={i} className="simple-quote"><small>구멍 {i + 1}</small><p>{g.description}</p><p>질문: {g.question}</p><p>원문: “{g.sourceQuote}”</p></div>)}
+    {out.errors.map((e, i) => <div key={i} className="simple-quote"><small>오류 {i + 1} · 부분 {e.corePartIndex + 1}{e.gapIndex !== null && ` · 질문 ${e.gapIndex + 1}번`}</small><p>학생: “{e.studentQuote}”</p><p>정정: {e.correction}</p><p>원문: “{e.sourceQuote}”</p>{e.feedback && <p>바로잡기 말: {e.feedback}</p>}</div>)}
+    {out.gaps.map((g, i) => <div key={i} className="simple-quote"><small>구멍 {i + 1} · 부분 {g.corePartIndex + 1} · 한 가지만 묻기={g.asksOneThing ? '예' : '아니오'}</small><p>{g.description}</p><p>질문: {g.question}</p><p>원문: “{g.sourceQuote}”</p></div>)}
     <p><strong>다시 정리한 요약</strong> {out.restatedSummary || '(없음)'}</p>
     {out.coreIntro && <p><strong>핵심 도입</strong> {out.coreIntro}</p>}
     {out.coreSummary && <p><strong>핵심 정리</strong> {out.coreSummary}</p>}

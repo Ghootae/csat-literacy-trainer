@@ -1,18 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { applySimpleAction, checkSimpleOutput, expectedAction, initialSimpleState, type SimpleParagraphState } from './rules.js';
-import type { SimpleAction, SimpleCategory, SimpleGap, SimpleEvaluationInput, SimpleOutput, SimpleStage } from './schema.js';
+import { applySimpleAction, checkSimpleOutput as rawCheck, expectedAction, initialSimpleState, type SimpleParagraphState } from './rules.js';
+import type { SimpleAction, SimpleCategory, SimpleCorePart, SimpleGap, SimpleEvaluationInput, SimpleOutput, SimpleStage } from './schema.js';
 
 const paragraph = '광합성은 빛에너지를 화학에너지로 바꾼다. 이 과정에서 산소가 나온다.';
-const gap = { description: '산소', sourceQuote: '산소가 나온다', question: '이 과정에서 무엇이 생기는지 다시 볼래?' };
-const gap2 = { description: '에너지', sourceQuote: '빛에너지를 화학에너지로 바꾼다', question: '무엇이 무엇으로 바뀌는지 말해 볼래?' };
+const parts: SimpleCorePart[] = [{ description: '에너지 전환', sourceQuote: '빛에너지를 화학에너지로 바꾼다' }, { description: '산소 발생', sourceQuote: '산소가 나온다' }];
+const gap = { corePartIndex: 1, description: '산소', sourceQuote: '산소가 나온다', question: '이 과정에서 무엇이 생기는지 다시 볼래?', asksOneThing: true };
+const gap2 = { corePartIndex: 0, description: '에너지', sourceQuote: '빛에너지를 화학에너지로 바꾼다', question: '무엇이 무엇으로 바뀌는지 말해 볼래?', asksOneThing: true };
 const input = (stage: SimpleStage, student = '광합성은 빛을 화학에너지로 바꾼다', targetGaps: SimpleGap[] | null = stage === 'AFTER_GAP' ? [gap] : null): SimpleEvaluationInput => ({
   passage: { title: '광합성', paragraphs: [{ paragraphId: 'p1', text: paragraph }] },
   targetParagraph: { paragraphId: 'p1', text: paragraph }, stage,
-  dialogue: [{ role: 'student', text: student }], targetError: null, targetGaps,
+  dialogue: [{ role: 'student', text: student }], coreParts: stage === 'INITIAL' ? null : parts, targetError: null, targetGaps,
 });
-const err = { studentQuote: '빛을 화학에너지로', correction: '빛에너지가 화학에너지로 바뀐다', sourceQuote: '빛에너지를 화학에너지로 바꾼다', gapIndex: null, feedback: '' };
+const err = { studentQuote: '빛을 화학에너지로', correction: '빛에너지가 화학에너지로 바뀐다', sourceQuote: '빛에너지를 화학에너지로 바꾼다', corePartIndex: 0, gapIndex: null, feedback: '' };
 const errFb = { ...err, feedback: '빛이 아니라 빛에너지가 바뀌어' };
-const base: SimpleOutput = { category: 'CAPTURED', reason: '이유', errors: [], gaps: [], targetErrorResolved: null, targetGapReadings: null, targetGapsFilled: null, restatedSummary: '요약', action: 'PRAISE', message: '잘했어', coreIntro: null, coreSummary: null, missingNote: null, coreSourceQuote: null };
+const errFb1 = { ...errFb, corePartIndex: 1 };
+const base: SimpleOutput = { category: 'CAPTURED', reason: '이유', coreParts: parts, corePartsCovered: [true, true], errors: [], gaps: [], targetErrorResolved: null, targetGapReadings: null, targetGapsFilled: null, restatedSummary: '요약', action: 'PRAISE', message: '잘했어', coreIntro: null, coreSummary: null, missingNote: null, coreSourceQuote: null };
+/** 테스트 편의: INITIAL이 아닌 단계에서 기본 coreParts(parts)를 쓴 출력은 빈 배열로 바꿔 검증한다. coreParts·corePartsCovered 자체를 겨냥한 테스트는 rawCheck를 쓴다. */
+const checkSimpleOutput = (i: SimpleEvaluationInput, o: SimpleOutput) => rawCheck(i, i.stage !== 'INITIAL' && o.coreParts === parts ? { ...o, coreParts: [] } : o);
 const praiseAfter = { coreIntro: '내가 파악한 핵심은 이거야.', coreSummary: '핵심' };
 
 describe('행동 표 13줄', () => {
@@ -40,7 +44,7 @@ describe('행동 표 13줄', () => {
 describe('출력 검증', () => {
   it('정상 출력은 통과한다', () => {
     expect(checkSimpleOutput(input('INITIAL'), base).problems).toEqual([]);
-    const one: SimpleOutput = { ...base, category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' };
+    const one: SimpleOutput = { ...base, category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, true] };
     expect(checkSimpleOutput(input('INITIAL'), one).problems).toEqual([]);
   });
   it('restatedSummary는 빈 문자열이어도 통과한다', () => {
@@ -51,7 +55,7 @@ describe('출력 검증', () => {
     expect(checkSimpleOutput(input('INITIAL'), { ...base, action: 'CLOSE_GAP' }).problems.join()).toMatch(/행동 표/);
   });
   it('학생 인용·원문 인용·개수·null 규칙 위반을 잡는다', () => {
-    const one: SimpleOutput = { ...base, category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' };
+    const one: SimpleOutput = { ...base, category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, true] };
     expect(checkSimpleOutput(input('INITIAL', '전혀 다른 말'), one).problems.join()).toMatch(/studentQuote/);
     expect(checkSimpleOutput(input('INITIAL'), { ...one, errors: [{ ...err, sourceQuote: '빛에너지를  화학에너지로' }] }).problems.join()).toMatch(/sourceQuote/);
     expect(checkSimpleOutput(input('INITIAL'), { ...one, errors: [] }).problems.join()).toMatch(/정확히 1개/);
@@ -62,28 +66,28 @@ describe('출력 검증', () => {
     expect(checkSimpleOutput(input('INITIAL'), { ...base, category: 'MULTI_ERROR', errors: [err], action: 'CLOSE_ERRORS', coreSummary: '요약' }).problems.join()).toMatch(/2개 이상/);
   });
   it('마무리 행동은 coreSummary가 필요하고, 교정·구멍 뒤 CLOSE_ERRORS는 오류 1개 이상이면 된다', () => {
-    const close: SimpleOutput = { ...base, category: 'ONE_ERROR', errors: [errFb], action: 'CLOSE_ERRORS', targetErrorResolved: false, coreIntro: '내가 보는 핵심은 이래.', coreSummary: null };
+    const close: SimpleOutput = { ...base, category: 'ONE_ERROR', errors: [errFb], action: 'CLOSE_ERRORS', targetErrorResolved: false, coreIntro: '내가 보는 핵심은 이래.', coreSummary: null, corePartsCovered: [false, true] };
     expect(checkSimpleOutput(input('AFTER_CORRECTION'), close).problems.join()).toMatch(/coreSummary/);
     expect(checkSimpleOutput(input('AFTER_CORRECTION'), { ...close, coreSummary: '핵심' }).problems).toEqual([]);
-    const afterGap = { ...close, targetErrorResolved: null, targetGapReadings: ['읽기'], targetGapsFilled: [false], coreSummary: '핵심', errors: [errFb, errFb], missingNote: '빠진 내용' };
+    const afterGap = { ...close, targetErrorResolved: null, targetGapReadings: ['읽기'], targetGapsFilled: [false], coreSummary: '핵심', errors: [errFb, errFb1], corePartsCovered: [false, false], missingNote: '빠진 내용' };
     expect(checkSimpleOutput(input('AFTER_GAP'), afterGap).problems).toEqual([]);
     expect(checkSimpleOutput(input('AFTER_GAP'), { ...afterGap, errors: [] }).problems.join()).toMatch(/1개 이상/);
   });
   it('v3: feedback·coreIntro는 CLOSE_ERRORS에서만 채우고, 통과·실패를 가른다', () => {
-    const close: SimpleOutput = { ...base, category: 'MULTI_ERROR', errors: [errFb, errFb], action: 'CLOSE_ERRORS', coreIntro: '내가 보는 핵심은 이래.', coreSummary: '핵심' };
+    const close: SimpleOutput = { ...base, category: 'MULTI_ERROR', errors: [errFb, errFb1], corePartsCovered: [false, false], action: 'CLOSE_ERRORS', coreIntro: '내가 보는 핵심은 이래.', coreSummary: '핵심' };
     expect(checkSimpleOutput(input('INITIAL'), close).problems).toEqual([]);
     expect(checkSimpleOutput(input('INITIAL'), { ...close, errors: [errFb, err] }).problems.join()).toMatch(/errors\[1\]\.feedback/);
-    expect(checkSimpleOutput(input('INITIAL'), { ...close, errors: [errFb, { ...errFb, feedback: ' ' }] }).problems.join()).toMatch(/feedback/);
+    expect(checkSimpleOutput(input('INITIAL'), { ...close, errors: [errFb, { ...errFb1, feedback: ' ' }] }).problems.join()).toMatch(/feedback/);
     expect(checkSimpleOutput(input('INITIAL'), { ...close, coreIntro: null }).problems.join()).toMatch(/coreIntro/);
     expect(checkSimpleOutput(input('INITIAL'), { ...close, coreIntro: '가'.repeat(61) }).problems.join()).toMatch(/coreIntro/);
     expect(checkSimpleOutput(input('INITIAL'), { ...close, coreIntro: '가'.repeat(60) }).problems).toEqual([]);
-    const one: SimpleOutput = { ...base, category: 'ONE_ERROR', errors: [errFb], action: 'CORRECTION_QUESTION' };
+    const one: SimpleOutput = { ...base, category: 'ONE_ERROR', errors: [errFb], action: 'CORRECTION_QUESTION', corePartsCovered: [false, true] };
     expect(checkSimpleOutput(input('INITIAL'), one).problems.join()).toMatch(/feedback/);
     expect(checkSimpleOutput(input('INITIAL'), { ...one, errors: [err] }).problems).toEqual([]);
     expect(checkSimpleOutput(input('INITIAL'), { ...base, coreIntro: '도입' }).problems.join()).toMatch(/coreIntro/);
   });
   it('v3: coreSourceQuote는 CLOSE_NO_RESPONSE에서만, 대상 문단의 연속 부분 문자열이어야 한다', () => {
-    const none: SimpleOutput = { ...base, category: 'COPY', action: 'CLOSE_NO_RESPONSE', coreSummary: '핵심', coreSourceQuote: '이 과정에서 산소가 나온다.' };
+    const none: SimpleOutput = { ...base, corePartsCovered: [false, false], category: 'COPY', action: 'CLOSE_NO_RESPONSE', coreSummary: '핵심', coreSourceQuote: '이 과정에서 산소가 나온다.' };
     expect(checkSimpleOutput(input('RETRY'), none).problems).toEqual([]);
     expect(checkSimpleOutput(input('RETRY'), { ...none, coreSourceQuote: null }).problems.join()).toMatch(/coreSourceQuote/);
     expect(checkSimpleOutput(input('RETRY'), { ...none, coreSourceQuote: '' }).problems.join()).toMatch(/coreSourceQuote/);
@@ -91,9 +95,9 @@ describe('출력 검증', () => {
     expect(checkSimpleOutput(input('INITIAL'), { ...base, coreSourceQuote: '산소가 나온다' }).problems.join()).toMatch(/coreSourceQuote/);
   });
   it('v4: GAP_QUESTION의 gaps는 1~2개, 필드 비어 있지 않음, sourceQuote는 문단 부분 문자열', () => {
-    const q: SimpleOutput = { ...base, category: 'GAP', gaps: [gap], action: 'GAP_QUESTION' };
+    const q: SimpleOutput = { ...base, category: 'GAP', gaps: [gap], action: 'GAP_QUESTION', corePartsCovered: [true, false] };
     expect(checkSimpleOutput(input('INITIAL'), q).problems).toEqual([]);
-    expect(checkSimpleOutput(input('INITIAL'), { ...q, gaps: [gap, gap2] }).problems).toEqual([]);
+    expect(checkSimpleOutput(input('INITIAL'), { ...q, corePartsCovered: [false, false], gaps: [gap, gap2] }).problems).toEqual([]);
     expect(checkSimpleOutput(input('INITIAL'), { ...q, gaps: [] }).problems.join()).toMatch(/1개 또는 2개/);
     expect(checkSimpleOutput(input('INITIAL'), { ...q, gaps: [gap, gap, gap] }).problems.join()).toMatch(/1개 또는 2개/);
     expect(checkSimpleOutput(input('INITIAL'), { ...q, gaps: [{ ...gap, question: ' ' }] }).problems.join()).toMatch(/question/);
@@ -132,32 +136,76 @@ describe('출력 검증', () => {
   it('v4.1: targetGapReadings·errors[].gapIndex·missingNote 검증', () => {
     const closeErr = (patch: Partial<SimpleOutput>, gaps = [gap, gap2], student = '빛을 화학에너지로') => checkSimpleOutput(input('AFTER_GAP', student, gaps),
       { ...base, category: 'MULTI_ERROR', action: 'CLOSE_ERRORS', coreIntro: '도입', coreSummary: '핵심', targetGapReadings: ['읽기', ''], targetGapsFilled: [false, false],
-        errors: [{ ...errFb, gapIndex: 0 }, { ...errFb, gapIndex: 1 }], ...patch }).problems.join();
+        errors: [{ ...errFb, gapIndex: 0 }, { ...errFb, corePartIndex: 1, gapIndex: 1 }], corePartsCovered: [false, false], ...patch }).problems.join();
     expect(closeErr({})).toBe('');
     expect(closeErr({ targetGapReadings: ['읽기'] })).toMatch(/targetGapReadings/);
     expect(closeErr({ targetGapReadings: null })).toMatch(/targetGapReadings/);
     expect(checkSimpleOutput(input('INITIAL'), { ...base, targetGapReadings: [] }).problems.join()).toMatch(/targetGapReadings/);
     expect(closeErr({ errors: [{ ...errFb, gapIndex: 2 }, { ...errFb, gapIndex: null }], missingNote: '빠짐' })).toMatch(/gapIndex/);
     expect(closeErr({ errors: [{ ...errFb, gapIndex: -1 }, { ...errFb, gapIndex: null }], missingNote: '빠짐' })).toMatch(/gapIndex/);
-    expect(closeErr({ targetGapsFilled: [true, false], errors: [{ ...errFb, gapIndex: 0 }, { ...errFb, gapIndex: 1 }] })).toMatch(/errors\[0\]\.gapIndex.*false/);
+    expect(closeErr({ targetGapsFilled: [true, false], errors: [{ ...errFb, gapIndex: 0 }, { ...errFb, corePartIndex: 1, gapIndex: 1 }] })).toMatch(/errors\[0\]\.gapIndex.*false/);
     expect(checkSimpleOutput(input('INITIAL'), { ...base, category: 'ONE_ERROR', action: 'CORRECTION_QUESTION', errors: [{ ...err, gapIndex: 0 }] }).problems.join()).toMatch(/gapIndex/);
     // 오류도 채움도 아닌 항목이 있으면 missingNote 필수
-    const partial = { errors: [errFb, { ...errFb, gapIndex: 1 }], targetGapsFilled: [false, false] };
+    const partial = { errors: [errFb, { ...errFb, corePartIndex: 1, gapIndex: 1 }], targetGapsFilled: [false, false] };
     expect(closeErr({ ...partial, missingNote: null })).toMatch(/missingNote/);
     expect(closeErr({ ...partial, missingNote: ' ' })).toMatch(/missingNote/);
     expect(closeErr({ ...partial, missingNote: '첫째 항목이 빠졌어' })).toBe('');
     // 채움 true인 항목은 빠진 것이 아니다
-    expect(closeErr({ errors: [errFb, { ...errFb, gapIndex: 1 }], targetGapsFilled: [true, false], missingNote: '불필요' })).toMatch(/missingNote/);
-    expect(closeErr({ errors: [errFb, { ...errFb, gapIndex: 1 }], targetGapsFilled: [true, false] })).toBe('');
+    expect(closeErr({ errors: [errFb, { ...errFb, corePartIndex: 1, gapIndex: 1 }], targetGapsFilled: [true, false], missingNote: '불필요' })).toMatch(/missingNote/);
+    expect(closeErr({ errors: [errFb, { ...errFb, corePartIndex: 1, gapIndex: 1 }], targetGapsFilled: [true, false] })).toBe('');
     // 오류 없는(gapIndex null) 오류가 있어도 항목은 여전히 미처리
-    expect(closeErr({ errors: [errFb, errFb], targetGapsFilled: [false, false], missingNote: '둘 다 빠짐' })).toBe('');
+    expect(closeErr({ errors: [errFb, errFb1], targetGapsFilled: [false, false], missingNote: '둘 다 빠짐' })).toBe('');
   });
   it('v4.1: 시험 3사례의 출력 형태(둘 다 틀림 / 둘째만 틀림 / 첫째 틀림·둘째 모름)가 통과한다', () => {
     const run = (filled: boolean[], errors: SimpleOutput['errors'], missingNote: string | null) => checkSimpleOutput(input('AFTER_GAP', '빛을 화학에너지로\n빛을 화학에너지로', [gap, gap2]),
-      { ...base, category: 'MULTI_ERROR', errors, action: 'CLOSE_ERRORS', targetGapReadings: ['읽기', ''], targetGapsFilled: filled, coreIntro: '도입', coreSummary: '핵심', missingNote }).problems;
-    expect(run([false, false], [{ ...errFb, gapIndex: 0 }, { ...errFb, gapIndex: 1 }], null)).toEqual([]);
-    expect(run([true, false], [{ ...errFb, gapIndex: 1 }, errFb], null)).toEqual([]);
-    expect(run([false, false], [{ ...errFb, gapIndex: 0 }, errFb], '아직 빠진 부분이 있어')).toEqual([]);
+      { ...base, category: 'MULTI_ERROR', errors, action: 'CLOSE_ERRORS', corePartsCovered: [false, false], targetGapReadings: ['읽기', ''], targetGapsFilled: filled, coreIntro: '도입', coreSummary: '핵심', missingNote }).problems;
+    expect(run([false, false], [{ ...errFb, gapIndex: 0 }, { ...errFb, corePartIndex: 1, gapIndex: 1 }], null)).toEqual([]);
+    expect(run([true, false], [{ ...errFb, corePartIndex: 1, gapIndex: 1 }, errFb], null)).toEqual([]);
+    expect(run([false, false], [{ ...errFb, gapIndex: 0 }, errFb1], '아직 빠진 부분이 있어')).toEqual([]);
+  });
+  it('v4.2: INITIAL의 coreParts는 1~3개, description·sourceQuote 규칙, 그 밖의 단계는 빈 배열', () => {
+    expect(rawCheck(input('INITIAL'), base).problems).toEqual([]);
+    expect(rawCheck(input('INITIAL'), { ...base, coreParts: [], corePartsCovered: [] }).problems.join()).toMatch(/1~3개/);
+    const four = [...parts, ...parts];
+    expect(rawCheck(input('INITIAL'), { ...base, coreParts: four, corePartsCovered: [true, true, true, true] }).problems.join()).toMatch(/1~3개/);
+    expect(rawCheck(input('INITIAL'), { ...base, coreParts: [{ ...parts[0]!, description: ' ' }, parts[1]!] }).problems.join()).toMatch(/coreParts\[0\]\.description/);
+    expect(rawCheck(input('INITIAL'), { ...base, coreParts: [parts[0]!, { ...parts[1]!, sourceQuote: '없는 문장' }] }).problems.join()).toMatch(/coreParts\[1\]\.sourceQuote/);
+    expect(rawCheck(input('RETRY'), base).problems.join()).toMatch(/coreParts는 INITIAL에서만/);
+    expect(rawCheck(input('RETRY'), { ...base, coreParts: [] }).problems).toEqual([]);
+  });
+  it('v4.2: corePartsCovered 길이와 CAPTURED/GAP/IRRELEVANT·COPY 일관성', () => {
+    expect(rawCheck(input('INITIAL'), { ...base, corePartsCovered: [true] }).problems.join()).toMatch(/같은 길이/);
+    expect(rawCheck(input('RETRY'), { ...base, coreParts: [], corePartsCovered: [true] }).problems.join()).toMatch(/같은 길이/);
+    expect(rawCheck(input('INITIAL'), { ...base, corePartsCovered: [true, false] }).problems.join()).toMatch(/CAPTURED면/);
+    const q: SimpleOutput = { ...base, category: 'GAP', gaps: [gap], action: 'GAP_QUESTION', corePartsCovered: [true, false] };
+    expect(rawCheck(input('INITIAL'), { ...q, corePartsCovered: [true, true] }).problems.join()).toMatch(/GAP이면/);
+    expect(rawCheck(input('AFTER_CORRECTION'), { ...q, coreParts: [], targetErrorResolved: true }).problems).toEqual([]);
+    const irr: SimpleOutput = { ...base, category: 'IRRELEVANT', action: 'RETRY_PROMPT', corePartsCovered: [false, false] };
+    expect(rawCheck(input('INITIAL'), irr).problems).toEqual([]);
+    expect(rawCheck(input('INITIAL'), { ...irr, category: 'COPY', corePartsCovered: [true, false] }).problems.join()).toMatch(/모두 false/);
+  });
+  it('v4.2: errors[].corePartIndex는 범위 안·중복 없음·그 부분 corePartsCovered=false', () => {
+    const one: SimpleOutput = { ...base, category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, true] };
+    expect(rawCheck(input('INITIAL'), one).problems).toEqual([]);
+    expect(rawCheck(input('INITIAL'), { ...one, errors: [{ ...err, corePartIndex: 2 }] }).problems.join()).toMatch(/범위 밖/);
+    expect(rawCheck(input('INITIAL'), { ...one, errors: [{ ...err, corePartIndex: -1 }] }).problems.join()).toMatch(/범위 밖/);
+    expect(rawCheck(input('INITIAL'), { ...one, errors: [{ ...err, corePartIndex: 1 }] }).problems.join()).toMatch(/corePartsCovered가 false여야/);
+    const multi: SimpleOutput = { ...one, category: 'MULTI_ERROR', action: 'CLOSE_ERRORS', corePartsCovered: [false, false], coreIntro: '도입', coreSummary: '핵심', errors: [errFb, errFb1] };
+    expect(rawCheck(input('INITIAL'), multi).problems).toEqual([]);
+    expect(rawCheck(input('INITIAL'), { ...multi, errors: [errFb, errFb] }).problems.join()).toMatch(/겹친다/);
+  });
+  it('v4.2: GAP_QUESTION의 gaps는 담지 못한 부분과 짝지어지고 개수·asksOneThing이 맞아야 한다', () => {
+    const q: SimpleOutput = { ...base, category: 'GAP', gaps: [gap], action: 'GAP_QUESTION', corePartsCovered: [true, false] };
+    expect(rawCheck(input('INITIAL'), q).problems).toEqual([]);
+    expect(rawCheck(input('INITIAL'), { ...q, gaps: [gap2] }).problems.join()).toMatch(/gaps\[0\]\.corePartIndex.*false여야/);
+    expect(rawCheck(input('INITIAL'), { ...q, gaps: [{ ...gap, corePartIndex: 5 }] }).problems.join()).toMatch(/범위 밖/);
+    expect(rawCheck(input('INITIAL'), { ...q, corePartsCovered: [false, false], gaps: [gap, { ...gap2, corePartIndex: 1 }] }).problems.join()).toMatch(/겹친다/);
+    expect(rawCheck(input('INITIAL'), { ...q, corePartsCovered: [false, false] }).problems.join()).toMatch(/맞아야/);
+    expect(rawCheck(input('INITIAL'), { ...q, gaps: [{ ...gap, asksOneThing: false }] }).problems.join()).toMatch(/asksOneThing/);
+    const three = [...parts, { description: '셋째', sourceQuote: '광합성은' }];
+    const t = { ...q, coreParts: three, corePartsCovered: [false, false, false] };
+    expect(rawCheck(input('INITIAL'), { ...t, gaps: [gap, gap2] }).problems).toEqual([]);
+    expect(rawCheck(input('INITIAL'), { ...t, gaps: [gap] }).problems.join()).toMatch(/맞아야/);
   });
   it('스키마 위반은 문제로 돌려준다', () => {
     const r = checkSimpleOutput(input('INITIAL'), { category: 'X' });
@@ -215,6 +263,16 @@ describe('문단 상태 기계', () => {
     // AFTER_GAP이 아니면 오류 근거 문장만
     const c = step(initialSimpleState(), { category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' });
     expect(step(c, { category: 'ONE_ERROR', errors: [err], action: 'CLOSE_ERRORS', coreSummary: '핵심' }).revealQuotes).toEqual([err.sourceQuote]);
+  });
+  it('v4.2: coreParts는 INITIAL 출력으로 저장되고 이후 단계에서는 유지된다', () => {
+    expect(initialSimpleState().coreParts).toEqual([]);
+    const g = step(initialSimpleState(), { category: 'GAP', gaps: [gap], action: 'GAP_QUESTION', corePartsCovered: [true, false] });
+    expect(g.coreParts).toEqual(parts);
+    const closed = step(g, { category: 'GAP', action: 'CLOSE_GAP', coreParts: [], targetGapsFilled: [false] });
+    expect(closed.coreParts).toEqual(parts);
+    const retry = step(initialSimpleState(), { category: 'COPY', action: 'RETRY_PROMPT', corePartsCovered: [false, false] });
+    expect(retry.coreParts).toEqual(parts);
+    expect(step(retry, { category: 'GAP', gaps: [gap], action: 'GAP_QUESTION', coreParts: [] }).coreParts).toEqual(parts);
   });
   it('끝난 문단에는 적용할 수 없다', () => {
     expect(() => step(step(initialSimpleState(), {}), {})).toThrow();

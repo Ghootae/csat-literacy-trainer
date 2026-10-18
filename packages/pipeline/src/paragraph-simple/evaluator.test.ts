@@ -5,10 +5,10 @@ import type { SimpleEvaluationInput, SimpleOutput } from './schema.js';
 const text = '광합성은 빛에너지를 화학에너지로 바꾼다.';
 const input: SimpleEvaluationInput = {
   passage: { title: 't', paragraphs: [{ paragraphId: 'p1', text }] }, targetParagraph: { paragraphId: 'p1', text },
-  stage: 'INITIAL', dialogue: [{ role: 'student', text: '빛을 화학에너지로 바꾼다' }], targetError: null, targetGaps: null,
+  stage: 'INITIAL', dialogue: [{ role: 'student', text: '빛을 화학에너지로 바꾼다' }], coreParts: null, targetError: null, targetGaps: null,
 };
-const good: SimpleOutput = { category: 'CAPTURED', reason: 'r', errors: [], gaps: [], targetErrorResolved: null, targetGapReadings: null, targetGapsFilled: null, restatedSummary: '요약', action: 'PRAISE', message: '잘했어', coreIntro: null, coreSummary: null, missingNote: null, coreSourceQuote: null };
-const bad: SimpleOutput = { ...good, category: 'ONE_ERROR', action: 'CORRECTION_QUESTION', errors: [{ studentQuote: '없는 인용', correction: 'c', sourceQuote: '빛에너지', gapIndex: null, feedback: '' }] };
+const good: SimpleOutput = { category: 'CAPTURED', reason: 'r', coreParts: [{ description: '전환', sourceQuote: '빛에너지를 화학에너지로 바꾼다' }], corePartsCovered: [true], errors: [], gaps: [], targetErrorResolved: null, targetGapReadings: null, targetGapsFilled: null, restatedSummary: '요약', action: 'PRAISE', message: '잘했어', coreIntro: null, coreSummary: null, missingNote: null, coreSourceQuote: null };
+const bad: SimpleOutput = { ...good, category: 'ONE_ERROR', action: 'CORRECTION_QUESTION', errors: [{ studentQuote: '없는 인용', correction: 'c', sourceQuote: '빛에너지', corePartIndex: 0, gapIndex: null, feedback: '' }] };
 const meta = (n: number) => ({ provider: 'mock' as const, model: 'm', promptVersion: 'v', durationMs: n, inputTokens: n, outputTokens: n, cachedTokens: 0 });
 const evaluator = (...raws: unknown[]): SimpleEvaluator & { seen: SimpleEvaluationInput[] } => {
   const seen: SimpleEvaluationInput[] = [];
@@ -49,11 +49,11 @@ describe('OpenAISimpleEvaluator (모의 전송)', () => {
     const call = await new OpenAISimpleEvaluator({ model: 'x', transport: { create } }).complete(input);
     const [request, options] = create.mock.calls[0]!;
     expect(request).toMatchObject({ model: 'x', store: false, reasoning: { effort: 'medium' }, text: { format: { type: 'json_schema', strict: true } } });
-    expect(String(request.instructions)).toContain('paragraph-simple-holistic-v4.1');
+    expect(String(request.instructions)).toContain('paragraph-simple-holistic-v4.4');
     expect(options).toEqual({ timeout: 60_000, maxRetries: 0 });
     expect(JSON.parse(((request.input as { content: { text: string }[] }[])[0]!.content[0]!.text))).toMatchObject({ stage: 'INITIAL' });
     expect(call.rawOutput).toEqual(good);
-    expect(call.metadata).toMatchObject({ provider: 'openai', model: 'x', promptVersion: 'paragraph-simple-holistic-v4.1', inputTokens: 10, outputTokens: 5, cachedTokens: 3 });
+    expect(call.metadata).toMatchObject({ provider: 'openai', model: 'x', promptVersion: 'paragraph-simple-holistic-v4.4', inputTokens: 10, outputTokens: 5, cachedTokens: 3 });
   });
   it('환경 변수로 모델을 바꾼다', async () => {
     const create = vi.fn<SimpleTransport['create']>(async () => ({ status: 'completed', output_text: '{}' }));
