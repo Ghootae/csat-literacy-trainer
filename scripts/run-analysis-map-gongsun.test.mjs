@@ -116,3 +116,42 @@ test('options: default dry-run request unchanged; dopamine request carries only 
     assert.throws(() => loadPassage(undefined, 'no-such-passage'), /SOURCE_NOT_FOUND/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('existing passages: request bodies are byte-identical to the pre-section-support baseline', async () => {
+  const { mkdtempSync, rmSync, readdirSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { main, hash, PASSAGES_DIR } = await import('./run-analysis-map-gongsun.mjs');
+  const baseline = {
+    'corporate-law': '3b1fc63af893664acb08f5a8110a0ab9c0c470a7407c9853ef99c134bb68d736',
+    'dopamine-motor-control': '6525b648e95d3a1c708bbbbbeafdfe52e61074d27305d3164ba17aa8565ca5a1',
+    'gongsun-long-later-mohists': 'bae25915fd8f6d60c79464a1e4147bded35eb03e9ee64dd73cd89a2f67636c60',
+    'information-asymmetry-free-marketplace': '6516a1e483393bdff9958e10184bbbfdee310f82eac0e1424c1a28f046fe36c3',
+    'mrna-vaccine-lipid-nanoparticle': '36dfdca10608c107f7dbfb00872425eba70511f3e88cc9c2c48678ffceac1f29',
+    'surface-tension-laplace': '8a30c22c04f6ec9a85ace495ab5ee9a282c3697129510d70491b1cd4d6908ca8',
+  };
+  const dir = mkdtempSync(join(tmpdir(), 'map-base-'));
+  try {
+    for (const [id, h] of Object.entries(baseline)) {
+      const n = loadPassage(undefined, id).passage.paragraphs.length;
+      await main({ dryRun: true, expDir: dir, passageId: id, paragraphs: n });
+      assert.equal(hash(readFileSync(`${dir}/runs/dry-run.request.json`)), h, id);
+    }
+    assert.ok(readdirSync(PASSAGES_DIR).length >= 7);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('section paragraphs carry section in key order paragraphId, index, section, text; passagesDir option is used', async () => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { main } = await import('./run-analysis-map-gongsun.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'map-sec-'));
+  try {
+    const p = { passageId: 'sec-test', paragraphs: [{ paragraphId: 'sec-test-p1', position: 1, section: '(가)', text: '가 문단이다. 두 번째 문장이다.' }, { paragraphId: 'sec-test-p2', position: 2, section: '(나)', text: '나 문단이다. 둘째 문장이다.' }] };
+    writeFileSync(join(dir, 'sec-test.json'), JSON.stringify(p));
+    const input = buildInput(p);
+    for (const q of input.paragraphs) assert.deepEqual(Object.keys(q), ['paragraphId', 'index', 'section', 'text']);
+    const r = await main({ dryRun: true, expDir: join(dir, 'exp'), passageId: 'sec-test', paragraphs: 2, passagesDir: dir });
+    assert.equal(r.exampleAllPass, true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

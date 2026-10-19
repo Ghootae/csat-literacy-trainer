@@ -1,6 +1,6 @@
 // D-0143 stage 1: hierarchical analysis-map generation for one passage (gongsun-long-later-mohists).
 // Keys are loaded only by Node's --env-file-if-exists. Handoff: docs/handoffs/2026-10-16-analysis-map-gongsun-stage1.md
-// Usage: node --env-file-if-exists=.env scripts/run-analysis-map-gongsun.mjs [--dry-run] [--passage <id>] [--exp-dir <dir>] [--prompt <path>] [--paragraphs <n>]
+// Usage: node --env-file-if-exists=.env scripts/run-analysis-map-gongsun.mjs [--dry-run] [--passage <id>] [--exp-dir <dir>] [--prompt <path>] [--paragraphs <n>] [--passages-dir <dir>]
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
@@ -41,7 +41,9 @@ export function loadPassage(dir = PASSAGES_DIR, passageId = PASSAGE_ID) {
 }
 // User content: passage id and per-paragraph { paragraphId, index, text } only. No gold, axes, or student responses.
 export function buildInput(passage) {
-  return { passageId: passage.passageId, paragraphs: passage.paragraphs.map(p => ({ paragraphId: p.paragraphId, index: p.position, text: p.text })) };
+  return { passageId: passage.passageId, paragraphs: passage.paragraphs.map(p => p.section === undefined
+    ? { paragraphId: p.paragraphId, index: p.position, text: p.text }
+    : { paragraphId: p.paragraphId, index: p.position, section: p.section, text: p.text }) };
 }
 export function instructionsFrom(promptMd) {
   const m = /^## 지시문[ \t]*$/mu.exec(promptMd);
@@ -240,8 +242,8 @@ export function renderMaps(dir = EXP_DIR, title = '분석 지도 생성 결과 (
 }
 
 // Options default to the gongsun stage-1 setup (D-0146: passage id, experiment dir, prompt path, expected paragraph count).
-export async function main({ dryRun = false, transport, passageId = PASSAGE_ID, expDir = EXP_DIR, promptPath = PROMPT_PATH, paragraphs = 5 } = {}) {
-  const { passage, file, fileHash } = loadPassage(PASSAGES_DIR, passageId);
+export async function main({ dryRun = false, transport, passageId = PASSAGE_ID, expDir = EXP_DIR, promptPath = PROMPT_PATH, paragraphs = 5, passagesDir = PASSAGES_DIR } = {}) {
+  const { passage, file, fileHash } = loadPassage(passagesDir, passageId);
   if (passage.paragraphs.length !== paragraphs) throw new Error(`PARAGRAPH_COUNT: ${passage.paragraphs.length}`);
   const promptBytes = readFileSync(promptPath), promptHashBefore = hash(promptBytes);
   const instructions = instructionsFrom(promptBytes.toString('utf8')), input = buildInput(passage), request = buildRequest(instructions, input);
@@ -296,6 +298,6 @@ export async function main({ dryRun = false, transport, passageId = PASSAGE_ID, 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const argv = process.argv, opt = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
   const result = await main({ dryRun: argv.includes('--dry-run'), passageId: opt('--passage'), expDir: opt('--exp-dir'),
-    promptPath: opt('--prompt'), paragraphs: opt('--paragraphs') ? Number(opt('--paragraphs')) : undefined });
+    promptPath: opt('--prompt'), passagesDir: opt('--passages-dir'), paragraphs: opt('--paragraphs') ? Number(opt('--paragraphs')) : undefined });
   console.log(JSON.stringify(result, null, 2));
 }
