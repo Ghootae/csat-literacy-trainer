@@ -13,7 +13,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const runs = Number(argv[0] ?? 3), model = argv[1] ?? 'gpt-6-luna', usdCap = Number(argv[2] ?? 1), label = argv[3], previous = argv[4];
 const PRICE = { input: 0.10, output: 0.50 }; // 백만 토큰당 USD(저장소 기존 스크립트 단가, 캐시 입력도 정가로 보수 계산)
-const { meta, cases } = JSON.parse(readFileSync(join(here, 'cases.json'), 'utf8'));
+// CASE_FILTER=gongsun,dopamine 처럼 문단 키로 사례를 고른다(없으면 전체).
+const { meta, cases: allCases } = JSON.parse(readFileSync(join(here, 'cases.json'), 'utf8'));
+const filter = process.env.CASE_FILTER?.split(',').map(x => x.trim()).filter(Boolean);
+const cases = filter ? allCases.filter(c => filter.includes(c.paragraphKey)) : allCases;
 const passages = loadDialoguePassages();
 const outDir = join(here, 'runs', label ?? `${new Date().toISOString().slice(0, 10)}-${PARAGRAPH_SIMPLE_PROMPT_VERSION.replace('paragraph-simple-holistic-', '')}`);
 mkdirSync(outDir, { recursive: true });
@@ -21,7 +24,8 @@ const callsPath = join(outDir, 'calls.jsonl');
 const evaluator = new OpenAISimpleEvaluator({ model, timeoutMs: 120_000 });
 let usd = 0, calls = 0, stopped = false;
 
-const sentenceKey = (p, quote) => Object.entries(meta.paragraphs[p].sentences).find(([, s]) => s === quote)?.[0] ?? '기타';
+// 키 끝의 _alt는 같은 부분의 다른 근거 문장(예: 표면 장력 B의 결과 문장)이다.
+const sentenceKey = (p, quote) => (Object.entries(meta.paragraphs[p].sentences).find(([, s]) => s === quote)?.[0] ?? '기타').replace(/_alt\d*$/, '');
 // 서버와 같게: 모델 입력 대화의 튜터 발화는 message(+번호 질문). 마무리 뒤에는 더 판정하지 않으므로 질문형 행동만 이어 붙인다.
 const tutorText = o => o.action === 'GAP_QUESTION' ? `${o.message}\n${o.gaps.map((g, i) => `${i + 1}. ${g.question}`).join('\n')}` : o.message;
 const bubblesOf = (o, stage) => {

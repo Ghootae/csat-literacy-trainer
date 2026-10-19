@@ -1,6 +1,7 @@
 // 단순 형식 문단 v4.1 전체 경로(29) 시뮬레이션 생성기. 문단 두 개 × 29 경로 = 58 사례.
 // node docs/experiments/simple-holistic-path-simulation-2026-10-17/build.mjs
 // 출력: cases.json(실험 스크립트용), SIMULATION.md(사람이 읽는 기대 대화)
+// 2026-10-19(2): v4.4 원칙에 맞게 기대값 2건 수정 — 공손룡 '왜?'에 틀린 이유는 질문 1번 오류(빠진 내용 없음), 공손룡 교정 실패 답은 관계+목적 오류 둘. 새 문단 3개 추가(법인 5, 정보 비대칭 4, 표면 장력 2).
 // 2026-10-19: 구멍 하나 질문에 질문과 무관한 틀린 말(도파민 'D1이 억제성…')은 판정하지 않는다(사용자 원칙, v4.4). 공손룡 쪽은 이유를 물은 질문에 틀린 이유를 댄 것이라 오류 그대로.
 // 2026-10-18: gongsun oneErrWithB를 오류 하나로 고침(이전 문장은 '그래야 혼란이 줄어든다'가 둘째 오류였다 — 1차 실행 RESULTS 6).
 // 기대 말풍선 문구는 방향 예시다. 비교 기준은 분류·행동·항목 판정·말풍선 구성·짚는 내용의 방향이다.
@@ -47,6 +48,7 @@ const P = {
       g1OtherError: '하나의 명이 여러 실을 가리켜야 하니까 그런 거 아닐까?',
     },
     g1OtherRelevant: true,
+    fixFailedErrors: ['relMany', 'purposeConv'],
     errors: {
       relMany: { quote: '하나의 명이 여러 실을 가리켜도 된다고 봤다', part: 'A', fix: '공손룡은 오히려 하나의 명이 하나의 실만 가리켜야 한다고 주장했어.' },
       relManyMulti: { quote: '명과 실이 다대다로 대응해도 된다고 봤고', part: 'A', fix: '다대다가 아니라, 명과 실이 하나씩 엄격하게 대응해야 한다고 봤어.' },
@@ -56,6 +58,7 @@ const P = {
       relNone: { quote: '명과 실은 서로 상관없이 정해진다.', part: 'A', fix: '상관없는 게 아니라, 명과 실이 엄격하게 일대일로 대응해야 한다고 봤어.' },
       purposeChange: { quote: '이름을 상황에 따라 바꿔 쓸 수 있게 하려고.', part: 'B', fix: '이름을 바꿔 쓰려는 게 아니라, 같은 이름이 다른 실을 가리켜 생기는 혼란을 막으려는 거야.' },
       relManyOther: { quote: '하나의 명이 여러 실을 가리켜야 하니까', part: 'A', fix: '하나의 명은 하나의 실만 가리켜야 한다고 봤어.' },
+      purposeConv: { quote: '소통이 편하니까', part: 'B', fix: '소통을 편하게 하려는 게 아니라, 같은 이름이 다른 실을 가리켜 생기는 혼란을 막으려는 거야.' },
     },
     reply: {
       praiseShort: '일대일 대응과 그게 막으려는 혼란을 함께 잡았네. 이 문단의 중심을 정확히 짚었어.',
@@ -128,6 +131,178 @@ const P = {
       noResponse: '괜찮아, 이번엔 내가 정리해 줄게.',
     },
   },
+  corporate: {
+    passageId: 'corporate-law', paragraphId: 'corporate-law-p5', title: '법인의 종류와 자산 운용의 법적 통제 · 문단 5',
+    core: '무상 증자는 자산이 밖으로 나가지 않고 총 규모가 그대로여서 이사회 결정만으로 실행할 수 있다. 반면 배당은 자산이 외부로 유출되므로 주주 총회 의결 등 더 까다로운 요건이 필요하다.',
+    parts: { A: '무상 증자는 자산 총규모가 변하지 않아 이사회 결정만으로 실행(유출 없음 → 가벼운 요건)', B: '배당은 자산이 외부로 유출되어 주주 총회 의결 등 더 까다로운 요건(유출 → 무거운 요건)' },
+    sentences: {
+      A: '무상 증자를 실행하면 자산의 구조만 재편되고 자산의 총 규모는 변하지 않기 때문에 이사회의 결정만으로 실행이 가능하다.',
+      B: '다만 배당은 자산이 외부로 유출되는 것이기 때문에, 잘못된 판단으로 인한 회사나 주주들의 손해를 막기 위해 이사회뿐만 아니라 주주 총회의 의결을 거치는 등 더 까다로운 요건을 만족해야 한다.',
+      derive: '주식회사의 자산 운용은 자산의 외부 유출 여부에 따라 실행의 요건이 다르다.',
+    },
+    questions: { A: '무상 증자는 실행 요건이 어떻게 정해져 있을까?', B: '배당의 실행 요건은 무상 증자와 어떻게 다를까?' },
+    say: {
+      captured: '무상 증자는 자산이 회사 밖으로 나가지 않아서 이사회 결정만으로 되지만, 배당은 자산이 빠져나가니까 주주 총회까지 거쳐야 한다.',
+      captured2: '자산이 밖으로 나가느냐에 따라 요건이 달라서, 무상 증자는 이사회만, 배당은 주주 총회 의결까지 필요하다.',
+      copy: '무상 증자를 실행하면 자산의 구조만 재편되고 자산의 총 규모는 변하지 않기 때문에 이사회의 결정만으로 실행이 가능하다.',
+      irrelevant: '잘 모르겠어.',
+      nonCore: '주식회사는 무상 증자를 하면 주식을 주주들에게 무상으로 나눠 준다.',
+      onlyA: '무상 증자는 자산 총규모가 그대로라서 이사회 결정만으로 실행할 수 있다.',
+      oneErrWithB: '무상 증자는 주주 총회 의결을 거쳐야 실행할 수 있다. 배당은 자산이 밖으로 나가니까 요건이 더 까다롭다.',
+      oneErrNoB: '무상 증자는 주주 총회 의결을 거쳐야 실행할 수 있다.',
+      multi: '무상 증자는 자산이 외부로 유출되기 때문에 주주 총회 의결이 필요하고, 배당은 이사회 결정만으로 할 수 있다.',
+      fixResolvedFull: '아, 무상 증자는 자산이 밖으로 안 나가니까 이사회 결정만으로 되는구나.',
+      fixResolvedPartial: '무상 증자는 자산 규모가 그대로라 이사회 결정만으로 되는 거였네.',
+      fixFailed: '무상 증자도 주식을 새로 발행하니까 주주 총회를 거쳐야 할 것 같아.',
+      g2Filled: '1. 이사회 결정만으로 돼. 자산 총규모가 안 변하니까.\n2. 배당은 자산이 밖으로 나가서 주주 총회 의결까지 거쳐야 해.',
+      g2Partial: '무상 증자는 자산 총규모가 그대로라 이사회 결정만으로 돼.',
+      g2Irrelevant: '모르겠어.',
+      g2Errors: '주주 총회 의결.\n배당은 이사회만 결정하면 돼.',
+      g2ErrorPlusBlank: '무상 증자는 주주 총회를 거쳐야 해.\n잘 모르겠어.',
+      g1Filled: '배당은 자산이 회사 밖으로 나가니까 주주 총회 의결까지 거쳐야 해.',
+      g1Vague: '배당은 좀 다를 것 같아.',
+      g1Irrelevant: '모르겠어.',
+      g1Error: '배당도 이사회 결정만으로 할 수 있어.',
+      g1OtherError: '주식회사는 상법을 적용받지 않잖아.',
+    },
+    g1OtherRelevant: false,
+    errors: {
+      relMany: { quote: '무상 증자는 주주 총회 의결을 거쳐야 실행할 수 있다', part: 'A', fix: '무상 증자는 자산 총규모가 그대로라 이사회 결정만으로 실행할 수 있어.' },
+      relManyMulti: { quote: '무상 증자는 자산이 외부로 유출되기 때문에 주주 총회 의결이 필요하고', part: 'A', fix: '반대야. 무상 증자는 자산이 밖으로 나가지 않아서 이사회 결정만으로 돼.' },
+      purposeFlexMulti: { quote: '배당은 이사회 결정만으로 할 수 있다', part: 'B', fix: '배당은 자산이 외부로 유출되기 때문에 주주 총회 의결 같은 더 까다로운 요건이 필요해.' },
+      relManyFrag: { quote: '주주 총회 의결.', part: 'A', fix: '무상 증자는 주주 총회 없이 이사회 결정만으로 실행할 수 있어.' },
+      purposeFlexFrag: { quote: '배당은 이사회만 결정하면 돼.', part: 'B', fix: '배당은 이사회뿐 아니라 주주 총회 의결도 거쳐야 해.' },
+      relNone: { quote: '무상 증자는 주주 총회를 거쳐야 해.', part: 'A', fix: '무상 증자는 이사회 결정만으로 실행할 수 있어.' },
+      purposeChange: { quote: '배당도 이사회 결정만으로 할 수 있어.', part: 'B', fix: '배당은 자산이 밖으로 나가서 주주 총회 의결 등 더 까다로운 요건이 필요해.' },
+    },
+    reply: {
+      praiseShort: '자산이 밖으로 나가는지에 따라 무상 증자와 배당의 요건이 달라진다는 대비를 잘 잡았어.',
+      praiseAfter: '질문에 답하면서 무상 증자와 배당의 요건 차이를 모두 채웠어.',
+      retry: '문단 문장을 거의 그대로 옮겨 적었네. 이 문단이 무엇과 무엇을 비교하는지 네 말로 다시 써 볼래?',
+      gap2: '무상 증자로 주식을 무상 분배한다는 건 맞지만, 이 문단의 중심 내용이라고 보긴 어려워. 내가 더 확인하고 싶은 건 이거야.',
+      gap1: '무상 증자의 요건은 잘 잡았어. 하나만 더 확인하고 싶어.',
+      gap1AfterFix: '맞아, 그렇게 고친 게 맞아. 하나만 더 확인하고 싶어.',
+      correction: '무상 증자에 주주 총회 의결이 필요하다고 했는데, 문단에서 무상 증자의 실행 요건을 어떻게 말하는지 다시 볼래?',
+      missingB: (got) => `${got ? '무상 증자의 요건은 잘 잡았어. ' : ''}아직 빠진 부분은 배당은 자산이 외부로 유출되기 때문에 주주 총회 의결 등 더 까다로운 요건이 필요하다는 점이야.`,
+      missingAB: '아직 빠진 부분은 무상 증자는 자산 규모가 그대로라 이사회 결정만으로 되고, 배당은 자산이 빠져나가 더 까다로운 요건이 필요하다는 대비야.',
+      noResponse: '괜찮아, 이번엔 내가 정리해 줄게.',
+    },
+  },
+  infoAsym: {
+    passageId: 'information-asymmetry-free-marketplace', paragraphId: 'information-asymmetry-free-marketplace-p4', title: '정보 비대칭과 사상의 자유 시장 이론 · 문단 4',
+    core: '비판론은 허위·왜곡 정보가 넘쳐나면 의견 간 경쟁이 이루어질 수 없고 민주적 의사 결정이 왜곡된다고 본다. 그래서 플랫폼과 정부의 공동 규제를 강화해야 한다고 주장한다.',
+    parts: { A: '허위·왜곡 정보가 대량 공급되면 의견 경쟁이 불가능하고 의사 결정이 왜곡된다(근거)', B: '그래서 플랫폼과 정부의 공동 규제를 강화해야 한다(주장)' },
+    sentences: {
+      A: '비판론에 따르면, 진실한 정보는 과소 공급되고 허위·왜곡 정보가 대량 공급되는 상황에서는 다양한 의견 간의 경쟁이 이루어질 수 없다.',
+      B: '이러한 입장에 따라 비판론은 민주주의 의사 결정의 왜곡을 막기 위해 플랫폼과 정부의 공동 규제가 강화되어야 한다고 주장한다.',
+      derive: '사상의 자유 시장 이론에 대한 비판론도 제기되었다.',
+    },
+    questions: { A: '비판론은 사상의 자유 시장이 왜 제대로 작동하지 않는다고 볼까?', B: '그래서 비판론은 무엇을 해야 한다고 주장할까?' },
+    say: {
+      captured: '비판론은 허위 정보가 넘치면 의견 경쟁이 안 되고 민주적 결정이 왜곡되니까, 플랫폼과 정부가 함께 규제해야 한다고 본다.',
+      captured2: '허위·왜곡 정보 때문에 사상의 경쟁이 안 되므로 플랫폼과 정부의 공동 규제를 강화하자는 게 비판론이다.',
+      copy: '이러한 입장에 따라 비판론은 민주주의 의사 결정의 왜곡을 막기 위해 플랫폼과 정부의 공동 규제가 강화되어야 한다고 주장한다.',
+      irrelevant: '잘 모르겠어.',
+      nonCore: '사상의 자유 시장 이론에 대한 비판론이 있다.',
+      onlyA: '비판론은 허위 정보가 대량으로 퍼지면 다양한 의견 간의 경쟁이 이루어질 수 없다고 본다.',
+      oneErrWithB: '비판론은 허위 정보가 많아질수록 의견 경쟁이 더 활발해진다고 본다. 그래서 플랫폼과 정부가 함께 규제해야 한다고 주장한다.',
+      oneErrNoB: '비판론은 허위 정보가 많아질수록 의견 경쟁이 더 활발해진다고 본다.',
+      multi: '비판론은 허위 정보도 의견 경쟁으로 걸러진다고 보고, 그래서 정부는 개입하지 말아야 한다고 주장한다.',
+      fixResolvedFull: '아, 허위 정보가 넘치면 오히려 의견 경쟁이 안 된다는 거구나.',
+      fixResolvedPartial: '허위 정보가 넘치면 의견 경쟁이 이루어질 수 없다는 거였네.',
+      fixFailed: '그래도 정보가 많을수록 사람들이 더 많이 비교할 수 있으니까 경쟁이 활발해질 것 같아.',
+      g2Filled: '1. 허위 정보가 넘쳐서 의견 경쟁이 안 되고 민주적 결정이 왜곡되니까.\n2. 플랫폼과 정부가 같이 규제를 강화해야 한다고.',
+      g2Partial: '허위 정보가 너무 많으면 의견 간 경쟁이 안 된다고 봐.',
+      g2Irrelevant: '모르겠어.',
+      g2Errors: '정부가 너무 많이 개입해서.\n정부는 빠지고 플랫폼이 알아서 하게 둬야 한다고.',
+      g2ErrorPlusBlank: '의견 경쟁이 너무 활발해서.\n잘 모르겠어.',
+      g1Filled: '플랫폼과 정부가 함께 규제를 강화해야 한다고 주장해.',
+      g1Vague: '뭔가 대책이 필요하다고.',
+      g1Irrelevant: '모르겠어.',
+      g1Error: '정부는 손을 떼고 시장에 맡겨야 한다고.',
+      g1OtherError: '헌법 재판소는 실명 확인 규정을 합헌이라고 했어.',
+    },
+    g1OtherRelevant: false,
+    errors: {
+      relMany: { quote: '허위 정보가 많아질수록 의견 경쟁이 더 활발해진다고 본다', part: 'A', fix: '반대야. 비판론은 허위 정보가 넘치면 의견 경쟁이 이루어질 수 없다고 봐.' },
+      relManyMulti: { quote: '허위 정보도 의견 경쟁으로 걸러진다고 보고', part: 'A', fix: '그건 사상의 자유 시장 이론의 입장이야. 비판론은 허위 정보가 넘치면 의견 경쟁이 이루어질 수 없다고 봐.' },
+      purposeFlexMulti: { quote: '정부는 개입하지 말아야 한다고 주장한다', part: 'B', fix: '비판론은 오히려 플랫폼과 정부의 공동 규제를 강화해야 한다고 주장해.' },
+      relManyFrag: { quote: '정부가 너무 많이 개입해서.', part: 'A', fix: '정부 개입이 문제가 아니라, 허위 정보가 넘쳐 의견 경쟁이 이루어질 수 없다는 게 비판론의 근거야.' },
+      purposeFlexFrag: { quote: '정부는 빠지고 플랫폼이 알아서 하게 둬야 한다고.', part: 'B', fix: '정부가 빠지는 게 아니라, 플랫폼과 정부가 함께 규제를 강화해야 한다는 거야.' },
+      relNone: { quote: '의견 경쟁이 너무 활발해서.', part: 'A', fix: '경쟁이 너무 활발한 게 아니라, 허위 정보 때문에 경쟁이 이루어질 수 없다는 거야.' },
+      purposeChange: { quote: '정부는 손을 떼고 시장에 맡겨야 한다고.', part: 'B', fix: '시장에 맡기자는 게 아니라, 플랫폼과 정부의 공동 규제를 강화하자는 주장이야.' },
+    },
+    reply: {
+      praiseShort: '허위 정보로 의견 경쟁이 무너진다는 근거와 공동 규제라는 주장을 함께 잡았네.',
+      praiseAfter: '질문에 답하면서 비판론의 근거와 주장을 모두 채웠어.',
+      retry: '문단 문장을 거의 그대로 옮겨 적었네. 비판론이 무엇을 주장하는지 네 말로 다시 써 볼래?',
+      gap2: '사상의 자유 시장 이론에 비판론이 있다는 건 맞지만, 이 문단의 중심 내용이라고 보긴 어려워. 내가 더 확인하고 싶은 건 이거야.',
+      gap1: '비판론의 근거는 잘 잡았어. 하나만 더 확인하고 싶어.',
+      gap1AfterFix: '맞아, 그렇게 고친 게 맞아. 하나만 더 확인하고 싶어.',
+      correction: '허위 정보가 많아질수록 의견 경쟁이 활발해진다고 했는데, 문단에서 비판론이 이 상황을 어떻게 보는지 다시 볼래?',
+      missingB: (got) => `${got ? '비판론의 근거는 잘 잡았어. ' : ''}아직 빠진 부분은 그래서 플랫폼과 정부의 공동 규제를 강화해야 한다는 비판론의 주장이야.`,
+      missingAB: '아직 빠진 부분은 허위 정보가 넘치면 의견 경쟁이 이루어질 수 없다는 근거와, 그래서 공동 규제를 강화해야 한다는 주장이야.',
+      noResponse: '괜찮아, 이번엔 내가 정리해 줄게.',
+    },
+  },
+  surface: {
+    passageId: 'surface-tension-laplace', paragraphId: 'surface-tension-laplace-p2', title: '표면 장력과 라플라스 식 · 문단 2',
+    core: '폐포를 둘러싼 액체층의 표면 장력은 폐포를 수축시키는 압력으로 작용한다. 그런데 계면 활성제가 이 표면 장력을 낮춰 폐포가 쉽게 확장되게 한다.',
+    parts: { A: '액체층의 표면 장력은 폐포를 수축시키는 압력으로 작용한다(원인)', B: '계면 활성제가 표면 장력을 낮춰 폐포 확장이 쉬워진다(조절과 결과)' },
+    sentences: {
+      A: '폐포를 둘러싸고 있는 액체층의 표면 장력은 폐포를 수축하게 하는 압력으로 작용한다.',
+      B: '그런데 지질과 단백질로 구성된 계면 활성제가 분비되어 액체층의 표면 장력을 낮춘다.',
+      B_alt: '이에 따라 폐포의 확장이 쉬워진다.',
+      derive: '라플라스 식은 사람이 호흡할 때 폐포에 작용하는 압력과 표면 장력 사이의 관계를 설명할 때도 유용하다.',
+    },
+    questions: { A: '폐포를 둘러싼 액체층의 표면 장력은 폐포에 어떤 영향을 줄까?', B: '그런데 폐포가 쉽게 확장될 수 있는 까닭은 뭘까?' },
+    say: {
+      captured: '표면 장력은 폐포를 오므라들게 하는데, 계면 활성제가 표면 장력을 낮춰서 폐포가 쉽게 부풀 수 있다.',
+      captured2: '액체층 표면 장력이 폐포를 수축시키지만 계면 활성제가 그걸 줄여 줘서 폐포 확장이 쉬워진다.',
+      copy: '폐포를 둘러싸고 있는 액체층의 표면 장력은 폐포를 수축하게 하는 압력으로 작용한다.',
+      irrelevant: '잘 모르겠어.',
+      nonCore: '폐포에는 공기가 드나든다.',
+      onlyA: '폐포를 둘러싼 액체층의 표면 장력은 폐포를 수축시키는 압력으로 작용한다.',
+      oneErrWithB: '표면 장력은 폐포를 팽창시키는 압력으로 작용한다. 계면 활성제는 표면 장력을 낮춰서 폐포가 쉽게 확장되게 한다.',
+      oneErrNoB: '표면 장력은 폐포를 팽창시키는 압력으로 작용한다.',
+      multi: '표면 장력은 폐포를 팽창시키고, 계면 활성제는 표면 장력을 높여서 폐포가 잘 부풀게 한다.',
+      fixResolvedFull: '아, 표면 장력은 폐포를 수축시키는 쪽이구나.',
+      fixResolvedPartial: '표면 장력은 폐포를 수축시키는 압력이었네.',
+      fixFailed: '표면 장력이 표면을 팽팽하게 당기니까 폐포가 부푸는 것 같아.',
+      g2Filled: '1. 폐포를 수축시키는 압력으로 작용해.\n2. 계면 활성제가 표면 장력을 낮춰 주니까.',
+      g2Partial: '표면 장력은 폐포를 수축시키는 압력으로 작용해.',
+      g2Irrelevant: '모르겠어.',
+      g2Errors: '폐포를 팽창시켜.\n계면 활성제가 표면 장력을 높여서.',
+      g2ErrorPlusBlank: '폐포를 부풀게 해.\n잘 모르겠어.',
+      g1Filled: '계면 활성제가 표면 장력을 낮춰 주니까 확장이 쉬워져.',
+      g1Vague: '뭔가 도와주는 게 있어서.',
+      g1Irrelevant: '모르겠어.',
+      g1Error: '계면 활성제가 표면 장력을 높여서.',
+      g1OtherError: '물방울은 원래 정육면체 모양이잖아.',
+    },
+    g1OtherRelevant: false,
+    errors: {
+      relMany: { quote: '표면 장력은 폐포를 팽창시키는 압력으로 작용한다', part: 'A', fix: '반대야. 표면 장력은 폐포를 수축시키는 압력으로 작용해.' },
+      relManyMulti: { quote: '표면 장력은 폐포를 팽창시키고', part: 'A', fix: '표면 장력은 폐포를 팽창시키는 게 아니라 수축시키는 압력으로 작용해.' },
+      purposeFlexMulti: { quote: '계면 활성제는 표면 장력을 높여서', part: 'B', fix: '계면 활성제는 표면 장력을 높이는 게 아니라 낮춰서 폐포 확장을 쉽게 해.' },
+      relManyFrag: { quote: '폐포를 팽창시켜.', part: 'A', fix: '표면 장력은 폐포를 팽창시키는 게 아니라 수축시키는 압력이야.' },
+      purposeFlexFrag: { quote: '계면 활성제가 표면 장력을 높여서.', part: 'B', fix: '계면 활성제는 표면 장력을 낮춰서 확장을 쉽게 해.' },
+      relNone: { quote: '폐포를 부풀게 해.', part: 'A', fix: '표면 장력은 폐포를 부풀게 하는 게 아니라 수축시키는 쪽으로 작용해.' },
+      purposeChange: { quote: '계면 활성제가 표면 장력을 높여서.', part: 'B', fix: '계면 활성제는 표면 장력을 높이는 게 아니라 낮춰서 폐포가 쉽게 확장돼.' },
+    },
+    reply: {
+      praiseShort: '표면 장력이 폐포를 수축시키고 계면 활성제가 그걸 낮춰 확장을 돕는다는 흐름을 잡았네.',
+      praiseAfter: '질문에 답하면서 표면 장력의 작용과 계면 활성제의 역할을 모두 채웠어.',
+      retry: '문단 문장을 거의 그대로 옮겨 적었네. 폐포에서 무슨 일이 일어나는지 네 말로 다시 써 볼래?',
+      gap2: '폐포에 공기가 드나든다는 건 맞지만, 이 문단의 중심 내용이라고 보긴 어려워. 내가 더 확인하고 싶은 건 이거야.',
+      gap1: '표면 장력이 폐포를 수축시킨다는 건 잘 잡았어. 하나만 더 확인하고 싶어.',
+      gap1AfterFix: '맞아, 그렇게 고친 게 맞아. 하나만 더 확인하고 싶어.',
+      correction: '표면 장력이 폐포를 팽창시킨다고 했는데, 문단에서 표면 장력이 폐포에 어떤 압력으로 작용한다고 하는지 다시 볼래?',
+      missingB: (got) => `${got ? '표면 장력이 폐포를 수축시킨다는 건 잘 잡았어. ' : ''}아직 빠진 부분은 계면 활성제가 표면 장력을 낮춰 폐포 확장을 쉽게 한다는 점이야.`,
+      missingAB: '아직 빠진 부분은 표면 장력이 폐포를 수축시키는 압력으로 작용한다는 점과, 계면 활성제가 그 표면 장력을 낮춰 확장을 쉽게 한다는 점이야.',
+      noResponse: '괜찮아, 이번엔 내가 정리해 줄게.',
+    },
+  },
 };
 
 // ── 단계 만들기 ──────────────────────────────────────────────
@@ -168,9 +343,9 @@ const C = {
   resolvedGap: p => step('AFTER_CORRECTION', p.say.fixResolvedPartial,
     { category: 'GAP', action: 'GAP_QUESTION', targetErrorResolved: true, gaps: ['B'], bubbles: ['생각해 보기(번호 질문 1)'], highlights: [], points: ['고친 것을 인정', '두 번째(마지막) 질문으로 B를 방향만 물음'] },
     [{ label: '생각해 보기', text: p.reply.gap1AfterFix, items: [p.questions.B] }]),
-  failed: p => step('AFTER_CORRECTION', p.say.fixFailed,
-    { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetErrorResolved: false, errors: [{ key: 'relMany', part: 'A', gapIndex: null }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '문단 핵심'], highlights: ['A'], points: ['앞서 확인한 오류가 남았다는 도입', '그 오류를 인용하고 바로잡음', '문단 핵심 공개'] },
-    [...fixBubbles(p, ['relMany'], '앞에서 확인한 부분이 아직 문단과 달라.'), coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]),
+  failed: p => { const keys = p.fixFailedErrors ?? ['relMany']; return step('AFTER_CORRECTION', p.say.fixFailed,
+    { category: keys.length > 1 ? 'MULTI_ERROR' : 'ONE_ERROR', action: 'CLOSE_ERRORS', targetErrorResolved: false, errors: keys.map(k => ({ key: k, part: p.errors[k].part, gapIndex: null })), missingNote: false, bubbles: ['바로잡기(도입)', ...keys.map(() => '바로잡기'), '문단 핵심'], highlights: [...new Set(keys.map(k => p.errors[k].part))], points: ['앞서 확인한 오류가 남았다는 도입', keys.length > 1 ? '남은 오류와 새로 틀린 목적을 각각 인용하고 바로잡음' : '그 오류를 인용하고 바로잡음', '문단 핵심 공개'] },
+    [...fixBubbles(p, keys, '앞에서 확인한 부분이 아직 문단과 달라.'), coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]); },
 };
 
 // 구멍 질문에 한 답 (AFTER_GAP). asked: ['A','B'] 또는 ['B']. gotA: 앞서 A를 말했는지(빠진 내용 인정용)
@@ -203,8 +378,8 @@ const G = {
       { category: 'GAP', action: 'CLOSE_GAP', targetGapsFilled: [false], bubbles: ['문단 핵심', '빠진 내용'], highlights: ['B'], points: ['질문과 무관한 말(다른 대상의 성질)은 맞든 틀리든 판정하지 않음(오류로 세지 않고 바로잡지 않음)', '빠진 내용에서 질문과 다른 이야기였다고 짧게 짚고 B가 빠졌다고 말함'] },
       [coreBubble(p, '내가 생각한 이 문단의 핵심 내용은 이거야.'), { label: '빠진 내용', text: `질문과는 다른 이야기를 했어. ${p.reply.missingB(true)}` }])
     : step('AFTER_GAP', p.say.g1OtherError,
-      { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false], errors: [{ key: 'relManyOther', part: 'A', gapIndex: null }], missingNote: true, bubbles: ['바로잡기(도입)', '바로잡기', '빠진 내용', '문단 핵심'], highlights: ['A', 'B'], points: ['답이 물은 B가 아니라 A를 틀리게 말함 → 오류(gapIndex null)', '물은 B는 못 채움 → 빠진 내용 말풍선'] },
-      [...fixBubbles(p, ['relManyOther'], '네 답에서 지문과 다른 점을 짚어 볼게.'), { label: '빠진 내용', text: p.reply.missingB(false) }, coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]),
+      { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false], errors: [{ key: 'relManyOther', part: 'A', gapIndex: 0 }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '문단 핵심'], highlights: ['A'], points: ['물은 것(이유)에 대한 답의 형태로 틀린 이유를 댐 → 질문 1번의 오류(v4.4 원칙)', '물은 항목이 바로잡기로 응답받았으므로 빠진 내용 말풍선 없음'] },
+      [...fixBubbles(p, ['relManyOther'], '네 답에서 지문과 다른 점을 짚어 볼게.'), coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]),
 };
 const gLeaves = ['filled', 'partial', 'irrelevant', 'errors', 'errorPlusUncovered'];
 const gName = { filled: '물은 항목 모두 채움', partial: '일부 못 채움(오류 없음)', irrelevant: '무관한 말', errors: '오류, 물은 항목 모두 오류/채움', errorPlusUncovered: '오류 + 오류도 채움도 아닌 항목' };
@@ -254,7 +429,7 @@ for (const [key, p] of Object.entries(P)) {
     });
   });
 }
-if (cases.length !== 58) throw new Error(`사례 수 ${cases.length} ≠ 58`);
+if (cases.length !== 29 * Object.keys(P).length) throw new Error(`사례 수 ${cases.length} ≠ ${29 * Object.keys(P).length}`);
 if (cases.some(c => c.questionsAsked > 2)) throw new Error('질문 3회 이상 경로');
 
 const meta = {
