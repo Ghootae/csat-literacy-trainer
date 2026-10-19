@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import OpenAI from 'openai';
 import { z } from 'zod/v4';
+import { detectSourceCopy } from './copy.js';
 import { checkSimpleOutput } from './rules.js';
 import { PARAGRAPH_SIMPLE_PROMPT_VERSION, SimpleOutputSchema, type SimpleEvaluationInput, type SimpleOutput } from './schema.js';
 
@@ -25,7 +26,8 @@ export class SimpleEvaluationError extends Error {
 }
 
 /** 검증 실패 시 이유를 담아 1회만 재요청한다. 그래도 실패하면 오류. API 오류·타임아웃은 재요청하지 않는다. */
-export async function evaluateSimple(evaluator: SimpleEvaluator, input: SimpleEvaluationInput): Promise<SimpleEvaluationResult> {
+export async function evaluateSimple(evaluator: SimpleEvaluator, baseInput: SimpleEvaluationInput): Promise<SimpleEvaluationResult> {
+  const input = withSourceCopy(baseInput);
   const failures: SimpleEvaluationResult['validationFailures'] = [];
   const calls: SimpleCallMetadata[] = [];
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -46,6 +48,13 @@ export async function evaluateSimple(evaluator: SimpleEvaluator, input: SimpleEv
   throw new SimpleEvaluationError(`검증 2회 실패: ${failures.at(-1)!.problems.join(' / ')}`, failures);
 }
 
+/** INITIAL·RETRY의 마지막 학생 발화가 원문 옮겨 적기인지 서버가 정해 입력에 싣는다. 판정 검증이 COPY를 강제한다. */
+export function withSourceCopy(input: SimpleEvaluationInput): SimpleEvaluationInput {
+  if (input.stage !== 'INITIAL' && input.stage !== 'RETRY') return input;
+  const last = input.dialogue.findLast(m => m.role === 'student');
+  return { ...input, sourceCopyDetected: last ? detectSourceCopy(last.text, input.passage.paragraphs.map(p => p.text)) : false };
+}
+
 export interface SimpleTransport {
   create(request: OpenAI.Responses.ResponseCreateParamsNonStreaming, options: { timeout: number; maxRetries: number }): Promise<{
     status: string; output_text: string;
@@ -53,7 +62,7 @@ export interface SimpleTransport {
   }>;
 }
 export const PARAGRAPH_SIMPLE_DEFAULT_MODEL = 'gpt-5.6-terra';
-const PROMPT_PATH = 'packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.4.md';
+const PROMPT_PATH = 'packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.5.md';
 
 export class OpenAISimpleEvaluator implements SimpleEvaluator {
   private client: OpenAI | undefined;

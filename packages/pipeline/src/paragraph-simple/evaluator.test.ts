@@ -35,6 +35,21 @@ describe('evaluateSimple', () => {
     await expect(evaluateSimple(e, input)).rejects.toBeInstanceOf(SimpleEvaluationError);
     expect(e.seen).toHaveLength(2);
   });
+  it('v4.5: 원문 문장을 통째로 옮기면 sourceCopyDetected를 싣고, COPY가 아니면 재요청한다', async () => {
+    const copy = { ...input, dialogue: [{ role: 'student' as const, text }] };
+    const copyOut: SimpleOutput = { ...good, category: 'COPY', action: 'RETRY_PROMPT', corePartsCovered: [false] };
+    const e = evaluator(good, copyOut);
+    const r = await evaluateSimple(e, copy);
+    expect(e.seen[0]!.sourceCopyDetected).toBe(true);
+    expect(e.seen[1]!.validationFeedback).toMatch(/COPY여야/);
+    expect(r.output.category).toBe('COPY');
+    const plain = evaluator(good);
+    await evaluateSimple(plain, input);
+    expect(plain.seen[0]!.sourceCopyDetected).toBe(false);
+    const later = evaluator({ ...good, coreParts: [] });
+    await evaluateSimple(later, { ...copy, stage: 'AFTER_GAP', coreParts: good.coreParts, targetGaps: [] }).catch(() => undefined);
+    expect(later.seen[0]!.sourceCopyDetected).toBeUndefined();
+  });
   it('API 오류는 재요청하지 않는다', async () => {
     const e = evaluator(new Error('timeout'), good);
     await expect(evaluateSimple(e, input)).rejects.toThrow('timeout');
@@ -49,11 +64,11 @@ describe('OpenAISimpleEvaluator (모의 전송)', () => {
     const call = await new OpenAISimpleEvaluator({ model: 'x', transport: { create } }).complete(input);
     const [request, options] = create.mock.calls[0]!;
     expect(request).toMatchObject({ model: 'x', store: false, reasoning: { effort: 'medium' }, text: { format: { type: 'json_schema', strict: true } } });
-    expect(String(request.instructions)).toContain('paragraph-simple-holistic-v4.4');
+    expect(String(request.instructions)).toContain('paragraph-simple-holistic-v4.5');
     expect(options).toEqual({ timeout: 60_000, maxRetries: 0 });
     expect(JSON.parse(((request.input as { content: { text: string }[] }[])[0]!.content[0]!.text))).toMatchObject({ stage: 'INITIAL' });
     expect(call.rawOutput).toEqual(good);
-    expect(call.metadata).toMatchObject({ provider: 'openai', model: 'x', promptVersion: 'paragraph-simple-holistic-v4.4', inputTokens: 10, outputTokens: 5, cachedTokens: 3 });
+    expect(call.metadata).toMatchObject({ provider: 'openai', model: 'x', promptVersion: 'paragraph-simple-holistic-v4.5', inputTokens: 10, outputTokens: 5, cachedTokens: 3 });
   });
   it('환경 변수로 모델을 바꾼다', async () => {
     const create = vi.fn<SimpleTransport['create']>(async () => ({ status: 'completed', output_text: '{}' }));

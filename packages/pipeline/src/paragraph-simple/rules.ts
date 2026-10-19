@@ -40,6 +40,7 @@ export function validateSimpleOutput(input: SimpleEvaluationInput, output: Simpl
     if (output.errors.length < 2) problems.push('MULTI_ERROR는 errors가 2개 이상이어야 한다.');
   } else if (output.errors.length !== 0) problems.push(`${output.category}는 errors가 비어 있어야 한다.`);
 
+  if (input.sourceCopyDetected && output.category !== 'COPY') problems.push('sourceCopyDetected=true다(학생 응답이 원문 문장을 거의 그대로 옮겼다). category는 COPY여야 한다.');
   if (input.stage === 'AFTER_CORRECTION' ? output.targetErrorResolved === null : output.targetErrorResolved !== null) {
     problems.push('targetErrorResolved는 AFTER_CORRECTION에서만 true/false이고 그 밖에는 null이어야 한다.');
   }
