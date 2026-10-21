@@ -155,3 +155,19 @@ test('section paragraphs carry section in key order paragraphId, index, section,
     assert.equal(r.exampleAllPass, true);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+test('round option sends only that round into its own folder; invalid round rejected', async () => {
+  const { mkdtempSync, rmSync, existsSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { main } = await import('./run-analysis-map-gongsun.mjs');
+  const dir = mkdtempSync(join(tmpdir(), 'map-round-'));
+  try {
+    let calls = 0;
+    const transport = { async create() { calls++; return { id: 'resp', model: 'm', status: 'completed', usage: { input_tokens: 10, output_tokens: 10 }, output: [], output_text: JSON.stringify(base()) }; } };
+    const r = await main({ expDir: dir, transport, round: 2 });
+    assert.equal(calls, 1); assert.equal(r.requests, 1);
+    assert.ok(existsSync(join(dir, 'runs', 'map-r2.json'))); assert.ok(!existsSync(join(dir, 'runs', 'map-r1.json')));
+    assert.equal(JSON.parse(readFileSync(join(dir, 'RUN.json'), 'utf8')).round, 2);
+    await assert.rejects(main({ expDir: join(dir, 'x'), transport, round: 4 }), /ROUND: 4/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

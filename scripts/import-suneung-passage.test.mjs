@@ -9,6 +9,7 @@ const exam = { title: '제목', label: '시험 라벨', question_range: '1~3' };
 const para = (order, text) => ({ order, text });
 const fixtures = {
   single: { exam, images: [], sections: [{ label: null, order: 1, paragraphs: [para(2, '둘째 문단'), para(1, '첫째 ⓐ 문단')] }] },
+  multifn: { exam, images: [], sections: [{ label: '(가)', order: 1, paragraphs: [para(1, '가1'), para(2, '* 가주: 풀이.'), para(3, '가2')] }, { label: '(나)', order: 2, paragraphs: [para(1, '나1'), para(2, '* 나주: 풀이.')] }] },
   multi: { exam, images: [], sections: [{ label: '(나)', order: 2, paragraphs: [para(1, '나1')] }, { label: '(가)', order: 1, paragraphs: [para(1, '가1'), para(2, '가2')] }] },
   img: { exam, images: [{ image_id: 'x' }], sections: [{ label: null, order: 1, paragraphs: [para(1, 'a')] }] },
   nolabel: { exam, images: [], sections: [{ label: null, order: 1, paragraphs: [para(1, 'a')] }, { label: '(나)', order: 2, paragraphs: [para(1, 'b')] }] },
@@ -56,5 +57,33 @@ test('footnote paragraphs ("* term: gloss") become notes and do not take a posit
     const p = JSON.parse(readFileSync(run(dir, 'fn').file, 'utf8'));
     assert.deepEqual(p.notes, ['* 세수: 정부의 수입.']);
     assert.deepEqual(p.paragraphs.map(x => [x.position, x.text]), [[1, '본문 하나'], [2, '본문 둘']]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('section option: only that section, renumbered, own notes, title and composite', () => {
+  const dir = setup();
+  try {
+    const p = JSON.parse(readFileSync(importPassage({ setId: 'multifn', passageId: 't-nb', outDir: join(dir, 'out'), dbDir: dir, section: '(나)', pairPassageId: 't-ga' }).file, 'utf8'));
+    assert.deepEqual(p.paragraphs, [{ paragraphId: 't-nb-p1', position: 1, text: '나1' }]);
+    assert.deepEqual(p.notes, ['* 나주: 풀이.']);
+    assert.equal(p.title, '제목 (나)');
+    assert.deepEqual(p.composite, { setId: 'multifn', section: '(나)', pairPassageId: 't-ga' });
+    const g = JSON.parse(readFileSync(importPassage({ setId: 'multifn', passageId: 't-ga', outDir: join(dir, 'out'), dbDir: dir, section: '(가)' }).file, 'utf8'));
+    assert.deepEqual(g.paragraphs.map(x => [x.paragraphId, x.position, x.text]), [['t-ga-p1', 1, '가1'], ['t-ga-p2', 2, '가2']]);
+    assert.deepEqual(g.notes, ['* 가주: 풀이.']); assert.equal(g.composite.pairPassageId, null);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('section option errors: single-section set and unknown label', () => {
+  const dir = setup();
+  try {
+    assert.throws(() => importPassage({ setId: 'single', passageId: 't-x', outDir: join(dir, 'out'), dbDir: dir, section: '(가)' }), /SECTION_NOT_COMPOSITE/);
+    assert.throws(() => importPassage({ setId: 'multi', passageId: 't-y', outDir: join(dir, 'out'), dbDir: dir, section: '(다)' }), /SECTION_NOT_FOUND/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+test('without section option the output is unchanged (no composite key, original title)', () => {
+  const dir = setup();
+  try {
+    const p = JSON.parse(readFileSync(run(dir, 'multi').file, 'utf8'));
+    assert.equal(p.title, '제목'); assert.equal('composite' in p, false);
+    assert.deepEqual(Object.keys(p), ['schemaVersion', 'passageId', 'title', 'exam', 'questionRange', 'source', 'notes', 'paragraphs']);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

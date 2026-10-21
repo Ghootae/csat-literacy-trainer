@@ -1,6 +1,7 @@
 // D-0143 stage 1: hierarchical analysis-map generation for one passage (gongsun-long-later-mohists).
 // Keys are loaded only by Node's --env-file-if-exists. Handoff: docs/handoffs/2026-10-16-analysis-map-gongsun-stage1.md
-// Usage: node --env-file-if-exists=.env scripts/run-analysis-map-gongsun.mjs [--dry-run] [--passage <id>] [--exp-dir <dir>] [--prompt <path>] [--paragraphs <n>] [--passages-dir <dir>]
+// Usage: node --env-file-if-exists=.env scripts/run-analysis-map-gongsun.mjs [--dry-run] [--passage <id>] [--exp-dir <dir>] [--prompt <path>] [--paragraphs <n>] [--passages-dir <dir>] [--round <n>]
+// --round re-sends one round that got no response (server/connection error) into its own --exp-dir (D-0151).
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
@@ -242,7 +243,8 @@ export function renderMaps(dir = EXP_DIR, title = '분석 지도 생성 결과 (
 }
 
 // Options default to the gongsun stage-1 setup (D-0146: passage id, experiment dir, prompt path, expected paragraph count).
-export async function main({ dryRun = false, transport, passageId = PASSAGE_ID, expDir = EXP_DIR, promptPath = PROMPT_PATH, paragraphs = 5, passagesDir = PASSAGES_DIR } = {}) {
+export async function main({ dryRun = false, transport, passageId = PASSAGE_ID, expDir = EXP_DIR, promptPath = PROMPT_PATH, paragraphs = 5, passagesDir = PASSAGES_DIR, round } = {}) {
+  if (round !== undefined && ![1, 2, 3].includes(round)) throw new Error(`ROUND: ${round}`);
   const { passage, file, fileHash } = loadPassage(passagesDir, passageId);
   if (passage.paragraphs.length !== paragraphs) throw new Error(`PARAGRAPH_COUNT: ${passage.paragraphs.length}`);
   const promptBytes = readFileSync(promptPath), promptHashBefore = hash(promptBytes);
@@ -256,12 +258,12 @@ export async function main({ dryRun = false, transport, passageId = PASSAGE_ID, 
   }
   const ledgerPath = `${expDir}/ledger.jsonl`;
   if (existsSync(ledgerPath) || existsSync(`${expDir}/RUN.json`)) throw new Error('RUN_EXISTS: refusing to rerun (no retries)');
-  const runInfo = { version: 1, startedAtUtc: new Date().toISOString(), model: MODEL, reasoning: { effort: 'medium' }, maxOutputTokens: MAX_OUTPUT_TOKENS, timeoutMs: TIMEOUT_MS,
+  const runInfo = { version: 1, ...(round === undefined ? {} : { round }), startedAtUtc: new Date().toISOString(), model: MODEL, reasoning: { effort: 'medium' }, maxOutputTokens: MAX_OUTPUT_TOKENS, timeoutMs: TIMEOUT_MS,
     rates: RATES, limits: LIMITS, retries: 0, promptFile: promptPath, promptFileHashBefore: promptHashBefore, instructionsHash: hash(instructions),
     passageId, sourceFile: file, sourceFileHash: fileHash, inputHash: hash(JSON.stringify(input)), requestHash: hash(JSON.stringify(request)), schemaHash: hash(JSON.stringify(JSON_SCHEMA)), schema: JSON_SCHEMA };
   let spent = 0, requests = 0, stop = null, client;
   const record = row => appendFileSync(ledgerPath, jsonLine(row) + '\n');
-  for (const r of [1, 2, 3]) {
+  for (const r of round === undefined ? [1, 2, 3] : [round]) {
     const reserved = reserveUsd(request);
     stop = limitCheck({ requests, spentUsd: spent, reserved });
     if (stop) { record({ event: 'STOP', round: r, reason: stop, atUtc: new Date().toISOString() }); break; }
@@ -298,6 +300,6 @@ export async function main({ dryRun = false, transport, passageId = PASSAGE_ID, 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const argv = process.argv, opt = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
   const result = await main({ dryRun: argv.includes('--dry-run'), passageId: opt('--passage'), expDir: opt('--exp-dir'),
-    promptPath: opt('--prompt'), passagesDir: opt('--passages-dir'), paragraphs: opt('--paragraphs') ? Number(opt('--paragraphs')) : undefined });
+    promptPath: opt('--prompt'), passagesDir: opt('--passages-dir'), paragraphs: opt('--paragraphs') ? Number(opt('--paragraphs')) : undefined, round: opt('--round') ? Number(opt('--round')) : undefined });
   console.log(JSON.stringify(result, null, 2));
 }

@@ -65,3 +65,35 @@ test('dry-run request has propositions and paragraphs only (no nodes, relations,
   assert.equal(req.model, 'gpt-6.1-sol'); assert.equal(req.reasoning.effort, 'medium'); assert.equal(req.max_output_tokens, 16000);
   assert.equal(req.text.format.strict, true);
 });
+
+test('passagesDir and stanceDir: dry-run reads the passage from another folder and writes only into stanceDir', async () => {
+  const { main } = await import('./run-analysis-stance-gongsun.mjs');
+  const { mkdtempSync, existsSync, rmSync, readdirSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+  const expDir = 'docs/experiments/analysis-gold-calibration-2026-10-20/horse-race-reporting', dir = mkdtempSync(join(tmpdir(), 'stance-'));
+  try {
+    const before = readdirSync(expDir).sort();
+    const r = await main({ dryRun: true, passageId: 'horse-race-reporting', expDir, passagesDir: 'docs/experiments/analysis-gold-calibration-2026-10-20/passages', stanceDir: dir });
+    assert.equal(r.externalRequests, 0); assert.equal(r.exampleAllPass, true);
+    assert.ok(existsSync(join(dir, 'dry-run.request.json')));
+    assert.deepEqual(readdirSync(expDir).sort(), before);
+    const req = JSON.parse(readFileSync(join(dir, 'dry-run.request.json'), 'utf8'));
+    assert.ok(JSON.stringify(req).includes('경마식 보도'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('promptPath: dry-run sends the given prompt file instructions; default stays v1', async () => {
+  const { main } = await import('./run-analysis-stance-gongsun.mjs');
+  const { mkdtempSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+  const expDir = 'docs/experiments/analysis-gold-calibration-2026-10-20/horse-race-reporting', passagesDir = 'docs/experiments/analysis-gold-calibration-2026-10-20/passages';
+  const v2 = 'docs/experiments/analysis-gold-calibration-2-2026-10-21/STANCE-PROMPT-v2.md', a = mkdtempSync(join(tmpdir(), 'stance-v2-')), b = mkdtempSync(join(tmpdir(), 'stance-v1-'));
+  try {
+    await main({ dryRun: true, passageId: 'horse-race-reporting', expDir, passagesDir, stanceDir: a, promptPath: v2 });
+    await main({ dryRun: true, passageId: 'horse-race-reporting', expDir, passagesDir, stanceDir: b });
+    const ra = JSON.parse(readFileSync(join(a, 'dry-run.request.json'), 'utf8')), rb = JSON.parse(readFileSync(join(b, 'dry-run.request.json'), 'utf8'));
+    assert.equal(ra.instructions, instructionsFrom(readFileSync(v2, 'utf8')));
+    assert.equal(rb.instructions, instructionsFrom(readFileSync(PROMPT_PATH, 'utf8')));
+    assert.ok(ra.instructions.includes('하고자') && !rb.instructions.includes('관형절'));
+  } finally { rmSync(a, { recursive: true, force: true }); rmSync(b, { recursive: true, force: true }); }
+});

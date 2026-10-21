@@ -1,6 +1,8 @@
 // D-0143 stance marking: per-proposition stance (AUTHOR/FIGURE/COMMON) for the frozen gongsun map, one sol request.
 // Keys are loaded only by Node's --env-file-if-exists. Handoff: docs/handoffs/2026-10-17-analysis-map-gongsun-stance.md
-// Usage: node --env-file-if-exists=.env scripts/run-analysis-stance-gongsun.mjs [--dry-run] [--passage <id> --exp-dir <dir>]
+// Usage: node --env-file-if-exists=.env scripts/run-analysis-stance-gongsun.mjs [--dry-run] [--passage <id> --exp-dir <dir>] [--passages-dir <dir>] [--stance-dir <dir>] [--prompt <file>]
+// --passages-dir reads the passage from another folder; --stance-dir puts outputs (e.g. a dry-run) elsewhere (D-0151).
+// --prompt sends another stance prompt file (STANCE-PROMPT-v2, D-0155).
 // Other passages (D-0146) reuse the gongsun STANCE-PROMPT.md unchanged; map and outputs come from --exp-dir.
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -131,11 +133,11 @@ export function renderStances(map, out, validation, nodeStances) {
   return lines.join('\n') + '\n';
 }
 
-export async function main({ dryRun = false, transport, passageId, expDir } = {}) {
-  const STANCE_DIR = expDir ? `${expDir}/stance` : DEFAULT_STANCE_DIR, MAP_PATH = expDir ? `${expDir}/frozen-map.json` : DEFAULT_MAP_PATH;
-  const { passage, file, fileHash } = passageId ? loadPassage(PASSAGES_DIR, passageId) : loadPassage();
+export async function main({ dryRun = false, transport, passageId, expDir, passagesDir = PASSAGES_DIR, stanceDir, promptPath = PROMPT_PATH } = {}) {
+  const STANCE_DIR = stanceDir ?? (expDir ? `${expDir}/stance` : DEFAULT_STANCE_DIR), MAP_PATH = expDir ? `${expDir}/frozen-map.json` : DEFAULT_MAP_PATH;
+  const { passage, file, fileHash } = passageId ? loadPassage(passagesDir, passageId) : loadPassage();
   const mapBytes = readFileSync(MAP_PATH), map = JSON.parse(mapBytes.toString('utf8'));
-  const promptBytes = readFileSync(PROMPT_PATH), promptHashBefore = hash(promptBytes);
+  const promptBytes = readFileSync(promptPath), promptHashBefore = hash(promptBytes);
   const instructions = instructionsFrom(promptBytes.toString('utf8')), input = buildInput(passage, map), request = buildRequest(instructions, input);
   mkdirSync(STANCE_DIR, { recursive: true });
   if (dryRun) {
@@ -149,7 +151,7 @@ export async function main({ dryRun = false, transport, passageId, expDir } = {}
   const reserved = reserveUsd(request);
   if (reserved > LIMITS.usdCap) throw new Error(`RUN_LIMIT: usd cap (reserve ${reserved})`);
   const runInfo = { version: 1, startedAtUtc: new Date().toISOString(), model: MODEL, reasoning: { effort: 'medium' }, maxOutputTokens: MAX_OUTPUT_TOKENS, timeoutMs: TIMEOUT_MS,
-    rates: RATES, limits: LIMITS, retries: 0, promptFile: PROMPT_PATH, promptFileHashBefore: promptHashBefore, instructionsHash: hash(instructions),
+    rates: RATES, limits: LIMITS, retries: 0, promptFile: promptPath, promptFileHashBefore: promptHashBefore, instructionsHash: hash(instructions),
     passageId: passage.passageId, mapFile: MAP_PATH, mapFileHash: hash(mapBytes), sourceFile: file, sourceFileHash: fileHash, inputHash: hash(JSON.stringify(input)),
     requestHash: hash(JSON.stringify(request)), schemaHash: hash(JSON.stringify(JSON_SCHEMA)), schema: JSON_SCHEMA };
   const record = row => appendFileSync(ledgerPath, JSON.stringify(row) + '\n');
@@ -179,7 +181,7 @@ export async function main({ dryRun = false, transport, passageId, expDir } = {}
     } catch (e) { status = 'FORMAT_ERROR'; error = String(e); }
   }
   writeFileSync(`${STANCE_DIR}/validation.json`, serialize({ requestStatus: status, error, validation }));
-  const promptHashAfter = hash(readFileSync(PROMPT_PATH));
+  const promptHashAfter = hash(readFileSync(promptPath));
   writeFileSync(`${STANCE_DIR}/RUN.json`, serialize({ ...runInfo, finishedAtUtc: new Date().toISOString(), requests: 1, requestStatus: status, totalCostUsd: spent,
     promptFileHashAfter: promptHashAfter, promptUnchanged: promptHashAfter === promptHashBefore }));
   return { requestStatus: status, totalCostUsd: spent, allPass: validation?.allPass ?? null, promptUnchanged: promptHashAfter === promptHashBefore };
@@ -187,6 +189,7 @@ export async function main({ dryRun = false, transport, passageId, expDir } = {}
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const argv = process.argv, opt = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
-  const result = await main({ dryRun: argv.includes('--dry-run'), passageId: opt('--passage'), expDir: opt('--exp-dir') });
+  const result = await main({ dryRun: argv.includes('--dry-run'), passageId: opt('--passage'), expDir: opt('--exp-dir'),
+    passagesDir: opt('--passages-dir'), stanceDir: opt('--stance-dir'), promptPath: opt('--prompt') });
   console.log(JSON.stringify(result, null, 2));
 }
