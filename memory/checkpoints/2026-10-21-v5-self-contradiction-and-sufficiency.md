@@ -17,8 +17,14 @@
 - `scripts/` 아래 `node --test` 모의 시험 5개 실패(npm test 밖). 옛 흐름 기대 등 낡은 시험으로 보이나 이번 변경 영향 여부는 HEAD 빌드가
   다른 세션 파일로 깨져 확인 못 함.
 
+## 추가: 29번 반영
+
+- 다른 Claude 의견 + Claude 권고(조각별 학생 인용) 사용자 동의 → [인계](../../docs/handoffs/2026-10-21-v5-supported-key-relation-coverage.md), executor 구현,
+  보강 2회(Claude 직접) → [D-0161](../decisions/D-0161-supported-needs-key-relation-coverage.md). 실모델 1차 9/12 → 2차 5/6 → 3차 6/6.
+- 사용자 판정: B1("뇌에 못 들어가") 근거 부족, K1(회사법) 충분.
+- 시험: npm test 1343 통과·2 실패(기존), e2e 12/13(기존), 파이프라인 409/409.
+
 ## 다음
 
-- UI 메모장 29번 방향.
 - `scripts/` 모의 시험 정리.
-- 커밋됨(2026-10-21, 코드 1edb2be + 문서). `scripts/` 모의 시험 파일 5개는 이전 변경과 섞여 제외.
+- 23·24·25번은 커밋됨(2026-10-21, 코드 1edb2be + 문서 43605dc). 29번도 커밋됨. `scripts/` 모의 시험 파일 5개는 이전 변경과 섞여 제외.
