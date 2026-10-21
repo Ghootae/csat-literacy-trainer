@@ -210,3 +210,6 @@
 | [`D-0152`](./decisions/D-0152-end-explanation-guess-and-step-style.md) | accepted | 마지막 설명 짐작·단계 문체 | 추정 오류는 짐작이라고 밝히고 생각을 따옴표로 직접 풀기(D-0150 가정 표현 대체), 한 단계씩·원문 밖 개념 부정 금지, 정답 칸은 판정과 문제 목표로 끝내기, 선지 칸 끝 문구는 칸이 다룬 내용(잘못된 생각/빈 곳/선지 내용)으로 |
 | [`D-0153`](./decisions/D-0153-section-lead-content-verdict-and-goal.md) | accepted | 오답 칸 첫 문장 내용 판정+목표 대조 | "너는 ①이 적절하지 않은 내용이라고 봤지만, ①의 내용은 적절해. 적절하지 않은 것을 고르는 문제니까 ①은 정답이 아니야." 학생 판단은 같은 방향일 때만, 다시 고른 칸은 괄호, 판정어는 발문 술어. D-0127 문구 변경, 짐작 도입 끊기·판정 무관 대비 금지 |
 | [`D-0154`](./decisions/D-0154-gate-note-after-failed-repair-and-reselection.md) | accepted | 교정 실패·재선택 오답 안내 문장 | REPAIR_FAILED(오답/정답 선택별)와 RESELECTION_WRONG에도 정답 공개 앞 안내 문장을 코드로 둔다. D-0117 5항(판단 불가에만) 확장 |
+| [`D-0156`](./decisions/D-0156-self-contradiction-unknown-via-claim-conflicts.md) | accepted | 학생 진술 모순은 판정 불가 | 한 제출 안의 진술끼리 모순되면 보태 읽거나 오류로 잡지 않고 UNKNOWN. 출력 칸 `claimConflicts`와 서버 검증(UI 메모장 23번) |
+| [`D-0157`](./decisions/D-0157-rationale-sufficient-needs-single-student-quote.md) | accepted | 교정 뒤 근거 확인 기준 | `rationaleSufficient`는 핵심 관계를 혼자 담은 학생 발화 인용 하나(`sufficiencyEvidence`)로만. 평가자가 이은 관계·오류 인용 불가(UI 메모장 24번) |
+| [`D-0159`](./decisions/D-0159-correct-unverified-judgment-method-note.md) | accepted | 정답·근거 미확인의 판단 방식 | 판정에 `insufficiencyKind`(판단 방식/연결 빠짐)를 두고, 판단 방식이면 마지막 설명이 그 방식을 인정하지 않고 까닭을 말한다(UI 메모장 25번) |
