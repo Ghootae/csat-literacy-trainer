@@ -114,7 +114,8 @@ VALID다. 내용이 틀렸다는 이유로 학생 결론을 INVALID로 바꾸지
 
 `contentAssessment=INSUFFICIENT`이면 부족의 종류를 `insufficiencyKind`에 적는다. 학생이 원문과의
 관계가 아니라 판단 방식(원문에 그 말이 있는지 없는지, 같은 단어가 나오는지, 원문 밖 지식)에
-기대어 선지를 판정했으면 `JUDGMENT_METHOD`다. 학생이 원문과 맞는 사실이나 대상을 밝혔지만 그것이
+기대어 선지를 판정했으면 `JUDGMENT_METHOD`다. 학생이 근거의 출처를 원문 밖으로 밝혔거나 선지의 결론을 바꿔 말했을 뿐이어도
+`JUDGMENT_METHOD`다. 학생이 원문과 맞는 사실이나 대상을 밝혔지만 그것이
 선지의 판정으로 이어지는 연결을 말하지 않았으면 `MISSING_LINK`다. 둘 다 해당하면 판정을 실제로
 이끈 쪽을 고른다. INSUFFICIENT가 아니면 `NONE`이다. 이 표시는 판정 결과를 바꾸지 않는다.
 
@@ -123,6 +124,7 @@ VALID다. 내용이 틀렸다는 이유로 학생 결론을 INVALID로 바꾸지
 그러나 관련 대상이나 조건만 언급하거나, “맞는 것 같다”, “이상하다”처럼 판단 결과만 말한
 경우에는 그것만으로 SUPPORTED로 인정하지 않는다. 평가자가 원문에서 올바른 관계를 찾아낼
 수 있다는 사실은 학생이 그 관계를 이해했다는 증거가 아니다.
+정답 선택에서 이 판단은 `keyRelationCoverage`의 조각별 학생 인용으로 기록한다.
 
 최종 판정은 `reason`에서 확인한 내용과 일치해야 한다. 학생의 명시적 주장과 원문의 충돌을
 확정했다면 ERROR로 기록한다. 다만 단지 근거가 부족하거나 원문으로 뒷받침되지 않는다는
@@ -272,6 +274,10 @@ SELECTION에서 contentAssessment와 errors를 정하기 전에 studentClaims를
 - studentClaims: 이번 선택의 학생 발화에서 학생이 명시한 판단을 의미 단위로 나누어 빠짐없이 적는다. 각 항목은 observationId, 해당 학생 발화에서 정확히 복사한 quote, 학생이 말한 대상·관계 방향·조건·대응 순서를 바꾸지 않고 다시 쓴 claimAsStated, 원문 대조 결과 sourceCheck, 그 근거 sourceBasis를 가진다.
 - claimConflicts: studentClaims의 claimAsStated끼리 비교해, 둘 다 글자 그대로 참일 수 없는 짝을 모두 적는다. 원문과의 일치 여부는 보지 않고 학생 진술끼리만 비교한다. 표현이 달라도 뜻이 같은 말(같은 대상을 가리키거나 같은 성질을 말하는 말)은 같은 것으로 보고 비교한다. 각 항목은 observationId, 두 진술의 정확한 quote(firstQuote, secondQuote), 둘이 왜 함께 참일 수 없는지 쓴 conflict를 가진다. 언어적 생략 복원(지시 대상·주어·서술어)만으로 풀리는 짝은 적지 않는다. 충돌이 없으면 빈 배열이다.
 - claimConflicts가 하나라도 있으면 SELECTION의 모순 규칙대로 reconstructability=UNKNOWN이고 errors는 빈 배열이다. claimConflicts는 reconstructability를 정하기 전에 기록한다.
+- keyRelationCoverage: 이 선지의 참·거짓을 가르는 관계를, 원문의 근거 사실에서 선지가 맞거나 틀리는 지점까지 조각(element)으로 나누어 적는다. 조각은 학생 근거와 상관없이 원문과 선지로 정한다. 마지막 판정("이 선지는 적절하지 않다") 자체는 조각으로 넣지 않는다. 조각은 적어도 두 개다. 선지를 가르는 원문 근거 사실과, 그 사실이 선지가 맞거나 틀리는 지점에 닿는 연결을 한 조각에 함께 넣지 않는다. 조각은 선지의 참·거짓을 가르는 데 꼭 필요한 것만 쓴다. 공식 해설에 있어도 판정에 필요하지 않은 내용은 조각으로 넣지 않는다.
+- keyRelationCoverage의 조각마다 그 내용을 말한 학생 발화가 있으면 covered=true와 그 부분의 정확한 quote(observationId 포함)를, 없으면 covered=false와 빈 observationId·quote를 쓴다. 표현이 달라도 뜻이 같으면 덮은 것이다. 선지의 결론을 바꿔 말한 발화는 원문 사실 조각을 덮지 않는다. 평가자가 원문에서 찾아 이은 연결은 덮은 것이 아니다.
+- 서로 다른 조각은 학생 발화의 서로 겹치지 않는 부분으로 덮는다. 한 부분이 두 조각을 함께 덮지 않는다.
+- 학생이 고른 선지가 정답이면, contentAssessment=SUPPORTED는 모든 조각이 covered일 때만 쓴다. 하나라도 covered=false이면 INSUFFICIENT이고 insufficiencyKind를 정한다. keyRelationCoverage는 contentAssessment를 정하기 전에 기록한다.
 - claimAsStated에는 평가자가 원문에서 확인한 해석을 넣지 않는다. 학생이 말한 것을 그대로 옮기며, 원문과 다르더라도 고치지 않는다.
 - sourceCheck는 먼저 학생이 선지가 판단하는 대상을 판단했는지 본다. 선지의 대상 대신 다른 대상을 판단한 주장은 원문과 일치하는지 따지지 않고 OFF_TARGET이다. 그렇지 않으면 원문과 일치하면 CONSISTENT, 원문과 명시적으로 충돌하면 CONTRADICTED, 원문만으로 판단할 수 없으면 UNDETERMINED다. 각 항목은 독립적으로 판정한다. 다른 항목의 정오나 학생 선택의 정오를 이유로 한 항목의 판정을 바꾸지 않는다.
 - 선지가 판단하는 대상은 선지 문장에 적힌 다음 요소다: 기호와 가리키는 표현(ⓐ, ⓓ, ㉠ 등)과 그 짝, 판단하는 사람이나 입장(갑, 을, 글쓴이 등), 조건과 상황(무엇이 바뀌고 무엇이 그대로인지, 어떤 시점인지). OFF_TARGET은 학생이 선지의 대상 대신 다른 대상을 판단한 주장에만 쓴다. 학생이 선지의 대상을 판단하면서 지문의 다른 정보를 근거로 끌어오는 것은 OFF_TARGET이 아니다. 어느 쪽인지 확실하지 않으면 OFF_TARGET을 쓰지 않고 위의 원문 대조를 따른다. OFF_TARGET 주장의 sourceBasis에는 선지가 실제로 다루는 대상을 쓴다.

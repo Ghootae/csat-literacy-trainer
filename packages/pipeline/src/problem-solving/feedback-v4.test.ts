@@ -12,12 +12,19 @@ import {
 } from './feedback-v4.js';
 import { feedbackEvaluationInput, feedbackRequestContent, OpenAIFeedbackEvaluator } from './feedback-v4-evaluator.js';
 import type { SourceDirectProblemBundle } from './source-direct-evaluator.js';
+// Correct SUPPORTED needs >= 2 elements with non-overlapping quotes; a single quote is split in two halves.
+function coverageOf(refs: any[]) {
+  const parts = refs.length === 1 && [...refs[0].quote].length >= 2
+    ? [[...refs[0].quote].slice(0, Math.floor([...refs[0].quote].length / 2)).join(''), [...refs[0].quote].slice(Math.floor([...refs[0].quote].length / 2)).join('')].map(quote => ({ ...refs[0], quote }))
+    : refs;
+  return parts.map((e: any) => ({ element: e.quote, covered: true, observationId: e.observationId, quote: e.quote }));
+}
 function withClaims(raw: any) {
   if (raw?.mode !== 'SELECTION') return raw;
   const refs = raw.errors.length
     ? raw.errors.flatMap((error: any) => error.studentEvidence.map((e: any) => ({ ...e, sourceCheck: error.errorType === 'TARGET' ? 'OFF_TARGET' : 'CONTRADICTED' })))
     : raw.studentEvidence.map((e: any) => ({ ...e, sourceCheck: 'CONSISTENT' }));
-  return { ...raw, claimConflicts: [], studentClaims: refs.map((e: any) => ({ ...e, claimAsStated: e.quote, sourceBasis: '원문 대조' })) };
+  return { ...raw, claimConflicts: [], keyRelationCoverage: coverageOf(refs), studentClaims: refs.map((e: any) => ({ ...e, claimAsStated: e.quote, sourceBasis: '원문 대조' })) };
 }
 const sections = (s: FeedbackSession, firstChoice = '원문을 바탕으로 판단 관계를 다시 확인해 봐.') => ({ firstChoice, reselection: s.selections.length === 2 ? '다시 고른 답을 원문과 비교해 봐.' : null, answer: '정답은 원문의 판단 관계로 설명할 수 있어.' });
 const acceptEnd = (s: FeedbackSession) => s.phase === 'AWAITING_END_START' ? submit(s, { type: 'END_START', accept: true }, 'end-start') : s;
@@ -439,7 +446,8 @@ describe('v5 target errors', () => {
   const claim = (quote: string, sourceCheck: string) => ({ observationId: 'o1', quote, claimAsStated: quote, sourceCheck, sourceBasis: '대조' });
   const err = (errorType: string, quote: string, errorId = 'E1') => ({ errorId, errorType, studentEvidence: [{ observationId: 'o1', quote }] });
   const base = { reconstructability: 'RECONSTRUCTABLE', contentAssessment: 'ERROR' };
-  const check = (claims: any[], errors: any[], extra: any = {}) => validateClaims({ ...base, claimConflicts: [], studentClaims: claims, errors, ...extra }, obs);
+  const cover = [{ element: '관계', covered: true, observationId: 'o1', quote: '가나다' }];
+  const check = (claims: any[], errors: any[], extra: any = {}) => validateClaims({ ...base, claimConflicts: [], keyRelationCoverage: cover, studentClaims: claims, errors, ...extra }, obs);
   it('accepts matching claims and errors by type', () => {
     expect(() => check([claim('가나다', 'OFF_TARGET'), claim('라마바', 'CONTRADICTED')], [err('TARGET', '가나다'), err('CONTENT', '라마바', 'E2')])).not.toThrow();
     expect(() => check([claim('가나다', 'OFF_TARGET'), claim('라마바', 'OFF_TARGET')],
@@ -458,7 +466,7 @@ describe('v5 target errors', () => {
   describe('claimConflicts', () => {
     const conflict = (firstQuote = '가나다', secondQuote = '라마바') => ({ observationId: 'o1', firstQuote, secondQuote, conflict: '함께 참일 수 없다' });
     const unknown = { reconstructability: 'UNKNOWN', contentAssessment: 'UNDETERMINED' };
-    const run = (claimConflicts: any, extra: any = {}) => validateClaims({ ...base, contentAssessment: 'SUPPORTED', studentClaims: [claim('가나다', 'CONSISTENT')], errors: [], ...extra, claimConflicts }, obs);
+    const run = (claimConflicts: any, extra: any = {}) => validateClaims({ ...base, keyRelationCoverage: cover, contentAssessment: 'SUPPORTED', studentClaims: [claim('가나다', 'CONSISTENT')], errors: [], ...extra, claimConflicts }, obs);
     it('accepts empty and UNKNOWN with conflicts and no errors', () => {
       expect(() => run([])).not.toThrow();
       expect(() => run([conflict()], unknown)).not.toThrow();
@@ -477,6 +485,46 @@ describe('v5 target errors', () => {
       const props = Object.keys(extendedSelectionSchema(z.toJSONSchema(FeedbackSelectionAssessmentSchema)).properties);
       expect(props.indexOf('claimConflicts')).toBeGreaterThanOrEqual(0);
       expect(props.indexOf('claimConflicts')).toBeLessThan(props.indexOf('reconstructability'));
+    });
+  });
+  describe('keyRelationCoverage', () => {
+    const el = (covered: boolean, quote = covered ? '가나다' : '') => ({ element: '관계', covered, observationId: covered ? 'o1' : '', quote });
+    const supported = { contentAssessment: 'SUPPORTED' };
+    const run = (keyRelationCoverage: any, extra: any = {}, correctChoice = true) => validateClaims({ ...base, ...supported, claimConflicts: [], studentClaims: [claim('가나다', 'CONSISTENT')], errors: [], ...extra, keyRelationCoverage }, obs, { correctChoice });
+    it('accepts correct SUPPORTED with every element covered', () => {
+      expect(() => run([el(true), el(true, '라마바')])).not.toThrow();
+    });
+    it('rejects correct SUPPORTED with fewer than two elements or overlapping quotes', () => {
+      expect(() => run([el(true)])).toThrow(/at least two key relation elements/);
+      expect(() => run([el(true), el(true, '가나')])).toThrow(/non-overlapping quotes/);
+      expect(() => run([el(true)], { contentAssessment: 'INSUFFICIENT' })).not.toThrow();
+      expect(() => run([el(true)], {}, false)).not.toThrow();
+    });
+    it('rejects correct SUPPORTED with an uncovered element', () => {
+      expect(() => run([el(true), el(false)])).toThrow(/SUPPORTED requires every key relation element covered/);
+    });
+    it('accepts an uncovered element for a wrong choice, for INSUFFICIENT, and when the options are omitted', () => {
+      expect(() => run([el(true), el(false)], {}, false)).not.toThrow();
+      expect(() => run([el(false)], { contentAssessment: 'INSUFFICIENT' })).not.toThrow();
+      expect(() => validateClaims({ ...base, ...supported, claimConflicts: [], keyRelationCoverage: [el(false)], studentClaims: [claim('가나다', 'CONSISTENT')], errors: [] }, obs)).not.toThrow();
+    });
+    it('rejects covered with a quote absent from the observation, and uncovered with a quote', () => {
+      expect(() => run([el(true, '없는 발화')])).toThrow(/covered element quote not in observation/);
+      expect(() => run([el(true, '')])).toThrow(/covered element quote not in observation/);
+      expect(() => run([{ ...el(false), quote: '가나다' }])).toThrow(/uncovered element must have empty/);
+      expect(() => run([{ ...el(false), observationId: 'o1' }])).toThrow(/uncovered element must have empty/);
+    });
+    it('rejects an empty or missing array and bad structure', () => {
+      expect(() => run([])).toThrow(/keyRelationCoverage must be nonempty/);
+      expect(() => run(undefined)).toThrow(/keyRelationCoverage must be nonempty/);
+      expect(() => run([{ ...el(true), extra: 1 }])).toThrow(/invalid keyRelationCoverage structure/);
+      expect(() => run([{ ...el(true), covered: 'yes' }])).toThrow(/invalid keyRelationCoverage structure/);
+    });
+    it('orders the schema properties: claimConflicts, keyRelationCoverage, then the rest', () => {
+      const props = Object.keys(extendedSelectionSchema(z.toJSONSchema(FeedbackSelectionAssessmentSchema)).properties);
+      expect(props.slice(0, 2)).toEqual(['claimConflicts', 'keyRelationCoverage']);
+      expect(props.indexOf('keyRelationCoverage')).toBeLessThan(props.indexOf('reconstructability'));
+      expect(props.indexOf('keyRelationCoverage')).toBeLessThan(props.indexOf('contentAssessment'));
     });
   });
   it('rejects ERROR without matching claims', () => {
@@ -554,9 +602,11 @@ describe('v5 developer connection contracts', () => {
     const sufficiency = '`rationaleSufficient`는 선지의 참·거짓을 가르는 핵심 관계가 학생 발화(처음 근거와 교정 답)에 드러날 때만\ntrue다. 학생이 답한 대상·라벨을 평가자가 이어 만든 관계는 학생의 판단으로 인정하지 않는다. 평가자가 학생 발화를\n재료로 올바른 판단을 만들 수 있다는 사실은 학생이 그 판단을 했다는 증거가 아니다. true이면 그 핵심 관계를 혼자 담은\n학생 발화 한 곳을 `sufficiencyEvidence`에 하나만 인용한다. 그 인용만 읽어도 핵심 관계가 드러나야 한다. 여러 발화나\n조각을 이어야 관계가 되면 false다. 질문이 제시한 대상·라벨 가운데 하나를 고른 답만으로는 관계가 드러나지 않는다.\n처음 근거에서 오류로 잡힌 학생 발화는 인용하지 않는다. false이면 `sufficiencyEvidence`는 빈 배열이다. 이 기준은\n충분성에만 쓰고, 오류 수정 판정(`repairs`)에는 쓰지 않는다.\n';
     const sufficiencyRecord = '- REPAIR의 `sufficiencyEvidence`는 `studentEvidence`와 같은 형식(observationId, quote)의 배열이며, quote는 학생 발화(처음 근거 또는 교정 답)에서 정확히 복사한 부분 문자열이다. true이면 항목은 정확히 하나다.\n';
     const conflictsItem = '- claimConflicts: studentClaims의 claimAsStated끼리 비교해, 둘 다 글자 그대로 참일 수 없는 짝을 모두 적는다. 원문과의 일치 여부는 보지 않고 학생 진술끼리만 비교한다. 표현이 달라도 뜻이 같은 말(같은 대상을 가리키거나 같은 성질을 말하는 말)은 같은 것으로 보고 비교한다. 각 항목은 observationId, 두 진술의 정확한 quote(firstQuote, secondQuote), 둘이 왜 함께 참일 수 없는지 쓴 conflict를 가진다. 언어적 생략 복원(지시 대상·주어·서술어)만으로 풀리는 짝은 적지 않는다. 충돌이 없으면 빈 배열이다.\n- claimConflicts가 하나라도 있으면 SELECTION의 모순 규칙대로 reconstructability=UNKNOWN이고 errors는 빈 배열이다. claimConflicts는 reconstructability를 정하기 전에 기록한다.\n';
-    const judgmentMethod = '`contentAssessment=INSUFFICIENT`이면 부족의 종류를 `insufficiencyKind`에 적는다. 학생이 원문과의\n관계가 아니라 판단 방식(원문에 그 말이 있는지 없는지, 같은 단어가 나오는지, 원문 밖 지식)에\n기대어 선지를 판정했으면 `JUDGMENT_METHOD`다. 학생이 원문과 맞는 사실이나 대상을 밝혔지만 그것이\n선지의 판정으로 이어지는 연결을 말하지 않았으면 `MISSING_LINK`다. 둘 다 해당하면 판정을 실제로\n이끈 쪽을 고른다. INSUFFICIENT가 아니면 `NONE`이다. 이 표시는 판정 결과를 바꾸지 않는다.\n\n';
-    for (const added of [contradiction, sufficiency, sufficiencyRecord, conflictsItem, judgmentMethod]) expect(current.split(added).length - 1).toBe(1);
-    let restored = current.replace(hypothesisExemption, '').replace(hypothesisSection, '').replace(hypothesisRepair, '').replace(hypothesisQuestion, '').replace(contradiction, '').replace(sufficiency, '').replace(sufficiencyRecord, '').replace(conflictsItem, '').replace(judgmentMethod, '').replace('  형식은 ' + mismatchAsk + '\n', '').replace(tone + '\n', '').replace(reconstruction, '').replace(criterion, '');
+    const coverageItems = '- keyRelationCoverage: 이 선지의 참·거짓을 가르는 관계를, 원문의 근거 사실에서 선지가 맞거나 틀리는 지점까지 조각(element)으로 나누어 적는다. 조각은 학생 근거와 상관없이 원문과 선지로 정한다. 마지막 판정("이 선지는 적절하지 않다") 자체는 조각으로 넣지 않는다. 조각은 적어도 두 개다. 선지를 가르는 원문 근거 사실과, 그 사실이 선지가 맞거나 틀리는 지점에 닿는 연결을 한 조각에 함께 넣지 않는다. 조각은 선지의 참·거짓을 가르는 데 꼭 필요한 것만 쓴다. 공식 해설에 있어도 판정에 필요하지 않은 내용은 조각으로 넣지 않는다.\n- keyRelationCoverage의 조각마다 그 내용을 말한 학생 발화가 있으면 covered=true와 그 부분의 정확한 quote(observationId 포함)를, 없으면 covered=false와 빈 observationId·quote를 쓴다. 표현이 달라도 뜻이 같으면 덮은 것이다. 선지의 결론을 바꿔 말한 발화는 원문 사실 조각을 덮지 않는다. 평가자가 원문에서 찾아 이은 연결은 덮은 것이 아니다.\n- 서로 다른 조각은 학생 발화의 서로 겹치지 않는 부분으로 덮는다. 한 부분이 두 조각을 함께 덮지 않는다.\n- 학생이 고른 선지가 정답이면, contentAssessment=SUPPORTED는 모든 조각이 covered일 때만 쓴다. 하나라도 covered=false이면 INSUFFICIENT이고 insufficiencyKind를 정한다. keyRelationCoverage는 contentAssessment를 정하기 전에 기록한다.\n';
+    const coverageNote = '정답 선택에서 이 판단은 `keyRelationCoverage`의 조각별 학생 인용으로 기록한다.\n';
+    const judgmentMethod = '`contentAssessment=INSUFFICIENT`이면 부족의 종류를 `insufficiencyKind`에 적는다. 학생이 원문과의\n관계가 아니라 판단 방식(원문에 그 말이 있는지 없는지, 같은 단어가 나오는지, 원문 밖 지식)에\n기대어 선지를 판정했으면 `JUDGMENT_METHOD`다. 학생이 근거의 출처를 원문 밖으로 밝혔거나 선지의 결론을 바꿔 말했을 뿐이어도\n`JUDGMENT_METHOD`다. 학생이 원문과 맞는 사실이나 대상을 밝혔지만 그것이\n선지의 판정으로 이어지는 연결을 말하지 않았으면 `MISSING_LINK`다. 둘 다 해당하면 판정을 실제로\n이끈 쪽을 고른다. INSUFFICIENT가 아니면 `NONE`이다. 이 표시는 판정 결과를 바꾸지 않는다.\n\n';
+    for (const added of [contradiction, sufficiency, sufficiencyRecord, conflictsItem, coverageItems, coverageNote, judgmentMethod]) expect(current.split(added).length - 1).toBe(1);
+    let restored = current.replace(hypothesisExemption, '').replace(hypothesisSection, '').replace(hypothesisRepair, '').replace(hypothesisQuestion, '').replace(contradiction, '').replace(sufficiency, '').replace(sufficiencyRecord, '').replace(conflictsItem, '').replace(coverageItems, '').replace(coverageNote, '').replace(judgmentMethod, '').replace('  형식은 ' + mismatchAsk + '\n', '').replace(tone + '\n', '').replace(reconstruction, '').replace(criterion, '');
     for (const added of targetOnly) restored = restored.replace(added + '\n', '');
     for (const [approved, previous] of replacements) {
       expect(current).toContain(approved); expect(current).not.toContain(previous);
@@ -615,10 +665,12 @@ describe('v5 developer connection contracts', () => {
     const actualSchema = extendedSelectionSchema(base);
     expect(Object.keys(actualSchema.properties).indexOf('claimConflicts')).toBeLessThan(Object.keys(actualSchema.properties).indexOf('reconstructability'));
     expect(Object.keys(actualSchema.properties).indexOf('claimConflicts')).toBe(0);
+    expect(Object.keys(actualSchema.properties).indexOf('keyRelationCoverage')).toBe(1);
     expect(actualSchema.required).toContain('claimConflicts');
-    const { claimConflicts: _cc, ...tsProperties } = actualSchema.properties;
+    expect(actualSchema.required).toContain('keyRelationCoverage');
+    const { claimConflicts: _cc, keyRelationCoverage: _kc, ...tsProperties } = actualSchema.properties;
     expect(Object.keys(tsProperties)).toEqual(Object.keys(expectedSchema.properties));
-    expect({ ...actualSchema, properties: tsProperties, required: actualSchema.required.filter((k: string) => k !== 'claimConflicts') }).toEqual(expectedSchema);
+    expect({ ...actualSchema, properties: tsProperties, required: actualSchema.required.filter((k: string) => k !== 'claimConflicts' && k !== 'keyRelationCoverage') }).toEqual(expectedSchema);
     expect(base.properties).not.toHaveProperty('studentClaims');
     const valid = withClaims(output(selection()));
     const observations = [{ observationId: 'o1', text: rationale.text }];
@@ -627,7 +679,7 @@ describe('v5 developer connection contracts', () => {
       { ...valid, errors: [] }, { ...valid, studentClaims: [{ ...valid.studentClaims[0], sourceCheck: 'CONSISTENT' }] },
       { ...valid, studentClaims: [{ ...valid.studentClaims[0], extra: true }] }];
     const result = (fn: typeof validateClaims, raw: unknown) => { try { return fn(raw, observations); } catch (e) { return String(e); } };
-    for (const raw of variants) expect(result(validateClaims, { claimConflicts: [], ...raw })).toEqual(result(reference.validateClaims, raw));
+    for (const raw of variants) expect(result(validateClaims, { claimConflicts: [], keyRelationCoverage: withClaims(output(selection())).keyRelationCoverage, ...raw })).toEqual(result(reference.validateClaims, raw));
   });
   for (const correct of [false, true]) it(`routes selection and independent audit by last choice: ${correct}`, async () => {
     const s = selection(correct ? 'C5' : 'C4'); const a = output(s, { rationaleImpliedVerdict: 'VALID' });
@@ -682,6 +734,18 @@ describe('v5 developer connection contracts', () => {
     expect(requests).toHaveLength(2); expect(JSON.stringify(requests[1])).toContain('CLAIMS_CONTRACT:');
     expect(call.metadata.attempts?.[0]?.rawOutput).toEqual(bad);
     expect(call.rawOutput).not.toHaveProperty('studentClaims'); expect(assess(s, call.rawOutput).phase).toBe('AWAITING_CORRECTION');
+  });
+  for (const correct of [false, true]) it(`passes the last choice correctness to the coverage check: correct=${correct}`, async () => {
+    const s = selection(correct ? 'C5' : 'C4');
+    const uncovered = { ...withClaims(output(s, { errors: [], contentAssessment: 'SUPPORTED' })), keyRelationCoverage: [{ element: '핵심 관계', covered: false, observationId: '', quote: '' }] };
+    const good = withClaims(output(s, { errors: [], contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' }));
+    const requests: any[] = [];
+    const call = await new OpenAIFeedbackEvaluator({ transport: { async create(r) {
+      requests.push(r); return response(requests.length === 1 ? uncovered : good);
+    } } }).evaluate(s);
+    expect(requests).toHaveLength(correct ? 2 : 1);
+    if (correct) expect(JSON.stringify(requests[1])).toContain('SUPPORTED requires every key relation element covered');
+    expect(call.rawOutput).not.toHaveProperty('keyRelationCoverage');
   });
   for (const correct of [false, true]) for (const reason of ['REPAIR_FAILED', 'COACHING_REQUESTED'] as const) {
     for (const sufficient of [false, true]) it(`end ${reason}, correct=${correct}, sufficient=${sufficient}`, async () => {
@@ -877,7 +941,7 @@ describe('error hypothesis (INFERRED errors)', () => {
     const obs = [{ observationId: 'o1', text: '가나다 라마바' }];
     const claim = (quote: string, sourceCheck: string) => ({ observationId: 'o1', quote, claimAsStated: quote, sourceCheck, sourceBasis: '대조' });
     const inferredError = (quote: string) => ({ errorId: 'E1', errorType: 'TARGET', basis: 'INFERRED', studentEvidence: [{ observationId: 'o1', quote }] });
-    const check = (claims: any[], errors: any[]) => validateClaims({ reconstructability: 'RECONSTRUCTABLE', contentAssessment: 'ERROR', claimConflicts: [], studentClaims: claims, errors }, obs);
+    const check = (claims: any[], errors: any[]) => validateClaims({ reconstructability: 'RECONSTRUCTABLE', contentAssessment: 'ERROR', claimConflicts: [], keyRelationCoverage: [{ element: 'e', covered: false, observationId: '', quote: '' }], studentClaims: claims, errors }, obs);
     it('exempts INFERRED errors from claim correspondence', () => {
       expect(() => check([claim('가나다', 'CONSISTENT')], [inferredError('가나다')])).not.toThrow();
     });

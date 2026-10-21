@@ -151,8 +151,9 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
             s.evaluationMode === 'REPAIR' ? FeedbackRepairAssessmentSchema : FeedbackSelectionAssessmentSchema,
             readFileSync(resolve(process.cwd(), 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md'), 'utf8'), content);
           if (s.evaluationMode === 'SELECTION') {
-            validateClaims(candidate, feedbackEvaluationInput(s).observations.map(o => ({ observationId: o.observationId, text: feedbackObservationText(o) })));
-            const { studentClaims: _claims, claimConflicts: _conflicts, ...assessment } = candidate as Record<string, unknown>;
+            validateClaims(candidate, feedbackEvaluationInput(s).observations.map(o => ({ observationId: o.observationId, text: feedbackObservationText(o) })),
+              { correctChoice: s.selections.at(-1)?.choiceId === s.source.answerChoiceId });
+            const { studentClaims: _claims, claimConflicts: _conflicts, keyRelationCoverage: _coverage, ...assessment } = candidate as Record<string, unknown>;
             candidate = assessment;
           }
           const assessment = validateFeedbackAssessment(s, candidate);
