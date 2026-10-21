@@ -152,7 +152,7 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
             readFileSync(resolve(process.cwd(), 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md'), 'utf8'), content);
           if (s.evaluationMode === 'SELECTION') {
             validateClaims(candidate, feedbackEvaluationInput(s).observations.map(o => ({ observationId: o.observationId, text: feedbackObservationText(o) })));
-            const { studentClaims: _claims, ...assessment } = candidate as Record<string, unknown>;
+            const { studentClaims: _claims, claimConflicts: _conflicts, ...assessment } = candidate as Record<string, unknown>;
             candidate = assessment;
           }
           const assessment = validateFeedbackAssessment(s, candidate);

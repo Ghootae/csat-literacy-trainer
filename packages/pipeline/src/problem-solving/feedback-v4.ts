@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { overlaps } from './feedback-v5-claims.js';
 import { SourceDirectProblemBundleSchema, type SourceDirectProblemBundle } from './source-direct-evaluator.js';
 
 export const PROBLEM_FEEDBACK_V4 = 'problem-feedback-v4' as const;
@@ -47,6 +48,7 @@ export const FeedbackSelectionAssessmentSchema = z.object({
   // Model-derived conclusion, never a quotation attributed to the student.
   rationaleImpliedVerdict: z.enum(['VALID', 'INVALID', 'UNKNOWN']),
   contentAssessment: z.enum(['SUPPORTED', 'INSUFFICIENT', 'ERROR', 'UNKNOWN']),
+  insufficiencyKind: z.enum(['NONE', 'JUDGMENT_METHOD', 'MISSING_LINK']),
   studentEvidence: z.array(StudentEvidence),
   sourceEvidence: z.array(SourceEvidence),
   errors: z.array(ErrorSchema),
@@ -75,6 +77,7 @@ export const FeedbackRepairAssessmentSchema = z.object({
   }).strict()),
   verificationComplete: z.boolean(),
   rationaleSufficient: z.boolean(),
+  sufficiencyEvidence: z.array(StudentEvidence),
   coaching: Text,
 }).strict();
 export type FeedbackSelectionAssessment = z.infer<typeof FeedbackSelectionAssessmentSchema>;
@@ -347,6 +350,9 @@ export function validateFeedbackAssessment(s: FeedbackSession, raw: unknown): Fe
     if (new Set(a.errors.map(e => e.errorId)).size !== a.errors.length || a.errors.some(e => e.errorId === 'selection-mismatch')) throw new Error('오류 ID 중복 또는 예약 ID입니다.');
     for (const e of a.errors) { validateStudentEvidence(s, e.studentEvidence); validateSourceEvidence(s, e.sourceEvidence); }
     if (a.boundary !== 'NONE') return a;
+    const insufficient = a.reconstructability === 'RECONSTRUCTABLE' && a.contentAssessment === 'INSUFFICIENT';
+    if (insufficient && a.insufficiencyKind === 'NONE') throw new Error('근거 부족 판정에는 부족의 종류(판단 방식 / 연결 빠짐)가 필요합니다.');
+    if (!insufficient && a.insufficiencyKind !== 'NONE') throw new Error('근거 부족이 아닌 판정에는 부족의 종류를 둘 수 없습니다.');
     const inferred = a.errors.filter(e => e.basis === 'INFERRED');
     if (inferred.length > 1) throw new Error('추정 오류는 하나까지만 허용됩니다.');
     if (inferred.length) {
@@ -379,6 +385,12 @@ export function validateFeedbackAssessment(s: FeedbackSession, raw: unknown): Fe
       if (repair.status === 'REPAIRED' && !repair.studentEvidence.length) throw new Error('실제 수정 근거 없이 교정 성공으로 판정할 수 없습니다.');
       if (repair.status === 'REPAIRED' && repair.studentEvidence.every(e => /^(네|예|응|알겠습니다|알겠어요|맞아요|이해했어요|모르겠어요|찍었어요)[.!?\s]*$/u.test(e.quote))) throw new Error('동의 또는 확인 불가 발화만으로 실제 수정을 인정할 수 없습니다.');
     }
+    if (a.rationaleSufficient && !a.sufficiencyEvidence.length) throw new Error('충분성 판정에는 핵심 관계를 담은 학생 발화 인용이 필요합니다.');
+    if (a.rationaleSufficient && a.sufficiencyEvidence.length > 1) throw new Error('충분성 인용은 핵심 관계를 혼자 담은 학생 발화 하나여야 합니다. 여러 발화를 이어야 관계가 되면 충분하지 않습니다.');
+    if (!a.rationaleSufficient && a.sufficiencyEvidence.length) throw new Error('충분하지 않은 근거에는 충분성 인용을 둘 수 없습니다.');
+    validateStudentEvidence(s, a.sufficiencyEvidence);
+    const flagged = [...s.errors, ...s.additionalErrors].flatMap(e => e.studentEvidence);
+    if (a.sufficiencyEvidence.some(q => flagged.some(f => overlaps(q, f)))) throw new Error('오류로 확인된 학생 발화는 충분성 인용으로 쓸 수 없습니다.');
     if (new Set(a.newErrors.map(e => e.errorId)).size !== a.newErrors.length || a.newErrors.some(e => expected.includes(e.errorId))) throw new Error('새 오류 ID는 기존 오류와 중복할 수 없습니다.');
     for (const e of a.newErrors) { validateStudentEvidence(s, e.studentEvidence, true); validateSourceEvidence(s, e.sourceEvidence); }
   }

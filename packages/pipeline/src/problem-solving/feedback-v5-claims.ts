@@ -1,17 +1,24 @@
 // Port of scripts/lib/v5-marker-judgment.mjs; preserve its JSON contract and validation semantics.
+// claimConflicts는 TS 쪽에만 있음(2026-10-21).
 export function extendedSelectionSchema(base: Record<string, any>) {
   const schema = structuredClone(base);
+  // claimConflicts must be generated before reconstructability, so it goes first.
+  schema.properties = { claimConflicts: { type: 'array', items: {
+    type: 'object', additionalProperties: false,
+    properties: Object.fromEntries(['observationId', 'firstQuote', 'secondQuote', 'conflict'].map(k => [k, { type: 'string' }])),
+    required: ['observationId', 'firstQuote', 'secondQuote', 'conflict'],
+  } }, ...schema.properties };
   schema.properties.studentClaims = { type: 'array', minItems: 1, items: {
     type: 'object', additionalProperties: false,
     properties: Object.fromEntries(['observationId', 'quote', 'claimAsStated', 'sourceCheck', 'sourceBasis']
       .map(k => [k, k === 'sourceCheck' ? { type: 'string', enum: ['CONSISTENT', 'CONTRADICTED', 'OFF_TARGET', 'UNDETERMINED'] } : { type: 'string' }])),
     required: ['observationId', 'quote', 'claimAsStated', 'sourceCheck', 'sourceBasis'],
   } };
-  schema.required = [...schema.required, 'studentClaims'];
+  schema.required = [...schema.required, 'claimConflicts', 'studentClaims'];
   return schema;
 }
 const normalize = (text: string) => text.replace(/\s+/gu, ' ').trim();
-const overlaps = (a: { observationId: string; quote: string }, b: { observationId: string; quote: string }) => a.observationId === b.observationId && normalize(a.quote) && normalize(b.quote)
+export const overlaps = (a: { observationId: string; quote: string }, b: { observationId: string; quote: string }) => a.observationId === b.observationId && normalize(a.quote) && normalize(b.quote)
   && (normalize(a.quote).includes(normalize(b.quote)) || normalize(b.quote).includes(normalize(a.quote)));
 export function validateClaims(assessment: any, observations: { observationId: string; text: string }[]) {
   const fail = (reason: string): never => { throw new Error(`CLAIMS_CONTRACT: ${reason}`); };
@@ -43,5 +50,15 @@ export function validateClaims(assessment: any, observations: { observationId: s
     if (target.length > 1) fail('at most one target error');
     if (!contradicted.length && !offTarget.length && assessment.contentAssessment === 'ERROR' && !errors.some((e: any) => e?.basis === 'INFERRED')) fail('ERROR without CONTRADICTED or OFF_TARGET claim');
   }
+  const conflicts = assessment.claimConflicts;
+  if (!Array.isArray(conflicts)) fail('claimConflicts must be an array');
+  const conflictKeys = ['observationId', 'firstQuote', 'secondQuote', 'conflict'];
+  for (const c of conflicts) {
+    if (!c || Object.keys(c).length !== conflictKeys.length || conflictKeys.some(k => typeof c[k] !== 'string')) fail('invalid claimConflict structure');
+    const text = observations.find(o => o.observationId === c.observationId)?.text;
+    if (typeof text !== 'string' || [c.firstQuote, c.secondQuote].some((q: string) => !normalize(q) || !normalize(text).includes(normalize(q)))) fail('conflict quote not in observation');
+    if (overlaps({ observationId: c.observationId, quote: c.firstQuote }, { observationId: c.observationId, quote: c.secondQuote })) fail('conflict quotes overlap');
+  }
+  if (conflicts.length && (assessment.reconstructability !== 'UNKNOWN' || !Array.isArray(assessment.errors) || assessment.errors.length)) fail('claimConflicts requires UNKNOWN and no errors');
   return claims;
 }

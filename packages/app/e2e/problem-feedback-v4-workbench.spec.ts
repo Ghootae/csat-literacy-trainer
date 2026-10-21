@@ -27,12 +27,12 @@ const evaluator: FeedbackEvaluator = { async evaluate(s) {
     const noRepair = text.includes('모르겠어요');
     return { metadata, rawOutput: { mode: 'REPAIR', boundary: 'NONE', reason: noRepair ? '수정 확인 불가' : '수정한 관계 확인', reviewedResponse: studentEvidence[0],
       repairs: s.errors.map((e, i) => ({ errorId: e.errorId, status: !noRepair && i < corrections.length ? 'REPAIRED' : 'REMAINING', studentEvidence })),
-      newErrors: [], verificationComplete: true, rationaleSufficient: !noRepair, coaching: '동일인의 반복 게시가 여론을 왜곡할 수 있다는 점을 원문과 비교해 보세요.' } };
+      newErrors: [], verificationComplete: true, rationaleSufficient: !noRepair, sufficiencyEvidence: noRepair ? [] : studentEvidence, coaching: '동일인의 반복 게시가 여론을 왜곡할 수 있다는 점을 원문과 비교해 보세요.' } };
   }
   const unknown = text.includes('모호');
   const correct = s.selections.at(-1)?.choiceId === s.source.answerChoiceId;
   return { metadata, rawOutput: { mode: 'SELECTION', boundary: text.includes('자료 경계') ? 'MISSING_SOURCE' : 'NONE', reason: unknown ? '근거의 판단 연결을 확인할 수 없습니다.' : '선택 근거를 원문과 비교했습니다.',
-    reconstructability: unknown ? 'UNKNOWN' : 'RECONSTRUCTABLE', reconstructedPath: unknown ? [] : [text, '따라서 선택한 선지는 거짓이라고 판단한다.'], rationaleImpliedVerdict: unknown ? 'UNKNOWN' : 'INVALID', contentAssessment: unknown ? 'UNKNOWN' : correct ? 'SUPPORTED' : 'ERROR', studentEvidence, sourceEvidence,
+    reconstructability: unknown ? 'UNKNOWN' : 'RECONSTRUCTABLE', reconstructedPath: unknown ? [] : [text, '따라서 선택한 선지는 거짓이라고 판단한다.'], rationaleImpliedVerdict: unknown ? 'UNKNOWN' : 'INVALID', contentAssessment: unknown ? 'UNKNOWN' : correct ? 'SUPPORTED' : 'ERROR', insufficiencyKind: 'NONE', studentEvidence, sourceEvidence,
     errors: correct || unknown ? [] : Array.from({ length: text.includes('두 가지') ? 2 : 1 }, (_, i) => ({ errorId: `E${i + 1}`, errorType: 'CONTENT', description: `${i + 1}번째 관계 오류`, studentEvidence, sourceEvidence, basis: 'STATED', question: `${i + 1}번째 관계를 원문과 비교하면 어떻게 달라지나요?` })),
     errorHypothesis: null, selectionMismatchQuestion: null, coaching: '동일인의 반복 게시가 여러 시민의 의견으로 오인되면 여론 왜곡의 우려를 뒷받침합니다.' } };
 } };

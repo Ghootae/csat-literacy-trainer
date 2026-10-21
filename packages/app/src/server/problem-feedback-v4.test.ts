@@ -18,7 +18,7 @@ function unknown(s: FeedbackSession): FeedbackEvaluationCall {
   if (s.evaluationMode === 'END_EXPLANATION') return { metadata, rawOutput: { firstChoice: '원문에서 중복 게시와 여론의 관계를 비교해 봐.', reselection: s.selections.length === 2 ? '다시 고른 답도 원문과 비교해 봐.' : null, answer: '정답은 여론 왜곡의 관계로 확인할 수 있어.' } };
   const o = s.observations.at(-1)!;
   return { metadata, rawOutput: { mode: 'SELECTION', boundary: 'NONE', reason: '확인할 수 없음',
-    reconstructability: 'UNKNOWN', reconstructedPath: [], rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN',
+    reconstructability: 'UNKNOWN', reconstructedPath: [], rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE',
     studentEvidence: [{ observationId: o.observationId, quote: o.command.type === 'SELECT' && o.command.rationale.mode === 'PROVIDED' ? o.command.rationale.text : '모르겠어요' }],
     sourceEvidence: [], errors: [], errorHypothesis: null, selectionMismatchQuestion: null, coaching: '근거를 확인하기 어렵습니다. 원문의 중복 게시와 여론의 관계를 비교하세요.' } };
 }
@@ -146,10 +146,10 @@ describe('v5 controller continuation', () => {
         return { metadata, rawOutput: s.evaluationMode === 'REPAIR' ? {
           mode: 'REPAIR', boundary: 'NONE', reason: '수정 확인', reviewedResponse: studentEvidence[0],
           repairs: s.errors.map(e => ({ errorId: e.errorId, status: 'REPAIRED', studentEvidence })), newErrors: [],
-          verificationComplete: true, rationaleSufficient: true, coaching: '원문 관계를 확인했어요.',
+          verificationComplete: true, rationaleSufficient: true, sufficiencyEvidence: studentEvidence, coaching: '원문 관계를 확인했어요.',
         } : {
           mode: 'SELECTION', boundary: 'NONE', reason: '내용 오류', reconstructability: 'RECONSTRUCTABLE',
-          reconstructedPath: [text], rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR', studentEvidence, sourceEvidence,
+          reconstructedPath: [text], rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR', insufficiencyKind: 'NONE', studentEvidence, sourceEvidence,
           errors: [{ errorId: 'E1', errorType: 'CONTENT', description: '내용 오류', studentEvidence, sourceEvidence, basis: 'STATED', question: '중복 게시가 여론에 어떤 영향을 줄까요?' }],
           errorHypothesis: null, selectionMismatchQuestion: null, coaching: '원문 관계를 확인해 보세요.',
         } };
@@ -283,9 +283,9 @@ describe('unverifiable rationale connector', () => {
       if (s.evaluationMode === 'END_EXPLANATION') return unknown(s);
       const o = s.observations.at(-1)!;
       const studentEvidence = [{ observationId: o.observationId, quote: '모르겠어요' }];
-      if (s.evaluationMode === 'REPAIR') return { metadata, rawOutput: { mode: 'REPAIR', boundary: 'NONE', reason: '남음', reviewedResponse: studentEvidence[0], repairs: [{ errorId: 'E1', status: 'REMAINING', studentEvidence }], newErrors: [], verificationComplete: true, rationaleSufficient: false, coaching: '원문을 확인해 봐.' } };
+      if (s.evaluationMode === 'REPAIR') return { metadata, rawOutput: { mode: 'REPAIR', boundary: 'NONE', reason: '남음', reviewedResponse: studentEvidence[0], repairs: [{ errorId: 'E1', status: 'REMAINING', studentEvidence }], newErrors: [], verificationComplete: true, rationaleSufficient: false, sufficiencyEvidence: [], coaching: '원문을 확인해 봐.' } };
       const raw = unknown(s).rawOutput as Record<string, unknown>;
-      return { metadata, rawOutput: { ...raw, reconstructability: 'RECONSTRUCTABLE', reconstructedPath: ['반대 관계'], rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR', sourceEvidence: [{ location: 'PASSAGE', quote: source.passage, mediaId: null, visualObservation: null }],
+      return { metadata, rawOutput: { ...raw, reconstructability: 'RECONSTRUCTABLE', reconstructedPath: ['반대 관계'], rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR', insufficiencyKind: 'NONE', sourceEvidence: [{ location: 'PASSAGE', quote: source.passage, mediaId: null, visualObservation: null }],
         errors: [{ errorId: 'E1', errorType: 'CONTENT', description: '내부 오류 설명', studentEvidence, sourceEvidence: [{ location: 'PASSAGE', quote: source.passage, mediaId: null, visualObservation: null }, { location: 'EXPLANATION', quote: source.officialExplanation, mediaId: null, visualObservation: null }], basis: 'STATED', question: '원문은 어떻게 말해?' }] } };
     } });
     let next = await submitSettled(c, v.sessionId, request(v, { ...select, choiceId }));
@@ -312,10 +312,10 @@ describe('instant acceptance contract', () => {
       const studentEvidence = [{ observationId: observation.observationId, quote: text }];
       const sourceEvidence = [{ location: 'PASSAGE', quote: source.passage, mediaId: null, visualObservation: null }];
       if (s.evaluationMode === 'REPAIR') return { metadata, rawOutput: { mode: 'REPAIR', boundary: 'NONE', reason: '수정 확인', reviewedResponse: studentEvidence[0],
-        repairs: s.errors.map(e => ({ errorId: e.errorId, status: 'REPAIRED', studentEvidence })), newErrors: [], verificationComplete: true, rationaleSufficient: true, coaching: '확인했어.' } };
+        repairs: s.errors.map(e => ({ errorId: e.errorId, status: 'REPAIRED', studentEvidence })), newErrors: [], verificationComplete: true, rationaleSufficient: true, sufficiencyEvidence: studentEvidence, coaching: '확인했어.' } };
       if (s.selections.length === 2) return unknown(s);
       return { metadata, rawOutput: { mode: 'SELECTION', boundary: 'NONE', reason: '내용 오류', reconstructability: 'RECONSTRUCTABLE',
-        reconstructedPath: [text], rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR', studentEvidence, sourceEvidence,
+        reconstructedPath: [text], rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR', insufficiencyKind: 'NONE', studentEvidence, sourceEvidence,
         errors: [{ errorId: 'E1', errorType: 'CONTENT', description: '내용 오류', studentEvidence, sourceEvidence, basis: 'STATED', question: '원문은 어떻게 말해?' }],
         errorHypothesis: null, selectionMismatchQuestion: null, coaching: '원문을 확인해 봐.' } };
     } });
