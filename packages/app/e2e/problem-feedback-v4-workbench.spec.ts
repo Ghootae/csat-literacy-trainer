@@ -33,8 +33,8 @@ const evaluator: FeedbackEvaluator = { async evaluate(s) {
   const correct = s.selections.at(-1)?.choiceId === s.source.answerChoiceId;
   return { metadata, rawOutput: { mode: 'SELECTION', boundary: text.includes('자료 경계') ? 'MISSING_SOURCE' : 'NONE', reason: unknown ? '근거의 판단 연결을 확인할 수 없습니다.' : '선택 근거를 원문과 비교했습니다.',
     reconstructability: unknown ? 'UNKNOWN' : 'RECONSTRUCTABLE', reconstructedPath: unknown ? [] : [text, '따라서 선택한 선지는 거짓이라고 판단한다.'], rationaleImpliedVerdict: unknown ? 'UNKNOWN' : 'INVALID', contentAssessment: unknown ? 'UNKNOWN' : correct ? 'SUPPORTED' : 'ERROR', studentEvidence, sourceEvidence,
-    errors: correct || unknown ? [] : Array.from({ length: text.includes('두 가지') ? 2 : 1 }, (_, i) => ({ errorId: `E${i + 1}`, description: `${i + 1}번째 관계 오류`, studentEvidence, sourceEvidence, question: `${i + 1}번째 관계를 원문과 비교하면 어떻게 달라지나요?` })),
-    selectionMismatchQuestion: null, coaching: '동일인의 반복 게시가 여러 시민의 의견으로 오인되면 여론 왜곡의 우려를 뒷받침합니다.' } };
+    errors: correct || unknown ? [] : Array.from({ length: text.includes('두 가지') ? 2 : 1 }, (_, i) => ({ errorId: `E${i + 1}`, errorType: 'CONTENT', description: `${i + 1}번째 관계 오류`, studentEvidence, sourceEvidence, basis: 'STATED', question: `${i + 1}번째 관계를 원문과 비교하면 어떻게 달라지나요?` })),
+    errorHypothesis: null, selectionMismatchQuestion: null, coaching: '동일인의 반복 게시가 여러 시민의 의견으로 오인되면 여론 왜곡의 우려를 뒷받침합니다.' } };
 } };
 
 test.beforeAll(async () => {
@@ -220,6 +220,7 @@ test('wrong reselection gates and reveals each section through understanding NO 
   await select(page, 3, '느린 설명: 다시 고른 답도 맞다고 생각해.');
   await expect(page.getByRole('button', { name: '응', exact: true })).toBeDisabled(); await measure();
   await expect(page.getByLabel('대화 기록')).toContainText('정답은 ⑤번이야.');
+  await expect(page.getByLabel('대화 기록')).toContainText('다시 고른 답도 정답이 아니야. 더 묻지 않고 정답을 먼저 알려 줄게.');
   await page.getByRole('button', { name: '응', exact: true }).click();
   await expect(page.locator('.v4-waiting')).toContainText('설명을 정리하고 있어'); await measure();
   await expect(page.getByLabel('대화 기록')).toContainText('처음에 고른 ①번부터 볼게.', { timeout: 15000 });
@@ -313,6 +314,6 @@ test('instant verdict precedes waiting; processing reload preserves pending and 
   expect(coach.findIndex(t => t.includes('네가 쓴 근거만으로는'))).toBeLessThan(coach.findIndex(t => t.includes('정답은 ⑤번이야.')));
   await page.getByRole('button', { name: '응', exact: true }).click();
   await expect(page.getByRole('button', { name: '다음으로 넘어가기', exact: true })).toBeEnabled();
-  await expect(page.getByLabel('대화 기록')).toContainText('설명이 이해됐으면 다음 설명으로 넘어가 보자.');
+  await expect(page.getByLabel('대화 기록')).toContainText('설명이 이해됐으면, 이번엔 정답에 대한 설명으로 넘어가 보자.');
   expect(await page.locator('.v4-composer').evaluate(e => e.getBoundingClientRect().height)).toBe(height);
 });

@@ -68,9 +68,9 @@ describe('headless v4 HTTP integration', () => {
           mode: 'SELECTION', boundary: 'NONE', reason: '근거를 해당 선지 판단으로 재구성',
           reconstructability: 'RECONSTRUCTABLE', reconstructedPath: [text], rationaleImpliedVerdict: s.choiceImpliedVerdict,
           contentAssessment: s.selections.length === 1 ? 'ERROR' : 'SUPPORTED', studentEvidence, sourceEvidence,
-          errors: s.selections.length === 1 ? [{ errorId: 'E1', description: '여론 왜곡의 결과를 소수 의견의 약화로 오해함',
-            studentEvidence, sourceEvidence, question: '같은 사람의 반복 게시가 실제 시민들의 의견으로 오인될 수 있을까요?' }] : [],
-          selectionMismatchQuestion: null, coaching: '여론 왜곡의 사례가 소수 의견의 우려를 강화합니다.',
+          errors: s.selections.length === 1 ? [{ errorId: 'E1', errorType: 'CONTENT', description: '여론 왜곡의 결과를 소수 의견의 약화로 오해함',
+            studentEvidence, sourceEvidence, basis: 'STATED', question: '같은 사람의 반복 게시가 실제 시민들의 의견으로 오인될 수 있을까요?' }] : [],
+          errorHypothesis: null, selectionMismatchQuestion: null, coaching: '여론 왜곡의 사례가 소수 의견의 우려를 강화합니다.',
         } };
     } };
     const base = await server({ developerMode: true, problemFeedbackV4Evaluator: evaluator, problemFeedbackV4Save(r) { records.push(r); } });

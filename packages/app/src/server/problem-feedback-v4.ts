@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import {
   FeedbackCommandSchema, FeedbackEvaluationError, OpenAIFeedbackEvaluator,
-  applyFeedbackAssessment, applyFeedbackEndExplanation, createFeedbackSession, feedbackPublicView, feedbackSectionLead, submitFeedbackCommand,
+  applyFeedbackAssessment, applyFeedbackEndExplanation, createFeedbackSession, feedbackPublicView, feedbackSectionClosing, feedbackSectionLead, submitFeedbackCommand,
   type FeedbackEvaluationCall, type FeedbackEvaluator, type FeedbackSession, type SourceDirectProblemBundle,
 } from '@csat/pipeline';
 import { loadProblemSolvingBundle } from './content.js';
@@ -126,7 +126,6 @@ export class ProblemFeedbackV4Controller {
     return this.view(r);
   }
   private async evaluate(r: Runtime, transitionId: string): Promise<FeedbackV4View> {
-    if (r.session.phase === 'AWAITING_END_START') { this.generateEnd(r, transitionId); return this.view(r); }
     if (r.session.phase !== 'AWAITING_EVALUATION') return this.view(r);
     r.evaluationStatus = 'PROCESSING';
     for (let evaluation = 0; evaluation < 2 && r.session.phase === 'AWAITING_EVALUATION'; evaluation++) {
@@ -215,16 +214,23 @@ export class ProblemFeedbackV4Controller {
           : '근거를 적지 않아서 어떻게 판단했는지는 알 수 없었어. 선지 내용 위주로 볼게.'
         : reason === 'CORRECT_UNVERIFIED'
           ? '네 근거만으로는 이 답에 어떻게 이르렀는지 다 보이지는 않았어. 빠진 연결을 같이 채워 볼게.'
-          : null;
+          // UI backlog 28: a failed correction answer or a wrong reselection gets feedback before the answer is revealed.
+          : reason === 'REPAIR_FAILED'
+            ? correct
+              ? '네 근거에 고쳐야 할 부분이 있어서 질문했는데, 방금 답도 정확하지 않았어. 더 묻지 않고 근거를 같이 정리해 볼게.'
+              : '네 답과 근거에 고쳐야 할 부분이 있어서 질문했는데, 방금 답도 정확하지 않았어. 더 묻지 않고 정답을 먼저 알려 줄게.'
+            : reason === 'RESELECTION_WRONG'
+              ? '다시 고른 답도 정답이 아니야. 더 묻지 않고 정답을 먼저 알려 줄게.'
+              : null;
       if (note) add('-unverifiable-gate', note, 'GATE');
       if (!correct) add('-gate-1', `정답은 ${number(s.source.answerChoiceId)}번이야.`, 'GATE');
       add('-gate-2', correct ? '네 근거를 하나씩 같이 볼까?' : '네 답을 하나씩 같이 볼까?', 'GATE');
     } else if (s.phase === 'AWAITING_UNDERSTANDING' && s.endExplanation) {
       add('-first-connector', `${s.selections.length === 1 ? '네가 고른' : '처음에 고른'} ${number(s.selections[0]!.choiceId)}번부터 볼게.`, 'CONNECTOR');
-      add('-first-section', feedbackSectionLead(s, 1) + ' ' + s.endExplanation.firstChoice + '\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자.', 'SECTION');
+      add('-first-section', feedbackSectionLead(s, 1) + ' ' + s.endExplanation.firstChoice + '\n\n' + feedbackSectionClosing(s, 1), 'SECTION');
       if (s.selections.length === 2) {
         add('-reselection-connector', `다음은 다시 고른 ${number(s.selections[1]!.choiceId)}번이야.`, 'CONNECTOR');
-        add('-reselection-section', feedbackSectionLead(s, 2) + ' ' + s.endExplanation.reselection! + '\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자.', 'SECTION');
+        add('-reselection-section', feedbackSectionLead(s, 2) + ' ' + s.endExplanation.reselection! + '\n\n' + feedbackSectionClosing(s, 2), 'SECTION');
       }
       add('-answer-connector', `이제 ${number(s.source.answerChoiceId)}번이 정답인 이유를 볼게.`, 'CONNECTOR');
       add('-answer-section', s.endExplanation.answer, 'SECTION');

@@ -30,10 +30,12 @@ const SourceEvidence = z.object({
 }).strict();
 const ErrorSchema = z.object({
   errorId: Text,
+  errorType: z.enum(['TARGET', 'CONTENT']),
   description: Text,
   studentEvidence: z.array(StudentEvidence).min(1),
   sourceEvidence: z.array(SourceEvidence).min(1),
   question: Text,
+  basis: z.enum(['STATED', 'INFERRED']),
 }).strict();
 const Boundary = z.enum(['NONE', 'MISSING_SOURCE', 'KEY_CONFLICT']);
 export const FeedbackSelectionAssessmentSchema = z.object({
@@ -48,6 +50,7 @@ export const FeedbackSelectionAssessmentSchema = z.object({
   studentEvidence: z.array(StudentEvidence),
   sourceEvidence: z.array(SourceEvidence),
   errors: z.array(ErrorSchema),
+  errorHypothesis: Text.nullable(),
   selectionMismatchQuestion: Text.nullable(),
   coaching: Text,
 }).strict();
@@ -65,6 +68,7 @@ export const FeedbackRepairAssessmentSchema = z.object({
   // Includes newly introduced errors; these NEVER expand the question queue.
   newErrors: z.array(z.object({
     errorId: Text,
+    errorType: z.enum(['TARGET', 'CONTENT']),
     description: Text,
     studentEvidence: z.array(StudentEvidence).min(1),
     sourceEvidence: z.array(SourceEvidence).min(1),
@@ -329,8 +333,10 @@ export function recoverFeedbackSourceQuote(source: string, quote: string): strin
 function validateQuestion(s: FeedbackSession, question: string) {
   const answer = s.source.choices.find(c => c.choiceId === s.source.answerChoiceId)!;
   // Deterministic guard for explicit leaks. Implicit semantic hints still require model evaluation.
+  // Once the student has chosen the answer (already told "정답이야!"), quoting its number reveals nothing.
+  const chosen = s.selections.at(-1)?.choiceId === answer.choiceId;
   if (/정답\s*(?:은|는|이|:|=)/u.test(question) || question.includes(answer.choiceId)
-      || question.includes(`${answer.position}번`) || question.includes('①②③④⑤'[answer.position - 1] ?? '\0')
+      || (!chosen && (question.includes(`${answer.position}번`) || question.includes('①②③④⑤'[answer.position - 1] ?? '\0')))
       || question.includes(answer.text)) throw new Error('교정 질문에 미공개 정답이 포함됐습니다.');
 }
 export function validateFeedbackAssessment(s: FeedbackSession, raw: unknown): FeedbackAssessment {
@@ -341,13 +347,20 @@ export function validateFeedbackAssessment(s: FeedbackSession, raw: unknown): Fe
     if (new Set(a.errors.map(e => e.errorId)).size !== a.errors.length || a.errors.some(e => e.errorId === 'selection-mismatch')) throw new Error('오류 ID 중복 또는 예약 ID입니다.');
     for (const e of a.errors) { validateStudentEvidence(s, e.studentEvidence); validateSourceEvidence(s, e.sourceEvidence); }
     if (a.boundary !== 'NONE') return a;
+    const inferred = a.errors.filter(e => e.basis === 'INFERRED');
+    if (inferred.length > 1) throw new Error('추정 오류는 하나까지만 허용됩니다.');
+    if (inferred.length) {
+      if (!a.errorHypothesis?.trim() || a.errors.some(e => e.basis === 'STATED') || selected(s).choiceId === s.source.answerChoiceId
+        || s.selections.length !== 1 || a.rationaleImpliedVerdict !== s.choiceImpliedVerdict) throw new Error('추정 오류의 조건(가설, 오답 첫 선택, 결론 일치, 명시 오류 없음)을 어겼습니다.');
+    } else if (a.errorHypothesis !== null) throw new Error('추정 오류 없이 오류 가설을 쓸 수 없습니다.');
     if (a.reconstructability === 'UNKNOWN') {
       if (a.rationaleImpliedVerdict !== 'UNKNOWN' || a.contentAssessment === 'SUPPORTED') throw new Error('확인 불가 근거에 결론 또는 타당성을 보충할 수 없습니다.');
       return a; // Global gate wins over local errors, including local questions.
     }
     if (a.rationaleImpliedVerdict === 'UNKNOWN' || !a.reconstructedPath.length || !a.studentEvidence.length || !a.sourceEvidence.length) throw new Error('재구성 가능한 판정의 근거가 부족합니다.');
     if ((a.contentAssessment === 'ERROR') !== (a.errors.length > 0)) throw new Error('내용 오류 판정과 오류 목록이 불일치합니다.');
-    const mismatch = feedbackConsistency(s.choiceImpliedVerdict, a.rationaleImpliedVerdict) === 'MISMATCH';
+    // A target error means the conclusion was reached on another target, so the selection comparison is skipped.
+    const mismatch = feedbackConsistency(s.choiceImpliedVerdict, a.rationaleImpliedVerdict) === 'MISMATCH' && !a.errors.some(e => e.errorType === 'TARGET');
     if (mismatch && s.selections.length === 1 && !a.selectionMismatchQuestion) throw new Error('선택–근거 충돌 질문이 누락됐습니다.');
     // Only questions that can actually be shown are checked; final selections never ask.
     if (s.selections.length === 1) {
@@ -404,10 +417,11 @@ export function applyFeedbackAssessment(session: FeedbackSession, raw: unknown):
       s.phase = 'ITEM_REVIEW'; s.message = '타당한 근거와 정답 기준의 충돌을 검토해야 합니다.'; return s;
     }
     if (!correct && s.selections.length === 2) return endExplanation(s, 'RESELECTION_WRONG', 'COACHING_TERMINATED');
-    const errors: FeedbackError[] = a.errors.map(e => ({ ...e, kind: 'CONTENT', asked: false, skipped: false, status: 'REMAINING' }));
-    if (consistency === 'MISMATCH') errors.push({
-      errorId: 'selection-mismatch', description: '선택이 뜻하는 판정과 근거에서 도출되는 판정이 다릅니다.',
-      kind: 'SELECTION_EXECUTION', question: a.selectionMismatchQuestion!,
+    const mapped: FeedbackError[] = a.errors.map(e => ({ ...e, kind: 'CONTENT', asked: false, skipped: false, status: 'REMAINING' }));
+    const errors = [...mapped.filter(e => e.errorType === 'TARGET'), ...mapped.filter(e => e.errorType !== 'TARGET')];
+    if (consistency === 'MISMATCH' && !errors.some(e => e.errorType === 'TARGET')) errors.push({
+      errorId: 'selection-mismatch', errorType: 'CONTENT', description: '선택이 뜻하는 판정과 근거에서 도출되는 판정이 다릅니다.',
+      kind: 'SELECTION_EXECUTION', basis: 'STATED', question: a.selectionMismatchQuestion!,
       studentEvidence: a.studentEvidence, sourceEvidence: a.sourceEvidence, asked: false, skipped: false, status: 'REMAINING',
     });
     if (errors.length) {
@@ -427,8 +441,18 @@ export function applyFeedbackAssessment(session: FeedbackSession, raw: unknown):
   s.correctionSucceeded = true;
   s.phase = 'AWAITING_POST_REPAIR_CHOICE';
   const position = s.source.choices.find(c => c.choiceId === selected(s).choiceId)!.position;
+  // A new error in the correction answer means "네 근거대로면" can no longer be asserted.
+  const selectionMismatchOnly = s.errors.length === 1 && s.errors[0]!.errorId === 'selection-mismatch' && !s.additionalErrors.length;
+  const [obj, , topic] = numeralParticles(position);
+  const inferredOnly = s.errors.length === 1 && s.errors[0]!.basis === 'INFERRED' && !s.additionalErrors.length;
   s.message = selected(s).choiceId === s.source.answerChoiceId
     ? '근거의 핵심 오류를 잘 고쳤어. 처음 근거에서 어디가 잘못됐는지 정리한 설명을 볼래?'
+    : inferredOnly
+    ? `맞아, 거기가 ${'①②③④⑤'[position - 1]}${obj} 판단하는 열쇠야. 그걸 생각하면서 다시 골라 볼래?`
+    : selectionMismatchOnly
+    ? s.choiceImpliedVerdict === 'INVALID'
+      ? `네 근거대로면 ${'①②③④⑤'[position - 1]}${topic} 적절한 설명이야. 이 문제는 적절하지 않은 것을 고르는 문제니까, 다시 골라 볼래?`
+      : `네 근거대로면 ${'①②③④⑤'[position - 1]}${topic} 적절하지 않은 설명이야. 이 문제는 적절한 것을 고르는 문제니까, 다시 골라 볼래?`
     : `핵심 오류를 잘 고쳤어. 처음에 ${'①②③④⑤'[position - 1]}번을 고르게 된 생각 중 어디가 잘못됐는지 알 것 같으면 다시 골라 볼래?`;
   return s;
 }
@@ -461,4 +485,9 @@ export function feedbackPublicView(s: FeedbackSession) {
         : ['RESELECT', 'REQUEST_EXPLANATION'] as ('RESELECT' | 'REQUEST_EXPLANATION' | 'FINISH')[]
       : null,
   };
+}
+
+/** Particles follow the spoken numeral: 일·삼 end in a consonant, 이·사·오 do not. Returns [object, subject, topic]. */
+export function numeralParticles(position: number): [string, string, string] {
+  return position === 1 || position === 3 ? ['을', '이', '은'] : ['를', '가', '는'];
 }

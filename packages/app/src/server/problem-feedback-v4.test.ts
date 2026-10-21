@@ -20,7 +20,7 @@ function unknown(s: FeedbackSession): FeedbackEvaluationCall {
   return { metadata, rawOutput: { mode: 'SELECTION', boundary: 'NONE', reason: '확인할 수 없음',
     reconstructability: 'UNKNOWN', reconstructedPath: [], rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN',
     studentEvidence: [{ observationId: o.observationId, quote: o.command.type === 'SELECT' && o.command.rationale.mode === 'PROVIDED' ? o.command.rationale.text : '모르겠어요' }],
-    sourceEvidence: [], errors: [], selectionMismatchQuestion: null, coaching: '근거를 확인하기 어렵습니다. 원문의 중복 게시와 여론의 관계를 비교하세요.' } };
+    sourceEvidence: [], errors: [], errorHypothesis: null, selectionMismatchQuestion: null, coaching: '근거를 확인하기 어렵습니다. 원문의 중복 게시와 여론의 관계를 비교하세요.' } };
 }
 function setup(evaluator: FeedbackEvaluator = { async evaluate(s) { return unknown(s); } }) {
   const records: FeedbackV4Record[] = [];
@@ -150,8 +150,8 @@ describe('v5 controller continuation', () => {
         } : {
           mode: 'SELECTION', boundary: 'NONE', reason: '내용 오류', reconstructability: 'RECONSTRUCTABLE',
           reconstructedPath: [text], rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR', studentEvidence, sourceEvidence,
-          errors: [{ errorId: 'E1', description: '내용 오류', studentEvidence, sourceEvidence, question: '중복 게시가 여론에 어떤 영향을 줄까요?' }],
-          selectionMismatchQuestion: null, coaching: '원문 관계를 확인해 보세요.',
+          errors: [{ errorId: 'E1', errorType: 'CONTENT', description: '내용 오류', studentEvidence, sourceEvidence, basis: 'STATED', question: '중복 게시가 여론에 어떤 영향을 줄까요?' }],
+          errorHypothesis: null, selectionMismatchQuestion: null, coaching: '원문 관계를 확인해 보세요.',
         } };
       } });
       let next = await submitSettled(c, v.sessionId, request(v, { ...select, choiceId: correct ? 'C2' : 'C1' }));
@@ -195,7 +195,7 @@ describe('background end explanation and transcript sequencing', () => {
     expect(shown.phase).toBe('AWAITING_UNDERSTANDING');
     expect(records.at(-1)?.session.endExplanation?.firstChoice).toBe('원문에서 중복 게시와 여론의 관계를 비교해 봐.');
     expect(shown.transcript.slice(-5).map(m => [m.sequence, m.text])).toEqual([
-      ['CONNECTOR', '네가 고른 ①번부터 볼게.'], ['SECTION', '①은 답이 아니야. 원문에서 중복 게시와 여론의 관계를 비교해 봐.\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자.'],
+      ['CONNECTOR', '네가 고른 ①번부터 볼게.'], ['SECTION', '①은 옳은 내용이야. 옳지 않은 것을 고르는 문제니까 ①은 정답이 아니야. 원문에서 중복 게시와 여론의 관계를 비교해 봐.\n\n설명이 이해됐으면, 이번엔 정답에 대한 설명으로 넘어가 보자.'],
       ['CONNECTOR', '이제 ②번이 정답인 이유를 볼게.'], ['SECTION', '정답은 여론 왜곡의 관계로 확인할 수 있어.'], ['QUESTION', '이해됐어?'],
     ]);
     const done = await submitSettled(c, v.sessionId, request(shown, { type: 'UNDERSTOOD', answer: false }, 'understood'));
@@ -275,7 +275,10 @@ describe('unverifiable rationale connector', () => {
     expect(connectors.some(m => m.text === text)).toBe(false);
     expect(connectors[0]?.text).toContain('번부터 볼게.');
   });
-  it('shows correction evidence publicly and removes it after the response; repair failure has no note', async () => {
+  it.each([
+    ['C1', ['네 답과 근거에 고쳐야 할 부분이 있어서 질문했는데, 방금 답도 정확하지 않았어. 더 묻지 않고 정답을 먼저 알려 줄게.', '정답은 ②번이야.', '네 답을 하나씩 같이 볼까?']],
+    ['C2', ['네 근거에 고쳐야 할 부분이 있어서 질문했는데, 방금 답도 정확하지 않았어. 더 묻지 않고 근거를 같이 정리해 볼게.', '네 근거를 하나씩 같이 볼까?']],
+  ])('shows correction evidence publicly and removes it after the response; repair failure on %s gets a feedback note', async (choiceId, gates) => {
     const { controller: c, view: v } = setup({ async evaluate(s) {
       if (s.evaluationMode === 'END_EXPLANATION') return unknown(s);
       const o = s.observations.at(-1)!;
@@ -283,14 +286,15 @@ describe('unverifiable rationale connector', () => {
       if (s.evaluationMode === 'REPAIR') return { metadata, rawOutput: { mode: 'REPAIR', boundary: 'NONE', reason: '남음', reviewedResponse: studentEvidence[0], repairs: [{ errorId: 'E1', status: 'REMAINING', studentEvidence }], newErrors: [], verificationComplete: true, rationaleSufficient: false, coaching: '원문을 확인해 봐.' } };
       const raw = unknown(s).rawOutput as Record<string, unknown>;
       return { metadata, rawOutput: { ...raw, reconstructability: 'RECONSTRUCTABLE', reconstructedPath: ['반대 관계'], rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR', sourceEvidence: [{ location: 'PASSAGE', quote: source.passage, mediaId: null, visualObservation: null }],
-        errors: [{ errorId: 'E1', description: '내부 오류 설명', studentEvidence, sourceEvidence: [{ location: 'PASSAGE', quote: source.passage, mediaId: null, visualObservation: null }, { location: 'EXPLANATION', quote: source.officialExplanation, mediaId: null, visualObservation: null }], question: '원문은 어떻게 말해?' }] } };
+        errors: [{ errorId: 'E1', errorType: 'CONTENT', description: '내부 오류 설명', studentEvidence, sourceEvidence: [{ location: 'PASSAGE', quote: source.passage, mediaId: null, visualObservation: null }, { location: 'EXPLANATION', quote: source.officialExplanation, mediaId: null, visualObservation: null }], basis: 'STATED', question: '원문은 어떻게 말해?' }] } };
     } });
-    let next = await submitSettled(c, v.sessionId, request(v));
+    let next = await submitSettled(c, v.sessionId, request(v, { ...select, choiceId }));
     expect(next.correctionHighlights).toEqual([{ location: 'PASSAGE', start: 0, end: source.passage.length, text: source.passage }]);
     expect(JSON.stringify(next)).not.toContain(source.officialExplanation);
     expect(JSON.stringify(next)).not.toContain('내부 오류 설명');
     next = await submitSettled(c, v.sessionId, request(next, { type: 'CORRECT', errorId: 'E1', text: '모르겠어요' }, 'repair'));
     expect(next.correctionHighlights).toEqual([]);
+    expect(next.transcript.filter(m => m.sequence === 'GATE').map(m => m.text)).toEqual(gates);
     next = await submitSettled(c, v.sessionId, request(next, { type: 'END_START', accept: true }, 'accept'));
     expect(next.transcript.filter(m => m.sequence === 'CONNECTOR')).toHaveLength(2);
   });
@@ -312,8 +316,8 @@ describe('instant acceptance contract', () => {
       if (s.selections.length === 2) return unknown(s);
       return { metadata, rawOutput: { mode: 'SELECTION', boundary: 'NONE', reason: '내용 오류', reconstructability: 'RECONSTRUCTABLE',
         reconstructedPath: [text], rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR', studentEvidence, sourceEvidence,
-        errors: [{ errorId: 'E1', description: '내용 오류', studentEvidence, sourceEvidence, question: '원문은 어떻게 말해?' }],
-        selectionMismatchQuestion: null, coaching: '원문을 확인해 봐.' } };
+        errors: [{ errorId: 'E1', errorType: 'CONTENT', description: '내용 오류', studentEvidence, sourceEvidence, basis: 'STATED', question: '원문은 어떻게 말해?' }],
+        errorHypothesis: null, selectionMismatchQuestion: null, coaching: '원문을 확인해 봐.' } };
     } });
     const instants = () => c.get(v.sessionId).transcript.filter(m => m.sequence === 'INSTANT').map(m => m.text);
     const first = await c.submit(v.sessionId, request(v, { ...select, choiceId: 'C1' }));

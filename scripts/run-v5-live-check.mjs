@@ -213,9 +213,23 @@ function caseChecks(state) {
     // selection-mismatch carries the SELECTION assessment's own sourceEvidence (feedback-v4.ts applyFeedbackAssessment).
     const evidence = active === 'selection-mismatch' ? s.inspection.assessments.findLast(a => a.mode === 'SELECTION')?.raw?.sourceEvidence : err?.sourceEvidence;
     const quotes = (evidence ?? []).filter(e => ['PASSAGE', 'SCENARIO'].includes(e.location) && e.quote && !e.mediaId && !e.visualObservation);
-    if (!s.view.correctionHighlights.length) violations.push({ check: 'NO_HIGHLIGHT', step: s.transitionId, question: s.view.message });
+    // D-0130: a target error whose evidence is only the option text has nothing to highlight (user 2026-10-14: no change needed).
+    if (!s.view.correctionHighlights.length && !(err?.errorType === 'TARGET' && !quotes.length)) violations.push({ check: 'NO_HIGHLIGHT', step: s.transitionId, question: s.view.message });
     for (const e of quotes) if (!(e.location === 'PASSAGE' ? q.passageText : q.scenarioText ?? '').includes(e.quote)) violations.push({ check: 'HIGHLIGHT_NOT_IN_SOURCE', step: s.transitionId, location: e.location, quote: e.quote });
     for (const h of s.view.correctionHighlights) if (!quotes.some(e => e.location === h.location && e.quote === h.text)) violations.push({ check: 'HIGHLIGHT_NOT_EVIDENCE', step: s.transitionId, text: h.text });
+  }
+  // Handoff 2026-10-19-v5-error-hypothesis-first: a hypothesised (INFERRED) error is only ever put as a question or a conditional.
+  const inferredIds = new Set(state.steps.flatMap(s => s.inspection.assessments.flatMap(a => (a.raw?.errors ?? []).filter(e => e.basis === 'INFERRED').map(e => e.errorId))));
+  if (inferredIds.size) {
+    const asserted = /라고 봤지|라고 생각했지|라고 생각한|로 착각/u;
+    for (const s of state.steps) {
+      const isQuestion = s.view.phase === 'AWAITING_CORRECTION' && inferredIds.has(s.view.activeErrorId);
+      if ((isQuestion || s.view.phase === 'AWAITING_POST_REPAIR_CHOICE') && asserted.test(s.view.message)) violations.push({ check: 'INFERRED_ASSERTED', step: s.transitionId, text: s.view.message });
+    }
+    const first = last.transcript.find(m => m.id.endsWith('-first-section'));
+    // A section that states it is a guess (짐작 표지) does not count as an assertion.
+    const guessMarked = /짐작|것 같아|않았을까|내가 보기에/u;
+    if (first && asserted.test(first.text) && !guessMarked.test(first.text)) violations.push({ check: 'INFERRED_ASSERTED', entry: first.id, text: first.text });
   }
   const sections = last.transcript.filter(m => m.sequence === 'SECTION');
   if (!sections.length && last.phase === 'COMPLETED' && state.steps.some(s => s.command.type === 'END_START' && s.command.accept)) violations.push({ check: 'SECTION_MISSING', ids: [] });
@@ -224,10 +238,13 @@ function caseChecks(state) {
     const reselected = state.steps.filter(s => s.command.type === 'SELECT').length === 2;
     if (!ids.includes('-first-section') || !ids.includes('-answer-section')) violations.push({ check: 'SECTION_MISSING', ids });
     if (ids.includes('-reselection-section') !== reselected) violations.push({ check: 'RESELECTION_SECTION_MISMATCH', ids, reselected });
-    for (const m of sections) if (/부터 볼게|다음은 다시 고른|정답인 이유를 볼게/u.test(m.text.replace(/\n\n설명이 이해됐으면 다음 설명으로 넘어가 보자\.$/u, ''))) violations.push({ check: 'CONNECTOR_REPEATED', entry: m.id });
+    for (const m of sections) if (/부터 볼게|다음은 다시 고른|정답인 이유를 볼게/u.test(m.text.replace(/\n\n(?:설명이|네가 어디에서 잘못 생각했었는지|네 근거에서 빠진 부분이) 이해됐으면, [^\n]*(?:넘어가 보자|정리해 보자)\.$/u, ''))) violations.push({ check: 'CONNECTOR_REPEATED', entry: m.id });
     // Handoff 2026-10-14-v5-section-lead-sentence: code writes the first sentence; the model part must not judge again.
     for (const m of sections.filter(m => /-(first|reselection)-section$/u.test(m.id))) {
-      const lead = m.text.match(/^[①-⑤][을를이가은는] (?:고른 건 맞아\.|답이 아니야\.|(?:틀렸|맞)다고 봤지만, [①-⑤][은는] 답이 아니야\.) /u);
+      const attributive = '(?:적절한|적절하지 않은|일치하는|일치하지 않는|부합하는|부합하지 않는|옳은|옳지 않은)';
+      const predicate = '(?:적절해|적절하지 않아|일치해|일치하지 않아|부합해|부합하지 않아|옳아|옳지 않아)';
+      const goalClose = String.raw`(?:\. ${attributive} 것을 고르는 문제니까 [①-⑤][은는] 정답이 아니야\.|\(정답이 아니야\)\.)`;
+      const lead = m.text.match(new RegExp(String.raw`^(?:[①-⑤][을를] 고른 건 맞아\.|[①-⑤][은는] ${attributive} 내용이야${goalClose}|너는 [①-⑤][이가] ${attributive} 내용이라고 봤지만, [①-⑤]의 내용은 ${predicate}${goalClose}) `, 'u'));
       if (!lead) { violations.push({ check: 'LEAD_MISSING', entry: m.id, text: m.text }); continue; }
       const next = m.text.slice(lead[0].length).split(/(?<=[.!?])\s/u)[0];
       if (/고른 건 맞|답이 아니|판단은 맞지 않|(?:틀렸|맞)다고 (?:본|봤|한)/u.test(next)) violations.push({ check: 'LEAD_RESTATED', entry: m.id, sentence: next });
