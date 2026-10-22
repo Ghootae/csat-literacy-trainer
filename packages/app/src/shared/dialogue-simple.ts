@@ -1,7 +1,11 @@
 /** 단순 형식 문단 개발자 모드(simple-holistic)의 서버-클라이언트 계약. */
 export type SimpleMessageLabel = '나의 요약' | '다시 쓴 요약' | '나의 답' | '피드백' | '다시 써 보기' | '확인하기' | '생각해 보기' | '빠진 내용' | '바로잡기' | '문단 핵심';
-/** `quote`: 말풍선 위에 작게 보일 학생 발화 인용. `box`: 말풍선 안 옅은 배경 상자에 보일 문단 핵심. `items`: 말풍선 안 번호 목록(빈 곳 질문). */
-export interface SimpleMessageView { role: 'student' | 'tutor'; text: string; label: SimpleMessageLabel; quote?: string; box?: string; items?: string[]; copied?: true }
+/** `quote`: 말풍선 위에 작게 보일 학생 발화 인용. `parts`: 말풍선 안 옅은 배경 상자에 번호 목록으로 보일 부분별 문단 핵심. `items`: 말풍선 안 번호 목록(빈 곳 질문). */
+export interface SimpleMessageView { role: 'student' | 'tutor'; text: string; label: SimpleMessageLabel; quote?: string; parts?: string[]; items?: string[]; copied?: true }
+export type SimpleStage = 'INITIAL' | 'RETRY' | 'AFTER_CORRECTION' | 'AFTER_GAP';
+/** 단계별 학생 말풍선 이름. 서버 기록과 클라이언트 대기 말풍선이 같이 쓴다. */
+export const simpleStudentLabel: Record<SimpleStage, SimpleMessageLabel> =
+  { INITIAL: '나의 요약', RETRY: '다시 쓴 요약', AFTER_CORRECTION: '나의 답', AFTER_GAP: '나의 답' };
 export interface SimpleHighlightView { start: number; end: number; text: string; location: 'PASSAGE' }
 
 export interface SimpleDialogueView {
@@ -21,8 +25,11 @@ export interface SimpleDialogueView {
     restatedSummary: string | null;
     /** 현재 시도에 학생 발화가 있고 평가 중이 아닐 때. */
     canStartNewAttempt: boolean;
-    /** 마무리 행동에서만 채워진다(문단 텍스트 기준 위치). */
+    /** 현재 시도의 단계(state.stage). */
+    stage: SimpleStage;
+    /** REVEAL: 마무리 공개 표시. HINT: 교정 질문을 기다리는 동안 오류의 근거 문장 하나. 문단 텍스트 기준 위치. */
     highlights: SimpleHighlightView[];
+    highlightKind: 'HINT' | 'REVEAL' | null;
     canRespond: boolean;
     evaluationStatus: 'IDLE' | 'PROCESSING' | 'RETRYABLE_ERROR';
     evaluationError: string | null;
@@ -30,6 +37,8 @@ export interface SimpleDialogueView {
   allDone: boolean;
   /** 지문을 모두 마쳤고 연결 문제가 있을 때만. 문단 기록은 싣지 않는다. */
   problemUrl: string | null;
+  /** 연결된 문제가 있으면 완료 여부와 무관하게 준다(개발 화면 파트 이동용). */
+  problemQuestionId: string | null;
 }
 
 export interface SimpleNewAttemptRequest { paragraphIndex: number }

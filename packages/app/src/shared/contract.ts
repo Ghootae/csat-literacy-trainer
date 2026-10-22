@@ -171,6 +171,7 @@ export interface DialoguePassageSummary {
   readonly paragraphCount: number;
   readonly available: boolean;
   readonly limitation?: string;
+  readonly problemQuestionId?: string;
 }
 
 export interface DialogueParagraphView {

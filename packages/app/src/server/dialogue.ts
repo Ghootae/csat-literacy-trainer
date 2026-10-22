@@ -113,6 +113,7 @@ export class DialogueController {
         exam: passage.exam,
         paragraphCount: passage.paragraphs.length,
         available,
+        ...(passage.problemQuestionId ? { problemQuestionId: passage.problemQuestionId } : {}),
         ...(!available
           ? { limitation: passage.source.note ?? '검토된 전체 지문 골드가 아직 없습니다.' }
           : {}),

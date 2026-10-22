@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 const passage = loadDialoguePassages().find(p => p.paragraphs.length > 0)!;
 const root = '/api/developer/dialogue-simple/session';
-const praise: SimpleOutput = { category: 'CAPTURED', reason: 'r', coreParts: [{ description: '핵심', sourceQuote: passage.paragraphs[0]!.text }], corePartsCovered: [true], errors: [], gaps: [], targetErrorResolved: null, targetGapReadings: null, targetGapsFilled: null, restatedSummary: '요약', action: 'PRAISE', message: '잘 잡았어', coreIntro: null, coreSummary: null, missingNote: null, coreSourceQuote: null };
+const praise: SimpleOutput = { category: 'CAPTURED', reason: 'r', coreParts: [{ description: '핵심', sourceQuote: passage.paragraphs[0]!.text }], corePartsCovered: [true], errors: [], gaps: [], targetErrorResolved: null, targetGapReadings: null, targetGapsFilled: null, restatedSummary: '요약', action: 'PRAISE', message: '잘 잡았어', corePartSummaries: [], closingFeedback: null, coreSourceQuote: null };
 const evaluator: SimpleEvaluator = { async complete() {
   return { rawOutput: praise, metadata: { provider: 'mock', model: 'mock', promptVersion: 'paragraph-simple-holistic-v4.2', durationMs: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0 } };
 } };

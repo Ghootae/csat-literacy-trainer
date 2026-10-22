@@ -13,10 +13,10 @@ const here = dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const runs = Number(argv[0] ?? 3), model = argv[1] ?? 'gpt-6-luna', usdCap = Number(argv[2] ?? 1), label = argv[3], previous = argv[4];
 const PRICE = { input: 0.10, output: 0.50 }; // 백만 토큰당 USD(저장소 기존 스크립트 단가, 캐시 입력도 정가로 보수 계산)
-// CASE_FILTER=gongsun,dopamine 처럼 문단 키로 사례를 고른다(없으면 전체).
+// CASE_FILTER=gongsun,dopamine 처럼 문단 키(또는 사례 id)로 사례를 고른다(없으면 전체).
 const { meta, cases: allCases } = JSON.parse(readFileSync(join(here, 'cases.json'), 'utf8'));
 const filter = process.env.CASE_FILTER?.split(',').map(x => x.trim()).filter(Boolean);
-const cases = filter ? allCases.filter(c => filter.includes(c.paragraphKey)) : allCases;
+const cases = filter ? allCases.filter(c => filter.includes(c.paragraphKey) || filter.includes(c.caseId)) : allCases;
 const passages = loadDialoguePassages();
 const outDir = join(here, 'runs', label ?? `${new Date().toISOString().slice(0, 10)}-${PARAGRAPH_SIMPLE_PROMPT_VERSION.replace('paragraph-simple-holistic-', '')}`);
 mkdirSync(outDir, { recursive: true });
@@ -31,10 +31,10 @@ const tutorText = o => o.action === 'GAP_QUESTION' ? `${o.message}\n${o.gaps.map
 const bubblesOf = (o, stage) => {
   const after = stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP';
   if (o.action === 'GAP_QUESTION') return [`생각해 보기(번호 질문 ${o.gaps.length})`];
-  if (o.action === 'PRAISE') return after ? ['문단 핵심', '피드백'] : ['피드백'];
-  if (o.action === 'CLOSE_GAP') return ['문단 핵심', '빠진 내용'];
+  if (o.action === 'PRAISE') return after ? ['피드백(상자)'] : ['피드백'];
+  if (o.action === 'CLOSE_GAP') return ['빠진 내용(상자)'];
   if (o.action === 'CLOSE_NO_RESPONSE') return ['문단 핵심(도입+상자)'];
-  if (o.action === 'CLOSE_ERRORS') return ['바로잡기(도입)', ...o.errors.map(() => '바로잡기'), ...(o.missingNote ? ['빠진 내용'] : []), '문단 핵심'];
+  if (o.action === 'CLOSE_ERRORS') return ['바로잡기(도입)', ...o.errors.map(() => '바로잡기'), '바로잡기(마무리+상자)'];
   return [{ RETRY_PROMPT: '다시 써 보기', CORRECTION_QUESTION: '확인하기' }[o.action]];
 };
 
@@ -76,8 +76,8 @@ async function runCase(c, run) {
       targetGapReadings: o.targetGapReadings, targetGapsFilled: o.targetGapsFilled,
       errors: o.errors.map(x => ({ studentQuote: x.studentQuote, gapIndex: x.gapIndex, sentence: sentenceKey(c.paragraphKey, x.sourceQuote), feedback: x.feedback })),
       coreParts: o.coreParts?.map(x => ({ description: x.description, sentence: sentenceKey(c.paragraphKey, x.sourceQuote) })), corePartsCovered: o.corePartsCovered,
-      missingNote: o.missingNote, bubbles: bubblesOf(o, input.stage), highlights: next.revealQuotes.map(q => sentenceKey(c.paragraphKey, q)),
-      message: o.message, coreIntro: o.coreIntro, coreSummary: o.coreSummary, restatedSummary: o.restatedSummary, reason: o.reason, retries: result.call.attempts - 1,
+      bubbles: bubblesOf(o, input.stage), highlights: next.revealQuotes.map(q => sentenceKey(c.paragraphKey, q)),
+      message: o.message, corePartSummaries: o.corePartSummaries, closingFeedback: o.closingFeedback, restatedSummary: o.restatedSummary, reason: o.reason, retries: result.call.attempts - 1,
     };
     // 자동 대조(구조). 내용 방향은 REVIEW.md에서 사람이 본다.
     const check = {
@@ -88,7 +88,6 @@ async function runCase(c, run) {
       targetGapsFilled: !e.targetGapsFilled || JSON.stringify(o.targetGapsFilled) === JSON.stringify(e.targetGapsFilled),
       errorsCount: !e.errors || o.errors.length === e.errors.length,
       gapIndex: !e.errors || JSON.stringify(o.errors.map(x => x.gapIndex).sort()) === JSON.stringify(e.errors.map(x => x.gapIndex).sort()),
-      missingNote: e.missingNote === undefined || (o.missingNote !== null) === e.missingNote,
       bubbles: JSON.stringify(actual.bubbles) === JSON.stringify(e.bubbles),
       highlights: JSON.stringify([...actual.highlights].sort()) === JSON.stringify(e.highlights.map(h => h.part).sort()),
     };
@@ -132,8 +131,8 @@ const mark = ok => (ok ? '✓' : '✗');
 const lines = [`# 전체 경로 시뮬레이션 실행 결과 (${outDir.split('/').at(-1)})`, '',
   `- 모델 ${model} · 프롬프트 ${PARAGRAPH_SIMPLE_PROMPT_VERSION} · 사례당 ${runs}회 · 호출 ${calls} · 추정 비용 $${summary.usdEstimate}${stopped ? ' · 비용 상한으로 중단' : ''}`,
   `- 대화 ${results.length}: ${Object.entries(summary.status).map(([k, v]) => `${k} ${v}`).join(', ')} · 구조 대조 전부 일치 ${summary.allChecksPass}`,
-  '- ✓/✗는 구조 대조(행동·분류·고침·빈 곳 수·채움·오류 수·질문 번호·빠진 내용·말풍선·지문 표시). 내용 방향은 아래 문구로 직접 판단한다.', ''];
-const keys = ['action', 'category', 'targetErrorResolved', 'gapsCount', 'targetGapsFilled', 'errorsCount', 'gapIndex', 'missingNote', 'bubbles', 'highlights'];
+  '- ✓/✗는 구조 대조(행동·분류·고침·빈 곳 수·채움·오류 수·질문 번호·말풍선·지문 표시). 내용 방향은 아래 문구로 직접 판단한다.', ''];
+const keys = ['action', 'category', 'targetErrorResolved', 'gapsCount', 'targetGapsFilled', 'errorsCount', 'gapIndex', 'bubbles', 'highlights'];
 for (const c of cases) {
   const rs = results.filter(r => r.caseId === c.caseId);
   const verdict = rs.map(r => r.status === 'COMPLETED' && r.steps.every(s => s.check && Object.values(s.check).every(Boolean)) ? '일치' : r.status === 'COMPLETED' ? '부분' : r.status === 'DIVERGED' ? `갈라짐@${r.divergedAt + 1}` : r.status === 'QUESTION_MISMATCH' ? `질문 다름@${r.divergedAt + 1}` : r.status).join(' / ');
@@ -156,8 +155,8 @@ for (const c of cases) {
       if (a.gaps.length) lines.push(`  - 질문: ${a.gaps.map((g, j) => `${j + 1}. ${g.question}(${g.sentence})`).join(' ')}`);
       lines.push(`  - 말: ${a.message.replace(/\n/g, ' ')}`);
       for (const x of a.errors) if (x.feedback) lines.push(`  - 바로잡기: (“${x.studentQuote}”) ${x.feedback}`);
-      if (a.missingNote) lines.push(`  - 빠진 내용: ${a.missingNote}`);
-      if (a.coreSummary) lines.push(`  - 핵심: ${a.coreIntro ?? ''} ［${a.coreSummary}］`);
+      if (a.corePartSummaries?.length) lines.push(`  - 핵심 부분 문장: ${a.corePartSummaries.map((x, j) => `${j + 1}. ${x}`).join(' ')}`);
+      if (a.closingFeedback) lines.push(`  - 마무리: ${a.closingFeedback}`);
       lines.push(`  - 이유: ${a.reason}`);
     }
     lines.push('');

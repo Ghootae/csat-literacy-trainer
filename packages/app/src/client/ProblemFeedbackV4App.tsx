@@ -6,6 +6,10 @@ import './problem-feedback-workbench.css';
 import { Markdown } from './markdown.js';
 import { composerState, sequenceState, instantWaitingDelay, waitingKind, waitingText, type WaitingKind, type ButtonId } from './v4-composer-state.js';
 import { AnnotatedText } from './annotated-text.js';
+import { DevPartNav } from './DevPartNav.js';
+import { paragraphLink, resolveReturnTo } from './dev-part-nav-links.js';
+import { fetchDialoguePassages } from './api.js';
+import type { DialoguePassageSummary } from '../shared/contract.js';
 
 const read = (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const store = (key: string, value: string | null) => { try { if (value === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); } catch { /* Server transcript remains authoritative. */ } };
@@ -17,9 +21,10 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
   const params = new URLSearchParams(window.location.search);
   const questionId = params.get('questionId') ?? 'information-asymmetry-free-marketplace-q13';
   const requestedReturn = params.get('returnTo') ?? '';
-  const returnTo = /^\/dialogue\/dev(?:\?sessionId=[a-zA-Z0-9-]+)?$/.test(requestedReturn) ? requestedReturn : '/dialogue/dev';
+  const returnTo = resolveReturnTo(requestedReturn);
   const cacheKey = `csat.problem.v4.${questionId}.${returnTo}`;
   const [view, setView] = useState<FeedbackV4WorkbenchView | null>(null);
+  const [navPassage, setNavPassage] = useState<DialoguePassageSummary | null>(null);
   const [choice, setChoice] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [omit, setOmit] = useState(false);
@@ -72,6 +77,11 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
         else if (request) { store(`csat.problem.v4.pending.${next.sessionId}`, null); store(`csat.problem.v4.draft.${next.sessionId}`, null); setDraft(''); setOmit(false); setChoice(next.phase === 'AWAITING_RESELECTION' ? null : next.selectedChoiceId); }
       } catch { /* A malformed local draft cannot change server state. */ }
     }).catch((reason: unknown) => { if (active) setError(String(reason)); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    fetchDialoguePassages().then(list => { if (active) setNavPassage(list.find(p => p.problemQuestionId === questionId) ?? null); }).catch(() => { /* 막대만 생략한다. */ });
     return () => { active = false; };
   }, []);
   useEffect(() => {
@@ -177,6 +187,8 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
   return <main className="reading-workbench is-developer problem-v4-workbench" data-pane={pane}>
     <header className="workbench-header"><div><p className="dialogue-kicker">COGAXIS / PERSONAL LAB</p><h1>{view.title} <span>· {view.questionNumber}번</span></h1></div>
       <div className="workbench-actions"><span>선택 {view.selectionCount} / 2</span><button ref={trigger} aria-haspopup="dialog" aria-expanded={drawer} onClick={() => setDrawer(true)}>응답 평가</button><a href={returnTo}>학습 맵</a><button disabled={waiting} onClick={() => void restart()}>새 테스트</button></div></header>
+    {navPassage && <DevPartNav currentParagraph={null} currentIsProblem problem={{ onSelect: () => {} }}
+      paragraphs={Array.from({ length: navPassage.paragraphCount }, (_, i) => ({ label: `문단 ${i + 1}`, onSelect: () => window.location.assign(paragraphLink(returnTo, navPassage.passageId, i)) }))} />}
     <p className="developer-notice">문제 풀이 v4 · 개발자 테스트 · 평가 서랍에 내부 판정이 공개됩니다. 실제 포인트는 차감하지 않습니다.</p>
     <nav className="workbench-tabs" aria-label="문제 화면 전환">{[['source', '지문'], ['problem', '문제'], ['chat', '대화']].map(([id, title]) => <button key={id} aria-pressed={pane === id} onClick={() => setPane(id!)}>{title}</button>)}</nav>
     <div className="workbench-columns" ref={sourcePanes}>

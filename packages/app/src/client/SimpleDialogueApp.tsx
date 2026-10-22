@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { DialoguePassageSummary } from '../shared/contract.js';
-import type { SimpleDialogueView } from '../shared/dialogue-simple.js';
+import { simpleStudentLabel, type SimpleDialogueView, type SimpleStage } from '../shared/dialogue-simple.js';
 import { fetchDialoguePassages } from './api.js';
+import { DevPartNav } from './DevPartNav.js';
+import { parseInitialParagraph, problemLink } from './dev-part-nav-links.js';
 import { AnnotatedText } from './annotated-text.js';
 import { SimpleBubble, SimpleDialogueDrawer } from './SimpleDialogueDrawer.js';
 import { getSimple, navigateSimple, newAttemptSimple, respondSimple, startSimple } from './simple-dialogue-api.js';
+import { simpleWaitingText } from './simple-waiting.js';
 import './simple-dialogue.css';
 
 const base = '/dialogue/dev/simple';
@@ -17,6 +20,9 @@ export function SimpleDialogueApp(): React.JSX.Element {
   const [error, setError] = useState('');
   const [drawer, setDrawer] = useState(false);
   const [mobilePane, setMobilePane] = useState('chat');
+  const [pending, setPending] = useState<{ text: string; stage: SimpleStage; startedAt: number } | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [seenAt, setSeenAt] = useState(() => Date.now());
   const inFlight = useRef(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const accept = (next: SimpleDialogueView) => {
@@ -32,11 +38,29 @@ export function SimpleDialogueApp(): React.JSX.Element {
   useEffect(() => {
     let active = true;
     fetchDialoguePassages().then(p => { if (active) setPassages(p); }).catch(reason => { if (active) setError(String(reason)); });
-    const id = new URLSearchParams(window.location.search).get('sessionId');
-    if (id) getSimple(id).then(v => { if (active) accept(v); }).catch(reason => { if (active) setError(String(reason)); });
+    const { sessionId: id, passageId, paragraph } = parseInitialParagraph(window.location.search);
+    const inRange = (v: SimpleDialogueView) => paragraph !== null && paragraph < v.paragraphs.length;
+    const fail = (reason: unknown) => { if (active) setError(String(reason)); };
+    if (id) getSimple(id).then(async v => {
+      if (paragraph !== null && inRange(v) && paragraph !== v.current.index) v = await navigateSimple(id, paragraph);
+      if (active) accept(v);
+    }).catch(fail);
+    else if (passageId && paragraph !== null) startSimple(passageId).then(async v => {
+      if (inRange(v) && paragraph > 0) v = await navigateSimple(v.sessionId, paragraph);
+      if (active) accept(v);
+    }).catch(fail);
     return () => { active = false; };
   }, []);
-  useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' }); }, [view?.current.messages.length, busy]);
+  const processing = view?.current.evaluationStatus === 'PROCESSING';
+  const waiting = pending !== null || processing;
+  useEffect(() => { if (processing) setSeenAt(Date.now()); }, [processing]);
+  useEffect(() => {
+    if (!waiting) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [waiting]);
+  useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' }); }, [view?.current.messages.length, busy, waiting]);
 
   if (!passages) return <main className="dialogue-shell"><p>불러오는 중…</p>{error && <p role="alert">{error}</p>}</main>;
   if (!view) return <main className="dialogue-shell dialogue-start">
@@ -60,10 +84,13 @@ export function SimpleDialogueApp(): React.JSX.Element {
   const submit = () => {
     const text = draft.trim();
     if (!text || busy || !current.canRespond) return;
+    setPending({ text, stage: current.stage, startedAt: Date.now() });
     void run(async () => {
-      const next = await respondSimple(view.sessionId, { transitionId: crypto.randomUUID(), paragraphIndex: current.index, text });
-      if (next.current.evaluationStatus !== 'RETRYABLE_ERROR') setDrafts(old => ({ ...old, [current.index]: '' }));
-      accept(next);
+      try {
+        const next = await respondSimple(view.sessionId, { transitionId: crypto.randomUUID(), paragraphIndex: current.index, text });
+        if (next.current.evaluationStatus !== 'RETRYABLE_ERROR') setDrafts(old => ({ ...old, [current.index]: '' }));
+        accept(next);
+      } finally { setPending(null); }
     });
   };
   const startAttempt = () => {
@@ -78,17 +105,18 @@ export function SimpleDialogueApp(): React.JSX.Element {
         <button onClick={() => setDrawer(true)}>단계별 판정·메모</button>
         <button disabled={busy} onClick={() => { setView(null); window.history.replaceState(null, '', base); }}>나가기</button></div>
     </header>
+    <DevPartNav disabled={busy} currentParagraph={current.index} currentIsProblem={false}
+      paragraphs={view.paragraphs.map((p, i) => ({ label: `문단 ${p.position}`, done: p.done, onSelect: () => go(i) }))}
+      problem={view.problemQuestionId === null ? null : { onSelect: () => window.location.assign(problemLink(view.problemQuestionId!, view.sessionId)) }} />
     <p className="developer-notice">simple-holistic · 개인 테스트 · 판정과 원출력은 서랍에서만 보입니다. 학생 상태 원장에는 쓰지 않습니다.</p>
     <nav className="workbench-tabs" aria-label="화면 전환">{[['source', '원문'], ['chat', '대화']].map(([id, label]) =>
       <button key={id} aria-pressed={mobilePane === id} onClick={() => setMobilePane(id!)}>{label}</button>)}</nav>
     <div className="workbench-columns">
       <section className="source-pane workbench-pane" aria-label="원문"><header className="pane-header"><h2>원문</h2><small>{view.exam}</small></header>
         <div className="source-scroll simple-source">
-          <nav className="simple-paragraph-nav" aria-label="문단 이동">{view.paragraphs.map((p, i) =>
-            <button key={p.paragraphId} disabled={busy} aria-current={i === current.index ? 'true' : undefined} onClick={() => go(i)}>{p.position}{p.done ? ' ✓' : ''}</button>)}</nav>
           {view.paragraphs.map((p, i) => i === current.index
-            ? <article className="dialogue-paragraph current" key={p.paragraphId}><span className="paragraph-chip">문단 {p.position}</span>
-                <AnnotatedText text={p.text} annotations={[]} highlights={current.highlights} /></article>
+            ? <article className={`dialogue-paragraph current${current.highlightKind === 'HINT' ? ' is-hint' : ''}`} key={p.paragraphId}><span className="paragraph-chip">문단 {p.position}</span>
+                <AnnotatedText text={p.text} annotations={[]} highlights={pending ? [] : current.highlights} /></article>
             : <details className="previous-paragraph" key={p.paragraphId}><summary>문단 {p.position}<small>{p.done ? '완료' : '다시 읽기'}</small></summary><p>{p.text}</p></details>)}
         </div>
       </section>
@@ -101,7 +129,9 @@ export function SimpleDialogueApp(): React.JSX.Element {
           {!current.messages.length && <p className="chat-welcome">이 문단의 중심 내용과 관계를 자기 말로 써 보세요.</p>}
           {current.messages.map((m, i) => <div className="chat-round" key={i}>
             <SimpleBubble message={m} /></div>)}
-          {current.evaluationStatus === 'PROCESSING' && <p role="status" className="chat-notice">판정하는 중이에요…</p>}
+          {pending && <div className="chat-round"><SimpleBubble message={{ role: 'student', text: pending.text, label: simpleStudentLabel[pending.stage] }} /></div>}
+          {waiting && <div className="chat-round"><article className="chat-message tutor simple-waiting" role="status" aria-live="polite"><small className="simple-label">피드백</small>
+            <p>{simpleWaitingText(pending?.stage ?? current.stage, Math.max(0, now - (pending?.startedAt ?? seenAt)))}<span className="simple-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></article></div>}
           {current.evaluationError && <p role="alert" className="chat-notice">{current.evaluationError}</p>}
         </div>
         <footer className="chat-footer">{error && <p className="err" role="alert">{error}</p>}

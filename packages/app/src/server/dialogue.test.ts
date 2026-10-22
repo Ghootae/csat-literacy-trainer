@@ -155,6 +155,8 @@ describe('개발자용 순차 대화 세션', () => {
     expect(passages.filter((passage) => passage.available)).toHaveLength(6);
     expect(passages.find((passage) => passage.passageId === 'gongsun-long-later-mohists'))
       .toMatchObject({ available: true, paragraphCount: 5 });
+    expect(passages.find((passage) => passage.passageId === 'mrna-vaccine-lipid-nanoparticle')?.problemQuestionId)
+      .toBe('mrna-vaccine-lipid-nanoparticle-q19');
     const hegel = passages.find((passage) => passage.passageId === 'hegel-aesthetics-absolute-spirit');
     expect(hegel).toMatchObject({ available: false, paragraphCount: 1 });
     expect(() => controller.start('hegel-aesthetics-absolute-spirit')).toThrow(/전체 원문|완전한 지문/);

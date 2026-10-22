@@ -1,6 +1,7 @@
 // 단순 형식 문단 v4.1 전체 경로(29) 시뮬레이션 생성기. 문단 두 개 × 29 경로 = 58 사례.
 // node docs/experiments/simple-holistic-path-simulation-2026-10-17/build.mjs
 // 출력: cases.json(실험 스크립트용), SIMULATION.md(사람이 읽는 기대 대화)
+// 2026-10-19(3): v4.6 — 질문 뒤 마무리 말풍선을 '전체 피드백 + 부분별 핵심 상자'로 바꿔 기대 bubbles를 새 문자열로 맞춤(별도 도입·빠진 내용 말풍선 없음).
 // 2026-10-19(2): v4.4 원칙에 맞게 기대값 2건 수정 — 공손룡 '왜?'에 틀린 이유는 질문 1번 오류(빠진 내용 없음), 공손룡 교정 실패 답은 관계+목적 오류 둘. 새 문단 3개 추가(법인 5, 정보 비대칭 4, 표면 장력 2).
 // 2026-10-19: 구멍 하나 질문에 질문과 무관한 틀린 말(도파민 'D1이 억제성…')은 판정하지 않는다(사용자 원칙, v4.4). 공손룡 쪽은 이유를 물은 질문에 틀린 이유를 댄 것이라 오류 그대로.
 // 2026-10-18: gongsun oneErrWithB를 오류 하나로 고침(이전 문장은 '그래야 혼란이 줄어든다'가 둘째 오류였다 — 1차 실행 RESULTS 6).
@@ -313,7 +314,7 @@ const step = (stage, student, expect, tutor) => ({ stage, student, expect, tutor
 // 첫 요약·다시 쓴 요약 단계
 const S = {
   captured: (p, stage) => step(stage, stage === 'INITIAL' ? p.say.captured : p.say.captured2,
-    { category: 'CAPTURED', action: 'PRAISE', bubbles: ['피드백'], highlights: [], points: ['잡은 핵심(두 부분)을 구체적으로 칭찬', '문단 핵심 상자 없음'] },
+    { category: 'CAPTURED', action: 'PRAISE', bubbles: ['피드백'], highlights: [], points: ['잡은 핵심(두 부분)을 구체적으로 칭찬', '핵심 상자 없음'] },
     [{ label: '피드백', text: p.reply.praiseShort }]),
   copy: p => step('INITIAL', p.say.copy,
     { category: 'COPY', action: 'RETRY_PROMPT', bubbles: ['다시 써 보기'], highlights: [], points: ['옮겨 적었다고 말하고 자기 말로 다시 쓰게 함', '문단 내용을 알려 주지 않음'] },
@@ -331,54 +332,54 @@ const S = {
     { category: 'ONE_ERROR', action: 'CORRECTION_QUESTION', errors: [{ key: 'relMany', part: 'A', gapIndex: null }], bubbles: ['확인하기'], highlights: [], points: ['학생 말을 되짚고 문단과 맞는지 다시 보게 함', '맞는 답을 알려 주지 않음', withB ? 'B는 이미 말함' : 'B가 빠져 있어도 확인 질문만'] },
     [{ label: '확인하기', text: p.reply.correction }]),
   multi: (p, stage) => step(stage, p.say.multi,
-    { category: 'MULTI_ERROR', action: 'CLOSE_ERRORS', errors: [{ key: 'relManyMulti', part: 'A', gapIndex: null }, { key: 'purposeFlexMulti', part: 'B', gapIndex: null }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '바로잡기', '문단 핵심'], highlights: ['A', 'B'], points: ['질문 없이 오류 2개를 각각 인용하고 바로잡음', '문단 핵심 공개'] },
+    { category: 'MULTI_ERROR', action: 'CLOSE_ERRORS', errors: [{ key: 'relManyMulti', part: 'A', gapIndex: null }, { key: 'purposeFlexMulti', part: 'B', gapIndex: null }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '바로잡기', '바로잡기(마무리+상자)'], highlights: ['A', 'B'], points: ['질문 없이 오류 2개를 각각 인용하고 바로잡음', '마지막 말풍선에 마무리 피드백과 부분별 핵심 상자'] },
     [...fixBubbles(p, ['relManyMulti', 'purposeFlexMulti'], '지문과 다른 점이 두 군데 있어서 하나씩 볼게.'), coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]),
 };
 
 // 확인 질문에 한 답 (AFTER_CORRECTION)
 const C = {
   resolvedCaptured: p => step('AFTER_CORRECTION', p.say.fixResolvedFull,
-    { category: 'CAPTURED', action: 'PRAISE', targetErrorResolved: true, bubbles: ['문단 핵심', '피드백'], highlights: [], points: ['문단 핵심 공개 뒤 고친 것을 칭찬'] },
+    { category: 'CAPTURED', action: 'PRAISE', targetErrorResolved: true, bubbles: ['피드백(상자)'], highlights: [], points: ['고친 것을 칭찬하는 피드백 아래 부분별 핵심 상자'] },
     [coreBubble(p), { label: '피드백', text: '바로 고쳤네. 이제 두 부분을 모두 잡았어.' }]),
   resolvedGap: p => step('AFTER_CORRECTION', p.say.fixResolvedPartial,
     { category: 'GAP', action: 'GAP_QUESTION', targetErrorResolved: true, gaps: ['B'], bubbles: ['생각해 보기(번호 질문 1)'], highlights: [], points: ['고친 것을 인정', '두 번째(마지막) 질문으로 B를 방향만 물음'] },
     [{ label: '생각해 보기', text: p.reply.gap1AfterFix, items: [p.questions.B] }]),
   failed: p => { const keys = p.fixFailedErrors ?? ['relMany']; return step('AFTER_CORRECTION', p.say.fixFailed,
-    { category: keys.length > 1 ? 'MULTI_ERROR' : 'ONE_ERROR', action: 'CLOSE_ERRORS', targetErrorResolved: false, errors: keys.map(k => ({ key: k, part: p.errors[k].part, gapIndex: null })), missingNote: false, bubbles: ['바로잡기(도입)', ...keys.map(() => '바로잡기'), '문단 핵심'], highlights: [...new Set(keys.map(k => p.errors[k].part))], points: ['앞서 확인한 오류가 남았다는 도입', keys.length > 1 ? '남은 오류와 새로 틀린 목적을 각각 인용하고 바로잡음' : '그 오류를 인용하고 바로잡음', '문단 핵심 공개'] },
+    { category: keys.length > 1 ? 'MULTI_ERROR' : 'ONE_ERROR', action: 'CLOSE_ERRORS', targetErrorResolved: false, errors: keys.map(k => ({ key: k, part: p.errors[k].part, gapIndex: null })), missingNote: false, bubbles: ['바로잡기(도입)', ...keys.map(() => '바로잡기'), '바로잡기(마무리+상자)'], highlights: [...new Set(keys.map(k => p.errors[k].part))], points: ['앞서 확인한 오류가 남았다는 도입', keys.length > 1 ? '남은 오류와 새로 틀린 목적을 각각 인용하고 바로잡음' : '그 오류를 인용하고 바로잡음', '마지막 말풍선에 마무리 피드백과 부분별 핵심 상자'] },
     [...fixBubbles(p, keys, '앞에서 확인한 부분이 아직 문단과 달라.'), coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]); },
 };
 
 // 구멍 질문에 한 답 (AFTER_GAP). asked: ['A','B'] 또는 ['B']. gotA: 앞서 A를 말했는지(빠진 내용 인정용)
 const G = {
   filled: (p, asked) => step('AFTER_GAP', asked.length === 2 ? p.say.g2Filled : p.say.g1Filled,
-    { category: 'CAPTURED', action: 'PRAISE', targetGapsFilled: asked.map(() => true), bubbles: ['문단 핵심', '피드백'], highlights: [], points: ['각 답을 질문과 합쳐 읽어 모두 채움', '문단 핵심 공개 뒤 칭찬'] },
+    { category: 'CAPTURED', action: 'PRAISE', targetGapsFilled: asked.map(() => true), bubbles: ['피드백(상자)'], highlights: [], points: ['각 답을 질문과 합쳐 읽어 모두 채움', '칭찬하는 피드백 아래 부분별 핵심 상자'] },
     [coreBubble(p), { label: '피드백', text: p.reply.praiseAfter }]),
   partial: (p, asked) => asked.length === 2
     ? step('AFTER_GAP', p.say.g2Partial,
-      { category: 'GAP', action: 'CLOSE_GAP', targetGapsFilled: [true, false], bubbles: ['문단 핵심', '빠진 내용'], highlights: ['B'], points: ['A는 채움, B는 못 채움(오류 아님)', '잡은 A를 짧게 인정하고 아직 빠진 B를 말함', '중요도 비교 없음'] },
+      { category: 'GAP', action: 'CLOSE_GAP', targetGapsFilled: [true, false], bubbles: ['빠진 내용(상자)'], highlights: ['B'], points: ['A는 채움, B는 못 채움(오류 아님)', '잡은 A를 짧게 인정하고 아직 빠진 B를 말함', '중요도 비교 없음'] },
       [coreBubble(p, '내가 생각한 이 문단의 핵심 내용은 이거야.'), { label: '빠진 내용', text: p.reply.missingB(true) }])
     : step('AFTER_GAP', p.say.g1Vague,
-      { category: 'GAP', action: 'CLOSE_GAP', targetGapsFilled: [false], bubbles: ['문단 핵심', '빠진 내용'], highlights: ['B'], points: ['모호한 답은 오류가 아니라 못 채움', '앞서 잡은 A를 짧게 인정하고 아직 빠진 B를 말함'] },
+      { category: 'GAP', action: 'CLOSE_GAP', targetGapsFilled: [false], bubbles: ['빠진 내용(상자)'], highlights: ['B'], points: ['모호한 답은 오류가 아니라 못 채움', '앞서 잡은 A를 짧게 인정하고 아직 빠진 B를 말함'] },
       [coreBubble(p, '내가 생각한 이 문단의 핵심 내용은 이거야.'), { label: '빠진 내용', text: p.reply.missingB(true) }]),
   irrelevant: (p, asked) => step('AFTER_GAP', asked.length === 2 ? p.say.g2Irrelevant : p.say.g1Irrelevant,
-    { category: 'IRRELEVANT', action: 'CLOSE_GAP', targetGapsFilled: asked.map(() => false), bubbles: ['문단 핵심', '빠진 내용'], highlights: asked, points: ['물은 항목 모두 못 채움', asked.length === 2 ? '빠진 부분으로 A·B 모두 말함(잡은 것 없음)' : '앞서 잡은 A를 인정하고 B가 빠졌다고 말함'] },
+    { category: 'IRRELEVANT', action: 'CLOSE_GAP', targetGapsFilled: asked.map(() => false), bubbles: ['빠진 내용(상자)'], highlights: asked, points: ['물은 항목 모두 못 채움', asked.length === 2 ? '빠진 부분으로 A·B 모두 말함(잡은 것 없음)' : '앞서 잡은 A를 인정하고 B가 빠졌다고 말함'] },
     [coreBubble(p, '내가 생각한 이 문단의 핵심 내용은 이거야.'), { label: '빠진 내용', text: asked.length === 2 ? p.reply.missingAB : p.reply.missingB(true) }]),
   errors: (p, asked) => asked.length === 2
     ? step('AFTER_GAP', p.say.g2Errors,
-      { category: 'MULTI_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false, false], errors: [{ key: 'relManyFrag', part: 'A', gapIndex: 0 }, { key: 'purposeFlexFrag', part: 'B', gapIndex: 1 }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '바로잡기', '문단 핵심'], highlights: ['A', 'B'], points: ['조각 답을 질문과 합쳐 읽음(둘째 답은 목적/결과 주장으로)', '오류 2개, 각각 질문 1·2에 연결', '물은 항목 모두 바로잡기로 응답'] },
+      { category: 'MULTI_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false, false], errors: [{ key: 'relManyFrag', part: 'A', gapIndex: 0 }, { key: 'purposeFlexFrag', part: 'B', gapIndex: 1 }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '바로잡기', '바로잡기(마무리+상자)'], highlights: ['A', 'B'], points: ['조각 답을 질문과 합쳐 읽음(둘째 답은 목적/결과 주장으로)', '오류 2개, 각각 질문 1·2에 연결', '물은 항목 모두 바로잡기로 응답'] },
       [...fixBubbles(p, ['relManyFrag', 'purposeFlexFrag'], '네 답에서 지문과 다른 점을 하나씩 볼게.'), coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')])
     : step('AFTER_GAP', p.say.g1Error,
-      { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false], errors: [{ key: 'purposeChange', part: 'B', gapIndex: 0 }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '문단 핵심'], highlights: ['B'], points: ['답을 질문과 합쳐 읽어 B에 대한 틀린 주장으로 판정', '오류 1개(질문 1)'] },
+      { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false], errors: [{ key: 'purposeChange', part: 'B', gapIndex: 0 }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '바로잡기(마무리+상자)'], highlights: ['B'], points: ['답을 질문과 합쳐 읽어 B에 대한 틀린 주장으로 판정', '오류 1개(질문 1)'] },
       [...fixBubbles(p, ['purposeChange'], '네 답에서 지문과 다른 점을 짚어 볼게.'), coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]),
   errorPlusUncovered: (p, asked) => asked.length === 2
     ? step('AFTER_GAP', p.say.g2ErrorPlusBlank,
-      { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false, false], targetGapReadingsNote: '둘째 읽기는 빈 문자열', errors: [{ key: 'relNone', part: 'A', gapIndex: 0 }], missingNote: true, bubbles: ['바로잡기(도입)', '바로잡기', '빠진 내용', '문단 핵심'], highlights: ['A', 'B'], points: ['질문 1 답은 오류(gapIndex 0)', '질문 2 "모르겠어"는 오류 아님·못 채움 → 빠진 내용 말풍선', '물은 항목 모두 응답받음'] },
+      { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false, false], targetGapReadingsNote: '둘째 읽기는 빈 문자열', errors: [{ key: 'relNone', part: 'A', gapIndex: 0 }], missingNote: true, bubbles: ['바로잡기(도입)', '바로잡기', '바로잡기(마무리+상자)'], highlights: ['A', 'B'], points: ['질문 1 답은 오류(gapIndex 0)', '질문 2 "모르겠어"는 오류 아님·못 채움 → 마무리 피드백이 이 항목에 응답', '물은 항목 모두 응답받음'] },
       [...fixBubbles(p, ['relNone'], '네 답에서 지문과 다른 점을 짚어 볼게.'), { label: '빠진 내용', text: p.reply.missingB(false) }, coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')])
     : !p.g1OtherRelevant ? step('AFTER_GAP', p.say.g1OtherError,
-      { category: 'GAP', action: 'CLOSE_GAP', targetGapsFilled: [false], bubbles: ['문단 핵심', '빠진 내용'], highlights: ['B'], points: ['질문과 무관한 말(다른 대상의 성질)은 맞든 틀리든 판정하지 않음(오류로 세지 않고 바로잡지 않음)', '빠진 내용에서 질문과 다른 이야기였다고 짧게 짚고 B가 빠졌다고 말함'] },
+      { category: 'GAP', action: 'CLOSE_GAP', targetGapsFilled: [false], bubbles: ['빠진 내용(상자)'], highlights: ['B'], points: ['질문과 무관한 말(다른 대상의 성질)은 맞든 틀리든 판정하지 않음(오류로 세지 않고 바로잡지 않음)', '빠진 내용에서 질문과 다른 이야기였다고 짧게 짚고 B가 빠졌다고 말함'] },
       [coreBubble(p, '내가 생각한 이 문단의 핵심 내용은 이거야.'), { label: '빠진 내용', text: `질문과는 다른 이야기를 했어. ${p.reply.missingB(true)}` }])
     : step('AFTER_GAP', p.say.g1OtherError,
-      { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false], errors: [{ key: 'relManyOther', part: 'A', gapIndex: 0 }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '문단 핵심'], highlights: ['A'], points: ['물은 것(이유)에 대한 답의 형태로 틀린 이유를 댐 → 질문 1번의 오류(v4.4 원칙)', '물은 항목이 바로잡기로 응답받았으므로 빠진 내용 말풍선 없음'] },
+      { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetGapsFilled: [false], errors: [{ key: 'relManyOther', part: 'A', gapIndex: 0 }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '바로잡기(마무리+상자)'], highlights: ['A'], points: ['물은 것(이유)에 대한 답의 형태로 틀린 이유를 댐 → 질문 1번의 오류(v4.4 원칙)', '물은 항목이 바로잡기로 응답받았으므로 빠진 내용 말풍선 없음'] },
       [...fixBubbles(p, ['relManyOther'], '네 답에서 지문과 다른 점을 짚어 볼게.'), coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]),
 };
 const gLeaves = ['filled', 'partial', 'irrelevant', 'errors', 'errorPlusUncovered'];
@@ -454,7 +455,7 @@ for (const [k, p] of Object.entries(P)) {
     c.steps.forEach((s, i) => {
       const e = s.expect;
       const judge = [`${e.category} → ${e.action}`, e.targetErrorResolved !== undefined && `고침=${e.targetErrorResolved}`, e.gaps && `빈 곳 ${e.gaps.join('·')}`, e.targetGapsFilled && `채움 ${JSON.stringify(e.targetGapsFilled)}`,
-        e.errors?.length && `오류 ${e.errors.map(x => `${x.part}${x.gapIndex !== null ? `(질문 ${x.gapIndex + 1})` : ''}`).join('·')}`, e.missingNote !== undefined && `빠진 내용 말풍선 ${e.missingNote ? '있음' : '없음'}`].filter(Boolean).join(' · ');
+        e.errors?.length && `오류 ${e.errors.map(x => `${x.part}${x.gapIndex !== null ? `(질문 ${x.gapIndex + 1})` : ''}`).join('·')}`].filter(Boolean).join(' · ');
       lines.push(`${i + 1}. **${s.stage}** 학생: “${s.student.replace(/\n/g, ' / ')}”`, `   - 기대 판정: ${judge}`, `   - 말풍선: ${e.bubbles.join(' → ')} · 지문 표시: ${e.highlights.length ? e.highlights.map(h => h.part).join('·') : '없음'}`, `   - 확인할 방향: ${e.points.join('; ')}`);
       for (const t of s.exampleTutor) lines.push(`   - 예시 〔${t.label}〕 ${t.quote ? `(“${t.quote}”) ` : ''}${t.text}${t.items ? ' ' + t.items.map((q, j) => `${j + 1}. ${q}`).join(' ') : ''}${t.box ? ` ［${t.box}］` : ''}`);
     });

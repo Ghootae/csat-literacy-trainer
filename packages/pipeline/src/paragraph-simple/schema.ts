@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 
-/** 단순 형식 문단 판정(simple-holistic) 계약. 프롬프트: experiments/dialogue/paragraph-simple-holistic-prompt-v4.5.md */
-export const PARAGRAPH_SIMPLE_PROMPT_VERSION = 'paragraph-simple-holistic-v4.5';
+/** 단순 형식 문단 판정(simple-holistic) 계약. 프롬프트: experiments/dialogue/paragraph-simple-holistic-prompt-v4.6.md */
+export const PARAGRAPH_SIMPLE_PROMPT_VERSION = 'paragraph-simple-holistic-v4.6';
 
 export const SimpleCategorySchema = z.enum(['CAPTURED', 'GAP', 'ONE_ERROR', 'MULTI_ERROR', 'IRRELEVANT', 'COPY']);
 export const SimpleActionSchema = z.enum([
@@ -35,9 +35,8 @@ export const SimpleOutputSchema = z.object({
   restatedSummary: z.string(),
   action: SimpleActionSchema,
   message: z.string(),
-  coreIntro: z.string().nullable(),
-  coreSummary: z.string().nullable(),
-  missingNote: z.string().nullable(),
+  corePartSummaries: z.array(z.string()),
+  closingFeedback: z.string().nullable(),
   coreSourceQuote: z.string().nullable(),
 }).strict();
 

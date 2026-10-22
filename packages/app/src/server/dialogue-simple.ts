@@ -9,6 +9,7 @@ import { appendJsonlLine, loadDialoguePassages, readJsonlLines, type DialoguePas
 import type {
   SimpleAttemptInspection, SimpleDialogueView, SimpleHighlightView, SimpleInspection, SimpleMemoRecord, SimpleMessageLabel, SimpleMessageView, SimpleStepInspection,
 } from '../shared/dialogue-simple.js';
+import { simpleStudentLabel } from '../shared/dialogue-simple.js';
 
 export const SimpleRespondSchema = z.object({
   transitionId: z.string().trim().min(1), paragraphIndex: z.number().int().nonnegative(), text: z.string().trim().min(1),
@@ -34,8 +35,6 @@ interface AttemptRuntime {
 interface ParagraphRuntime { attempts: AttemptRuntime[] }
 const newAttempt = (attemptNumber: number): AttemptRuntime =>
   ({ attemptNumber, state: initialSimpleState(), transcript: [], steps: [], status: 'IDLE', abandoned: false });
-const studentLabel: Record<SimpleParagraphState['stage'], SimpleMessageLabel> =
-  { INITIAL: '나의 요약', RETRY: '다시 쓴 요약', AFTER_CORRECTION: '나의 답', AFTER_GAP: '나의 답' };
 const tutorLabel: Record<SimpleAction, SimpleMessageLabel> = {
   PRAISE: '피드백', RETRY_PROMPT: '다시 써 보기', CORRECTION_QUESTION: '확인하기', GAP_QUESTION: '생각해 보기',
   CLOSE_GAP: '빠진 내용', CLOSE_NO_RESPONSE: '문단 핵심', CLOSE_ERRORS: '바로잡기',
@@ -94,7 +93,7 @@ export class SimpleDialogueController {
     if (p.state.done) throw new Error('이미 끝난 문단입니다.');
     // 평가 실패로 남은 학생 발화는 새 제출이 대체한다(같은 문장이면 그대로 다시 시도).
     if (p.status === 'RETRYABLE_ERROR') p.transcript.pop();
-    p.transcript.push({ role: 'student', text: request.text, label: studentLabel[p.state.stage] });
+    p.transcript.push({ role: 'student', text: request.text, label: simpleStudentLabel[p.state.stage] });
     p.status = 'PROCESSING';
     r.currentIndex = request.paragraphIndex;
     const promise = this.evaluate(r, request.paragraphIndex, p, request.text);
@@ -171,17 +170,16 @@ export class SimpleDialogueController {
     }
     return this.view(r);
   }
-  /** GAP_QUESTION: 리액션+번호 질문 한 말풍선. 질문 뒤 PRAISE·CLOSE_GAP: 문단 핵심 -> 피드백/빠진 내용. CLOSE_ERRORS: 도입 -> 오류마다 -> (missingNote) 빠진 내용 -> 문단 핵심. CLOSE_NO_RESPONSE: 도입+핵심 상자 한 말풍선. */
+  /** GAP_QUESTION: 리액션+번호 질문 한 말풍선. 질문 뒤 PRAISE·CLOSE_GAP·CLOSE_NO_RESPONSE: 전체 피드백 + 부분별 핵심 상자 한 말풍선. CLOSE_ERRORS: 도입 -> 오류마다 -> 마무리 피드백 + 부분별 핵심 상자. */
   private tutorMessages(o: SimpleOutput, stage: SimpleParagraphState['stage']): SimpleMessageView[] {
     const tutor = (m: Omit<SimpleMessageView, 'role'>): SimpleMessageView => ({ role: 'tutor', ...m });
-    const core = () => tutor({ text: o.coreIntro ?? '', box: o.coreSummary ?? '', label: '문단 핵심' });
     if (o.action === 'GAP_QUESTION') return [tutor({ text: o.message, items: o.gaps.map(g => g.question), label: '생각해 보기' })];
-    if (o.action === 'PRAISE' && (stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP')) return [core(), tutor({ text: o.message, label: '피드백' })];
-    if (o.action === 'CLOSE_GAP') return [core(), tutor({ text: o.message, label: '빠진 내용' })];
+    if (o.action === 'PRAISE' && (stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP')) return [tutor({ text: o.message, parts: o.corePartSummaries, label: '피드백' })];
+    if (o.action === 'CLOSE_GAP') return [tutor({ text: o.message, parts: o.corePartSummaries, label: '빠진 내용' })];
     if (o.action === 'CLOSE_ERRORS') return [tutor({ text: o.message, label: '바로잡기' }),
       ...o.errors.map(e => tutor({ text: e.feedback, quote: e.studentQuote, label: '바로잡기' })),
-      ...(o.missingNote ? [tutor({ text: o.missingNote, label: '빠진 내용' })] : []), core()];
-    if (o.action === 'CLOSE_NO_RESPONSE') return [tutor({ text: o.message, box: o.coreSummary ?? '', label: '문단 핵심' })];
+      tutor({ text: o.closingFeedback ?? '', parts: o.corePartSummaries, label: '바로잡기' })];
+    if (o.action === 'CLOSE_NO_RESPONSE') return [tutor({ text: o.message, parts: o.corePartSummaries, label: '문단 핵심' })];
     return [tutor({ text: o.message, label: tutorLabel[o.action] })];
   }
   private buildStep(p: AttemptRuntime, paragraphText: string, studentText: string, result: SimpleEvaluationResult, next: SimpleParagraphState): Step {
@@ -232,16 +230,21 @@ export class SimpleDialogueController {
     const paragraph = this.paragraphAt(r, r.currentIndex);
     const p = this.current(paragraph);
     const allDone = done.every(Boolean);
+    const hint = !p.state.done && p.state.stage === 'AFTER_CORRECTION' && p.status !== 'PROCESSING' && p.state.targetError
+      ? this.locate(r.passage.paragraphs[r.currentIndex]!.text, p.state.targetError.sourceQuote) : null;
+    const highlights = p.state.done ? p.steps.at(-1)?.highlights ?? [] : hint ? [hint] : [];
+    const highlightKind = !highlights.length ? null : p.state.done ? 'REVEAL' as const : 'HINT' as const;
     return structuredClone({
       sessionId: r.sessionId, passageId: r.passage.passageId, title: r.passage.title, exam: r.passage.exam, currentIndex: r.currentIndex,
       paragraphs: r.passage.paragraphs.map((q, i) => ({ paragraphId: q.paragraphId, position: q.position, text: q.text, done: done[i]! })),
       current: { index: r.currentIndex, messages: p.transcript, done: p.state.done, attemptNumber: p.attemptNumber, attemptCount: paragraph.attempts.length,
         restatedSummary: p.steps.length ? (p.steps.at(-1)!.output as SimpleOutput).restatedSummary : null,
         canStartNewAttempt: p.transcript.some(m => m.role === 'student') && p.status !== 'PROCESSING',
-        highlights: p.state.done ? p.steps.at(-1)?.highlights ?? [] : [],
+        stage: p.state.stage, highlights, highlightKind,
         canRespond: !p.state.done && p.status !== 'PROCESSING', evaluationStatus: p.status,
         evaluationError: p.status === 'RETRYABLE_ERROR' ? '피드백을 만들지 못했어. 쓴 내용은 저장돼 있으니 다시 시도해 줘.' : null },
       allDone, problemUrl: allDone && r.passage.problemQuestionId ? `/problem/dev/v4?questionId=${encodeURIComponent(r.passage.problemQuestionId)}` : null,
+      problemQuestionId: r.passage.problemQuestionId ?? null,
     });
   }
 }

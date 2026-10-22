@@ -106,19 +106,16 @@ export function validateSimpleOutput(input: SimpleEvaluationInput, output: Simpl
     if (!afterGap || e.gapIndex < 0 || e.gapIndex >= n) problems.push(`errors[${i}].gapIndex는 AFTER_GAP에서만 null 또는 0 이상 targetGaps 길이 미만의 정수이고 그 밖에는 null이어야 한다.`);
     else if (filledArr[e.gapIndex] !== false) problems.push(`errors[${i}].gapIndex가 가리키는 항목의 targetGapsFilled가 false여야 한다.`);
   });
-  const uncovered = filledArr.some((f, k) => !f && !output.errors.some(e => e.gapIndex === k));
-  const needsNote = afterGap && output.action === 'CLOSE_ERRORS' && uncovered;
-  if (needsNote ? !output.missingNote?.trim() : output.missingNote !== null) problems.push('missingNote는 AFTER_GAP의 CLOSE_ERRORS에서 오류도 채움도 아닌 항목이 있을 때만 비어 있지 않은 문자열이고 그 밖에는 null이어야 한다.');
   const afterQuestion = input.stage === 'AFTER_CORRECTION' || input.stage === 'AFTER_GAP';
   const praiseAfterQuestion = output.action === 'PRAISE' && afterQuestion;
   const needsSummary = output.action === 'CLOSE_ERRORS' || output.action === 'CLOSE_NO_RESPONSE' || output.action === 'CLOSE_GAP' || praiseAfterQuestion;
-  if (needsSummary ? !output.coreSummary?.trim() : output.coreSummary !== null) problems.push('coreSummary는 CLOSE_ERRORS·CLOSE_NO_RESPONSE·CLOSE_GAP·질문 뒤 PRAISE에서만 비어 있지 않은 문자열이고 그 밖에는 null이어야 한다.');
+  const summariesOk = needsSummary ? output.corePartSummaries.length === parts.length && output.corePartSummaries.every(s => s.trim()) : output.corePartSummaries.length === 0;
+  if (!summariesOk) problems.push('corePartSummaries는 CLOSE_ERRORS·CLOSE_NO_RESPONSE·CLOSE_GAP·질문 뒤 PRAISE에서 기준 핵심 부분과 같은 개수의 비어 있지 않은 문장이고 그 밖에는 빈 배열이어야 한다.');
+  if (output.action === 'CLOSE_ERRORS' ? !output.closingFeedback?.trim() : output.closingFeedback !== null) problems.push('closingFeedback은 CLOSE_ERRORS에서만 비어 있지 않은 문자열이고 그 밖에는 null이어야 한다.');
   const closeErrors = output.action === 'CLOSE_ERRORS';
   output.errors.forEach((e, i) => {
     if (closeErrors ? !e.feedback.trim() : e.feedback !== '') problems.push(`errors[${i}].feedback은 CLOSE_ERRORS에서만 비어 있지 않은 문자열이고 그 밖에는 빈 문자열이어야 한다.`);
   });
-  const needsIntro = closeErrors || output.action === 'CLOSE_GAP' || praiseAfterQuestion;
-  if (needsIntro ? !output.coreIntro?.trim() || output.coreIntro.length > 60 : output.coreIntro !== null) problems.push('coreIntro는 CLOSE_ERRORS·CLOSE_GAP·질문 뒤 PRAISE에서만 비어 있지 않은 60자 이하 문자열이고 그 밖에는 null이어야 한다.');
   const noResponse = output.action === 'CLOSE_NO_RESPONSE';
   if (noResponse ? !output.coreSourceQuote || !input.targetParagraph.text.includes(output.coreSourceQuote) : output.coreSourceQuote !== null) problems.push('coreSourceQuote는 CLOSE_NO_RESPONSE에서만 비어 있지 않은 대상 문단의 연속 부분 문자열이고 그 밖에는 null이어야 한다.');
   if (!output.message.trim()) problems.push('message가 비어 있다.');
