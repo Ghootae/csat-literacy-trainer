@@ -12,7 +12,7 @@ import { createLedger } from './test-v5-live-connection.mjs';
 // V5_LIVE_CHECK_CASES selects another case module (e.g. ./v5-reselection-cases.mjs); the default is the 2026-10-13 set.
 const casesModule = process.env.V5_LIVE_CHECK_CASES ?? './v5-live-check-cases.mjs';
 const { cases: allCases } = await import(casesModule);
-import { cases as diverse, specs } from './v5-diverse-48-cases.mjs';
+import { specs } from './v5-diverse-48-cases.mjs';
 
 // A rerun uses its own folder and case groups (e.g. V5_LIVE_CHECK_DIR=...-r2 V5_LIVE_CHECK_GROUPS=R,V).
 export const DIR = process.env.V5_LIVE_CHECK_DIR ?? 'docs/experiments/v5-live-check-2026-10-13';
@@ -104,8 +104,6 @@ export function prepare() {
   return { cases: cases.length, externalCalls: 0 };
 }
 
-// 48세션의 `supported` 근거: 정답·충분 근거 재선택(A2).
-const SUPPORTED = Object.fromEntries(specs.map(s => [s.key, s.supported]));
 /** Button and fixed steps follow PLAN.md; any free-text reply is left as null for a human author. */
 export function draft() {
   const out = [];
@@ -120,8 +118,9 @@ export function draft() {
     else if (v.phase === 'AWAITING_POST_REPAIR_CHOICE') command = { type: (c.role === 'A2' || c.reselect) && v.postRepairOptions.includes('RESELECT') ? 'RESELECT' : 'REQUEST_EXPLANATION' };
     else if (v.phase === 'AWAITING_RESELECTION' && c.reselect) command = { type: 'SELECT', choiceId: c.reselect.choiceId, rationale: { mode: 'PROVIDED', text: c.reselect.rationale } };
     else if (v.phase === 'AWAITING_RESELECTION' && c.role === 'A2') {
-      const k = c.id.split('-')[1], spec = diverse.find(d => d.id === `${k}-CP`);
-      command = { type: 'SELECT', choiceId: spec.choiceId, rationale: { mode: 'PROVIDED', text: SUPPORTED[k] } };
+      // A2 re-selects the correct choice with the 48-session `supported` rationale; ids vary (`F-I-A2`, `C-A2`), so match by question.
+      const spec = specs.find(d => d.questionId === c.questionId);
+      command = { type: 'SELECT', choiceId: `C${spec.answer}`, rationale: { mode: 'PROVIDED', text: spec.supported } };
     }
     out.push({ id: c.id, stepIndex: s.steps.length, phase: v.phase, message: v.message, command });
   });
