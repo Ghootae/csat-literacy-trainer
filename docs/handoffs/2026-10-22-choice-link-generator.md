@@ -136,3 +136,45 @@ UI 6지문:
 7. 테스트: 정오 고정(두 극성), marks 위치 변환(공손룡 q12 실제 블록: ⓐ는 S1 "옷", ⓑ·ⓒ는 S2, ⓓ·ⓔ는 S3 "옷"·"빨간 옷"), 표시가 조각 경계를 넘으면 예외, V4 NONE contextIds 통과·supportIds 위반, V4 APPLY support 양쪽 규칙, V5 NONE 비틂, V6 입력 truth 기준, READING_GAP 검토 표시와 note 필수, 안정성 교집합 계산. 기존 테스트는 v3에 맞게 고치되 v2 전용 동작 테스트는 v3 기대로 바꾼다.
 8. dry-run: `--targets docs/experiments/choice-link-2026-10-22/targets-ui.json --out docs/experiments/choice-link-2026-10-22/dry-run/ui-v3 --prompt docs/experiments/choice-link-2026-10-22/CHOICE-LINK-PROMPT-v3.md --runs 3 --max-requests 18 --usd-cap 5`. 외부 요청 0, `exampleAllPass: true`. 보고에 지문별 문항·선지·〈보기〉 조각·marks 수, 요청당 예약액, 전체 예약액, 공손룡 q12 조각과 marks를 그대로 붙인다.
 9. 완료 보고: 변경 파일, 테스트 결과(새 묶음 + 기존 82개 묶음), dry-run 출력, 해석 선택.
+
+## 보완 v4 (2026-10-22, v3 결과·비틂 목록 초안 반영, 사용자 "A에 동의. 전송 승인 후 일반화 테스트 실행")
+
+근거: `docs/experiments/choice-link-2026-10-22/REPORT-v3-run-desktop.md` 8절, `TWIST-LIST-DRAFT-v1.md`, D-0162 보완 4. 지시문은 `docs/experiments/choice-link-2026-10-22/CHOICE-LINK-PROMPT-v4.md`(기본값으로 바꾼다). v3 계약 중 아래와 어긋나는 부분은 이 절을 따른다. **외부 전송 없음, dry-run까지.** 기존 결과 폴더(`runs/ui-v2`, `runs/ui-v3`)·dry-run 폴더·지도·입장·classify·지문 파일은 건드리지 않는다. 파일 삭제가 필요하면 멈추고 보고한다. `packages/**`와 이 절에 없는 파일은 고치지 않는다.
+
+1. **발문 극성 확장.** `stemPolarity`: 발문에 `않은 것` 또는 `않는 것`이 있으면 `SELECT_INCORRECT`, 아니면 /적절한|일치하는/ → `SELECT_CORRECT`, 둘 다 아니면 `OTHER`(예외로 멈춤은 그대로). UI 6지문 문항의 극성은 v3와 같아야 한다(테스트로 확인).
+2. **(가)·(나) 두 지문 세트(target `sections`).** `targets-calib.json`의 첫 항목처럼 target에 `sections: [{ label, passageId, passagesDir, mapPath, stancePath, classifyPath }]`가 있으면, 섹션마다 지문·지도·입장·classify를 읽어 하나의 입력으로 합친다. 그 target의 `passageId`(입력·출력·검증 비교)는 `key`다.
+   - 문단: 섹션 순서대로 이어 붙이고 각 문단에 `section: label`을 더한다(문단 id는 이미 서로 다르다; 같으면 예외로 멈춤).
+   - 지도: 명제·노드·관계의 `id`와 관계 `fromId`·`toId`, 노드 `childIds`, 입장 `id`에 `"<label>."`를 앞에 붙인다(예: `가.P2-3`, `나.TOP`). classify 매칭은 붙이기 전 id로 한다. 합친 뒤 id가 겹치면 예외.
+   - 문항·지문 표시(`passageMarks`)는 세트 하나에서 읽는다(지금과 같은 경로).
+   - `protectedFiles`에 섹션별 파일을 모두 넣는다.
+   - `sections`가 없는 target은 지금과 똑같이 동작한다.
+3. **출력 스키마 v4** (`choice_link_v4`): 조각의 `twistName`을 빼고 `twistType`(아래 15값 enum 또는 `null`)과 `twistDetail`(문자열)을 더한다. 나머지 v3와 같다.
+   - enum(코드 상수 `TWIST_TYPES`, 순서 그대로): `NEGATION, DIRECTION, SUBSTITUTION, CONFLATION, CAUSE_SWAP, WRONG_REASON, CONDITION_SHIFT, HOLDER_SWAP, PAIR_SWAP, ABSOLUTIZE, SCOPE_EXTEND, DEGREE, ADDED_CONTENT, ADDED_METHOD, OTHER`.
+   - 갈래 상수 `TWIST_BRANCH`: 1 내용 바꿈(NEGATION·DIRECTION·SUBSTITUTION·CONFLATION), 2 관계 바꿈(CAUSE_SWAP·WRONG_REASON·CONDITION_SHIFT), 3 주체 바꿈(HOLDER_SWAP·PAIR_SWAP), 4 범위·정도 바꿈(ABSOLUTIZE·SCOPE_EXTEND·DEGREE), 5 근거 없는 추가(ADDED_CONTENT·ADDED_METHOD), 기타(OTHER). 한국어 이름은 지시문 표와 같게 `TWIST_KO`로 둔다.
+4. **검증 v4** (v3 대비 바뀌는 것만):
+   - V4: `INFER`의 `inferenceBasisIds` 필수는 `source !== 'NONE'`일 때만.
+   - V5: `twisted`이면 `twistType`이 null이 아니고 `twistDetail`이 비어 있지 않아야 한다. `twisted`가 아니면 `twistType === null`, `twistDetail === ''`(evidenceQuote·choiceQuote 규칙은 그대로).
+   - 검토 표시 추가: `TWIST_OTHER`(twistType OTHER인 조각).
+5. **요약 v4**:
+   - `twistTypes`: 비틂 조각의 종류별 수와 갈래별 수(twistName 빈도 표 대체). OTHER 조각 수와 그 `twistDetail` 목록.
+   - **종류 안정성** `typeStability`(FALSE 선지 대상, 2회 이상 파싱된 target): 선지마다 회차별 종류 집합(조각들의 twistType 집합). 분류: 모든 회차 집합 같음 / 모든 회차 교집합이 비지 않음 / 두 회차 이상이 공유하는 종류가 있음 / 그 밖. 선지별 다수 종류(가장 많은 회차에 나온 종류, 동점이면 모두)도 남긴다. 다수 종류가 OTHER뿐인 선지 수.
+   - **대상 안정성**(v3 `stability`) 수정: 모든 회차에서 twistTargetIds 합집합이 빈 선지(NONE 비틂만)를 `noneOnly`로 따로 세고, 비율 분모는 나머지(바뀐 곳이 있는 선지)로 한 값을 더한다(기존 값도 유지).
+   - REPORT.md에 위 표를 더하고, 선지별 표에 `twistType`·`twistDetail` 열을 쓴다.
+6. **가짜 예시 출력**을 v4 스키마·검증에 맞게 고친다(비틂이면 `twistType: 'OTHER'`, `twistDetail: '예시 비틂'`).
+7. **〈보기〉 고정 파일**: `supplement-fixed.json`에 경마식 보도 q7(표 전사)·가상 공간 q16(댓글 그림 요소 F1–F3)을 Claude가 이미 넣었다. 코드 변경 없이 그대로 읽혀야 한다.
+8. 테스트(새 묶음에 추가): 극성(`일치하지 않는` → SELECT_INCORRECT, UI 문항 회귀), sections 합치기(id 접두, 관계 끝점·childIds 접두, classify 매칭, 문단 section, id 겹침 예외), V4 NONE+INFER 면제, V5 twistType 규칙, TWIST_OTHER 검토 표시, typeStability 분류, noneOnly 분리. 기존 테스트는 v4에 맞게 고친다.
+9. dry-run 두 가지(외부 요청 0, `exampleAllPass: true`):
+   - 회귀: `--targets docs/experiments/choice-link-2026-10-22/targets-ui.json --out docs/experiments/choice-link-2026-10-22/dry-run/ui-v4 --runs 3 --max-requests 18 --usd-cap 5`
+   - 맞춰 보기: `--targets docs/experiments/choice-link-2026-10-22/targets-calib.json --out docs/experiments/choice-link-2026-10-22/dry-run/calib-v4 --runs 3 --max-requests 15 --usd-cap 4`
+   - 맞춰 보기 dry-run은 가상 공간·의미 내재주의의 classify 파일이 아직 없으면 `CLASSIFY_MISSING`/파일 없음으로 멈출 것이다. 그때는 **그 두 지문을 뺀 임시 targets 파일을 scratch 경로가 아닌 `dry-run/calib-v4-partial-targets.json`에 만들어** 나머지 3 target으로 dry-run하고, 두 지문은 classify 생성 뒤(메인 세션이 전송 승인 후 실행) 다시 한다고 보고한다.
+   - 보고에 target별 문항·선지·〈보기〉 조각·marks·이미지 수, 요청당 예약액, 전체 예약액, 근대 문명 세트의 입력 앞부분(문단 section·접두 id 예 5개), 경마식 보도 q7과 가상 공간 q16의 〈보기〉 조각을 그대로 붙인다.
+10. 완료 보고: 변경 파일, 테스트 결과(새 묶음 + 기존 묶음), dry-run 출력, 해석 선택.
+
+## 보완 v5 (2026-10-22, 맞춰 보기 검증 반영, 사용자 "A안으로 동의. 2, 3번 승인.")
+
+근거: `docs/experiments/choice-link-2026-10-22/REPORT-v4-calib-desktop.md` 8절, D-0162 보완 5. 작은 변경이라 메인 세션이 직접 했다.
+
+1. 지시문 `CHOICE-LINK-PROMPT-v5.md`(기본값). 14종 정의 다듬기, contextIds는 양쪽 허용.
+2. 검증 V4: `PASSAGE`·`SUPPLEMENT` 판정은 `twistTargetIds`·`supportIds`·`inferenceBasisIds`만 센다(`contextIds`는 어느 쪽 id든 허용, 존재 여부만 확인). `BOTH`는 모든 id로 센다. v4 맞춰 보기 결과 재검증: 위반 8 → 0.
+3. `TWIST_KO.ADDED_METHOD` = "글에 없는 서술 방식". 스키마 이름은 `choice_link_v4` 그대로(필드 변경 없음).
+4. 실행: `--targets targets-ui.json --out runs/ui-v5 --runs 3 --max-requests 18 --usd-cap 4`.

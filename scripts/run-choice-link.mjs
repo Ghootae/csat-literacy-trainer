@@ -1,5 +1,5 @@
-// D-0162 (supplement 3): choice-link generation v3 (truth fixed from the answer key and given as input; per choice: readingGap, source/operation parts, map links, twist) for non-vocabulary questions of a passage.
-// Keys are loaded only by Node's --env-file-if-exists. Handoff: docs/handoffs/2026-10-22-choice-link-generator.md (section 보완 v3)
+// D-0162 (supplement 4): choice-link generation v4 (closed twist-type list; (가)/(나) section sets; truth fixed from the answer key and given as input; per choice: readingGap, source/operation parts, map links, twist) for non-vocabulary questions of a passage.
+// Keys are loaded only by Node's --env-file-if-exists. Handoff: docs/handoffs/2026-10-22-choice-link-generator.md (sections 보완 v4, v5)
 // Usage: node --env-file-if-exists=.env scripts/run-choice-link.mjs [--dry-run] --targets <json> --out <dir> [--prompt <path>] [--fixed <json>] [--runs <n>] [--round <k>] [--max-requests <n>] [--usd-cap <x>]
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname, extname } from 'node:path';
@@ -10,7 +10,7 @@ import { loadPassage, buildInput as buildPassageInput, instructionsFrom, splitSe
 import { isConnectionError } from './run-analysis-judge-gongsun.mjs';
 import { TYPES } from './run-relation-classify.mjs';
 
-export const PROMPT_PATH = 'docs/experiments/choice-link-2026-10-22/CHOICE-LINK-PROMPT-v3.md';
+export const PROMPT_PATH = 'docs/experiments/choice-link-2026-10-22/CHOICE-LINK-PROMPT-v5.md';
 export const FIXED_PATH = 'docs/experiments/choice-link-2026-10-22/supplement-fixed.json';
 export const LIMITS = { maxRequests: 6, usdCap: 2 };
 export const TOKENS_PER_QUESTION = 6000, MAX_OUTPUT_CAP = 32000;
@@ -20,7 +20,13 @@ export const SOURCES = ['PASSAGE', 'SUPPLEMENT', 'BOTH', 'NONE'];
 export const OPERATIONS = ['RESTATE', 'INFER', 'APPLY'];
 export const READING_GAPS = ['NONE', 'IMPLICIT_PREMISE', 'STRICT_READING'];
 const POLARITIES = ['SELECT_INCORRECT', 'SELECT_CORRECT', 'OTHER'];
-export const stemPolarity = stem => stem.includes('적절하지 않은') ? 'SELECT_INCORRECT' : /적절한/u.test(stem) ? 'SELECT_CORRECT' : 'OTHER';
+export const stemPolarity = stem => /않은 것|않는 것/u.test(stem) ? 'SELECT_INCORRECT' : /적절한|일치하는/u.test(stem) ? 'SELECT_CORRECT' : 'OTHER';
+export const TWIST_TYPES = ['NEGATION', 'DIRECTION', 'SUBSTITUTION', 'CONFLATION', 'CAUSE_SWAP', 'WRONG_REASON', 'CONDITION_SHIFT', 'HOLDER_SWAP', 'PAIR_SWAP', 'ABSOLUTIZE', 'SCOPE_EXTEND', 'DEGREE', 'ADDED_CONTENT', 'ADDED_METHOD', 'OTHER'];
+export const TWIST_BRANCH = { NEGATION: 1, DIRECTION: 1, SUBSTITUTION: 1, CONFLATION: 1, CAUSE_SWAP: 2, WRONG_REASON: 2, CONDITION_SHIFT: 2, HOLDER_SWAP: 3, PAIR_SWAP: 3,
+  ABSOLUTIZE: 4, SCOPE_EXTEND: 4, DEGREE: 4, ADDED_CONTENT: 5, ADDED_METHOD: 5, OTHER: '기타' };
+export const TWIST_KO = { NEGATION: '긍정·부정 뒤집기', DIRECTION: '방향 뒤집기', SUBSTITUTION: '요소 바꿔치기', CONFLATION: '다른 것을 같은 것으로', CAUSE_SWAP: '원인·근거 바꿔치기',
+  WRONG_REASON: '맞는 사실을 엉뚱한 이유로', CONDITION_SHIFT: '조건 옮기기', HOLDER_SWAP: '입장 주인 바꾸기', PAIR_SWAP: '대비 쌍 뒤바꾸기', ABSOLUTIZE: '전칭·절대화',
+  SCOPE_EXTEND: '적용 범위 넓히기', DEGREE: '정도 바꾸기', ADDED_CONTENT: '없는 내용 덧붙이기', ADDED_METHOD: '글에 없는 서술 방식', OTHER: '기타' };
 const serialize = v => JSON.stringify(v, null, 2) + '\n';
 const jsonLine = o => JSON.stringify(o);
 const norm = s => s.replace(/\s+/gu, ' ').trim();
@@ -40,7 +46,7 @@ export const OutputSchema = z.strictObject({
       parts: z.array(z.strictObject({
         quote: z.string(), source: z.enum(SOURCES), operation: z.enum(OPERATIONS), twisted: z.boolean(),
         twistTargetIds: ids, supportIds: ids, contextIds: ids, inferenceBasisIds: ids,
-        twistName: z.string(), evidenceQuote: z.string(), choiceQuote: z.string(),
+        twistType: z.enum(TWIST_TYPES).nullable(), twistDetail: z.string(), evidenceQuote: z.string(), choiceQuote: z.string(),
         relationTypeChange: z.strictObject({ original: z.enum(TYPES), claimed: z.enum(TYPES) }).nullable(),
       })),
     })),
@@ -144,7 +150,7 @@ export function buildRequest(instructions, input, images = []) {
   for (const im of images) content.push({ type: 'input_text', text: `[IMAGE q${im.question} ${im.imageId}]` }, { type: 'input_image', image_url: im.dataUrl, detail: 'high' });
   return { model: MODEL, instructions, reasoning: { effort: 'medium' }, max_output_tokens: maxOutputTokens(input.questions.length),
     input: [{ role: 'user', content }],
-    text: { format: { type: 'json_schema', name: 'choice_link_v3', strict: true, schema: JSON_SCHEMA } } };
+    text: { format: { type: 'json_schema', name: 'choice_link_v4', strict: true, schema: JSON_SCHEMA } } };
 }
 // Dry-run copy: data URLs replaced by a size/hash note.
 export function redactImages(request) {
@@ -214,11 +220,12 @@ export function validateChoiceLink(out, ctx) {
         const pa = `${at}.${k}`;
         // V4: ids, source, operation
         const all = [...p.twistTargetIds, ...p.supportIds, ...p.contextIds, ...p.inferenceBasisIds];
-        let m = 0, s = 0;
-        for (const id of all) { if (mapIds.has(id)) m++; else if (suppIds.has(id)) s++; else v[4].push(`${pa}: unknown id ${id}`); }
+        for (const id of all) if (!mapIds.has(id) && !suppIds.has(id)) v[4].push(`${pa}: unknown id ${id}`);
+        // v5: PASSAGE/SUPPLEMENT are judged from twist targets, support and inference basis only (contextIds may point to either side); BOTH counts all ids.
+        const core = [...p.twistTargetIds, ...p.supportIds, ...p.inferenceBasisIds], m = core.filter(id => mapIds.has(id)).length, s = core.filter(id => suppIds.has(id)).length;
         if (p.source === 'PASSAGE' && (m < 1 || s > 0)) v[4].push(`${pa}: PASSAGE needs map ids only`);
         if (p.source === 'SUPPLEMENT' && (s < 1 || m > 0)) v[4].push(`${pa}: SUPPLEMENT needs supplement ids only`);
-        if (p.source === 'BOTH' && (m < 1 || s < 1)) v[4].push(`${pa}: BOTH needs both`);
+        if (p.source === 'BOTH' && (!all.some(id => mapIds.has(id)) || !all.some(id => suppIds.has(id)))) v[4].push(`${pa}: BOTH needs both`);
         if (p.source === 'NONE' && [...p.twistTargetIds, ...p.supportIds, ...p.inferenceBasisIds].length) v[4].push(`${pa}: NONE with twistTargetIds/supportIds/inferenceBasisIds`);
         if (p.operation === 'APPLY' && p.source !== 'BOTH') v[4].push(`${pa}: APPLY needs source BOTH`);
         if (p.operation === 'APPLY') {
@@ -226,10 +233,11 @@ export function validateChoiceLink(out, ctx) {
           const need = p.twisted ? side([...p.twistTargetIds, ...p.contextIds]) : side(p.supportIds);
           if (need.m < 1 || need.s < 1) v[4].push(`${pa}: APPLY needs map and supplement ids in ${p.twisted ? 'twistTargetIds+contextIds' : 'supportIds'}`);
         }
-        if (p.operation === 'INFER' && p.inferenceBasisIds.length < 1) v[4].push(`${pa}: INFER without inferenceBasisIds`);
+        if (p.operation === 'INFER' && p.source !== 'NONE' && p.inferenceBasisIds.length < 1) v[4].push(`${pa}: INFER without inferenceBasisIds`);
         // V5: twist
         if (p.twisted) {
-          if (p.twistName.trim() === '') v[5].push(`${pa}: twisted without twistName`);
+          if (p.twistType === null) v[5].push(`${pa}: twisted without twistType`);
+          if (p.twistDetail.trim() === '') v[5].push(`${pa}: twisted without twistDetail`);
           if (p.choiceQuote.trim() === '') v[5].push(`${pa}: twisted without choiceQuote`);
           else if (!p.quote.includes(p.choiceQuote)) { if (norm(p.quote).includes(norm(p.choiceQuote))) info5.push(`${pa}: choiceQuote whitespace-normalized match`); else v[5].push(`${pa}: choiceQuote not in part quote`); }
           if (p.supportIds.length) v[5].push(`${pa}: twisted with supportIds`);
@@ -246,7 +254,7 @@ export function validateChoiceLink(out, ctx) {
         } else {
           if (p.twistTargetIds.length) v[5].push(`${pa}: not twisted with twistTargetIds`);
           if (p.source !== 'NONE' && p.supportIds.length < 1) v[5].push(`${pa}: not twisted without supportIds`);
-          if (p.twistName !== '' || p.evidenceQuote !== '' || p.choiceQuote !== '') v[5].push(`${pa}: not twisted with twist fields`);
+          if (p.twistType !== null || p.twistDetail !== '' || p.evidenceQuote !== '' || p.choiceQuote !== '') v[5].push(`${pa}: not twisted with twist fields`);
         }
         const rels = p.twistTargetIds.filter(id => relType.has(id));
         if (p.relationTypeChange) {
@@ -260,6 +268,7 @@ export function validateChoiceLink(out, ctx) {
       if (c.readingGap !== 'NONE' && c.note.trim() === '') v[5].push(`${at}: readingGap ${c.readingGap} without note`);
       if (c.readingGap !== 'NONE') review.push({ kind: 'READING_GAP', at, readingGap: c.readingGap });
       if (c.explanationAgreement === 'DIFFER') review.push({ kind: 'EXPLANATION_DIFFER', at });
+      c.parts.forEach((p, k) => { if (p.twistType === 'OTHER') review.push({ kind: 'TWIST_OTHER', at: `${at}.${k}` }); });
       c.parts.forEach((p, k) => { if (p.source === 'NONE') review.push({ kind: p.twisted ? 'NONE_TWIST' : 'NONE_UNTWISTED', at: `${at}.${k}` }); });
       if (tw.length >= 2) review.push({ kind: 'MULTI_TWIST', at });
       if (c.note.trim() !== '') review.push({ kind: 'NOTE', at });
@@ -275,7 +284,7 @@ export function exampleOutput(passageId, questions) {
   return { passageId, questions: questions.map(q => ({ number: q.number, stemPolarity: stemPolarity(q.stem), extraSegments: [], choices: q.choices.map(c => {
     const tw = c.truth === 'FALSE';
     return { number: c.number, readingGap: 'NONE', explanationAgreement: 'NO_EXPLANATION', note: '', parts: [{ quote: c.text, source: 'NONE', operation: 'RESTATE', twisted: tw,
-      twistTargetIds: [], supportIds: [], contextIds: [], inferenceBasisIds: [], twistName: tw ? '예시 비틂' : '', evidenceQuote: '', choiceQuote: tw ? c.text : '', relationTypeChange: null }] };
+      twistTargetIds: [], supportIds: [], contextIds: [], inferenceBasisIds: [], twistType: tw ? 'OTHER' : null, twistDetail: tw ? '예시 비틂' : '', evidenceQuote: '', choiceQuote: tw ? c.text : '', relationTypeChange: null }] };
   }) })) };
 }
 
@@ -287,7 +296,7 @@ const pct = (n, d) => d ? `${(100 * n / d).toFixed(1)}%` : '0.0%';
 export function stability(results) {
   const byKey = new Map();
   for (const r of results.filter(x => x.out)) byKey.set(r.key, [...(byKey.get(r.key) ?? []), r]);
-  let total = 0, allSame = 0, twoSame = 0, interNonEmpty = 0; const mismatches = [];
+  let total = 0, allSame = 0, twoSame = 0, interNonEmpty = 0, noneOnly = 0; const mismatches = [];
   for (const [key, runs] of byKey) {
     if (runs.length < 2) continue;
     for (const iq of runs[0].questions) for (const ic of iq.choices.filter(c => c.truth === 'FALSE')) {
@@ -298,14 +307,44 @@ export function stability(results) {
       });
       const counts = sets.reduce((m, x) => (m[x.sig] = (m[x.sig] ?? 0) + 1, m), {});
       total++;
+      if (sets.every(x => x.targets && x.targets.length === 0)) noneOnly++;
       if (Object.keys(counts).length === 1 && sets[0].sig !== null) allSame++;
       if (Math.max(...Object.values(counts)) >= 2) twoSame++;
       if (sets.every(x => x.targets) && sets[0].targets.some(id => sets.every(x => x.targets.includes(id)))) interNonEmpty++;
       if (Object.keys(counts).length > 1) mismatches.push({ key, question: iq.number, choice: ic.number, runs: sets.map(({ run, targets }) => ({ run, targets })) });
     }
   }
+  // noneOnly: choices whose target union is empty in every run (NONE twists only); the *OfChanged values use the rest as denominator.
+  const changed = total - noneOnly;
   return { choices: total, allSame, allSamePct: pct(allSame, total), atLeastTwoSame: twoSame, atLeastTwoSamePct: pct(twoSame, total),
-    intersectionNonEmpty: interNonEmpty, intersectionNonEmptyPct: pct(interNonEmpty, total), mismatches };
+    intersectionNonEmpty: interNonEmpty, intersectionNonEmptyPct: pct(interNonEmpty, total), noneOnly, changedChoices: changed,
+    allSameOfChanged: allSame - noneOnly, allSameOfChangedPct: pct(allSame - noneOnly, changed), atLeastTwoSameOfChanged: twoSame - noneOnly, atLeastTwoSameOfChangedPct: pct(twoSame - noneOnly, changed),
+    intersectionNonEmptyOfChangedPct: pct(interNonEmpty, changed), mismatches };
+}
+
+// FALSE choices (input truth), passages with >= 2 parsed runs: per run the set of twistType over the choice's twisted parts.
+// category: ALL_SAME (all run sets equal) / INTERSECTION (shared type in every run) / TWO_SHARE (a type in >= 2 runs) / DISJOINT. majority = types seen in the most runs (ties all).
+export function typeStability(results) {
+  const byKey = new Map();
+  for (const r of results.filter(x => x.out)) byKey.set(r.key, [...(byKey.get(r.key) ?? []), r]);
+  const cats = { ALL_SAME: 0, INTERSECTION: 0, TWO_SHARE: 0, DISJOINT: 0 }; let total = 0, majorityOnlyOther = 0; const choices = [];
+  for (const [key, runs] of byKey) {
+    if (runs.length < 2) continue;
+    for (const iq of runs[0].questions) for (const ic of iq.choices.filter(c => c.truth === 'FALSE')) {
+      const sets = runs.map(r => {
+        const cc = r.out.questions.find(x => x.number === iq.number)?.choices.find(x => x.number === ic.number);
+        return { run: r.run, types: cc ? [...new Set(cc.parts.filter(p => p.twisted).map(p => p.twistType))].sort() : null };
+      });
+      const sig = x => x.types ? x.types.join(',') : null, valid = sets.every(x => x.types);
+      const count = {}; for (const x of sets) for (const t of x.types ?? []) count[t] = (count[t] ?? 0) + 1;
+      const top = Math.max(0, ...Object.values(count)), majority = Object.keys(count).filter(t => count[t] === top).sort();
+      const category = valid && sets.every(x => sig(x) === sig(sets[0])) ? 'ALL_SAME' : valid && sets[0].types.some(t => sets.every(x => x.types.includes(t))) ? 'INTERSECTION' : top >= 2 ? 'TWO_SHARE' : 'DISJOINT';
+      cats[category]++; total++;
+      if (majority.length === 1 && majority[0] === 'OTHER') majorityOnlyOther++;
+      choices.push({ key, question: iq.number, choice: ic.number, category, majority, runs: sets });
+    }
+  }
+  return { choices: total, categories: cats, categoriesPct: Object.fromEntries(Object.entries(cats).map(([k, c]) => [k, pct(c, total)])), majorityOnlyOther, items: choices };
 }
 
 // readingGap over the parsed runs: choice-run counts per kind, and per choice the number of runs with a gap (kinds listed).
@@ -323,6 +362,7 @@ export function readingGapStats(results) {
 // results: [{ key, run, passageId, questions, out|null, validation|null }]
 export function summarize(results) {
   const done = results.filter(r => r.out), parts = done.flatMap(r => r.out.questions.flatMap(q => q.choices.flatMap(c => c.parts)));
+  const twisted = parts.filter(p => p.twisted);
   const viol = r => (r.validation?.items ?? []).reduce((b, i) => b + i.violations.length, 0);
   const first = new Map(); for (const r of done) if (!first.has(r.key)) first.set(r.key, r);
   return { requestsParsed: done.length, passages: first.size,
@@ -330,49 +370,77 @@ export function summarize(results) {
     perRun: done.map(r => ({ key: r.key, run: r.run, violations: viol(r), review: r.validation?.review.length ?? 0, allPass: r.validation?.allPass ?? null })),
     reviewByKind: Object.fromEntries(freq(done.flatMap(r => (r.validation?.review ?? []).map(x => x.kind)))),
     sourceOperation: Object.fromEntries(freq(parts.map(p => `${p.source}|${p.operation}`))),
-    twistedParts: parts.filter(p => p.twisted).length, twistNames: freq(parts.filter(p => p.twisted).map(p => p.twistName)),
-    validationViolations: done.reduce((a, r) => a + viol(r), 0), readingGap: readingGapStats(results), stability: stability(results) };
+    twistedParts: parts.filter(p => p.twisted).length,
+    twistTypes: { byType: freq(twisted.map(p => p.twistType)), byBranch: freq(twisted.map(p => `${TWIST_BRANCH[p.twistType]}`)),
+      other: { count: twisted.filter(p => p.twistType === 'OTHER').length, details: twisted.filter(p => p.twistType === 'OTHER').map(p => p.twistDetail) } },
+    validationViolations: done.reduce((a, r) => a + viol(r), 0), readingGap: readingGapStats(results), stability: stability(results), typeStability: typeStability(results) };
 }
 
 export function renderReport(results, s = summarize(results)) {
-  const out = ['# 선지 연결 결과 (v3)', '', '해석·평가 없음. 원자료는 `<지문>/r<k>/choice-link.json`, 검증은 `choice-link.validation.json`, 요청 기록은 ledger, 실행 설정은 RUN 파일.', '',
+  const out = ['# 선지 연결 결과 (v4)', '', '해석·평가 없음. 원자료는 `<지문>/r<k>/choice-link.json`, 검증은 `choice-link.validation.json`, 요청 기록은 ledger, 실행 설정은 RUN 파일.', '',
     '## 전체 요약', '', `- 응답 파싱 ${s.requestsParsed}/${results.length}건, 지문 ${s.passages}, 문항 ${s.questions}, 선지 ${s.choices}(첫 회차 기준), 검증 위반 합계 ${s.validationViolations}, 비틂 조각 ${s.twistedParts}`, '',
     '### 회차별 검증 위반·검토 표시', '', '| 지문 | 회차 | 위반 | 검토 표시 | 전체 통과 |', '|---|---:|---:|---:|---|', ...s.perRun.map(p => `| ${p.key} | ${p.run} | ${p.violations} | ${p.review} | ${p.allPass} |`), '',
     '### 검토 표시 종류', '', ...(Object.keys(s.reviewByKind).length ? ['| 종류 | 수 |', '|---|---:|', ...Object.entries(s.reviewByKind).map(([k, c]) => `| ${k} | ${c} |`)] : ['- 없음']), '',
     '### source × operation 조각 수', '', '| source | operation | 수 |', '|---|---|---:|', ...Object.entries(s.sourceOperation).map(([k, c]) => `| ${k.split('|')[0]} | ${k.split('|')[1]} | ${c} |`), '',
-    '### twistName 빈도', '', ...(s.twistNames.length ? ['| twistName | 수 |', '|---|---:|', ...s.twistNames.map(([n, c]) => `| ${cell(n)} | ${c} |`)] : ['- 없음']), '',
+    '### twistType 빈도 (비틂 조각)', '', ...(s.twistTypes.byType.length ? ['| twistType | 이름 | 갈래 | 수 |', '|---|---|---|---:|', ...s.twistTypes.byType.map(([n, c]) => `| ${n} | ${TWIST_KO[n]} | ${TWIST_BRANCH[n]} | ${c} |`)] : ['- 없음']), '',
+    '### 갈래별 비틂 조각 수', '', ...(s.twistTypes.byBranch.length ? ['| 갈래 | 수 |', '|---|---:|', ...s.twistTypes.byBranch.map(([n, c]) => `| ${n} | ${c} |`)] : ['- 없음']), '',
+    `### OTHER 조각 ${s.twistTypes.other.count}건의 twistDetail`, '', ...(s.twistTypes.other.details.length ? s.twistTypes.other.details.map(d => `- ${cell(d)}`) : ['- 없음']), '',
     '### readingGap 분포 (선지×회차 건수)', '', ...(Object.keys(s.readingGap.byKind).length ? ['| readingGap | 수 |', '|---|---:|', ...Object.entries(s.readingGap.byKind).map(([k, c]) => `| ${k} | ${c} |`)] : ['- 없음']), '',
     '### readingGap이 NONE이 아닌 선지 (회차 수)', '', ...(s.readingGap.perChoice.length ? ['| 지문 | 문항 | 선지 | 회차 수 | 회차별 |', '|---|---:|---:|---:|---|', ...s.readingGap.perChoice.map(e => `| ${e.key} | ${e.question} | ${e.choice} | ${e.runsWithGap} | ${cell(e.kinds.join(', '))} |`)] : ['- 없음']), '',
     '## 회차 간 안정성 (FALSE 선지 단위: twistTargetIds 합집합)', '', `- 비교한 선지 ${s.stability.choices}, 모든 회차 같음 ${s.stability.allSame} (${s.stability.allSamePct}), 두 회차 이상 같음 ${s.stability.atLeastTwoSame} (${s.stability.atLeastTwoSamePct}), 모든 회차 교집합이 비지 않음 ${s.stability.intersectionNonEmpty} (${s.stability.intersectionNonEmptyPct})`, '',
+    `- 바뀐 곳이 없는 선지(NONE 비틂만, 모든 회차 합집합이 빈 선지) ${s.stability.noneOnly}. 나머지 ${s.stability.changedChoices}개 기준: 모든 회차 같음 ${s.stability.allSameOfChanged} (${s.stability.allSameOfChangedPct}), 두 회차 이상 같음 ${s.stability.atLeastTwoSameOfChanged} (${s.stability.atLeastTwoSameOfChangedPct}), 교집합이 비지 않음 ${s.stability.intersectionNonEmpty} (${s.stability.intersectionNonEmptyOfChangedPct})`, '',
     ...(s.stability.mismatches.length ? ['| 지문 | 문항 | 선지 | 회차별 대상 id |', '|---|---:|---:|---|', ...s.stability.mismatches.map(m => `| ${m.key} | ${m.question} | ${m.choice} | ${cell(m.runs.map(r => `r${r.run}: ${r.targets?.join(',') ?? '-'}`).join(' / '))} |`)] : ['- 불일치 없음']), '',
+    '## 종류 안정성 (FALSE 선지 단위: 회차별 twistType 집합)', '', `- 비교한 선지 ${s.typeStability.choices}, ` + Object.entries(s.typeStability.categories).map(([k, c]) => `${k} ${c} (${s.typeStability.categoriesPct[k]})`).join(', ') + `, 다수 종류가 OTHER뿐인 선지 ${s.typeStability.majorityOnlyOther}`, '',
+    ...(s.typeStability.items.length ? ['| 지문 | 문항 | 선지 | 분류 | 다수 종류 | 회차별 종류 |', '|---|---:|---:|---|---|---|', ...s.typeStability.items.map(m => `| ${m.key} | ${m.question} | ${m.choice} | ${m.category} | ${m.majority.join(',') || '-'} | ${cell(m.runs.map(r => `r${r.run}: ${r.types?.join(',') ?? '-'}`).join(' / '))} |`)] : ['- 비교할 선지 없음']), '',
     '## 비틂 조각 전체 (검토용)', ''];
   for (const r of results) {
     out.push(`### ${r.key} r${r.run}`, '');
     if (!r.out) { out.push('결과 없음.', ''); continue; }
-    out.push('| 문항 | 선지 | truth(입력) | 조각 | twistName | 대상 id | 원문 인용 | 선지 인용 |', '|---:|---:|---|---|---|---|---|---|');
+    out.push('| 문항 | 선지 | truth(입력) | 조각 | twistType | twistDetail | 대상 id | 원문 인용 | 선지 인용 |', '|---:|---:|---|---|---|---|---|---|---|');
     for (const q of r.out.questions) for (const c of q.choices) for (const p of c.parts.filter(x => x.twisted))
-      out.push(`| ${q.number} | ${c.number} | ${r.questions.find(x => x.number === q.number)?.choices.find(x => x.number === c.number)?.truth} | ${cell(p.quote)} | ${cell(p.twistName)} | ${p.twistTargetIds.join(',')} | ${cell(p.evidenceQuote)} | ${cell(p.choiceQuote)} |`);
+      out.push(`| ${q.number} | ${c.number} | ${r.questions.find(x => x.number === q.number)?.choices.find(x => x.number === c.number)?.truth} | ${cell(p.quote)} | ${p.twistType} | ${cell(p.twistDetail)} | ${p.twistTargetIds.join(',')} | ${cell(p.evidenceQuote)} | ${cell(p.choiceQuote)} |`);
     out.push('');
   }
   return out.join('\n');
 }
 
+// One passage's files: paragraphs, map (relations carry relationType from classify), stances. `label` (sections only) prefixes every map/stance id as "<label>.".
+function loadSection(t, label = null) {
+  const { passage, file, fileHash } = loadPassage(t.passagesDir, t.passageId);
+  const mapBytes = readFileSync(t.mapPath), stanceBytes = readFileSync(t.stancePath), classifyBytes = readFileSync(t.classifyPath);
+  const map = JSON.parse(mapBytes.toString('utf8')), stances = JSON.parse(stanceBytes.toString('utf8')).stances;
+  const types = new Map(JSON.parse(classifyBytes.toString('utf8')).items.map(i => [i.id, i.type]));
+  map.relations = map.relations.map(r => { if (!types.has(r.id)) throw new Error(`CLASSIFY_MISSING: ${t.passageId} ${r.id}`); return { ...r, relationType: types.get(r.id) }; });
+  const protectedFiles = { [file]: fileHash, [t.mapPath]: hash(mapBytes), [t.stancePath]: hash(stanceBytes), [t.classifyPath]: hash(classifyBytes) };
+  if (label === null) return { passage, map, stances, protectedFiles };
+  const pre = id => `${label}.${id}`;
+  return { passage: { ...passage, paragraphs: passage.paragraphs.map(p => ({ ...p, section: label })) }, protectedFiles,
+    map: { ...map, propositions: map.propositions.map(p => ({ ...p, id: pre(p.id) })), nodes: map.nodes.map(n => ({ ...n, id: pre(n.id), childIds: n.childIds.map(pre) })),
+      relations: map.relations.map(r => ({ ...r, id: pre(r.id), fromId: pre(r.fromId), toId: pre(r.toId) })) },
+    stances: stances.map(x => ({ ...x, id: pre(x.id) })) };
+}
+const dupes = list => list.filter((x, i) => list.indexOf(x) !== i);
+// Merge the sections of a (가)/(나) set into one passage/map/stance input; duplicate ids stop the run.
+function mergeSections(parts, key) {
+  const paragraphs = parts.flatMap(x => x.passage.paragraphs), ids = parts.flatMap(x => [...x.map.propositions, ...x.map.nodes, ...x.map.relations].map(m => m.id));
+  const dp = dupes(paragraphs.map(p => p.paragraphId)); if (dp.length) throw new Error(`DUPLICATE_PARAGRAPH_ID: ${key} ${dp.join(',')}`);
+  const di = dupes(ids); if (di.length) throw new Error(`DUPLICATE_MAP_ID: ${key} ${di.join(',')}`);
+  return { passage: { passageId: key, paragraphs }, stances: parts.flatMap(x => x.stances), protectedFiles: Object.assign({}, ...parts.map(x => x.protectedFiles)),
+    map: { propositions: parts.flatMap(x => x.map.propositions), nodes: parts.flatMap(x => x.map.nodes), relations: parts.flatMap(x => x.map.relations) } };
+}
+
 export function loadTargets(targetsPath, fixedPath = FIXED_PATH) {
   const fixedItems = readJson(fixedPath).items;
   return readJson(targetsPath).map(t => {
-    const { passage, file, fileHash } = loadPassage(t.passagesDir, t.passageId);
-    const mapBytes = readFileSync(t.mapPath), stanceBytes = readFileSync(t.stancePath), classifyBytes = readFileSync(t.classifyPath);
-    const map = JSON.parse(mapBytes.toString('utf8')), stances = JSON.parse(stanceBytes.toString('utf8')).stances;
-    const types = new Map(JSON.parse(classifyBytes.toString('utf8')).items.map(i => [i.id, i.type]));
-    map.relations = map.relations.map(r => { if (!types.has(r.id)) throw new Error(`CLASSIFY_MISSING: ${t.passageId} ${r.id}`); return { ...r, relationType: types.get(r.id) }; });
+    const key = t.key ?? t.passageId, passageId = t.passageId ?? t.key;
+    const { passage, map, stances, protectedFiles: sectionFiles } = t.sections ? mergeSections(t.sections.map(s => loadSection(s, s.label)), key) : loadSection(t);
     const { setId, questions, images } = loadQuestions(t.questionsPath, t.answersPath, t.assetsDir, fixedItems);
     if (setId !== t.setId) throw new Error(`SET_MISMATCH: ${t.setId} vs ${setId}`);
     const displayPath = resolve(dirname(t.questionsPath), '../passages', `${t.setId}.json`), displayBytes = readFileSync(displayPath);
     const passageMarks = JSON.parse(displayBytes.toString('utf8')).elements.filter(e => e.kind !== 'paragraph')
       .map(e => Object.fromEntries(['kind', 'symbol', 'style', 'text'].filter(k => e[k] != null).map(k => [k, e[k]])));
-    const protectedFiles = { [file]: fileHash, [t.mapPath]: hash(mapBytes), [t.stancePath]: hash(stanceBytes), [t.classifyPath]: hash(classifyBytes), [displayPath]: hash(displayBytes),
-      [t.questionsPath]: hash(readFileSync(t.questionsPath)), [t.answersPath]: hash(readFileSync(t.answersPath)) };
-    return { key: t.key ?? t.passageId, passageId: t.passageId, passage, map, stances, passageMarks, questions, images, protectedFiles };
+    const protectedFiles = { ...sectionFiles, [displayPath]: hash(displayBytes), [t.questionsPath]: hash(readFileSync(t.questionsPath)), [t.answersPath]: hash(readFileSync(t.answersPath)) };
+    return { key, passageId, passage, map, stances, passageMarks, questions, images, protectedFiles };
   });
 }
 const ctxOf = j => ({ passageId: j.passageId, map: j.map, questions: j.questions, paragraphs: j.passage.paragraphs.map(p => p.text) });
@@ -402,7 +470,7 @@ export async function main({ dryRun = false, transport, targetsPath, out, prompt
   }
   const sfx = round === undefined ? '' : `-rerun-${round}`, ledgerPath = `${out}/ledger${sfx}.jsonl`;
   if (existsSync(ledgerPath) || existsSync(`${out}/RUN${sfx}.json`)) throw new Error('RUN_EXISTS: refusing to rerun (no retries)');
-  const runInfo = { version: 3, ...(round === undefined ? {} : { round }), runs, startedAtUtc: new Date().toISOString(), model: MODEL, reasoning: { effort: 'medium' }, tokensPerQuestion: TOKENS_PER_QUESTION, maxOutputCap: MAX_OUTPUT_CAP, timeoutMs: TIMEOUT_MS, rates: RATES, limits, retries: 0,
+  const runInfo = { version: 4, ...(round === undefined ? {} : { round }), runs, startedAtUtc: new Date().toISOString(), model: MODEL, reasoning: { effort: 'medium' }, tokensPerQuestion: TOKENS_PER_QUESTION, maxOutputCap: MAX_OUTPUT_CAP, timeoutMs: TIMEOUT_MS, rates: RATES, limits, retries: 0,
     promptFile: promptPath, promptFileHashBefore: promptHashBefore, instructionsHash: hash(instructions), schemaHash: hash(JSON.stringify(JSON_SCHEMA)), targetsFile: targetsPath, fixedFile: fixedPath, fixedFileHash: hash(readFileSync(fixedPath)),
     inputs: Object.fromEntries(prepared.map(j => [j.key, { passageId: j.passageId, inputHash: hash(JSON.stringify(j.input)), requestHash: hash(JSON.stringify(j.request)), questions: j.questions.length, images: j.images.map(i => ({ question: i.question, imageId: i.imageId, sha256: i.sha256 })), maxOutputTokens: j.request.max_output_tokens }])) };
   const record = row => appendFileSync(ledgerPath, jsonLine(row) + '\n');

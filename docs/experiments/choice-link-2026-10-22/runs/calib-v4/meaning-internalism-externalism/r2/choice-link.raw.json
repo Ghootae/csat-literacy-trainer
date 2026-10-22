@@ -1,0 +1,384 @@
+{
+  "id": "resp_0e836f25b59b114d006ad9820d76f887d0a5cf46454d22c6b6",
+  "object": "response",
+  "created_at": 1792639501,
+  "status": "completed",
+  "access_programs": null,
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1792639592,
+  "error": null,
+  "frequency_penalty": 0,
+  "incomplete_details": null,
+  "instructions": "너는 수능 국어 독서 문항의 선지를 지문 분석 지도와 〈보기〉에 연결한다. 목적은 학생이 어떤 선지를 골랐을 때, 그 선지가 지문·〈보기〉의 어느 내용을 어떻게 다루었는지, 틀린 선지라면 무엇을 어떤 방식으로 바꿨는지 좌표로 남기는 것이다. 지도와 〈보기〉 조각은 고치지 않는다. 지문과 〈보기〉에 없는 내용을 지어내지 않는다.\n\n선지마다 정오 `truth`(TRUE 맞음, FALSE 틀림)가 정답에서 정해져 입력으로 주어진다. 정오를 다시 판단하지 말고, 그 정오가 지문·〈보기〉의 어디에서 비롯되는지 연결한다. 원문만으로 그 정오를 끌어내기 어렵다면 `readingGap`에 남긴다.\n\n참고 해설은 정오의 이유를 적은 참고 자료다. 근거는 반드시 지문·〈보기〉 원문과 지도에서 확인한다. 해설 문장을 근거 인용으로 쓰지 않는다.\n\n〈보기〉 조각의 `marks`는 〈보기〉 글에서 ⓐ·㉠ 같은 기호가 가리키는 구간이다(`text`는 그 구간 글, `start`·`end`는 조각 글 안의 위치). 선지가 기호를 말하면 이 표시로 대상을 찾는다.\n\n지문이 (가)·(나) 둘인 세트에서는 문단에 `section`이 있고, 지도와 입장의 id 앞에 `가.`·`나.`이 붙어 있다(예: `가.P2-3`, `나.G1`, `가.TOP`). id는 받은 그대로 쓴다.\n\n문항마다 다음을 한다.\n\n1. **발문 극성** `stemPolarity`: 적절하지 않은 것·일치하지 않는 것처럼 틀린 것을 고르면 `SELECT_INCORRECT`, 적절한(가장 적절한) 것을 고르면 `SELECT_CORRECT`, 둘 다 아니면 `OTHER`.\n2. **〈보기〉 조각**은 입력의 `S…`·`F…`를 그대로 쓴다. 한 조각 안에 선지가 기대는 단위가 둘 이상이면 `extraSegments`에 `S2a`처럼 더 나눈 조각을 둔다(`parentId`, `quote`는 부모 조각 글의 정확한 부분 문자열).\n3. **선지마다**\n   - `readingGap`: 주어진 정오가 원문에서 바로 확인되면 `NONE`. 정오를 얻으려면 원문에 없는 상식 전제를 한 단계 보태야 하면 `IMPLICIT_PREMISE`. 선지 표현을 글자 그대로 엄격히 읽으면 정오가 달라질 수 있으면 `STRICT_READING`. `NONE`이 아니면 `note`에 보탠 전제나 엄격히 읽은 표현을 적는다.\n   - `explanationAgreement`: 참고 해설과 같은 지점을 근거·비틂으로 잡았으면 `AGREE`, 다른 지점을 잡았으면 `DIFFER`(이유를 `note`에), 해설이 없으면 `NO_EXPLANATION`.\n   - `parts`: 선지를 내용 조각으로 나눈다. 조각을 모두 이으면 선지 문장에서 조사·어미·문장부호 말고는 빠지는 부분이 없어야 하고, 조각끼리 겹치지 않아야 한다. **한 선지에 비틂이 둘 이상이면**(예: 원문 내용을 바꾸고, 없는 내용도 보탬) 비틂마다 조각을 나눠 각각 `twisted`로 표시한다. 각 조각은\n     - `quote`: 선지 문장의 정확한 부분 문자열.\n     - `source` 근거 위치: `PASSAGE`(지문), `SUPPLEMENT`(〈보기〉), `BOTH`(둘 다), `NONE`(어디에도 없음).\n     - `operation` 다룬 방식: `RESTATE`(근거를 그대로 옮기거나 바꿔 씀), `INFER`(근거에서 한 단계 이끌어 낸 판단), `APPLY`(〈보기〉의 대상·사례를 지문의 원리·개념에 대응시킨 판단). `APPLY`면 `source`는 `BOTH`.\n     - `twisted`: 근거 내용과 다르게 바뀌었으면 `true`.\n     - `twistTargetIds`: `twisted`이면 실제로 바뀐 단위만 넣는다. `twisted`가 아니면 빈 배열. 무엇을 넣는지는 바뀐 대상에 따라 다르다.\n       - 인과·조건 등 이어짐을 바꿨으면 그 관계(`R…`) 하나.\n       - 명제 내용을 바꿨으면 그 명제.\n       - 〈보기〉 적용 선지는 바뀐 쪽을 넣는다. 선지가 〈보기〉의 사실(대상·수치·조건)을 다르게 옮겼으면 그 〈보기〉 조각을 넣는다. 〈보기〉 사실은 맞게 옮겼지만 지문의 원리·개념을 잘못 적용했으면, 선지 판단과 어긋나는 지문 단위를 넣는다.\n     - `supportIds`: `twisted`가 아니면 이 조각이 맞다는 근거 단위. `APPLY`면 대응시킨 〈보기〉 조각과 지문 단위를 **둘 다** 넣는다. `twisted`이면 빈 배열.\n     - `contextIds`: 판단하려면 함께 봐야 하는 단위(관계의 양 끝 명제, 〈보기〉 적용에서 바뀌지 않은 쪽 등). 바뀐 곳·근거와 겹치지 않게 둔다.\n     - `inferenceBasisIds`: `operation`이 `INFER`이고 `source`가 `NONE`이 아니면 **반드시** 추론의 전제 단위를 하나 이상 넣는다. 한 단계를 넘는 추론이면 `note`에 적는다. 그 밖에는 빈 배열.\n     - 지도 단위는 가장 작은 것부터 고른다. 한 문장 내용은 명제(`P…`), 두 내용의 이어짐은 관계(`R…`), 문단이나 여러 묶음의 요약은 합성·요지(`C…`·`G…`).\n     - **`source`가 `NONE`이면** 바뀐 곳·근거·추론 전제(`twistTargetIds`·`supportIds`·`inferenceBasisIds`)를 비워 둔다. 학생이 다시 볼 가장 가까운 단위는 `contextIds`에 넣는다.\n     - **글의 서술 방식·구성을 말하는 선지**(\"~을 분석하여 제시하고 있다\" 등): 지문에 그런 서술이 있으면 그 범위의 요지·묶음 단위(`G…`·`X…`·`TOP`)를 근거로 넣는다. 지문에 없는 서술 방식이면 `source: NONE`으로 두고 `contextIds`에 `TOP`을 넣는다.\n     - `twistType`: `twisted`이면 아래 비틂 목록에서 이 조각의 비틂에 가장 맞는 종류 하나. 어느 것도 맞지 않을 때만 `OTHER`. `twisted`가 아니면 `null`.\n     - `twistDetail`: `twisted`이면 무엇이 무엇으로 바뀌었는지 드러나는 짧은 명사구(예: \"조건부 감액 허용을 예외 없는 금지로\"). `OTHER`면 어떤 방식의 비틂인지도 함께 적는다. 아니면 빈 문자열.\n     - `evidenceQuote`: `twisted`이면 근거 원문의 정확한 부분 문자열(지문 문단 원문 또는 〈보기〉 조각 글; 그림이면 그림 요소 설명). `source`가 `NONE`이면 빈 문자열.\n     - `choiceQuote`: `twisted`이면 선지에서 바뀐 부분의 정확한 부분 문자열.\n     - `relationTypeChange`: `twistTargetIds`가 관계이면 `{ original, claimed }`. `original`은 입력의 관계 유형, `claimed`는 선지가 주장한 이어짐을 같은 유형 목록에서 고른 것. 아니면 `null`.\n   - 주어진 `truth`가 `FALSE`이면 `twisted` 조각이 하나 이상 있어야 한다. 근거가 아예 없는 내용을 보탠 경우에는 `source: NONE` 조각이 `twisted`다. `TRUE`이면 `twisted` 조각이 하나도 없어야 한다.\n   - 선지가 누구의 주장인지(인물·학파·입장)를 말하면 명제별 입장과 대조한다. 주인이 바뀐 것도 비틂이다.\n4. 지도에 알맞은 단위가 없으면 가장 가까운 단위를 넣고 `note`에 무엇이 모자란지 적는다.\n\n### 비틂 목록\n\n종류는 \"원문의 무엇을 어떻게 바꿨나\"로 고른다. 〈보기〉에 적용한 선지도 같은 목록에서 고른다(적용했다는 사실은 `operation: APPLY`가 기록한다).\n\n| twistType | 이름 | 정의 | 예 |\n|---|---|---|---|\n| `NEGATION` | 긍정·부정 뒤집기 | 원문의 있음·없음, 됨·안 됨, 허용·금지, 어려움·쉬움을 반대로 | \"의도 파악이 어렵다\" → \"쉽게 파악된다\" |\n| `DIRECTION` | 방향 뒤집기 | 증가↔감소, 이동 방향, 끌어당김↔밀어냄, 커짐↔작아짐의 방향을 반대로 | 작은 기포에서 큰 기포로 이동 → \"큰 기포에서 작은 기포로\"; 값이 커지는 상황에 값이 작을 때의 결과를 붙임 |\n| `SUBSTITUTION` | 요소 바꿔치기 | 원문의 한 요소(물질·부위·대상·행위·수단)를 다른 것으로 | \"항원\"을 \"항체\"로 |\n| `CONFLATION` | 다른 것을 같은 것으로 | 원문이 구별한 둘을 같은 것으로 보거나 섞음 | 자산 총액 불변을 자본금 불변으로 |\n| `CAUSE_SWAP` | 원인·근거 바꿔치기 | 결과는 맞지만 그 원인·근거를 다른 것으로 | 중성이 되는 원인을 다른 결합으로 |\n| `WRONG_REASON` | 맞는 사실을 엉뚱한 이유로 | 지문에 있는 사실이지만, 묻는 현상의 이유가 아닌데 이유로 이음 | 효소의 위치를 조절 차이의 이유로 |\n| `CONDITION_SHIFT` | 조건 옮기기 | 한 조건·상황에서 성립하는 내용을 다른 조건·상황으로 옮김 | A 때의 대조를 B 때로 |\n| `HOLDER_SWAP` | 입장 주인 바꾸기 | 한 인물·학파·이론의 주장을 다른 쪽의 것으로 | 후기 묵가의 생각을 공손룡의 것으로 |\n| `PAIR_SWAP` | 대비 쌍 뒤바꾸기 | 대비되는 둘(㉠·㉡ 등)에서 한쪽 특성을 다른 쪽에 | 직접 경로의 특성을 간접 경로에 |\n| `ABSOLUTIZE` | 전칭·절대화 | 일부·조건부·가능성을 \"모두·어떠한 경우에도·반드시·~만\"으로 | 조건부 허용을 \"어떠한 경우에도 금지\"로 |\n| `SCOPE_EXTEND` | 적용 범위 넓히기 | 한쪽·한 영역의 특성을 양쪽·다른 영역까지 | 한 경로만의 특성을 \"두 경로 모두\"로 |\n| `DEGREE` | 정도 바꾸기 | 같음↔큼, 강함↔약함, 많음↔조금 같은 비교 정도를 바꿈(방향은 그대로) | 평형의 \"같은 압력\"을 \"더 큰 압력\"으로 |\n| `ADDED_CONTENT` | 없는 내용 덧붙이기 | 지문·〈보기〉에 없는 기능·기제·인과·사실을 보탬 | 노즐에 \"방울을 합치는 기능\"을 보탬 |\n| `ADDED_METHOD` | 없는 서술 방식 | 글이 하지 않은 서술 방식·구성을 했다고 함 | 글에 없는 \"장단점 분석\" |\n| `OTHER` | 기타 | 위 어느 것에도 맞지 않음. `twistDetail`에 방식을 적는다 | |\n\n헷갈리는 쌍은 이렇게 가른다.\n\n- `NEGATION`은 있음·없음처럼 참·거짓이 반대가 되는 것, `DIRECTION`은 방향·증감이 반대가 되는 것, `DEGREE`는 방향은 같고 정도만 다른 것이다.\n- `SUBSTITUTION`은 한 요소를 다른 요소로 바꾼 것, `CONFLATION`은 원문이 구별한 둘을 같다고 한 것, `PAIR_SWAP`은 원문이 대비한 두 대상의 특성을 서로 옮긴 것, `HOLDER_SWAP`은 주장의 주인을 바꾼 것이다.\n- `CAUSE_SWAP`은 원인 자리에 다른 원인을 넣은 것, `WRONG_REASON`은 지문에 있는 다른 사실을 이유로 끌어온 것, `ADDED_CONTENT`는 지문에 없는 내용을 보탠 것이다.\n- `ABSOLUTIZE`는 \"모두·항상·~만\" 같은 한정 표현을 바꾼 것, `SCOPE_EXTEND`는 적용 대상을 넓힌 것, `CONDITION_SHIFT`는 성립 조건을 바꾼 것이다.\n\n출력은 주어진 JSON 스키마를 따른다.",
+  "max_output_tokens": 24000,
+  "max_tool_calls": null,
+  "model": "gpt-6.1-sol",
+  "moderation": null,
+  "output": [
+    {
+      "id": "rs_0e836f25b59b114d006ad9820ec06487d0a9d15e4dbe276c03",
+      "type": "reasoning",
+      "content": [],
+      "encrypted_content": "gAAAAABq2YJooYPiqqgU96HkGw2ooahYRF74A_bNiTrf1sJze4tc7RVn5FtZg9m-7DHRS2ckXiOoXCxb-ANUxSZGAYLPNyWCroL6COTyKRVB7tZEZMxWIfQUMPucxLCWzgYSAG-kV4KGVTJ9J2jD8dG2HgamTU9WYYYj8WX9RajaY7uWceRHy7dpwKfLlLehbQ4uhqnP58f_vXWlpcxX9a8QjRxfIuVh-sTyfnmpaDwb9vpO6wcnAfbMFV7nDA8we_6FYYAp0g5VJxHermxnhyF7lSKNZpRghOVzGBUvOuzQI8Eae84IQI-x3NRuHdsUzFt9Mi1PjWfMOmRPBCTKKWc0hRm_dP_tEm-LQrrAzcgOWfhgQiR3_GRcS9bJ4h7qEj9Gz7d3OXNjqUPjFgdIr6_T2CsC_nhg32REk5btqud9J8M0bFYKpn7iLPkC5719aqMGHnI2E6xDh7leG8nMFroHadyzfvprwtQJ7P9NfTS_JxK27BnE_E0DpJxGwij2Iv-EjbyrF_oJlQU2l2aalWC8vq9ZfCeaSIW_Ct7uQC8YcGiCdexgRRy5jdaSK2nMx78EAZpjKAYPMX03aqVlP0TWbQsBAwL8IRZB7Kwf7zq_8JNhcOQ3KrrMFblnR8vVAVb3o4YNIDN2veZvsQ_LrYX_9_zB5C8d6HPlZrt6Fld7LSQLcTla5h2o8Bjx2ZpfYsfpLggZ2IyNquLR0fJYNpkb6Rc73HhC0bMGXhw41h04T8wjwz1xhyVQHh9KOrur1KwV0gz7MDy7gVbISaqwv7icumOdZtlEjfVckzC12mWW6xtDQeSPVDbF0qZhOweT0G33NcQVUhEcDnEy6qm9IS1wiUovYkAqVcOhS3hX12zn4JuM5x14jZ-qDHO-D1t14ptEYUFUfIqSwahRYQ4IQ6_rpmSVbVI-UzU_dV6ByuLuq1ohN6Z6a-gO0vM0jwRNUsJ41UCxB9Bs9F9G4dkTGoJ-oMTiRYx4uULnC9Aw6-BxL74dFsfls2wdPb4N-S0xk80DISIN0vUIPfENotGh_duyfdjg3L0u7ISEhDJoj1kmQJud0aHWhedOmGZtfR09JV1tVntZPZGJkDo04GtTrB4HQA96ghIn7GmYKxGp4BAfhQ5Q4YlXgDrgomFzvx9fHY_IXlxVHpLuGeFlUOsL9dJlVgn7BcFZlIww7pMAswmc2Ld73AeKqUdDhXnxfxML6jqrpsIc1pXJIGuSIOvVSLRtFdO1kAfCHmbIYNXghRpDPIDYM4NyuZgtaoZD84StSqt4uI4pVJWNjCUYq9DLlSw6iiL1uy6ZeN8h2Kf7proJ653-HeZ1WdXfP1Ot59B6ZIS1t-TBNcrHDpofxAPt2cmo1OM71xMZfNdkNrRW2aBrxNrpXidWWHMDttp6xdim-RNktl6BRVEn3yGlcjeHqmxLOSvl0OhRn37u2aVzPqXXvGDLhT0p6rblMQTfArlFNNU_-qGtab-yMBF_zewxD4Sc_chiCEanUdFQaVf1mEjzn3rFvOve_TzMWB4QoBU5ZU0wjvQa-kucShcc3EtnDIaapzY6mfgNu18R3MUS7aTTs0lHEBXIVJSyoSG1jKH7pcyUlXh2CZD8mfazGV7jaFkeX5EcpmhyAAsXr8YfP3QyyG-xvB5s3u36JPrBdRKe-5kLalVVmJ84hJsc2n4HgpjtZb_SsBKpijtSdFoA7aYQsqbjSGaMDxBUyJmstATI4LZfP2szGUiWrJvN8lAMU9-dwRkMOwIWL0UbVJ9HVSvv8eVvMZLAa6_F8xxKyRwwu7RZ-OxEVVLGAlHA8pEAHd4IczavbbAhweKGK6t44c3fEnpblo_tbYRtTYL05YLs40pruOH86tH0dBcVjwohbV3XT1IHYrWJFIWS2PwZWJjKh3XelKBr47ENRyRu_kytZUdkuVaZgJAbS0A7B3PFDRPRu-nsYxWJ_uyy42ObVr2BT0EPBHdOeVh1HrZirUmuAe6uN_8NexR6NtNPNeXidLYCIBJ1ydP9sz64HbBxHXV9KDRq7mxBH0rjbtNACxIRbUv79DmQLODdG5gv_njqV0R28mkFeubiBL0Y9NlCk1aqi5K8KfVFCcKDyQtF9h3NL8u-wpsbAQU8EFRv5bfjYicaF-Nq0hKMf7G4RjTM7i4QHUHcr8K6ARxYgEStbo0g6vB9oDuUSaRvQiPkFRUNdnoNwTx-4taBoYXun1sRrhRr5yAtH7pyMlxE0uE8yUCDLI20e_TBNlEREm1G3zU9rII67_mbiRi-RoSPY-LNFqrEHUB69zlVHaQlA1yRoaMS1zzu8hpJ6RL_CZ3ZptOKagLQuYEFXQM_BJdA2KFnNMGGiXxzKEpXjjgSe4ZUjFZbu8TuNn1Go2cBQyK7KFjO6IkH1ZSKlql99mmo7cv4qS2Du6L8JP86SZcmy-OblQ7k3WV7BXO-UgNLwVuFP06ixHDc6m--FSKkN5wJ0-39xhXFLGuymK-ASTj7VS0fqIH4I47hjIjkbfy0I4Qzf3fdWnD2D6bZV-4gmy1LqTLw_6CtDZZ0uUTHM43LrVRrnKyAuPEDXC_FgSRg7hKqVyIJ8v9jfm5s0pAftBfqkb_CPkuFEAhFhFTDCD-wLL9ES8dGdD9-tgpYjcjslZkS6sSBZDVF8qceFIU1hOayMFwkSruVPd31k2jNG0ab3447cEGzCYzZHlNpJUKVSV9DKcwhOk42XHmdpE-UfQjsWivnp-mHGr_b2SXi_hlopPuAJj4JCFeggrg4AuRxVcwXjL1ls0-69DHUOtiRdoCxWQ2dwTfcVfGHNUwgsgwnIgQbE_SdNcDkh8iD-gcO-yhLfHHk9YA8LhtsPIbcKVOjukmAtXGC7HEbYYQz12m5yr05qGsCMI0_ArdrgXyXn1njUKOsVq4uy0TFpulbaS1sE1eSrp-6wI0nAV-r4t0S0uga7-XLR2vRwUGy6OgFmjPT5Xv0fWslpTkHHzzsaiszxUkedAxRFiAACKCHm1IDCkW0D42Yxyp9_Rt_lmei31wuxR_Fz9DW1AUCP_0WJD3d_jJurWSUK7O2A03MgnSrOP_y-nc23Jf7drAHvqvOpqsyAiSvbEjnBJ7DCtlOccGLAhRyfpY60cZXjKfE3dIOq0KKS1Wb7yEgjnTTYELeWd0MW3-u-wxnCHKBu2DnUfHw2kqwhpx3-Gaoi4JjQ21R5lCSZC6OtXzXw6p-WpJxL2GUqxITTeZAk4zIgoGCW4-pIE27UCvMZOpQkTlaoAuK2XAiwsKM4N5yjHa1-G74VnllC1djlIynyWYZ1SSP9Qx8usm3XTh00mmmW5nV0P9TrH4KfbPu7cbyji5sdw9WeabWPcPBdtmdKB8Kwkn62FCFxxI5pM7yTK4TNNsRPQu7wWJP8nniSRqUeSkHlwB_SSUF46PxLj9rqe3YXAcOYGa7wIcr-qyppQvtoODRMkHAEtmqExQ6_RHor76bQisypHDA410pynibaNAv8TpUfNu18uUP0UVfvMda0tl2bL6O4W03_i-a_UbKdA6bMQYiSH6W6XeWQiuwnmcbGQoNQ-vozkdpuOU6Hbj4B-32ArOA4XXeycA_cSyetglWL3lTJJm-XJs2CnKCNSxOlav1NEqQMGLKoGhwaHEoYOsEppONhTpTM1PVIvZ_WJFRfYC5iEBlArojTk7xUX-48RX-b65sYMTuZkMPEe4Wrl8xp86lZuD8EsBTahXW2lR1sJgv1oO4T4O5gE3XKLLj3S2n1gP4yAGc44V-Gm-du73IuFUkwMFO4Kl7Vx9pdFfr1wM4TIc6HEvvYxFFIDP9ZyIxEPatdqahd-jGm1OKw0XNsNP7UAZ0rIny9htLbuB5E03R170D129aUVHouLITd9tF-E7LrjA5lGw-zWnJqzNPVW8KVUlLRkbjGdU0facOw3HGCOxJiLDknvIbJyhFSn_BmHO6mCYMQyjYzQSo9fjtO2GQAtxcBOyjLvE4gWblQE5StNckITFWNtDQyLaWE-_KsBW_p_jGFevAvbj7okPee5nihylXSuW49VzPmA0iqMOAZU3yO5UvLaiI-fCCkMmN4tpTm939gJW3FVDSWRyb0_dV5TzBR2C5lT6IWjbLsb7asr8Fwi4IsoPEL3KSrEQsu_xS-m2mpqOCSWIcpw5QCS9k5THxTBc9aqa3FQ8yhrmANXVfG7O48dilvflSE2hA4sX7GJ9Mrm5APcEozgttxvZaBpft_ZfRO3PPzi0t12enM8RO61xzASRAatBUMXYxoqdgJyx_FAafOtBKHsDwE71_gUKK-26oFdu1QQ5ePk5hxoDEUmR7r5SKOce6MbzPgK2XsECGK0vDOEt53vK-D_LQ-G1YCEdND2PQN3Q8FeWrRt5qdJbS83OLZ7tH5oE7ARMQDpdf9x8An0sVyKa2LTiaJJb1SuN9_-O6dUCfa_bXp4yqIL553dEWl67zoRjesGukGj_C31JFqjAXzd3ukBB9OEoTFeH6F1zB2_aM4gjMv67UdIaMYF7NTApcjuyf8VsRYVOTIMjmp1hT_CuFxf3ItACNGFZa1ZTkJ6Kl2g9_OWmyr83ZOdsLuyUfpeokO8pZi_DEY52ax8hwUkvDRPUFwOXkZf4SyMqrCknAbgYLoqoAk6bnKD8b1PqeHLoa6wBOeJBIS-jlA2lH7PvR0vPskDWVVnUt-ulLyzNWqZSdO6rJYOIGtNRFIT-rFBbdavmK1dnVqASkt41Wbc9g-G0sFiPxkzcobLtbmTmVIpXhlSyeVGgSuUCa0UsNERk5AxIuyRpqSWPtMUf4voVD5_GktrJwn_ScL1mFYKrgSqOFB9pWLWj7VnwpN3o2H2qrwWmZzeYUoBdmwk7UqPBjbAtkcOhuLZWZ9KQFBp4i4k6YydB1x5-CdX2RZr-tU_HqZ5euI0U_74_HBddwf65H5nXruGdGUfTyTxSfh0m50TAhc8dUyX1mLDUX22CA2TsD_Sv37W3d2SQMkcmbTMe1vuQqX8PCiMv950wPUWtkl1ncLd0Y5U671sFCPj9hxSu5kvi2Fr8dQ4x8w7PtHzyv3MLoB5a-WaXWKnlam_jZ0Xaxggu5cNw3Z16Qej3r_IovIC11d5uPQeWLOzeyGcl6bmPi8-4-e3Oo2M4qSfibG0OH5uc7EUZwV1iuSLXcHvXZiDuTMnZrQI7WoyxPkSMv5XW4aiZ-bzU0sLh2XfA-I9R9VJruHBlf1KKvSC0zDl7qr8wm1sSBFVZ7kMwF-ifWWRql6zHqP5pp4J_H58gM-5wrNc_xiSLOnBxGWWspUbKbQw5f_emHh27X8ITjsBqSEtihuwC_ZwdPo9GoouQ4yoCpehyG6Vt_T0K4ku8WasEKMa2-hBNjaexKEVfqCkKLEFfHMO7vw8zmwrGpR0da1yKhKJ4w9qE3DMbnYKqCQHNVw5wE-iQ9EMeWVmarBSRJ22rAEdYpZj6fK1fEcu1B-h4VVWEgjRFP9Ai6mMAzMBUVk-GjKKFjwu0xZ8bc5B8U-hCunp5J1spzGvA4j64MvujBUlbLOAZCBgN10QkTbWldPKLiRl_0oUPmyClGSPTMOKTahs_X8wS8_aU4Y6wR7BOtU9UZDB4IX0yaAD_OqfE03CUpiClsbUnUE8a3lnXnLBif7hRRRJBL30OZM_kj4K6CIn-c0APQpSA24gEhxpJ_31kWnRsvAtGBrySSOerDyMOeil2wBqLZGRS1nVR40k6oWUwdhbEghliAQNPXSihVQzqZXaT3dpItyqhkZlCA-Ojn7YwDNqdpMUumhqjok0vz1uUSI_iVMmIzOOl088FCHaH5XzSR_NU4lOXEf-cEQVJiAAojZx2-3uuovGSY6vhv86zAbFhb3DiDf34Hf1pLrtE3H62exr5kzp2vlKjq_C3nKNGOrZ94txB0XDj5OJa5FO81hBJoYdSX5uwyfpHvyoRIntIvy9K0itXvKKUrDrreCBMiOsDtBcCCmtC_gJMdcX6339edE8vKxkmhg4ROxgxTlo8SU6Meo8Buje_7TiXPoVNuex-hbOA2SAbt6Hs3rfU8_Ybk9rDSb-iDnUnzA00i62-yQmHFLJkPoGkTVHX4FfN-bxOMHPPZrgiFiyfQns944eNZYQ_jr_PpB3i26m5d6fuOr6Ei9g1LIqa0-dkbnV5wjtYfNUFIN6qgcDw2xgqm5C-aCHAL1yJ5TdLciX9kF2BsXQ1X8nlbAVHEmKz3ErupwleZmDqAR0DUTKrsNAGzQZYTIQCsFUVii-tqYxkDBJBveHDZuyVMZW6iC78u3GbxWirHSl-lnG2RdF8ZexvZ0UdlTR97FRsMSgfZa-AqU-CVOJ77uou1i1l7dnU8oDPiyqkT085d1lCM352LRNDXm2dBPAMf9ukN-xK_dBV0QelCDLpq_o4Of2RoeUHyD9Du_WIhRBs0f77U8B9BZCa3hrkJdaSCGzKbOazDnuzS1nU84HoodzaCHRX8NM_8R8DI5TAMUh3l1ldQ-u_QAQOfGBSWlUJ2b9qhRG2_lhX8jOu0jnIl7dF3IfXE6ZtdTBP3epUFujiNEmUervx6UWU7bLxWdI_nduu0GhQOaT3o2FRoG5wsDDKaseO-9yvB_LnXxJyPF8WvnQXYSAMGELUzBSATruKEnaWfnr3TBGdHoJzkg-uwdy9byELcwqJIscPO3QWDQpasJva8EFgcJhltieoG3LTlowrg1dGzJy58jcc5VWcK5h-GneqOjFeUz3RbnsVpZk-owsgoL6Wfxe2ZxKPhVVNMJSDGQFlzn-sL17-dDEdhQMNr0iimCQlQ-dzVvQQ_-5WShRhfSmRifFn5M8bcZlRGUV05eBv2_xnmsURmhgKNum3DdQrUig8BOAsOnJsHEGdd9tobn5ZJVB9F56lh7rjufpE8X7yWn4_IsRbFUeCs9qIMiUGmuJt_tm_i23i6wjaVrH9Z_AufyA1r2iHOZ5d2Llrf0vD7YpbqvNtdw75WgPycBdtRKJHTxIvk5sxjk35fE0PZwn7AtyKbn62RoeVKqtH6Bef4lfrlY2qBPo78uEc_x3OHRC1EXWvfmTi4xLTuQ56LOktaSl68slIqXhfqPDLp_DkSTgTAOk4hXeWHKc4gGTAWDPA6BtxerGZVNbCxmKuyco4S9ZsAMoXo_bmMBFrY_F1vfG5CKcn73CdyAX4KH2jKQDXOF5FAF_yFoT4_S8fVCCZUnf0ICkFqkN_MF7c_ZHsQZMa7b780Z0Eur6G66UP83tErYOwQWozOKn49rFmDg02SxttUwLYaTHcXaB2u5g-ZhH_Lv1wwNgsq9QDXi6nh00pwgD2zDGzXuRpBaj7LaKEXXvzSqZEv40wNEAkLN4uCQyHsIGfAu7nP8UbOUV8Hiho7D3Uqi8DQVKmph2iP18JP4B_gcsW1BKisOU4wVTbWxC1RdDAO5e22oqHOc01xc11-CKUoZLCLZwHUNyeh37uZ_X6no0rAge-HXa7ONmfykU-ltMw01AYa6aQrJ2i7thiG4YnLU5AIPjnO8SpPB2YHBxWeb8_lSWQbRCJd2zkln1xKwMxm2_7wZ2LdOrbFzXt2oJ4ad6oHcUrw9Uk3FV6JlfXuEElhgaQZNY3Ep3EssH3GU4msuvhbTd64bVRFdqEihtFkvwJmrAKACW8bCqJgD8bTRfWZ0JfsrXWTx6ISAvspUSmLyGj4r8-kDE5aYBQEnS0TJxrCaaEZNdiqqMNnXe8FWPADCxEYDZAvuyIVTthjkPZyFS1GzRe0rHo4iiD6OlncPQh88o2G0pdF4pULDvV8HXZQvh9QGnZRh9XTeoZOK0lyHMXIVIBQOvp4tnsyEs09IdCovs3UNhKNxJhl86shUQpFGsPx3xE7bWe9sZ99tSKqJt3gPVeCF5QUJUKsWQdc4n_YsN9Skqnoq1cenvo9XT-zRasRO3clpXL9Z0cAzgdlQ2XJJs7HiURKBmo=",
+      "summary": []
+    },
+    {
+      "id": "msg_0e836f25b59b114d006ad9821c491c87d0ae2db1b5ae64f665",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\n  \"passageId\": \"meaning-internalism-externalism\",\n  \"questions\": [\n    {\n      \"number\": 20,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"의미 내재주의에 의하면 의미는 지시체에 대한 기술구에 따라 결정된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-7\", \"P1-6\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"의미에 대한 전통적 관점에 의하면 대상에 대한 인간의 인식이 의미를 구성한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"의미 외재주의에 의하면 의미는 우리가 살고 있는 객관적인 외부 세계에 의해 결정된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"내재주의의 개인 인식 기반 의미관을 퍼트넘에게까지 확장한 것이 핵심 비틂이다.\",\n          \"parts\": [\n            {\n              \"quote\": \"의미 내재주의자와 퍼트넘 모두 개인이 부여한 의미의 주관성이 중요하다고 생각했다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-3\", \"P2-2\"],\n              \"inferenceBasisIds\": [\"P1-3\", \"P2-1\"],\n              \"twistType\": \"SCOPE_EXTEND\",\n              \"twistDetail\": \"개인의 인식에 기반한 의미관을 이를 비판한 퍼트넘에게까지 확장\",\n              \"evidenceQuote\": \"퍼트넘은 기술구가 결정하는 의미가 객관적이지 않다고 비판하며\",\n              \"choiceQuote\": \"의미 내재주의자와 퍼트넘 모두\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"퍼트넘은 의미 내재주의자와 달리\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R6\"],\n              \"contextIds\": [\"P1-2\", \"P2-2\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"외부 세계를 구성하는 지시체가 의미를 결정한다고 주장했다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-3\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 21,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"같은 물질이라는 설정 변경과, 화학식의 표현 차이를 의미 차이의 이유로 삼은 변경을 구분했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"두 지구의 물이 같은 물질이더라도\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-9\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-5\", \"P3-6\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"NEGATION\",\n              \"twistDetail\": \"서로 다른 물질이라는 설정을 같은 물질로\",\n              \"evidenceQuote\": \"어떤 대상에 대한 사람들의 생각과 느낌이 동일해도 대상 자체가 다를 수 있음을\",\n              \"choiceQuote\": \"같은 물질\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"두 지구의 사람들이 이를 서로 다른 화학식으로 표현하고 있기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"R12\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-5\", \"P3-6\", \"P3-8\"],\n              \"inferenceBasisIds\": [\"P3-5\", \"P3-6\", \"P3-8\"],\n              \"twistType\": \"CAUSE_SWAP\",\n              \"twistDetail\": \"지시체 자체의 차이를 화학식 표현 방식의 차이로\",\n              \"evidenceQuote\": \"그런데 화학식이 H2O인 지구의 물과 달리, 쌍둥이 지구에서 물이라 불리는 대상은 화학식이 XYZ인 물질이라고 밝혀졌다면, 물에 대해 사람들이 제시하는 기술구는 동일할 수 있지만 두 지구의 ‘물’의 의미는 같지 않다.\",\n              \"choiceQuote\": \"서로 다른 화학식으로 표현하고 있기 때문이다\",\n              \"relationTypeChange\": {\n                \"original\": \"CONDITION\",\n                \"claimed\": \"GROUNDS\"\n              }\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"두 지구의 사람들이 물에 대해 가진 인식이 같더라도\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-4\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"두 지구의 물은 서로 다른 지시체이기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R12\", \"P2-3\"],\n              \"contextIds\": [\"P3-8\"],\n              \"inferenceBasisIds\": [\"P3-5\", \"P3-6\", \"P2-3\"],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"㉠을 설명하는 퍼트넘의 입장 자리에 의미 내재주의의 의미 결정 요인을 넣었다.\",\n          \"parts\": [\n            {\n              \"quote\": \"두 지구의 사람들이 물에 대해 가진 생각과 느낌이 물의 의미를 결정하기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-10\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-2\", \"P3-8\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"HOLDER_SWAP\",\n              \"twistDetail\": \"내재주의의 생각과 느낌에 의한 의미 결정을 퍼트넘의 설명으로\",\n              \"evidenceQuote\": \"의미는 인간의 인식이 아닌 외부 세계를 구성하는 대상에 의해 결정된다는 것을\",\n              \"choiceQuote\": \"생각과 느낌이 물의 의미를 결정하기 때문이다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"두 지구의 물이 다른 물질이더라도\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-5\", \"P3-6\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"기술구가 같으면 같은 물질이기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-9\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-7\", \"P3-8\"],\n              \"inferenceBasisIds\": [\"P3-7\", \"P3-9\"],\n              \"twistType\": \"CONFLATION\",\n              \"twistDetail\": \"기술구의 동일성과 물질 자체의 동일성을 혼동\",\n              \"evidenceQuote\": \"어떤 대상에 대한 사람들의 생각과 느낌이 동일해도 대상 자체가 다를 수 있음을\",\n              \"choiceQuote\": \"기술구가 같으면 같은 물질\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"두 지구의 사람들이 가진 물에 대한 인식에 차이가 있기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-4\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-8\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"NEGATION\",\n              \"twistDetail\": \"물에 대한 인식의 동일성을 차이로\",\n              \"evidenceQuote\": \"두 지구의 사람들이 물에 대해 가진 생각과 느낌은 동일하다.\",\n              \"choiceQuote\": \"인식에 차이가 있기 때문이다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 22,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [\n        {\n          \"id\": \"S1a\",\n          \"parentId\": \"S1\",\n          \"quote\": \"몰리브데넘은 자연에 존재하는 금속\"\n        },\n        {\n          \"id\": \"S1b\",\n          \"parentId\": \"S1\",\n          \"quote\": \"알루미늄과 속성 및 용도가 매우 유사하다.\"\n        },\n        {\n          \"id\": \"S3a\",\n          \"parentId\": \"S3\",\n          \"quote\": \"일반인들은 몰리브데넘 냄비와 알루미늄 냄비를 구별할 수 없으나\"\n        },\n        {\n          \"id\": \"S3b\",\n          \"parentId\": \"S3\",\n          \"quote\": \"전문가들은 테스트를 통해 이를 간단히 구별한다.\"\n        }\n      ],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"몰리브데넘과 알루미늄의 속성이 비슷하더라도\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1b\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"실제적 본성에는 차이가 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2\", \"P4-2\", \"P4-4\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"원소 기호로 드러난 두 물질의 차이를 실제적 본성을 알리는 과학적 발견에 대응시켰다.\",\n          \"parts\": [\n            {\n              \"quote\": \"두 금속의 원소를 밝혀낸 과학적 발견을 통해 몰리브데넘과 알루미늄의 본질적 구조가 드러났겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2\", \"P4-2\", \"P4-3\", \"P4-7\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"몰리브데넘과 알루미늄을 구별할 수 있는 소수의 전문가는\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S3b\", \"P4-8\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"단어가 의미하는 대상의 차이를 인지하며 단어를 사용하겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2\", \"S3b\", \"P4-7\", \"P4-1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"발견 상황 자체가 아니라, 언어 사용을 위한 협업을 의미를 결정하기 위한 협업으로 바꾼 부분이 비틂이다.\",\n          \"parts\": [\n            {\n              \"quote\": \"자연 상태에 있던 몰리브데넘과 알루미늄이 발견되면\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1a\", \"P4-5\"],\n              \"contextIds\": [\"S2\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"두 금속의 의미를 결정하기 위해서 언어 공동체의 협업이 필요하겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-10\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S2\", \"S3\", \"P4-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"SUBSTITUTION\",\n              \"twistDetail\": \"언어적 협업의 목적을 언어 사용에서 의미 결정으로\",\n              \"evidenceQuote\": \"퍼트넘은 언어 사용을 위해 언어 공동체에서 일상적으로 이루어지는 언어적 협업을 ‘언어적 노동 분업’이라고 불렀다.\",\n              \"choiceQuote\": \"두 금속의 의미를 결정하기 위해서\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"전문가의 안내에 따라 일반인들이 몰리브데넘과 알루미늄이라는 단어를 구별하여 사용하게 된다면\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S3a\", \"S3b\", \"P4-7\", \"P4-9\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"언어적 노동 분업이 이루어진 것이겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S3\", \"P4-10\", \"R25\"],\n              \"contextIds\": [\"C4-4\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 23,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [\n        {\n          \"id\": \"S2a\",\n          \"parentId\": \"S2\",\n          \"quote\": \"‘도깨비’와 같이 외부 세계에서 존재하지 않는 대상을 지시하는 단어\"\n        },\n        {\n          \"id\": \"S2b\",\n          \"parentId\": \"S2\",\n          \"quote\": \"분명히 그 단어만의 의미를 지닌다.\"\n        }\n      ],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"단어의 의미를 구별할 때 외부 세계에 대한 관습적 사고에서 벗어나지 못했다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S2\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"NEGATION\",\n              \"twistDetail\": \"관습적 사고가 아닌 실제적 본성에 의한 설명을 관습적 사고에 머문 설명으로\",\n              \"evidenceQuote\": \"퍼트넘은 한 단어의 의미는 관습적 사고가 아닌 단어가 지시하는 외부 세계의 대상이 가진 ‘실제적 본성’에 의해 결정된다고 생각했다.\",\n              \"choiceQuote\": \"관습적 사고에서 벗어나지 못했다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"실제적 본성이 의미를 결정한다는 퍼트넘의 설명에서 이끌어지는 내용을 그가 간과했다고 뒤집었다.\",\n          \"parts\": [\n            {\n              \"quote\": \"대상의 본질이 달라지면 그 대상을 나타내는 단어의 의미 역시 달라진다는 점을 간과했다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-8\", \"S2\"],\n              \"inferenceBasisIds\": [\"P4-1\", \"P4-2\", \"P3-8\"],\n              \"twistType\": \"NEGATION\",\n              \"twistDetail\": \"실제적 본성에 따른 의미 차이의 주장을 그 차이의 간과로\",\n              \"evidenceQuote\": \"퍼트넘은 한 단어의 의미는 관습적 사고가 아닌 단어가 지시하는 외부 세계의 대상이 가진 ‘실제적 본성’에 의해 결정된다고 생각했다.\",\n              \"choiceQuote\": \"간과했다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"단어의 의미를 아는 데 있어 외부 세계에 실재하는 대상의 본질을 밝히는 것을 도외시했다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"C4-1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S2\"],\n              \"inferenceBasisIds\": [\"P4-1\", \"P4-2\", \"P4-3\"],\n              \"twistType\": \"NEGATION\",\n              \"twistDetail\": \"실제적 본성과 그 과학적 발견의 중시를 본질 규명의 도외시로\",\n              \"evidenceQuote\": \"퍼트넘은 한 단어의 의미는 관습적 사고가 아닌 단어가 지시하는 외부 세계의 대상이 가진 ‘실제적 본성’에 의해 결정된다고 생각했다. 실제적 본성은 대상 속에 숨겨진 본질적 구조로 과학적 발견을 통해 알려진다.\",\n              \"choiceQuote\": \"대상의 본질을 밝히는 것을 도외시했다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"명제 자체의 내용은 퍼트넘의 입장에 가깝지만, 발문이 요구한 〈보기〉의 비판으로 제시하면 입장의 주인이 바뀐다. 〈보기〉는 외부 대상에 의한 의미 결정의 설명 한계를 지적한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"대상에 대해 사람들이 부여한 의미보다 대상 그 자체를 아는 것이 단어의 의미 결정에 중요하다.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S2\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-3\", \"P4-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"HOLDER_SWAP\",\n              \"twistDetail\": \"퍼트넘의 외부 대상 중심 입장을 〈보기〉의 비판 입장으로\",\n              \"evidenceQuote\": \"그러나 ‘도깨비’와 같이 외부 세계에서 존재하지 않는 대상을 지시하는 단어도 분명히 그 단어만의 의미를 지닌다.\",\n              \"choiceQuote\": \"대상 그 자체를 아는 것이 단어의 의미 결정에 중요하다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"readingGap\": \"IMPLICIT_PREMISE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"〈보기〉는 도깨비를 외부 세계에 존재하지 않는 대상으로만 명시한다. 이를 선지의 '인간의 상상으로 만들어진 단어들'에 대응시키려면 도깨비 같은 비실재 대상이 인간의 상상 산물이라는 상식 전제가 필요하다.\",\n          \"parts\": [\n            {\n              \"quote\": \"외부 세계가 의미 결정에 필수적이라면\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-2\", \"P2-3\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P2-2\", \"P2-3\"],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"인간의 상상으로 만들어진 단어들의 의미는 설명할 수가 없다.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2a\", \"S2b\", \"P2-3\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": "24h",
+  "reasoning": {
+    "context": "all_turns",
+    "effort": "medium",
+    "mode": "standard",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "description": null,
+      "name": "choice_link_v4",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "passageId": {
+            "type": "string"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "stemPolarity": {
+                  "type": "string",
+                  "enum": [
+                    "SELECT_INCORRECT",
+                    "SELECT_CORRECT",
+                    "OTHER"
+                  ]
+                },
+                "extraSegments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "parentId": {
+                        "type": "string"
+                      },
+                      "quote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parentId",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "choices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "number": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "readingGap": {
+                        "type": "string",
+                        "enum": [
+                          "NONE",
+                          "IMPLICIT_PREMISE",
+                          "STRICT_READING"
+                        ]
+                      },
+                      "explanationAgreement": {
+                        "type": "string",
+                        "enum": [
+                          "AGREE",
+                          "DIFFER",
+                          "NO_EXPLANATION"
+                        ]
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "parts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "quote": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "PASSAGE",
+                                "SUPPLEMENT",
+                                "BOTH",
+                                "NONE"
+                              ]
+                            },
+                            "operation": {
+                              "type": "string",
+                              "enum": [
+                                "RESTATE",
+                                "INFER",
+                                "APPLY"
+                              ]
+                            },
+                            "twisted": {
+                              "type": "boolean"
+                            },
+                            "twistTargetIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "supportIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "contextIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "inferenceBasisIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "twistType": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "NEGATION",
+                                    "DIRECTION",
+                                    "SUBSTITUTION",
+                                    "CONFLATION",
+                                    "CAUSE_SWAP",
+                                    "WRONG_REASON",
+                                    "CONDITION_SHIFT",
+                                    "HOLDER_SWAP",
+                                    "PAIR_SWAP",
+                                    "ABSOLUTIZE",
+                                    "SCOPE_EXTEND",
+                                    "DEGREE",
+                                    "ADDED_CONTENT",
+                                    "ADDED_METHOD",
+                                    "OTHER"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "twistDetail": {
+                              "type": "string"
+                            },
+                            "evidenceQuote": {
+                              "type": "string"
+                            },
+                            "choiceQuote": {
+                              "type": "string"
+                            },
+                            "relationTypeChange": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "original": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CAUSE",
+                                        "PROCESS",
+                                        "CONDITION",
+                                        "MEANS_END",
+                                        "CONTRAST",
+                                        "PARALLEL",
+                                        "CLASSIFICATION",
+                                        "GROUNDS",
+                                        "ELABORATION",
+                                        "APPLICATION",
+                                        "DEFINITION",
+                                        "CONCESSION",
+                                        "PROBLEM_RESPONSE",
+                                        "VIEW_DIFFERENCE",
+                                        "VIEW_AGREEMENT",
+                                        "CRITIQUE",
+                                        "INTERPRETATION",
+                                        "BACKGROUND",
+                                        "DEVELOPMENT",
+                                        "OTHER"
+                                      ]
+                                    },
+                                    "claimed": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CAUSE",
+                                        "PROCESS",
+                                        "CONDITION",
+                                        "MEANS_END",
+                                        "CONTRAST",
+                                        "PARALLEL",
+                                        "CLASSIFICATION",
+                                        "GROUNDS",
+                                        "ELABORATION",
+                                        "APPLICATION",
+                                        "DEFINITION",
+                                        "CONCESSION",
+                                        "PROBLEM_RESPONSE",
+                                        "VIEW_DIFFERENCE",
+                                        "VIEW_AGREEMENT",
+                                        "CRITIQUE",
+                                        "INTERPRETATION",
+                                        "BACKGROUND",
+                                        "DEVELOPMENT",
+                                        "OTHER"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "original",
+                                    "claimed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "quote",
+                            "source",
+                            "operation",
+                            "twisted",
+                            "twistTargetIds",
+                            "supportIds",
+                            "contextIds",
+                            "inferenceBasisIds",
+                            "twistType",
+                            "twistDetail",
+                            "evidenceQuote",
+                            "choiceQuote",
+                            "relationTypeChange"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "number",
+                      "readingGap",
+                      "explanationAgreement",
+                      "note",
+                      "parts"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "number",
+                "stemPolarity",
+                "extraSegments",
+                "choices"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "passageId",
+          "questions"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tool_usage": {
+    "image_gen": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "web_search": {
+      "num_requests": 0
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 16811,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 16808
+    },
+    "output_tokens": 6751,
+    "output_tokens_details": {
+      "reasoning_tokens": 516
+    },
+    "total_tokens": 23562
+  },
+  "user": null,
+  "metadata": {},
+  "output_text": "{\n  \"passageId\": \"meaning-internalism-externalism\",\n  \"questions\": [\n    {\n      \"number\": 20,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"의미 내재주의에 의하면 의미는 지시체에 대한 기술구에 따라 결정된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-7\", \"P1-6\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"의미에 대한 전통적 관점에 의하면 대상에 대한 인간의 인식이 의미를 구성한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"의미 외재주의에 의하면 의미는 우리가 살고 있는 객관적인 외부 세계에 의해 결정된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"내재주의의 개인 인식 기반 의미관을 퍼트넘에게까지 확장한 것이 핵심 비틂이다.\",\n          \"parts\": [\n            {\n              \"quote\": \"의미 내재주의자와 퍼트넘 모두 개인이 부여한 의미의 주관성이 중요하다고 생각했다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-3\", \"P2-2\"],\n              \"inferenceBasisIds\": [\"P1-3\", \"P2-1\"],\n              \"twistType\": \"SCOPE_EXTEND\",\n              \"twistDetail\": \"개인의 인식에 기반한 의미관을 이를 비판한 퍼트넘에게까지 확장\",\n              \"evidenceQuote\": \"퍼트넘은 기술구가 결정하는 의미가 객관적이지 않다고 비판하며\",\n              \"choiceQuote\": \"의미 내재주의자와 퍼트넘 모두\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"퍼트넘은 의미 내재주의자와 달리\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R6\"],\n              \"contextIds\": [\"P1-2\", \"P2-2\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"외부 세계를 구성하는 지시체가 의미를 결정한다고 주장했다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-3\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 21,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"같은 물질이라는 설정 변경과, 화학식의 표현 차이를 의미 차이의 이유로 삼은 변경을 구분했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"두 지구의 물이 같은 물질이더라도\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-9\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-5\", \"P3-6\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"NEGATION\",\n              \"twistDetail\": \"서로 다른 물질이라는 설정을 같은 물질로\",\n              \"evidenceQuote\": \"어떤 대상에 대한 사람들의 생각과 느낌이 동일해도 대상 자체가 다를 수 있음을\",\n              \"choiceQuote\": \"같은 물질\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"두 지구의 사람들이 이를 서로 다른 화학식으로 표현하고 있기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"R12\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-5\", \"P3-6\", \"P3-8\"],\n              \"inferenceBasisIds\": [\"P3-5\", \"P3-6\", \"P3-8\"],\n              \"twistType\": \"CAUSE_SWAP\",\n              \"twistDetail\": \"지시체 자체의 차이를 화학식 표현 방식의 차이로\",\n              \"evidenceQuote\": \"그런데 화학식이 H2O인 지구의 물과 달리, 쌍둥이 지구에서 물이라 불리는 대상은 화학식이 XYZ인 물질이라고 밝혀졌다면, 물에 대해 사람들이 제시하는 기술구는 동일할 수 있지만 두 지구의 ‘물’의 의미는 같지 않다.\",\n              \"choiceQuote\": \"서로 다른 화학식으로 표현하고 있기 때문이다\",\n              \"relationTypeChange\": {\n                \"original\": \"CONDITION\",\n                \"claimed\": \"GROUNDS\"\n              }\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"두 지구의 사람들이 물에 대해 가진 인식이 같더라도\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-4\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"두 지구의 물은 서로 다른 지시체이기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R12\", \"P2-3\"],\n              \"contextIds\": [\"P3-8\"],\n              \"inferenceBasisIds\": [\"P3-5\", \"P3-6\", \"P2-3\"],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"㉠을 설명하는 퍼트넘의 입장 자리에 의미 내재주의의 의미 결정 요인을 넣었다.\",\n          \"parts\": [\n            {\n              \"quote\": \"두 지구의 사람들이 물에 대해 가진 생각과 느낌이 물의 의미를 결정하기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-10\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-2\", \"P3-8\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"HOLDER_SWAP\",\n              \"twistDetail\": \"내재주의의 생각과 느낌에 의한 의미 결정을 퍼트넘의 설명으로\",\n              \"evidenceQuote\": \"의미는 인간의 인식이 아닌 외부 세계를 구성하는 대상에 의해 결정된다는 것을\",\n              \"choiceQuote\": \"생각과 느낌이 물의 의미를 결정하기 때문이다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"두 지구의 물이 다른 물질이더라도\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-5\", \"P3-6\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"기술구가 같으면 같은 물질이기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-9\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-7\", \"P3-8\"],\n              \"inferenceBasisIds\": [\"P3-7\", \"P3-9\"],\n              \"twistType\": \"CONFLATION\",\n              \"twistDetail\": \"기술구의 동일성과 물질 자체의 동일성을 혼동\",\n              \"evidenceQuote\": \"어떤 대상에 대한 사람들의 생각과 느낌이 동일해도 대상 자체가 다를 수 있음을\",\n              \"choiceQuote\": \"기술구가 같으면 같은 물질\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"두 지구의 사람들이 가진 물에 대한 인식에 차이가 있기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-4\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-8\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"NEGATION\",\n              \"twistDetail\": \"물에 대한 인식의 동일성을 차이로\",\n              \"evidenceQuote\": \"두 지구의 사람들이 물에 대해 가진 생각과 느낌은 동일하다.\",\n              \"choiceQuote\": \"인식에 차이가 있기 때문이다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 22,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [\n        {\n          \"id\": \"S1a\",\n          \"parentId\": \"S1\",\n          \"quote\": \"몰리브데넘은 자연에 존재하는 금속\"\n        },\n        {\n          \"id\": \"S1b\",\n          \"parentId\": \"S1\",\n          \"quote\": \"알루미늄과 속성 및 용도가 매우 유사하다.\"\n        },\n        {\n          \"id\": \"S3a\",\n          \"parentId\": \"S3\",\n          \"quote\": \"일반인들은 몰리브데넘 냄비와 알루미늄 냄비를 구별할 수 없으나\"\n        },\n        {\n          \"id\": \"S3b\",\n          \"parentId\": \"S3\",\n          \"quote\": \"전문가들은 테스트를 통해 이를 간단히 구별한다.\"\n        }\n      ],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"몰리브데넘과 알루미늄의 속성이 비슷하더라도\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1b\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"실제적 본성에는 차이가 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2\", \"P4-2\", \"P4-4\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"원소 기호로 드러난 두 물질의 차이를 실제적 본성을 알리는 과학적 발견에 대응시켰다.\",\n          \"parts\": [\n            {\n              \"quote\": \"두 금속의 원소를 밝혀낸 과학적 발견을 통해 몰리브데넘과 알루미늄의 본질적 구조가 드러났겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2\", \"P4-2\", \"P4-3\", \"P4-7\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"몰리브데넘과 알루미늄을 구별할 수 있는 소수의 전문가는\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S3b\", \"P4-8\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"단어가 의미하는 대상의 차이를 인지하며 단어를 사용하겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2\", \"S3b\", \"P4-7\", \"P4-1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"발견 상황 자체가 아니라, 언어 사용을 위한 협업을 의미를 결정하기 위한 협업으로 바꾼 부분이 비틂이다.\",\n          \"parts\": [\n            {\n              \"quote\": \"자연 상태에 있던 몰리브데넘과 알루미늄이 발견되면\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1a\", \"P4-5\"],\n              \"contextIds\": [\"S2\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"두 금속의 의미를 결정하기 위해서 언어 공동체의 협업이 필요하겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-10\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S2\", \"S3\", \"P4-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"SUBSTITUTION\",\n              \"twistDetail\": \"언어적 협업의 목적을 언어 사용에서 의미 결정으로\",\n              \"evidenceQuote\": \"퍼트넘은 언어 사용을 위해 언어 공동체에서 일상적으로 이루어지는 언어적 협업을 ‘언어적 노동 분업’이라고 불렀다.\",\n              \"choiceQuote\": \"두 금속의 의미를 결정하기 위해서\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"전문가의 안내에 따라 일반인들이 몰리브데넘과 알루미늄이라는 단어를 구별하여 사용하게 된다면\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S3a\", \"S3b\", \"P4-7\", \"P4-9\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"언어적 노동 분업이 이루어진 것이겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S3\", \"P4-10\", \"R25\"],\n              \"contextIds\": [\"C4-4\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 23,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [\n        {\n          \"id\": \"S2a\",\n          \"parentId\": \"S2\",\n          \"quote\": \"‘도깨비’와 같이 외부 세계에서 존재하지 않는 대상을 지시하는 단어\"\n        },\n        {\n          \"id\": \"S2b\",\n          \"parentId\": \"S2\",\n          \"quote\": \"분명히 그 단어만의 의미를 지닌다.\"\n        }\n      ],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"단어의 의미를 구별할 때 외부 세계에 대한 관습적 사고에서 벗어나지 못했다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S2\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"NEGATION\",\n              \"twistDetail\": \"관습적 사고가 아닌 실제적 본성에 의한 설명을 관습적 사고에 머문 설명으로\",\n              \"evidenceQuote\": \"퍼트넘은 한 단어의 의미는 관습적 사고가 아닌 단어가 지시하는 외부 세계의 대상이 가진 ‘실제적 본성’에 의해 결정된다고 생각했다.\",\n              \"choiceQuote\": \"관습적 사고에서 벗어나지 못했다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"실제적 본성이 의미를 결정한다는 퍼트넘의 설명에서 이끌어지는 내용을 그가 간과했다고 뒤집었다.\",\n          \"parts\": [\n            {\n              \"quote\": \"대상의 본질이 달라지면 그 대상을 나타내는 단어의 의미 역시 달라진다는 점을 간과했다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-8\", \"S2\"],\n              \"inferenceBasisIds\": [\"P4-1\", \"P4-2\", \"P3-8\"],\n              \"twistType\": \"NEGATION\",\n              \"twistDetail\": \"실제적 본성에 따른 의미 차이의 주장을 그 차이의 간과로\",\n              \"evidenceQuote\": \"퍼트넘은 한 단어의 의미는 관습적 사고가 아닌 단어가 지시하는 외부 세계의 대상이 가진 ‘실제적 본성’에 의해 결정된다고 생각했다.\",\n              \"choiceQuote\": \"간과했다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"단어의 의미를 아는 데 있어 외부 세계에 실재하는 대상의 본질을 밝히는 것을 도외시했다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"C4-1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S2\"],\n              \"inferenceBasisIds\": [\"P4-1\", \"P4-2\", \"P4-3\"],\n              \"twistType\": \"NEGATION\",\n              \"twistDetail\": \"실제적 본성과 그 과학적 발견의 중시를 본질 규명의 도외시로\",\n              \"evidenceQuote\": \"퍼트넘은 한 단어의 의미는 관습적 사고가 아닌 단어가 지시하는 외부 세계의 대상이 가진 ‘실제적 본성’에 의해 결정된다고 생각했다. 실제적 본성은 대상 속에 숨겨진 본질적 구조로 과학적 발견을 통해 알려진다.\",\n              \"choiceQuote\": \"대상의 본질을 밝히는 것을 도외시했다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"readingGap\": \"NONE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"명제 자체의 내용은 퍼트넘의 입장에 가깝지만, 발문이 요구한 〈보기〉의 비판으로 제시하면 입장의 주인이 바뀐다. 〈보기〉는 외부 대상에 의한 의미 결정의 설명 한계를 지적한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"대상에 대해 사람들이 부여한 의미보다 대상 그 자체를 아는 것이 단어의 의미 결정에 중요하다.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S2\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-3\", \"P4-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistType\": \"HOLDER_SWAP\",\n              \"twistDetail\": \"퍼트넘의 외부 대상 중심 입장을 〈보기〉의 비판 입장으로\",\n              \"evidenceQuote\": \"그러나 ‘도깨비’와 같이 외부 세계에서 존재하지 않는 대상을 지시하는 단어도 분명히 그 단어만의 의미를 지닌다.\",\n              \"choiceQuote\": \"대상 그 자체를 아는 것이 단어의 의미 결정에 중요하다\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"readingGap\": \"IMPLICIT_PREMISE\",\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"〈보기〉는 도깨비를 외부 세계에 존재하지 않는 대상으로만 명시한다. 이를 선지의 '인간의 상상으로 만들어진 단어들'에 대응시키려면 도깨비 같은 비실재 대상이 인간의 상상 산물이라는 상식 전제가 필요하다.\",\n          \"parts\": [\n            {\n              \"quote\": \"외부 세계가 의미 결정에 필수적이라면\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-2\", \"P2-3\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P2-2\", \"P2-3\"],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"인간의 상상으로 만들어진 단어들의 의미는 설명할 수가 없다.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2a\", \"S2b\", \"P2-3\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistType\": null,\n              \"twistDetail\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+}

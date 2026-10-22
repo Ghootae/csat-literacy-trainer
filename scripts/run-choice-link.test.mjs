@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { loadPassage } from './run-analysis-map-gongsun.mjs';
-import { splitSupplement, supplementSegments, loadQuestion, stemPolarity, readingGapStats, loadTargets, buildInput, buildRequest, redactImages, validateChoiceLink, exampleOutput, stability, main, summarize, renderReport, OutputSchema, maxOutputTokens } from './run-choice-link.mjs';
+import { TWIST_TYPES, TWIST_BRANCH, TWIST_KO, typeStability, splitSupplement, supplementSegments, loadQuestion, stemPolarity, isVocabulary, readingGapStats, loadTargets, buildInput, buildRequest, redactImages, validateChoiceLink, exampleOutput, stability, main, summarize, renderReport, OutputSchema, maxOutputTokens } from './run-choice-link.mjs';
 
 const PASSAGE_ID = 'gongsun-long-later-mohists', SET = 'setx', passagesDir = 'packages/pipeline/fixtures/experiments/dialogue/passages';
 const { passage } = loadPassage(passagesDir, PASSAGE_ID);
@@ -101,6 +101,26 @@ test('stemPolarity rule', () => {
   assert.equal(stemPolarity('이해로 적절하지 않은 것은?'), 'SELECT_INCORRECT');
   assert.equal(stemPolarity('가장 적절한 것은?'), 'SELECT_CORRECT');
   assert.equal(stemPolarity('옳은 것은?'), 'OTHER');
+  assert.equal(stemPolarity('윗글의 내용과 일치하지 않는 것은?'), 'SELECT_INCORRECT');
+  assert.equal(stemPolarity('윗글의 내용과 일치하는 것은?'), 'SELECT_CORRECT');
+  assert.equal(stemPolarity('<보기>를 바탕으로 이해한 내용으로 적절하지 않은 것은?'), 'SELECT_INCORRECT', 'UI-style stem keeps its v3 polarity');
+});
+test('stemPolarity regression: UI passage questions keep their v3 polarity (real DB stems)', () => {
+  const dir = '/Users/mac/Projects/suneung_db/output/questions';
+  if (!existsSync(dir)) return;
+  const v3 = stem => stem.includes('적절하지 않은') ? 'SELECT_INCORRECT' : /적절한/u.test(stem) ? 'SELECT_CORRECT' : 'OTHER';
+  const targets = JSON.parse(readFileSync('docs/experiments/choice-link-2026-10-22/targets-ui.json', 'utf8'));
+  let n = 0;
+  for (const t of targets) for (const q of JSON.parse(readFileSync(t.questionsPath, 'utf8')).questions.filter(x => !isVocabulary(x))) {
+    const stem = q.prompt_blocks.filter(b => b.type === 'stem').map(b => b.text.trim()).join('\n');
+    assert.equal(stemPolarity(stem), v3(stem), `${t.passageId} q${q.number}`); n++;
+  }
+  assert.equal(n, 24);
+});
+test('twist constants: 15 types in order, every type has a branch and a Korean name', () => {
+  assert.deepEqual(TWIST_TYPES, ['NEGATION', 'DIRECTION', 'SUBSTITUTION', 'CONFLATION', 'CAUSE_SWAP', 'WRONG_REASON', 'CONDITION_SHIFT', 'HOLDER_SWAP', 'PAIR_SWAP', 'ABSOLUTIZE', 'SCOPE_EXTEND', 'DEGREE', 'ADDED_CONTENT', 'ADDED_METHOD', 'OTHER']);
+  for (const t of TWIST_TYPES) { assert.ok(TWIST_BRANCH[t] !== undefined, t); assert.ok(TWIST_KO[t], t); }
+  assert.deepEqual([TWIST_BRANCH.NEGATION, TWIST_BRANCH.CAUSE_SWAP, TWIST_BRANCH.PAIR_SWAP, TWIST_BRANCH.DEGREE, TWIST_BRANCH.ADDED_METHOD, TWIST_BRANCH.OTHER], [1, 2, 3, 4, 5, '기타']);
 });
 
 // Real gongsun q12 supplement block (set 69c011fd78128b2a9beddd5e).
@@ -148,7 +168,7 @@ test('validation 1: question and choice numbers', () => {
   assert.equal(item(validateChoiceLink(c.out, c.ctx), 1).pass, false);
 });
 test('validation 2: cover, overlap, gap of 3 hangul fails and 2 passes, whitespace-normalized info', () => {
-  const run = parts => { const x = fresh(); x.out.questions[0].choices[0].parts = parts.map(quote => ({ ...x.out.questions[0].choices[0].parts[0], quote, choiceQuote: '', twisted: false, twistName: '' })); return item(validateChoiceLink(x.out, x.ctx), 2); };
+  const run = parts => { const x = fresh(); x.out.questions[0].choices[0].parts = parts.map(quote => ({ ...x.out.questions[0].choices[0].parts[0], quote, choiceQuote: '', twisted: false, twistType: null, twistDetail: '' })); return item(validateChoiceLink(x.out, x.ctx), 2); };
   assert.equal(run(['후기 묵가는', '이름을 달명이라고 하였다.']).pass, true);
   assert.equal(run(['묵가는 이름을 달명이라고 하였다.']).pass, true, 'leading gap "후기" (2 hangul)');
   assert.equal(run(['후기 묵가는', '달명이라고 하였다.']).pass, false, 'gap "이름을" (3 hangul)');
@@ -167,12 +187,15 @@ test('validation 3: extra segments', () => {
   }
 });
 test('validation 4: id existence, source and operation rules', () => {
-  const set = mut => { const x = fresh(); const p = x.out.questions[1].choices[0].parts[0]; p.twisted = false; p.twistName = ''; p.choiceQuote = ''; mut(p); return item(validateChoiceLink(x.out, x.ctx), 4); };
+  const set = mut => { const x = fresh(); const p = x.out.questions[1].choices[0].parts[0]; p.twisted = false; p.twistType = null; p.twistDetail = ''; p.choiceQuote = ''; mut(p); return item(validateChoiceLink(x.out, x.ctx), 4); };
   const ok = p => Object.assign(p, { source: 'PASSAGE', supportIds: ['P1-1'] });
   assert.equal(set(ok).pass, true);
   assert.equal(set(p => Object.assign(p, { source: 'PASSAGE', supportIds: ['P9'] })).pass, false, 'unknown id');
   assert.equal(set(p => Object.assign(p, { source: 'PASSAGE', supportIds: ['S1'] })).pass, false, 'PASSAGE with supplement id');
+  assert.equal(set(p => Object.assign(p, { source: 'PASSAGE', supportIds: ['P1-1'], contextIds: ['S1'] })).pass, true, 'v5: PASSAGE may carry supplement contextIds');
+  assert.equal(set(p => Object.assign(p, { source: 'PASSAGE', supportIds: ['P1-1'], contextIds: ['S9'] })).pass, false, 'unknown context id');
   assert.equal(set(p => Object.assign(p, { source: 'SUPPLEMENT', supportIds: ['S1'] })).pass, true);
+  assert.equal(set(p => Object.assign(p, { source: 'SUPPLEMENT', supportIds: ['S1'], contextIds: ['P1-1'] })).pass, true, 'v5: SUPPLEMENT may carry map contextIds');
   assert.equal(set(p => Object.assign(p, { source: 'SUPPLEMENT', supportIds: ['P1-1'] })).pass, false);
   assert.equal(set(p => Object.assign(p, { source: 'BOTH', supportIds: ['P1-1'] })).pass, false);
   assert.equal(set(p => Object.assign(p, { source: 'BOTH', supportIds: ['P1-1', 'F1'] })).pass, true);
@@ -189,16 +212,18 @@ test('validation 4: id existence, source and operation rules', () => {
   assert.equal(set(p => Object.assign(p, { source: 'BOTH', twisted: true, twistTargetIds: ['S1'], contextIds: ['P1-1'], operation: 'APPLY' })).pass, true, 'twisted APPLY: targets+context cover both');
   assert.equal(set(p => Object.assign(p, { source: 'BOTH', twisted: true, twistTargetIds: ['S1', 'P1-1'], operation: 'APPLY' })).pass, true);
   assert.equal(set(p => Object.assign(p, { source: 'BOTH', twisted: true, twistTargetIds: ['S1'], supportIds: ['P1-1'], operation: 'APPLY' })).pass, false, 'twisted APPLY ignores supportIds');
-  assert.equal(set(p => Object.assign(p, { operation: 'INFER' })).pass, false);
+  assert.equal(set(p => Object.assign(p, { operation: 'INFER', source: 'PASSAGE', supportIds: ['P1-1'] })).pass, false, 'INFER with source needs inferenceBasisIds');
+  assert.equal(set(p => Object.assign(p, { operation: 'INFER' })).pass, true, 'INFER with source NONE is exempt');
   assert.equal(set(p => Object.assign(p, { operation: 'INFER', inferenceBasisIds: ['P1-1'], source: 'PASSAGE' })).pass, true);
 });
 test('validation 5: twist fields, evidenceQuote in passage/supplement, relationTypeChange, NONE twist, readingGap note', () => {
-  const twist = mut => { const x = fresh(); const p = x.out.questions[0].choices[0].parts[0]; Object.assign(p, { twisted: true, source: 'PASSAGE', twistTargetIds: ['R1'], contextIds: ['P1-1'], twistName: '원인 뒤바꿈', evidenceQuote: P1Q, choiceQuote: '달명' }); mut(p); return item(validateChoiceLink(x.out, x.ctx), 5); };
+  const twist = mut => { const x = fresh(); const p = x.out.questions[0].choices[0].parts[0]; Object.assign(p, { twisted: true, source: 'PASSAGE', twistTargetIds: ['R1'], contextIds: ['P1-1'], twistType: 'CAUSE_SWAP', twistDetail: '원인을 바꿈', evidenceQuote: P1Q, choiceQuote: '달명' }); mut(p); return item(validateChoiceLink(x.out, x.ctx), 5); };
   assert.equal(twist(() => {}).pass, true);
   assert.equal(twist(p => { p.evidenceQuote = '지어낸 문장'; }).pass, false);
   assert.equal(twist(p => { p.evidenceQuote = P1Q.replace(/ /u, '  '); }).info?.length > 0, true, 'normalized evidence is info');
   assert.equal(twist(p => { p.twistTargetIds = []; }).pass, false);
-  assert.equal(twist(p => { p.twistName = ''; }).pass, false);
+  assert.equal(twist(p => { p.twistType = null; }).pass, false, 'twisted without twistType');
+  assert.equal(twist(p => { p.twistDetail = ' '; }).pass, false, 'twisted without twistDetail');
   assert.equal(twist(p => { p.choiceQuote = '선지에 없음'; }).pass, false);
   assert.equal(twist(p => { p.supportIds = ['P1-1']; }).pass, false);
   assert.equal(twist(p => { p.relationTypeChange = { original: 'CAUSE', claimed: 'CONTRAST' }; }).pass, true);
@@ -209,14 +234,16 @@ test('validation 5: twist fields, evidenceQuote in passage/supplement, relationT
   assert.equal(none(p => { p.contextIds = ['G1']; }).pass, true, 'NONE twist may carry contextIds');
   assert.equal(none(p => { p.twistTargetIds = ['P1-1']; }).pass, false);
   assert.equal(none(p => { p.evidenceQuote = P1Q; }).pass, false);
-  assert.equal(none(p => { p.twistName = ''; }).pass, false);
+  assert.equal(none(p => { p.twistType = null; }).pass, false);
   assert.equal(none(p => { p.choiceQuote = ''; }).pass, false);
-  const sup = fresh(); Object.assign(sup.out.questions[1].choices[0].parts[0], { twisted: true, source: 'SUPPLEMENT', twistTargetIds: ['S1'], twistName: 'n', evidenceQuote: '갑: 안녕.', choiceQuote: '하나' });
+  const sup = fresh(); Object.assign(sup.out.questions[1].choices[0].parts[0], { twisted: true, source: 'SUPPLEMENT', twistTargetIds: ['S1'], twistType: 'SUBSTITUTION', twistDetail: 'n', evidenceQuote: '갑: 안녕.', choiceQuote: '하나' });
   assert.equal(item(validateChoiceLink(sup.out, sup.ctx), 5).pass, true, 'supplement evidence');
   const nt = fresh(); Object.assign(nt.out.questions[0].choices[1].parts[0], { source: 'PASSAGE', supportIds: [] });
   assert.equal(item(validateChoiceLink(nt.out, nt.ctx), 5).pass, false, 'not twisted needs supportIds');
-  const nt2 = fresh(); nt2.out.questions[0].choices[1].parts[0].twistName = 'x';
+  const nt2 = fresh(); nt2.out.questions[0].choices[1].parts[0].twistType = 'OTHER';
   assert.equal(item(validateChoiceLink(nt2.out, nt2.ctx), 5).pass, false);
+  const nt3 = fresh(); nt3.out.questions[0].choices[1].parts[0].twistDetail = 'x';
+  assert.equal(item(validateChoiceLink(nt3.out, nt3.ctx), 5).pass, false, 'not twisted with twistDetail');
   const gap = (readingGap, note) => { const x = fresh(); Object.assign(x.out.questions[0].choices[1], { readingGap, note }); return item(validateChoiceLink(x.out, x.ctx), 5); };
   assert.equal(gap('IMPLICIT_PREMISE', '').pass, false, 'readingGap without note');
   assert.equal(gap('STRICT_READING', '엄격히 읽음').pass, true);
@@ -236,7 +263,7 @@ test('review marks: READING_GAP with kind, EXPLANATION_DIFFER, NOTE, NONE_TWIST,
   Object.assign(q.choices[3], { readingGap: 'IMPLICIT_PREMISE', note: '전제' }); q.choices[1].explanationAgreement = 'DIFFER'; q.choices[2].note = '메모';
   q.choices[3].parts.push({ ...q.choices[3].parts[0] }); // two twisted NONE parts
   const rev = validateChoiceLink(x.out, x.ctx).review, kinds = rev.map(e => e.kind);
-  for (const k of ['READING_GAP', 'EXPLANATION_DIFFER', 'NOTE', 'NONE_TWIST', 'NONE_UNTWISTED', 'MULTI_TWIST']) assert.ok(kinds.includes(k), k);
+  for (const k of ['READING_GAP', 'EXPLANATION_DIFFER', 'NOTE', 'NONE_TWIST', 'NONE_UNTWISTED', 'MULTI_TWIST', 'TWIST_OTHER']) assert.ok(kinds.includes(k), k);
   assert.deepEqual(rev.find(e => e.kind === 'READING_GAP'), { kind: 'READING_GAP', at: 'q10#4', readingGap: 'IMPLICIT_PREMISE' });
   assert.ok(!kinds.includes('ANSWER_CONFLICT'));
   assert.equal(item(validateChoiceLink(x.out, x.ctx), 5).pass, true, 'untwisted NONE is a review mark, not a violation');
@@ -249,6 +276,8 @@ test('stability across runs: FALSE choices only, twistTargetIds union, intersect
   const r1 = mk('k', 1, both(tgt([0, 3], ['G1']), tgt([1, 0], ['P1-1']))), r2 = mk('k', 2, both(tgt([0, 3], ['G1', 'P1-1']), tgt([1, 0], ['G1']))), r3 = mk('k', 3, both(tgt([0, 3], ['P1-1', 'G1']), tgt([1, 0], ['R1'])));
   const st = stability([r1, r2, r3]);
   assert.equal(st.choices, 5, 'q10#4 and q11#1,3,4,5 are FALSE'); assert.equal(st.allSame, 3); assert.equal(st.atLeastTwoSame, 4);
+  assert.equal(st.noneOnly, 3, 'q11#3,4,5 empty in every run'); assert.equal(st.changedChoices, 2);
+  assert.equal(st.allSameOfChanged, 0); assert.equal(st.atLeastTwoSameOfChanged, 1); assert.equal(st.atLeastTwoSameOfChangedPct, '50.0%'); assert.equal(st.intersectionNonEmptyOfChangedPct, '50.0%');
   assert.equal(st.intersectionNonEmpty, 1); assert.equal(st.intersectionNonEmptyPct, '20.0%'); assert.equal(st.allSamePct, '60.0%');
   assert.deepEqual(st.mismatches.map(m => [m.question, m.choice]), [[10, 4], [11, 1]]);
   assert.deepEqual(st.mismatches[1].runs.map(r => r.targets), [['P1-1'], ['G1'], ['R1']]);
@@ -281,10 +310,11 @@ test('--runs: r<k> folders, request count, summary and report v3, RUN_EXISTS', a
     for (const k of [1, 2, 3]) for (const n of ['choice-link.raw.json', 'choice-link.json', 'choice-link.validation.json']) assert.ok(existsSync(join(out, PASSAGE_ID, `r${k}`, n)), `r${k}/${n}`);
     const s = JSON.parse(readFileSync(join(out, 'summary.json'), 'utf8'));
     assert.equal(s.requestsParsed, 3); assert.equal(s.questions, 2); assert.equal(s.choices, 10); assert.equal(s.perRun.length, 3);
-    assert.equal(s.sourceOperation['NONE|RESTATE'], 30); assert.deepEqual(s.twistNames, [['예시 비틂', 15]]);
+    assert.equal(s.sourceOperation['NONE|RESTATE'], 30); assert.deepEqual(s.twistTypes.byType, [['OTHER', 15]]); assert.deepEqual(s.twistTypes.byBranch, [['기타', 15]]);
+    assert.equal(s.twistTypes.other.count, 15); assert.equal(s.twistTypes.other.details[0], '예시 비틂'); assert.equal(s.typeStability.choices, 5);
     assert.equal(s.stability.mismatches.length, 1);
     const report = readFileSync(join(out, 'REPORT.md'), 'utf8');
-    assert.ok(report.includes('회차 간 안정성') && report.includes('예시 비틂') && report.includes('readingGap 분포'));
+    assert.ok(report.includes('회차 간 안정성') && report.includes('예시 비틂') && report.includes('종류 안정성') && report.includes('twistType 빈도') && report.includes('readingGap 분포'));
     await assert.rejects(main({ targetsPath: f.targetsPath, fixedPath: f.fixedPath, out, transport: fakeTransport() }), /RUN_EXISTS/);
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
@@ -313,4 +343,82 @@ test('summarize and report handle a missing output', () => {
   const s = summarize([ok, { key: 'k', run: 2, out: null }]);
   assert.equal(s.requestsParsed, 1);
   assert.ok(renderReport([ok, { key: 'k', run: 2, out: null }], s).includes('결과 없음'));
+});
+
+// (가)/(나) section sets: two passages merged into one input with "<label>." id prefixes.
+function sectionFixture(labels = ['가', '나'], ids = [PASSAGE_ID, 'dopamine-motor-control']) {
+  const f = fixture(), targets = JSON.parse(readFileSync(f.targetsPath, 'utf8')), base = targets[0];
+  const sections = ids.map((passageId, i) => {
+    const m = { ...map, passageId, propositions: map.propositions.map(p => ({ ...p })) }, mapPath = join(f.dir, `map${i}.json`), stancePath = join(f.dir, `stance${i}.json`), classifyPath = join(f.dir, `classify${i}.json`);
+    writeFileSync(mapPath, JSON.stringify(m)); writeFileSync(stancePath, JSON.stringify(stance)); writeFileSync(classifyPath, JSON.stringify(classify));
+    return { label: labels[i], passageId, passagesDir, mapPath, stancePath, classifyPath };
+  });
+  const { passageId: _p, mapPath: _m, stancePath: _s, classifyPath: _c, ...rest } = base;
+  writeFileSync(f.targetsPath, JSON.stringify([{ ...rest, key: 'set-ab', sections }]));
+  return f;
+}
+test('sections: merged input has section on paragraphs, prefixed ids, relation endpoints and childIds, classify matched before prefixing', () => {
+  const f = sectionFixture();
+  try {
+    const t = load(f), input = buildInput(t.passage, t.map, t.stances, t.passageMarks, t.questions);
+    assert.equal(t.key, 'set-ab'); assert.equal(input.passageId, 'set-ab');
+    const dopa = loadPassage(passagesDir, 'dopamine-motor-control').passage;
+    assert.equal(input.paragraphs.length, passage.paragraphs.length + dopa.paragraphs.length);
+    assert.deepEqual([...new Set(input.paragraphs.map(p => p.section))], ['가', '나']);
+    assert.equal(input.paragraphs[0].section, '가'); assert.equal(input.paragraphs.at(-1).section, '나');
+    assert.deepEqual(input.map.propositions.map(p => p.id), ['가.P1-1', '가.P2-1', '나.P1-1', '나.P2-1']);
+    assert.deepEqual(input.map.nodes.map(n => [n.id, n.childIds]), [['가.G1', ['P1-1'].map(x => `가.${x}`)], ['가.TOP', ['가.G1']], ['나.G1', ['나.P1-1']], ['나.TOP', ['나.G1']]]);
+    assert.deepEqual(input.map.relations.map(r => [r.id, r.fromId, r.toId, r.relationType]), [['가.R1', '가.P2-1', '가.P1-1', 'CAUSE'], ['나.R1', '나.P2-1', '나.P1-1', 'CAUSE']]);
+    assert.deepEqual(input.stances.map(x => x.id), ['가.P1-1', '가.P2-1', '나.P1-1', '나.P2-1']);
+    assert.ok(Object.keys(t.protectedFiles).filter(p => /map\d|stance\d|classify\d/.test(p)).length === 6, 'protected files of both sections');
+    const ctx = { passageId: t.passageId, map: t.map, questions: t.questions, paragraphs: t.passage.paragraphs.map(p => p.text) };
+    assert.equal(t.passageId, 'set-ab'); assert.equal(validateChoiceLink(exampleOutput('set-ab', t.questions), ctx).allPass, true);
+    const o = exampleOutput('set-ab', t.questions); Object.assign(o.questions[0].choices[0].parts[0], { source: 'PASSAGE', supportIds: ['나.P1-1'] });
+    assert.equal(item(validateChoiceLink(o, ctx), 4).pass, true, 'prefixed ids are valid map ids');
+    Object.assign(o.questions[0].choices[0].parts[0], { supportIds: ['P1-1'] });
+    assert.equal(item(validateChoiceLink(o, ctx), 4).pass, false, 'unprefixed id no longer exists');
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+test('sections: duplicate paragraph ids or merged map ids stop; targets without sections are unchanged', () => {
+  const dupPara = sectionFixture(['가', '나'], [PASSAGE_ID, PASSAGE_ID]);
+  try { assert.throws(() => load(dupPara), /DUPLICATE_PARAGRAPH_ID/); } finally { rmSync(dupPara.dir, { recursive: true, force: true }); }
+  const dupMap = sectionFixture(['가', '가']);
+  try { assert.throws(() => load(dupMap), /DUPLICATE_MAP_ID/); } finally { rmSync(dupMap.dir, { recursive: true, force: true }); }
+  const { t } = freshCtx();
+  assert.equal(t.map.propositions[0].id, 'P1-1'); assert.equal(t.passage.paragraphs[0].section, undefined); assert.equal(t.key, PASSAGE_ID);
+});
+test('sections: dry-run runs end to end on a section target', async () => {
+  const f = sectionFixture();
+  try {
+    const dry = await main({ dryRun: true, targetsPath: f.targetsPath, fixedPath: f.fixedPath, out: join(f.dir, 'dry'), runs: 1, limits: { maxRequests: 3, usdCap: 3 } });
+    assert.equal(dry.exampleAllPass, true); assert.equal(dry.externalRequests, 0); assert.equal(dry.perPassage[0].passageId, 'set-ab');
+    assert.ok(existsSync(join(f.dir, 'dry', 'set-ab', 'dry-run.request.json')));
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});
+
+test('typeStability: categories, majority types, OTHER-only majority; empty sets count as same', () => {
+  const ty = (c, ...types) => o => { const ch = o.questions[c[0]].choices[c[1]]; ch.parts = types.map(t => ({ ...ch.parts[0], twisted: true, twistType: t, twistDetail: 'd' })); };
+  const all = (...fs) => o => fs.forEach(f => f(o));
+  // choice A=q10#4, B=q11#1, C=q11#3, D=q11#4; q11#5 untouched (OTHER in every run via the example output)
+  const r1 = mk('k', 1, all(ty([0, 3], 'NEGATION'), ty([1, 0], 'DEGREE'), ty([1, 2], 'NEGATION', 'DIRECTION'), ty([1, 3], 'OTHER'))),
+    r2 = mk('k', 2, all(ty([0, 3], 'NEGATION'), ty([1, 0], 'DEGREE', 'NEGATION'), ty([1, 2], 'NEGATION'), ty([1, 3], 'SUBSTITUTION'))),
+    r3 = mk('k', 3, all(ty([0, 3], 'NEGATION'), ty([1, 0], 'ABSOLUTIZE'), ty([1, 2], 'DIRECTION'), ty([1, 3], 'CONFLATION')));
+  const st = typeStability([r1, r2, r3]), by = Object.fromEntries(st.items.map(i => [`${i.question}#${i.choice}`, i]));
+  assert.equal(st.choices, 5);
+  assert.equal(by['10#4'].category, 'ALL_SAME'); assert.deepEqual(by['10#4'].majority, ['NEGATION']);
+  assert.equal(by['11#1'].category, 'TWO_SHARE', 'DEGREE in r1,r2 but no type in all three'); assert.deepEqual(by['11#1'].majority, ['DEGREE']);
+  assert.equal(by['11#3'].category, 'TWO_SHARE', 'NEGATION r1,r2 / DIRECTION r1,r3 -> no type in all three'); assert.deepEqual(by['11#3'].majority, ['DIRECTION', 'NEGATION']);
+  assert.equal(by['11#4'].category, 'DISJOINT'); assert.deepEqual(by['11#4'].majority, ['CONFLATION', 'OTHER', 'SUBSTITUTION']);
+  assert.equal(by['11#5'].category, 'ALL_SAME'); assert.deepEqual(by['11#5'].majority, ['OTHER']);
+  assert.equal(st.majorityOnlyOther, 1); assert.deepEqual(st.categories, { ALL_SAME: 2, INTERSECTION: 0, TWO_SHARE: 2, DISJOINT: 1 });
+  const inter = typeStability([mk('k', 1, ty([1, 3], 'NEGATION', 'DEGREE')), mk('k', 2, ty([1, 3], 'NEGATION')), mk('k', 3, ty([1, 3], 'NEGATION', 'DIRECTION'))]);
+  assert.equal(inter.items.find(i => i.question === 11 && i.choice === 4).category, 'INTERSECTION');
+  assert.equal(typeStability([r1]).choices, 0, 'single run: nothing to compare');
+  assert.ok(renderReport([r1, r2, r3]).includes('다수 종류가 OTHER뿐인 선지 1'));
+});
+test('TWIST_OTHER review mark and report listing of OTHER details', () => {
+  const x = fresh(); const kinds = validateChoiceLink(x.out, x.ctx).review.filter(e => e.kind === 'TWIST_OTHER');
+  assert.equal(kinds.length, 5, 'every FALSE choice of the example output (1 + 4)');
+  const y = fresh(); for (const q of y.out.questions) for (const c of q.choices) for (const p of c.parts) if (p.twisted) Object.assign(p, { twistType: 'NEGATION' });
+  assert.ok(!validateChoiceLink(y.out, y.ctx).review.some(e => e.kind === 'TWIST_OTHER'));
 });
