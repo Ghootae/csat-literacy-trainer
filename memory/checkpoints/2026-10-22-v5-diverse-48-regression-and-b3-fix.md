@@ -25,3 +25,6 @@
   있는 단계에서만), 대화창 맨 아래 따라가기, 칠한 곳 영역 안 스크롤. 이전 입력 영역 네 줄 설계(10-13 인계)를 세 줄로 대체, 높이 고정 원칙 유지.
 - 시험: build 통과, npm test 1349 통과·2 실패(기존: `boundary.test.ts` student-state node:fs, axis-architecture .omc 파일), 격리 e2e 15/15
   (기존 "문제" 버튼 이름 중복 실패 해소).
+- 문단 요약 개발자 화면(`/dialogue/dev/simple`)도 같은 방식으로 정리(사용자 요청, 모형 확인 뒤 승인, [인계](../../docs/handoffs/2026-10-22-simple-dialogue-layout-economy.md)):
+  위쪽 한 줄 띠, 원문 칸 머리(제목·시험 정보·문단 막대), "지금까지 내 요약" 한 줄 상자(최대 88px), 입력 영역 두 줄(86px). build·npm test(기존 실패 2)·
+  격리 e2e 전체 변경 전후 동일(52 통과·1 실패 `dialogue-workbench.spec.ts:171`). 대화가 쌓인 모습·문단 완료 줄은 모델 응답이 필요해 화면 미확인.

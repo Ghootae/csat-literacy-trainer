@@ -100,19 +100,17 @@ export function SimpleDialogueApp(): React.JSX.Element {
   };
   const go = (index: number) => void run(async () => accept(await navigateSimple(view.sessionId, index)));
   return <main className="reading-workbench is-developer simple-workbench" data-pane={mobilePane}>
-    <header className="workbench-header"><div><p className="dialogue-kicker">COGAXIS / PERSONAL LAB / SIMPLE</p><h1>{view.title}</h1></div>
+    <header className="workbench-header"><div className="simple-strip-lead"><p className="dialogue-kicker">COGAXIS / PERSONAL LAB / SIMPLE</p><p className="developer-notice" title="simple-holistic · 개인 테스트 · 판정과 원출력은 서랍에서만 보입니다. 학생 상태 원장에는 쓰지 않습니다.">simple-holistic · 개인 테스트 · 판정과 원출력은 서랍에서만 보입니다. 학생 상태 원장에는 쓰지 않습니다.</p></div>
       <div className="workbench-actions"><span>문단 {current.index + 1} / {view.paragraphs.length}</span>
         <button onClick={() => setDrawer(true)}>단계별 판정·메모</button>
         <button disabled={busy} onClick={() => { setView(null); window.history.replaceState(null, '', base); }}>나가기</button></div>
     </header>
-    <DevPartNav disabled={busy} currentParagraph={current.index} currentIsProblem={false}
-      paragraphs={view.paragraphs.map((p, i) => ({ label: `문단 ${p.position}`, done: p.done, onSelect: () => go(i) }))}
-      problem={view.problemQuestionId === null ? null : { onSelect: () => window.location.assign(problemLink(view.problemQuestionId!, view.sessionId)) }} />
-    <p className="developer-notice">simple-holistic · 개인 테스트 · 판정과 원출력은 서랍에서만 보입니다. 학생 상태 원장에는 쓰지 않습니다.</p>
     <nav className="workbench-tabs" aria-label="화면 전환">{[['source', '원문'], ['chat', '대화']].map(([id, label]) =>
       <button key={id} aria-pressed={mobilePane === id} onClick={() => setMobilePane(id!)}>{label}</button>)}</nav>
     <div className="workbench-columns">
-      <section className="source-pane workbench-pane" aria-label="원문"><header className="pane-header"><h2>원문</h2><small>{view.exam}</small></header>
+      <section className="source-pane workbench-pane" aria-label="원문"><header className="pane-header source-head"><div className="source-title"><h1 title={view.title}>{view.title}</h1><small>{view.exam}</small></div><DevPartNav disabled={busy} currentParagraph={current.index} currentIsProblem={false}
+        paragraphs={view.paragraphs.map((p, i) => ({ label: `문단 ${p.position}`, done: p.done, onSelect: () => go(i) }))}
+        problem={view.problemQuestionId === null ? null : { onSelect: () => window.location.assign(problemLink(view.problemQuestionId!, view.sessionId)) }} /></header>
         <div className="source-scroll simple-source">
           {view.paragraphs.map((p, i) => i === current.index
             ? <article className={`dialogue-paragraph current${current.highlightKind === 'HINT' ? ' is-hint' : ''}`} key={p.paragraphId}><span className="paragraph-chip">문단 {p.position}</span>
@@ -139,7 +137,7 @@ export function SimpleDialogueApp(): React.JSX.Element {
             {!last && <button className="primary" disabled={busy} onClick={() => go(current.index + 1)}>다음 문단</button>}
             {last && view.problemUrl && <button className="primary" onClick={() => window.location.assign(view.problemUrl!)}>문제 풀기</button>}
             {last && !view.allDone && <small>끝나지 않은 문단이 있어요. 위의 문단 번호로 이동하세요.</small>}</div></div>
-            : <div className="dialogue-compose"><label htmlFor="simple-response">이 문단의 중심 내용과 관계를 설명해 주세요.</label>
+            : <div className="dialogue-compose"><label className="simple-sr-only" htmlFor="simple-response">이 문단의 중심 내용과 관계를 설명해 주세요.</label>
               <textarea id="simple-response" value={draft} disabled={busy || !current.canRespond} placeholder="내 생각을 적어보세요…"
                 onChange={e => setDrafts(old => ({ ...old, [current.index]: e.target.value }))}
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submit(); } }} />
