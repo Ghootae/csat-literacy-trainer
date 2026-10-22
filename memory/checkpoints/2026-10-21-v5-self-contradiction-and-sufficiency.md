@@ -26,5 +26,7 @@
 
 ## 다음
 
-- `scripts/` 모의 시험 정리.
-- 23·24·25번은 커밋됨(2026-10-21, 코드 1edb2be + 문서 43605dc). 29번도 커밋됨. `scripts/` 모의 시험 파일 5개는 이전 변경과 섞여 제외.
+- `scripts/` 모의 시험 5개(`test-v5-live-connection`, `test-v5-multi-item-models`, `lib/provider-adapter`, `lib/v5-marker-judgment`,
+  `lib/v5-substitution-check`의 `*.test.mjs`)는 끝난 실험(10-07~10-14) 전용이라 지금 판정 형식에서는 실패하는 게 정상이다. `npm test` 밖.
+  고치지 않기로 함(사용자 2026-10-21). 고치다 만 미커밋 변경 11줄은 되돌림.
+- 23·24·25번은 커밋됨(2026-10-21, 코드 1edb2be + 문서 43605dc). 29번도 커밋됨.

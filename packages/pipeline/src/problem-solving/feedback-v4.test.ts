@@ -805,6 +805,13 @@ describe('v5 developer connection contracts', () => {
       expect(next.message).toBe(`네 근거대로면 ${'①②③④⑤'[next.source.choices.find(c => c.choiceId === choiceId)!.position - 1]}${lead.slice(1)} ${claim}. 이 문제는 ${goal} 문제니까, 다시 골라 볼래?`);
       expect(next.message).toContain(lead);
     });
+    it('lets sufficiencyEvidence quote the content-correct rationale behind a selection mismatch', () => {
+      const s = selection('C4', wide('SELECT_INCORRECT'));
+      const q = assess(s, output(s, { rationaleImpliedVerdict: 'VALID', contentAssessment: 'SUPPORTED', errors: [] }));
+      const mismatch = q.errors.find(e => e.errorId === 'selection-mismatch')!;
+      const r = reply(q);
+      expect(() => assess(r, repair(r, { sufficiencyEvidence: [mismatch.studentEvidence[0]!] }))).not.toThrow();
+    });
     it('keeps the old message when a content error came along', () => {
       const next = mismatchOnly('C4', 'SELECT_INCORRECT', true);
       expect(next.errors.map(e => e.errorId)).toEqual(['E1', 'selection-mismatch']);

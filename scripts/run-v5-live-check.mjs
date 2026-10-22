@@ -24,7 +24,7 @@ const cases = !set ? allCases : set.split(',').flatMap(item => {
   if (!picked.length) throw new Error(`Unknown case set item: ${item}`);
   return picked.flatMap(c => times ? Array.from({ length: Number(times) }, (_, i) => ({ ...c, id: `${c.id}-r${i + 1}`, full: full && c.full })) : [{ ...c, full: full && c.full }]);
 });
-// V5_LIVE_CHECK_LIMITS='{"gpt-6.1-sol":{"requests":50,"usd":2}}' narrows per-model caps for a run (rates stay fixed).
+// V5_LIVE_CHECK_LIMITS='{"gpt-6.1-sol":{"requests":50,"usd":2}}' sets per-model caps for a run (rates stay fixed).
 const BASE_LIMITS = { 'gpt-6.1-sol': { requests: 60, usd: 2.5, input: 2, output: 10 }, 'gpt-6-luna': { requests: 60, usd: 0.5, input: 0.10, output: 0.50 } };
 const override = JSON.parse(process.env.V5_LIVE_CHECK_LIMITS ?? '{}');
 export const LIMITS = Object.fromEntries(Object.entries(BASE_LIMITS).map(([m, l]) => [m, { ...l, ...(override[m] ? { requests: override[m].requests ?? l.requests, usd: override[m].usd ?? l.usd } : {}) }]));

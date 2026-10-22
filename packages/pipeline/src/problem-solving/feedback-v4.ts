@@ -389,7 +389,8 @@ export function validateFeedbackAssessment(s: FeedbackSession, raw: unknown): Fe
     if (a.rationaleSufficient && a.sufficiencyEvidence.length > 1) throw new Error('충분성 인용은 핵심 관계를 혼자 담은 학생 발화 하나여야 합니다. 여러 발화를 이어야 관계가 되면 충분하지 않습니다.');
     if (!a.rationaleSufficient && a.sufficiencyEvidence.length) throw new Error('충분하지 않은 근거에는 충분성 인용을 둘 수 없습니다.');
     validateStudentEvidence(s, a.sufficiencyEvidence);
-    const flagged = [...s.errors, ...s.additionalErrors].flatMap(e => e.studentEvidence);
+    // A selection-execution item carries the whole (content-correct) rationale as evidence; only content errors are flagged.
+    const flagged = [...s.errors.filter(e => e.kind !== 'SELECTION_EXECUTION'), ...s.additionalErrors].flatMap(e => e.studentEvidence);
     if (a.sufficiencyEvidence.some(q => flagged.some(f => overlaps(q, f)))) throw new Error('오류로 확인된 학생 발화는 충분성 인용으로 쓸 수 없습니다.');
     if (new Set(a.newErrors.map(e => e.errorId)).size !== a.newErrors.length || a.newErrors.some(e => expected.includes(e.errorId))) throw new Error('새 오류 ID는 기존 오류와 중복할 수 없습니다.');
     for (const e of a.newErrors) { validateStudentEvidence(s, e.studentEvidence, true); validateSourceEvidence(s, e.sourceEvidence); }

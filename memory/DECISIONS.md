@@ -214,3 +214,4 @@
 | [`D-0157`](./decisions/D-0157-rationale-sufficient-needs-single-student-quote.md) | accepted | 교정 뒤 근거 확인 기준 | `rationaleSufficient`는 핵심 관계를 혼자 담은 학생 발화 인용 하나(`sufficiencyEvidence`)로만. 평가자가 이은 관계·오류 인용 불가(UI 메모장 24번) |
 | [`D-0159`](./decisions/D-0159-correct-unverified-judgment-method-note.md) | accepted | 정답·근거 미확인의 판단 방식 | 판정에 `insufficiencyKind`(판단 방식/연결 빠짐)를 두고, 판단 방식이면 마지막 설명이 그 방식을 인정하지 않고 까닭을 말한다(UI 메모장 25번) |
 | [`D-0161`](./decisions/D-0161-supported-needs-key-relation-coverage.md) | accepted | 정답 선택 근거 충분 기준 | 핵심 관계를 조각으로 나눠 조각마다 학생 인용(`keyRelationCoverage`). 정답 SUPPORTED는 모든 조각·2개 이상·겹치지 않는 인용일 때만(UI 메모장 29번) |
+| [`D-0164`](./decisions/D-0164-selection-mismatch-quote-allowed-as-sufficiency.md) | accepted | 선택 충돌 인용은 충분성 인용 가능 | D-0157 오류 인용 금지에서 선택 충돌 항목(`SELECTION_EXECUTION`) 인용을 뺀다. 내용 오류 인용 금지는 그대로. 48세션 회귀 B3 막힘·G-B3 잘못된 교정 실패 해소 |
