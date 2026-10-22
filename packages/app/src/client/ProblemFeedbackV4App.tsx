@@ -93,6 +93,7 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
       store(`csat.problem.v4.pending.${view.sessionId}`, null); store(draftKey, null);
     }
   }, [view?.revision, view?.evaluationStatus, pending]);
+  const waiting = busy || view?.evaluationStatus === 'PROCESSING';
   const sequence = sequenceState(view?.transcript ?? [], revealed, reducedMotion, released);
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -105,7 +106,24 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
     const timer = window.setTimeout(() => { setRevealed(sequence.visibleCount + 1); setReleased(false); }, sequence.delayMs);
     return () => window.clearTimeout(timer);
   }, [view?.sessionId, view?.transcript.length, revealed, reducedMotion, released, sequence.visibleCount, sequence.delayMs]);
-  useEffect(() => { chat.current?.scrollTo({ top: chat.current.scrollHeight, behavior: 'auto' }); }, [sequence.visibleCount, sequence.showDots, pending]);
+  const stickToBottom = useRef(true);
+  const hasView = !!view;
+  const bottom = () => { const el = chat.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' }); };
+  // New bubbles always bring the bottom into view, even when the student had scrolled up.
+  useEffect(() => { stickToBottom.current = true; bottom(); }, [sequence.visibleCount, sequence.showDots, pending?.transitionId, waiting, view?.result?.answerRevealed, view?.phase, view?.transcript.length, pane]);
+  // Size changes (markdown, images, composer, window) keep the bottom only if the student was near it.
+  useEffect(() => {
+    const el = chat.current;
+    if (!el) return;
+    const follow = () => { if (stickToBottom.current) bottom(); };
+    const onScroll = () => { stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 80; };
+    const mutations = new MutationObserver(follow);
+    mutations.observe(el, { childList: true, subtree: true, characterData: true });
+    const sizes = new ResizeObserver(follow);
+    sizes.observe(el);
+    el.addEventListener('scroll', onScroll); el.addEventListener('load', follow, true);
+    return () => { mutations.disconnect(); sizes.disconnect(); el.removeEventListener('scroll', onScroll); el.removeEventListener('load', follow, true); };
+  }, [hasView]);
   useEffect(() => {
     if (!view || view.evaluationStatus !== 'PROCESSING' || busy) return;
     let active = true;
@@ -120,9 +138,18 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
   function scrollToHighlight() {
     if (!firstHighlight) return;
     const selector = firstHighlight.location === 'PASSAGE' ? '.source-pane .v4-highlight' : '.question-pane .v4-highlight';
-    sourcePanes.current?.querySelector(selector)?.scrollIntoView({ behavior: reducedMotion ? 'instant' : 'smooth', block: 'center' });
+    const target = sourcePanes.current?.querySelector<HTMLElement>(selector);
+    if (!target) return;
+    // Scroll only the region that holds the highlight; the page and the other panes stay put.
+    let region = target.parentElement;
+    while (region && !(region.scrollHeight > region.clientHeight && /auto|scroll/.test(getComputedStyle(region).overflowY))) region = region.parentElement;
+    if (!region || region === document.body || region.clientHeight === 0) return;
+    const box = target.getBoundingClientRect(); const frame = region.getBoundingClientRect();
+    const top = region.scrollTop + box.top - frame.top - (region.clientHeight - box.height) / 2;
+    region.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? 'instant' : 'smooth' });
   }
-  useEffect(() => { scrollToHighlight(); }, [view?.sessionId, view?.revision, pane, reducedMotion]);
+  const correctionRevealed = !!view && sequence.visibleCount === view.transcript.length;
+  useEffect(() => { if (correctionRevealed) scrollToHighlight(); }, [view?.sessionId, view?.revision, pane, reducedMotion, correctionRevealed]);
 
   const instant = view?.transcript.findLast(m => m.sequence === 'INSTANT');
   const pendingInstant = pending?.command.type === 'SELECT' && pending.command.rationale.mode === 'PROVIDED';
@@ -132,7 +159,6 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
     const timer = window.setTimeout(() => setInstantWaitReady(true), instantWaitingDelay(reducedMotion));
     return () => window.clearTimeout(timer);
   }, [instant?.id, pendingInstant, reducedMotion]);
-  const waiting = busy || view?.evaluationStatus === 'PROCESSING';
   useEffect(() => {
     if (!waiting && !pending) return;
     const timer = window.setInterval(() => setWaitClock(clock => ({ ...clock, elapsedMs: Date.now() - clock.startedAt })), 1000);
@@ -173,6 +199,8 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
   if (!view) return <main className="reading-workbench"><h1>문제 풀이</h1>{error ? <><p role="alert">{error}</p><p>이전 풀이가 끝났거나 서버에 연결할 수 없어.</p><button onClick={() => void restart()} disabled={busy}>새 테스트 시작</button><a href={returnTo}>문단 학습으로</a></> : <p role="status">문제를 불러오는 중…</p>}</main>;
   const selection = view.phase === 'AWAITING_SELECTION' || view.phase === 'AWAITING_RESELECTION';
   const correction = view.phase === 'AWAITING_CORRECTION';
+  const basePhase = (waiting || pending) && view.phase === 'AWAITING_EVALUATION' ? (previousView.current ?? view).phase : view.phase;
+  const choosable = basePhase === 'AWAITING_SELECTION' || basePhase === 'AWAITING_RESELECTION' || basePhase === 'AWAITING_RATIONALE';
   const composer = composerState(view, { choice, draft, omit, waiting, pending: !!pending, error, previousView: previousView.current, sequence, previousButtons: previousButtons.current });
   if (composer.actions.buttons.length && (sequence.complete || sequence.needsNext)) previousButtons.current = composer.actions.buttons;
   const canSubmit = composer.actions.buttons.some(button => button.id === 'SUBMIT' && !button.disabled);
@@ -185,16 +213,14 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
     void send(correction ? { type: 'CORRECT', errorId: view!.activeErrorId!, text: draft.trim() } : selection ? { type: 'SELECT', choiceId: choice!, rationale: evidence } : { type: 'RATIONALE', rationale: evidence });
   }
   return <main className="reading-workbench is-developer problem-v4-workbench" data-pane={pane}>
-    <header className="workbench-header"><div><p className="dialogue-kicker">COGAXIS / PERSONAL LAB</p><h1>{view.title} <span>· {view.questionNumber}번</span></h1></div>
+    <header className="workbench-header"><div className="v4-strip-lead"><p className="dialogue-kicker">COGAXIS / PERSONAL LAB</p><p className="developer-notice" title="문제 풀이 v4 · 개발자 테스트 · 평가 서랍에 내부 판정이 공개됩니다. 실제 포인트는 차감하지 않습니다.">문제 풀이 v4 · 개발자 테스트 · 평가 서랍에 내부 판정이 공개됩니다. 실제 포인트는 차감하지 않습니다.</p></div>
       <div className="workbench-actions"><span>선택 {view.selectionCount} / 2</span><button ref={trigger} aria-haspopup="dialog" aria-expanded={drawer} onClick={() => setDrawer(true)}>응답 평가</button><a href={returnTo}>학습 맵</a><button disabled={waiting} onClick={() => void restart()}>새 테스트</button></div></header>
-    {navPassage && <DevPartNav currentParagraph={null} currentIsProblem problem={{ onSelect: () => {} }}
-      paragraphs={Array.from({ length: navPassage.paragraphCount }, (_, i) => ({ label: `문단 ${i + 1}`, onSelect: () => window.location.assign(paragraphLink(returnTo, navPassage.passageId, i)) }))} />}
-    <p className="developer-notice">문제 풀이 v4 · 개발자 테스트 · 평가 서랍에 내부 판정이 공개됩니다. 실제 포인트는 차감하지 않습니다.</p>
     <nav className="workbench-tabs" aria-label="문제 화면 전환">{[['source', '지문'], ['problem', '문제'], ['chat', '대화']].map(([id, title]) => <button key={id} aria-pressed={pane === id} onClick={() => setPane(id!)}>{title}</button>)}</nav>
     <div className="workbench-columns" ref={sourcePanes}>
-      <section className="workbench-pane source-pane" aria-label="전체 지문"><header className="pane-header"><h2>전체 지문</h2><small>{view.exam}</small></header><div className="source-scroll"><AnnotatedText text={view.question.passageText} annotations={view.question.textAnnotations.filter(a => a.location === 'PASSAGE')} highlights={view.correctionHighlights.filter(a => a.location === 'PASSAGE')} /><Media items={view.question.media.filter(m => m.placement.scope === 'PASSAGE')} /></div></section>
-      <section className="workbench-pane question-pane" aria-label="문제와 선지"><header className="pane-header"><h2>문제 {view.questionNumber}</h2><small>읽고, 오른쪽에서 골라 줘</small></header><div className="v4-question-scroll"><h3>{view.question.stem}</h3>{(view.question.scenarioText || view.question.media.some(m => m.placement.scope === 'SCENARIO')) && <section className="v4-scenario"><h4>보기</h4><AnnotatedText text={view.question.scenarioText} annotations={view.question.textAnnotations.filter(a => a.location === 'SCENARIO')} highlights={view.correctionHighlights.filter(a => a.location === 'SCENARIO')} /><Media items={view.question.media.filter(m => m.placement.scope === 'SCENARIO')} /></section>}
-        <ol className="v4-choices">{view.question.choices.map(c => <li key={c.choiceId} data-selected={choice === c.choiceId}><span>{c.position}</span><div><p>{c.text}</p><Media items={view.question.media.filter(m => m.placement.scope === 'CHOICE' && m.placement.choiceId === c.choiceId)} /></div></li>)}</ol></div></section>
+      <section className="workbench-pane source-pane" aria-label="전체 지문"><header className="pane-header source-head"><div className="source-title"><h1 title={view.title}>{view.title}</h1><small>{view.exam}</small></div>{navPassage && <DevPartNav currentParagraph={null} currentIsProblem problem={{ onSelect: () => {} }}
+            paragraphs={Array.from({ length: navPassage.paragraphCount }, (_, i) => ({ label: `문단 ${i + 1}`, onSelect: () => window.location.assign(paragraphLink(returnTo, navPassage.passageId, i)) }))} />}</header><div className="source-scroll"><AnnotatedText text={view.question.passageText} annotations={view.question.textAnnotations.filter(a => a.location === 'PASSAGE')} highlights={view.correctionHighlights.filter(a => a.location === 'PASSAGE')} /><Media items={view.question.media.filter(m => m.placement.scope === 'PASSAGE')} /></div></section>
+      <section className="workbench-pane question-pane" aria-label="문제와 선지"><header className="pane-header question-head"><h2>문제 {view.questionNumber}</h2><h3>{view.question.stem}</h3></header><div className="v4-question-scroll">{(view.question.scenarioText || view.question.media.some(m => m.placement.scope === 'SCENARIO')) && <section className="v4-scenario"><h4>보기</h4><AnnotatedText text={view.question.scenarioText} annotations={view.question.textAnnotations.filter(a => a.location === 'SCENARIO')} highlights={view.correctionHighlights.filter(a => a.location === 'SCENARIO')} /><Media items={view.question.media.filter(m => m.placement.scope === 'SCENARIO')} /></section>}
+        <div className="v4-choices-scroll"><ol className="v4-choices">{view.question.choices.map(c => <li key={c.choiceId} data-selected={choice === c.choiceId}><span>{c.position}</span><div><p>{c.text}</p><Media items={view.question.media.filter(m => m.placement.scope === 'CHOICE' && m.placement.choiceId === c.choiceId)} /></div></li>)}</ol></div></div></section>
       <section className="workbench-pane chat-pane" aria-label="응답과 피드백"><header className="pane-header"><h2>생각을 나누는 공간</h2><small>{view.phase === 'COMPLETED' ? '풀이 완료' : correction ? '생각 다시 살피기' : view.phase === 'AWAITING_RESELECTION' ? '마지막 선택' : '선택과 근거'}</small></header>
         <div className="chat-scroll v4-chat-scroll" ref={chat} aria-label="대화 기록">{view.transcript.slice(0, sequence.visibleCount).map(entry => <article className={`chat-message ${entry.role === 'STUDENT' ? 'student' : 'tutor'}`} key={entry.id}><small>{entry.role === 'STUDENT' ? '나의 응답' : entry.phase === 'AWAITING_CORRECTION' ? '함께 확인하기' : '피드백'}</small>{entry.role === 'COACH' ? <Markdown text={entry.text} /> : <p>{entry.text}</p>}{correction && firstHighlight && entry.role === 'COACH' && entry.phase === 'AWAITING_CORRECTION' && entry.id === view.transcript.at(-1)?.id && <button onClick={() => { setPane(firstHighlight.location === 'PASSAGE' ? 'source' : 'problem'); scrollToHighlight(); }}>지문에서 보기</button>}</article>)}
           {sequence.showDots && <article className="chat-message tutor v4-sequence-waiting" role="status" aria-label="다음 이야기 준비 중"><span className="v4-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></article>}
@@ -204,10 +230,9 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
           {view.phase === 'COMPLETED' && view.transcript.filter(m => m.role === 'COACH').at(-1)?.sequence !== 'CLOSING' && <p className="v4-terminal">이 문제 풀이는 여기까지야.</p>}
         </div>
         <div className="chat-footer v4-composer">
-          <div className="v4-composer-notice" role={composer.notice.kind === 'error' ? 'alert' : 'status'}>{composer.notice.text}</div>
-          <fieldset className="v4-choice-buttons"><legend>선지 선택</legend>{composer.choices.map(c => <button type="button" key={c.choiceId} disabled={c.disabled} aria-label={`${c.position}번 선택`} aria-pressed={c.pressed} onClick={() => { setChoice(c.choiceId); response.current?.focus(); }}>{c.position}</button>)}</fieldset>
-          <div className="v4-composer-input"><label htmlFor="v4-response">{composer.input.label}</label><textarea ref={response} id="v4-response" value={draft} disabled={composer.input.disabled} onChange={e => setDraft(e.target.value)} placeholder={composer.input.placeholder} /></div>
-          <div className="v4-compose-actions"><div>{composer.actions.check && <label className="v4-omit"><input type="checkbox" checked={omit} disabled={composer.actions.checkDisabled} onChange={e => setOmit(e.target.checked)} />{composer.actions.check}</label>}</div><div className="v4-primary-actions">{composer.actions.buttons.map(button => button.id === 'RETURN' ? <a key={button.id} className="v4-return" href={button.disabled ? undefined : returnTo} aria-disabled={button.disabled}>{button.label}</a> : <button key={button.id} className="primary" disabled={button.disabled} onClick={() => {
+          <div className="v4-composer-notice" role={composer.notice.kind === 'error' ? 'alert' : 'status'} title={composer.notice.text || undefined}>{composer.notice.text}</div>
+          <div className="v4-composer-input"><label className="v4-sr-only" htmlFor="v4-response">{composer.input.label}</label><textarea ref={response} id="v4-response" value={draft} disabled={composer.input.disabled} onChange={e => setDraft(e.target.value)} placeholder={composer.input.placeholder} /></div>
+          <div className="v4-compose-actions"><div className="v4-compose-left">{composer.actions.check && <label className="v4-omit"><input type="checkbox" checked={omit} disabled={composer.actions.checkDisabled} onChange={e => setOmit(e.target.checked)} />{composer.actions.check}</label>}{choosable && <fieldset className="v4-choice-buttons"><legend className="v4-sr-only">선지 선택</legend>{composer.choices.map(c => <button type="button" key={c.choiceId} disabled={c.disabled} aria-label={`${c.position}번 선택`} aria-pressed={c.pressed} onClick={() => { setChoice(c.choiceId); response.current?.focus(); }}>{c.position}</button>)}</fieldset>}</div><div className="v4-primary-actions">{composer.actions.buttons.map(button => button.id === 'RETURN' ? <a key={button.id} className="v4-return" href={button.disabled ? undefined : returnTo} aria-disabled={button.disabled}>{button.label}</a> : <button key={button.id} className="primary" disabled={button.disabled} onClick={() => {
             if (button.id === 'SUBMIT') submit();
             else if (button.id === 'RETRY') void send();
             else if (button.id === 'RESTART') void restart(true);

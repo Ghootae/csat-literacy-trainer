@@ -50,7 +50,7 @@ test.beforeEach(async ({ page }) => {
 test.afterAll(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
 async function open(page: Page) {
   await page.goto(`/problem/dev/v4?questionId=${questionId}&returnTo=%2Fdialogue%2Fdev`);
-  await expect(page.getByRole('heading', { name: /정보 비대칭/ })).toBeVisible();
+  await expect(page.locator('h1')).toContainText('정보 비대칭');
 }
 async function select(page: Page, number: number, text: string) {
   await page.getByRole('button', { name: `${number}번 선택`, exact: true }).click();
@@ -68,12 +68,12 @@ test('three panes, persistent draft, multiple corrections, reselection and verif
   await expect(page.locator('#v4-response')).toHaveValue('두 가지 관계를 잘못 이해했습니다.');
   await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '선택·근거 전송' }).click();
-  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('대화 기록')).toContainText('1번째 관계를 원문과 비교');
   await page.locator('#v4-response').fill('첫 번째 관계를 수정했습니다.');
   await page.getByRole('button', { name: '답변 전송' }).click();
   await expect(page.getByLabel('대화 기록')).toContainText('2번째 관계를 원문과 비교');
-  await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toHaveCount(0);
   await page.locator('#v4-response').fill('두 번째 관계도 수정했습니다.');
   await page.getByRole('button', { name: '답변 전송' }).click();
   await page.getByRole('button', { name: '다시 선택', exact: true }).click();
@@ -106,7 +106,7 @@ test('explicit omission → wrong → omitted rationale → coaching, answer rev
   await page.getByRole('button', { name: '근거 전송', exact: true }).click();
   await page.getByRole('button', { name: '아니', exact: true }).click();
   await expect(page.locator('.v4-answer-reveal')).toContainText('정답 5번');
-  await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toHaveCount(0);
 });
 
 test('ambiguous correct can decline end coaching without questions or answer reveal; mobile panes fit', async ({ page }) => {
@@ -173,16 +173,18 @@ test('lost POST response recovers authoritative transcript without duplicate sub
 });
 
 
-test('composer keeps four rows and identical height through correction, post repair and reselection', async ({ page }) => {
+test('composer keeps three rows and identical height through correction, post repair and reselection', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 }); await open(page);
   const composer = page.locator('.v4-composer');
   const heights: number[] = [];
   async function measure() {
-    await expect(composer.locator(':scope > *')).toHaveCount(4);
+    await expect(composer.locator(':scope > *')).toHaveCount(3);
     heights.push((await composer.boundingBox())!.height);
   }
   await measure();
+  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toBeVisible();
   await select(page, 1, '관계가 반대라고 생각합니다.');
+  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toHaveCount(0);
   await expect(page.locator('.v4-highlight').first()).toBeVisible();
   await expect(page.getByRole('button', { name: '지문에서 보기' })).toBeVisible();
   await expect(page.getByRole('button', { name: '답변 전송', exact: true })).toBeVisible();
@@ -191,6 +193,7 @@ test('composer keeps four rows and identical height through correction, post rep
   await page.getByRole('button', { name: '답변 전송', exact: true }).click();
   await expect(page.locator('.v4-highlight')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '다시 선택', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toHaveCount(0);
   await expect(page.locator('#v4-response')).toBeDisabled(); await measure();
   await page.getByRole('button', { name: '다시 선택', exact: true }).click();
   await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toBeEnabled(); await measure();
@@ -209,7 +212,7 @@ test('wrong reselection gates and reveals each section through understanding NO 
   const heights: number[] = [];
   async function measure() {
     const composer = page.locator('.v4-composer');
-    await expect(composer.locator(':scope > *')).toHaveCount(4);
+    await expect(composer.locator(':scope > *')).toHaveCount(3);
     heights.push((await composer.boundingBox())!.height);
   }
   await measure();
@@ -317,3 +320,43 @@ test('instant verdict precedes waiting; processing reload preserves pending and 
   await expect(page.getByLabel('대화 기록')).toContainText('설명이 이해됐으면, 이번엔 정답에 대한 설명으로 넘어가 보자.');
   expect(await page.locator('.v4-composer').evaluate(e => e.getBoundingClientRect().height)).toBe(height);
 });
+
+
+for (const size of [{ width: 1600, height: 1000 }, { width: 1280, height: 720 }]) {
+  test(`layout economy, pinned stem and scenario, in-region highlight scroll and bottom-following chat at ${size.width}x${size.height}`, async ({ page }) => {
+    await page.setViewportSize(size); await open(page);
+    const big = size.width === 1600;
+    if (big) {
+      expect((await page.locator('.workbench-header').boundingBox())!.height).toBeLessThanOrEqual(44);
+      expect((await page.locator('.v4-composer').boundingBox())!.height).toBeLessThanOrEqual(140);
+      expect((await page.locator('.source-head').boundingBox())!.height).toBeLessThanOrEqual(72);
+    }
+    if (big) await page.screenshot({ path: '/private/tmp/problem-v4-layout-economy.png' });
+    const list = page.locator('.v4-choices-scroll');
+    const stem = page.locator('.question-head h3');
+    const scenario = page.locator('.v4-scenario');
+    const before = { stem: (await stem.boundingBox())!.y, scenario: (await scenario.count()) ? (await scenario.boundingBox())!.y : null };
+    await list.evaluate(e => { e.scrollTop = e.scrollHeight; });
+    expect((await stem.boundingBox())!.y).toBe(before.stem);
+    if (before.scenario !== null) expect((await scenario.boundingBox())!.y).toBe(before.scenario);
+    await list.evaluate(e => { e.scrollTop = 0; });
+    const last = page.locator('.chat-message').last();
+    await expect(last).toBeInViewport();
+    await select(page, 1, '관계가 반대라고 생각합니다.');
+    await expect(page.getByLabel('대화 기록')).toContainText('1번째 관계를 원문과 비교');
+    await expect(page.locator('.source-pane .v4-highlight, .question-pane .v4-highlight').first()).toBeInViewport();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    await expect(page.locator('.chat-message').last()).toBeInViewport();
+    await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toHaveCount(0);
+    await page.locator('#v4-response').fill('중복 게시가 여론을 왜곡할 수 있어.');
+    await page.getByRole('button', { name: '답변 전송', exact: true }).click();
+    await expect(page.getByRole('button', { name: '다시 선택', exact: true })).toBeVisible();
+    await expect(page.locator('.chat-message').last()).toBeInViewport();
+    await page.getByRole('button', { name: '다시 선택', exact: true }).click();
+    await select(page, 3, '다시 고른 답도 맞다고 생각해.');
+    await expect(page.getByRole('button', { name: '응', exact: true })).toBeEnabled();
+    await expect(page.locator('.chat-message').last()).toBeInViewport();
+    await page.getByRole('button', { name: '응', exact: true }).click();
+    await expect(page.locator('.chat-message').last()).toBeInViewport();
+  });
+}
