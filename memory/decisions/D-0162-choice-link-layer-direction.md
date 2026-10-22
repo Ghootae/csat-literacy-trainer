@@ -23,6 +23,29 @@ supersedes: none
 - UI 4지문 분석 골드(`docs/experiments/analysis-gold-ui-2026-10-21/`): 지도 v2 12회 모두 검증 통과($1.49), 동결 법인 r1·정보 비대칭 r1·mRNA r2(closeCall)·표면 장력 r2, 입장 4($0.159, 덮어쓰기 0, FIGURE는 정보 비대칭 15), 관계 유형 156관계 기타 0($0.219).
 - 외부 전송 승인(사용자 "승인", 2026-10-21): UI 4지문 원문·동결 지도, `gpt-6.1-sol` medium, 지도 12·입장 4·분류 4요청, 재시도 없음(응답 없는 오류만 1회), 상한 지도 $2.5·입장 $0.4·분류 $0.5. 실제 합계 약 $1.87.
 
+## 보완: 선지는 출처 조각으로, 정답 자료 위치 (2026-10-22)
+
+- 사용자: "실제로는 지문 뿐만 아니라 문제에 딸린 보기나 도표, 그림에 대한 내용도 선지에 포함될텐데" → 선지를 **출처가 붙은 조각**으로 나눈다. 출처는 지문(지도 단위), 〈보기〉·도표·그림(〈보기〉 안 위치 번호·그림 요소), 적용 판단(〈보기〉의 무엇을 지문의 무엇에 대응시켰나). 비틂은 조각마다 붙고 목록도 지문·〈보기〉·적용 갈래를 갖는다. 사용자 "오케이 그렇게 진행".
+- 생성은 결국 API(sol)가 하므로 비틂 목록도 sol 자유 기술에서 만든다(D-0147 흐름). 사용자 "결국엔 api를 써야하지 않나?" → Claude가 직접 기술하자는 앞 권고를 철회.
+- UI 6지문 비어휘 문항 19개 중 〈보기〉 7개, 그림 1개(공손룡 13번). 그림 문항은 이미지도 외부 전송 대상.
+- **정답 자료 위치**(사용자 "정답 정보 위치는 기록"):
+  - 수능 DB(`/Users/mac/Projects/suneung_db/output/`)의 `questions/{set_id}.json`에는 정답이 **없다**.
+  - 정답·선지별 해설: `/Users/mac/Projects/csat-literacy-trainer/data/enrichment/records/{set_id}.json`(153세트·728문항, `questions[].correct_choice`, `official_explanation.choice_explanations`). 출처는 EBSi 정답 및 해설로 정답 번호는 사실 확인값이고, 해설 문장은 `claude-opus-4-8`이 다시 쓴 것(`generation.content_type: independent_paraphrase`, 2026-09-03)이라 골드가 아니다.
+  - UI 연결 6문항의 정답·극성·해설: `packages/pipeline/fixtures/experiments/problem-solving/source-direct-runtime-v1.json`(`answerChoiceId`, `stemPolarity`). 도파민 q13 C2·mRNA q19 C5는 enrichment와 일치.
+  - mRNA 세트는 수능 DB에도 있다(`69c08f1d78128b2a9bedf236`, 16~20번 5문항). 앞서 "DB에 없고 1문항"이라 한 것은 잘못.
+
+## 보완 2: 설계 검토 반영 (2026-10-22)
+
+Desktop Claude 설계 검토(`docs/review/choice-link-design-review-2026-10-21.md`, 검토 요청 `docs/review/choice-link-design-for-review-2026-10-22.md`)를 반영한다. 사용자 "오케이 그렇게 진행".
+
+1. **스키마**: 근거 위치 `source`(PASSAGE·SUPPLEMENT·BOTH·NONE)와 다룬 방식 `operation`(RESTATE·INFER·APPLY) 분리. 지도 연결은 `twistTargetIds`(바뀐 곳, 집계는 이것만)·`supportIds`(맞는 근거)·`contextIds`(볼 곳)·`inferenceBasisIds`(추론 전제). 비틂 설명은 `evidenceQuote`(원문 부분 문자열, 코드 검사)·`choiceQuote`. 관계를 비틀면 `relationTypeChange {original, claimed}`(18유형).
+2. **코드 검증**: 조각 덮음(빈틈은 공백·문장부호 또는 한글 2자 이하)·겹침 금지, 근거 인용 원문 검사, 비틂 대상 필수.
+3. **〈보기〉**: 글은 코드가 S id로 고정. 그림 2장(공손룡 13번은 글 그림이라 Claude 전사, mRNA 19번은 요소 F1~F4)은 Claude가 확정해 `docs/experiments/choice-link-2026-10-22/supplement-fixed.json`에 동결.
+4. **EBSi 해설을 참고 입력으로 넣는다**(사용자 결정: "공식 해설 정보에 기반해서 재구성한거니까, 참고자료로는 쓰는 편이 좋지 않을까?"). 근거는 원문에서만 인용, 해설과 다른 지점은 `explanationAgreement: DIFFER`+이유. 정답 번호도 계속 준다.
+5. **비틂 목록은 두 단계**(사용자 결정): 큰 갈래 6개(내용 바꿈·관계 바꿈·주체 바꿈·범위·정도 바꿈·근거 없는 추가·대응 오류)는 Claude 묶기 기준으로만 쓰고 지시문에 넣지 않는다. 세부 이름은 자유 기술에서 귀납. 검증은 큰 갈래 수준과 세부 수준을 따로 본다.
+6. **3회 생성**, 회차 간 선지별 비틂 대상 집합·정오 일치율로 안정성을 잰다. 불일치 선지와 정답 충돌 문항은 Claude 검토, 충돌 문항은 동결하지 않는다.
+7. **진단 해석(학생 이해 지문 확장 때 반영, 이번 범위 밖)**: 문항 극성별 관측 가능 칸("적절하지 않은 것"은 정답 맞힘·맞는 선지를 틀렸다고 함, "가장 적절한 것"은 비튼 선지에 넘어감), "맞는 선지를 틀렸다고 함" 행, 비튼 조각 둘 이상 선지는 모호로 단정 집계 제외, 등급 구분(선택만 = 추정, 풀이 발화로 확인 = 확인), 요약 판정 라운드 시점, 처음엔 학생별보다 선지별 오답률 × 비틂 갈래 집단 집계. 피드백 쪽은 `twistTargetIds`만, 판정 뒤에만, 학생 발화와 겹칠 때만.
+
 ## 포함하지 않는 것
 
 비틂 목록 자체(다음 단계), 선지 연결 생성기, 학생 답안 수집, 피드백 런타임 변경, 다리 층.
@@ -30,3 +53,23 @@ supersedes: none
 ## 재검토 조건
 
 비틂 목록 검증에서 기타 비율이 높을 때, 또는 피드백 비교 실험 결과가 나올 때.
+
+## 보완 3: 정오는 정답에서 고정 (2026-10-22)
+
+v2 3회 실행(`docs/experiments/choice-link-2026-10-22/REPORT-v2-run-desktop.md`) 결과, 정답과 어긋난 판단은 360판단 중 28판단(선지 10개)이었다.
+
+- 5개 선지: 모델이 시험보다 엄격하게 읽었다(법인 q10①, mRNA q18④·q19②·q20③·q20⑤).
+- 5개 선지: 입력 결함이었다. 공손룡 q12의 〈보기〉에서 ⓐ~ⓔ 표시가 빠졌다.
+
+사용자 "A안 동의. 승인. 작업 후 커밋"(2026-10-22)으로 다음을 정한다.
+
+1. 선지 정오(`truth`)는 정답 번호와 발문 극성에서 정해 입력으로 준다. 모델은 정오를 판단하지 않고 연결만 한다. 원문만으로 정오를 끌어내기 어려우면 `readingGap`(`IMPLICIT_PREMISE` 상식 전제 보충, `STRICT_READING` 엄격 읽기)과 note를 남긴다. 이 층은 정답을 다시 판정하지 않는다. 정답이 왜 정답인지를 좌표로 남긴다.
+2. 〈보기〉 조각에 기호 표시(`marks`)를 넣는다.
+3. 형식 규칙을 고친다.
+   - `NONE` 조각도 `contextIds`를 쓸 수 있다.
+   - `APPLY`는 〈보기〉와 지문 근거를 둘 다 넣는다.
+   - 〈보기〉 적용 선지의 바뀐 곳: 〈보기〉 사실을 다르게 옮겼으면 〈보기〉 조각, 지문 원리를 잘못 적용했으면 지문 단위.
+   - 서술 방식 선지: 지문에 없으면 `NONE` + `TOP`.
+4. 비틂 목록은 v3 출력으로 묶는다. v2 출력에는 입력 결함이 섞여 있어서다.
+
+지시문: `CHOICE-LINK-PROMPT-v3.md`. 인계: `docs/handoffs/2026-10-22-choice-link-generator.md` 보완 v3.

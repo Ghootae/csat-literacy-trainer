@@ -1,0 +1,360 @@
+{
+  "id": "resp_0ba6e27a46678a73006ad8f32b12fc87d0b504c02715984a40",
+  "object": "response",
+  "created_at": 1792602923,
+  "status": "completed",
+  "access_programs": null,
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1792603019,
+  "error": null,
+  "frequency_penalty": 0,
+  "incomplete_details": null,
+  "instructions": "너는 수능 국어 독서 문항의 선지를 지문 분석 지도와 〈보기〉에 연결한다. 목적은 학생이 어떤 선지를 골랐을 때, 그 선지가 지문·〈보기〉의 어느 내용을 어떻게 다루었는지 좌표로 남기는 것이다. 지도와 〈보기〉 조각은 고치지 않는다. 지문과 〈보기〉에 없는 내용을 지어내지 않는다.\n\n참고 해설은 정답과 선지별 판단의 이유를 적은 참고 자료다. 판단과 근거는 반드시 지문·〈보기〉 원문과 지도에서 확인한다. 해설과 원문이 어긋나면 원문을 따르고 `note`에 적는다. 해설 문장을 근거 인용으로 쓰지 않는다.\n\n문항마다 다음을 한다.\n\n1. **발문 극성** `stemPolarity`: 적절하지 않은 것을 고르면 `SELECT_INCORRECT`, 적절한(가장 적절한) 것을 고르면 `SELECT_CORRECT`, 둘 다 아니면 `OTHER`.\n2. **〈보기〉 조각**은 입력의 `S…`·`F…`를 그대로 쓴다. 한 조각 안에 선지가 기대는 단위가 둘 이상이면 `extraSegments`에 `S2a`처럼 더 나눈 조각을 둔다(`parentId`, `quote`는 부모 조각 글의 정확한 부분 문자열).\n3. **선지마다**\n   - `truth`: 지문과 〈보기〉에 비추어 선지 진술이 맞으면 `TRUE`, 틀리면 `FALSE`, 판단할 수 없으면 `UNDETERMINED`.\n   - `answerConflict`: 정답 번호와 발문 극성으로 보아 `truth`가 정답과 어긋나면 `true`, `note`에 이유. 정답 번호를 바꾸지 않는다.\n   - `explanationAgreement`: 참고 해설과 같은 지점을 근거·비틂으로 잡았으면 `AGREE`, 다른 지점을 잡았으면 `DIFFER`(이유를 `note`에), 해설이 없으면 `NO_EXPLANATION`.\n   - `parts`: 선지를 내용 조각으로 나눈다. 조각을 모두 이으면 선지 문장에서 조사·어미·문장부호 말고는 빠지는 부분이 없어야 하고, 조각끼리 겹치지 않아야 한다. 각 조각은\n     - `quote`: 선지 문장의 정확한 부분 문자열.\n     - `source` 근거 위치: `PASSAGE`(지문), `SUPPLEMENT`(〈보기〉), `BOTH`(둘 다), `NONE`(어디에도 없음).\n     - `operation` 다룬 방식: `RESTATE`(근거를 그대로 옮기거나 바꿔 씀), `INFER`(근거에서 한 단계 이끌어 낸 판단), `APPLY`(〈보기〉의 대상·사례를 지문의 원리·개념에 대응시킨 판단).\n     - `twisted`: 근거 내용과 다르게 바뀌었으면 `true`.\n     - `twistTargetIds`: `twisted`이면 실제로 바뀐 단위만. 인과·조건 등 이어짐을 바꿨으면 그 관계(`R…`) 하나, 명제 내용을 바꿨으면 그 명제, 〈보기〉를 잘못 옮겼으면 그 〈보기〉 조각. `twisted`가 아니면 빈 배열.\n     - `supportIds`: `twisted`가 아니면 이 조각이 맞다는 근거 단위(지도·〈보기〉 id). `twisted`이면 빈 배열.\n     - `contextIds`: 판단하려면 함께 봐야 하는 단위(관계의 양 끝 명제, 대응시킨 원리 등). 바뀐 곳·근거와 겹치지 않게 둔다.\n     - `inferenceBasisIds`: `operation`이 `INFER`이면 추론의 전제 단위. 한 단계를 넘는 추론이면 `note`에 적는다. 아니면 빈 배열.\n     - 지도 단위는 가장 작은 것부터: 한 문장 내용은 명제(`P…`), 두 내용의 이어짐은 관계(`R…`), 문단이나 여러 묶음의 요약은 합성·요지(`C…`·`G…`).\n     - `twistName`: `twisted`이면 무엇이 어떻게 바뀌었는지 드러나는 짧은 명사구. 정해진 목록은 없다. 아니면 빈 문자열.\n     - `evidenceQuote`: `twisted`이면 근거 원문의 정확한 부분 문자열(지문 문단 원문 또는 〈보기〉 조각 글; 그림이면 그림 요소 설명). `source`가 `NONE`이면 빈 문자열로 두고 `note`에 \"지문·〈보기〉에 해당 내용 없음\"을 적는다.\n     - `choiceQuote`: `twisted`이면 선지에서 바뀐 부분의 정확한 부분 문자열.\n     - `relationTypeChange`: `twistTargetIds`가 관계이면 `{ original, claimed }`. `original`은 입력의 관계 유형, `claimed`는 선지가 주장한 이어짐을 같은 유형 목록에서 고른 것. 아니면 `null`.\n   - `truth`가 `FALSE`이면 `twisted` 조각이 하나 이상, `TRUE`이면 하나도 없다.\n   - 선지가 누구의 주장인지(인물·학파·입장)를 말하면 명제별 입장과 대조한다. 주인이 바뀐 것도 비틂이다.\n4. 지도에 알맞은 단위가 없으면 가장 가까운 단위를 넣고 `note`에 무엇이 모자란지 적는다.\n\n출력은 주어진 JSON 스키마를 따른다.",
+  "max_output_tokens": 24000,
+  "max_tool_calls": null,
+  "model": "gpt-6.1-sol",
+  "moderation": null,
+  "output": [
+    {
+      "id": "rs_0ba6e27a46678a73006ad8f32dcf7487d089167a4088fbc1cf",
+      "type": "reasoning",
+      "content": [],
+      "encrypted_content": "gAAAAABq2POM0SDyY_TfYNcGafwegincvxbyEV7aPG-2y1397QEW2eDEfFJmxFkbEWVeNoS-veZFP0JCP21diT5xSUGMkdr3QebnT8hHKH_dF44HaOGSXBWhEHtMMx3q6WOAgmxVtnWSM1n8AvyJGxj4TdTocI35Sf6QJt67Gpz5uxI7zERHYoAmO29KLaMp1-qOc87HJfR9M1FtIqEkznzYO6cHMT6QlJ3sEgWygbc13DsW7FhCZ4qjdhdTCn1W9WFL4HdBbcbJSffgAJiAGCvnrXSQkDqbvWDePOYbwWYbaGEyGT12fe0V97SG-MqoBqEsPKjifZb_-PivzoO4-US6u3UH6oKvJpeVn3HQQtvEtU1YGSrnvq5gmCIfFxOusWHhvNWTcp2mHc7T0qApeTdP31pw-eUpUTtcxyHOAvfTN5oNv52lbrM7TrKyqfZ3EfiRVRFVswjxYW6V2JKZJg2MNLaDYAHicTMu2t63ulG0NIMndt-zxfhx2B-QCioaKsp-MYEcxOEhlZ5245gLJWNB0R7bwxIawlV9SNwpJJNU29uZUb5e4Ct6g2RiN_qEP46R4sDfZBKNt3v8t2ri_GQTKIMHt42KDxd0W5if82LR7hb3vGl0pct057W_a75f35FVpiEigLXMkPbk6qABcq1hKDijUIDl5re4Onpzd8wj-Mn85eeYntavQuyelKPek5FX0ftWR82jaeTvh2GXHUyIazinCGjO93ctCbiGmI4hOdBKp7Seskr0LjTV6Sxse0GvGb-Bt8em3zmICpAjnQmtHi3sjRrWG8qMDK_JecUchLl74d7D2h17flnqja8EeKY7uGw_oR8P8ivqflX7kBQPUfRU1PJ6Es15cZ-IC7l6LIHt6rTBAZU822O9bqJ8VeQ6vOVhXrr5r0h52Rz4v8zBbvn6YSHowqiKd0o1xi8w85_e8I5ny_w7Tc19twNjoEItUsXb1dQhKYi-8x05YRk6Q8APyHr2TNuICAn0S0U5LlrWRK4h4Ju_n8zqnw6D20q3gS6neZKXBJSi3YlQJfbOeB98cDhE4CnEM_JhA8QPj8do_1buoryy0JmCfi_gqtBzGddencWHxYGefXtjGW7zM-Wb_siQEZMJ2eWWMi40IGH_nud1DqLreqbFnOLKkIrfLVSihZM_ZN9NtN9EjWWmowf6AkTuz8vpt7mgdlqNH5QZujyDussBRm_k3zSlasBDPPPVrDGJQnbfwyQOGJHKi7ZQIVrfNMKQbGcccYj6kYdog9vw89PM0Fuht-UDMTGCY2EpFiiVik-lu7UM6rd6nDnRPRomBg15DZiMWqIxj1l6LzGXqRSfIPuM4f7kNM9k6Ia5CG8I1B4IlTJ-1D2CUnhLiwMpzSQ-515Y_IHV2Xk02qS5HN5qkFHEtXlqsEV7g5wYZKv_q-Jlk2TXDQw2DgXy2UwuDKZS6GLO3Pr7jq0cwfJtk27B_rvShNyhi5Yz0wgaeX3epxvgzrVVltvpFT93P36977JhHNOU50LJvM2T5YcPi-y3KkgROv66JDRrkGciuAVEY2cYvYXy0obNrAAybbzFCJ0sqaprmUUuX1anEKndAWIRErkKYXIngvz7SOuLPMDMjwkHVGdS5MwalCl3cQ1zxe2u1oLVZz1kanLtHbJFFjYT7_D_ks12T-bTWtDKuo1ll9tX7QXaewjyP4i3nQioa87hLNyiqKVpdnS6zQKUGIQawOI-U1VgBDXz77rUkdGuq_58ThK85i8QzVUiAgfkusEMm5F44Y5hP53XrSUzg-s8eeJiNnCOFcLfPJtTcjyOo1FBrD6IFj1OAuAuqes32LNcethn2EHLBwOx4QJt22HQRpX8XKIwI-nbgT-k-N7CS9IDY9iPgdNHbHqsMb1hh3gjdgeCdnhbV3n7qZXjp4Wj9siQrKdyPzFoBjP1gbDZxidCMvxZV2ohktHoHfEr5k4nMu86arYPJAJYf_pLja9YnTaF37KAO0zHpJxYpIyL7ioDWdkO0Sads6_mZO529-l4dRINutsTbA9LL6_qvqfY-6lp_tEPBGoUpojRY7KZUQQ5y8JBEh7JljsQ-TTezQDM5JTu-lJif65M5om0IAT8LGSStuJyx3S3HUKRc22tnkchh1ZBbPfSjaF-VpvBSnqSbxGXV2sxzrYmI6tlq9jmOSWTcCMHDpj3t4YfpaU2NuVXOyGvm40qadSIEmqP-LxH3ABwo6lHUoogCSWH8THMZfPw9hTNsSoIrCzzQia4BTo_EkUx3DpmwokOhZZjh42-4muo7pDtOYvNNi8L5nZyv2J4F3O8E2BBxLiAzy35uKslPCWT8Vm5A_n4Nwo7WCztyXwRAg2i7zGQsHvEs3Fj7o4iB5R9l2_UDCoqefsmPTOjNIdw3yO5W-Lnpp4I9ofopqX_aYDD8saF6LEZQYyS0GJMMY5L_6SrIFFT7synExbN5uXZPNaV5vB85Y3ShvsVT9PjY0MuzJsJNEsiyVegAE30tnMsa-72CG-eaViT0SVkqzrBhWLKFYh0bYuU9gZKT3oaq7fJSPO0vmERQTIqWsuM4VTTS7Z2YB18P0U8D7Prcoh72wvHe-gE2sJBrrlrHV2qIQfStJACogIgIkwwv2Qo-k3xxjgDwTn5YDIbp4MKe8yxsWGsm-55W0-OWqTWs7LR_P-j3AIoQa1BHVWFEAqeNq_ZzPwjhQVXT5IS7BkHHELH_5yixzc50ySnIFj6Ll1h3f70XIWX-oy1JdiXdvPgY_Fyt-xHrJNp8tDgOrcBaIR532PGhSdxTJS8PUUaMkc8AdiwrPL4clRetsKQWouH9Jo5dsULQXhzQBeBwyhMElVkl2NjnjLY3ilWyWBAzYv7onXe73dJiHrnTNaQx-953fRSsXsIItMhAfa6g7MI1LlKmAl-k5mrtkDau9IGHBjr5C3VRKt_jPMHOypmWccvZVKHciiRa2b83_4gVPeXCed0EyILdGwR3EG2aIwa6-2xgn94EAGHSog_Lul1nDCFBGJdFYqNndX58RHLbgdOYiiLaEm2riTz2eIgtF1EwCWdHih57Py0MkM6mKDCCVJF2Pviza3JsD0A4YGV5aqS9eCK39zDamVxcQyCLXvZALBSsj3vfpz7MeeiQYeeG4z5H57k834m4SpQ3Dc_m0WZ4H73xEqUf_VUCxogvrxqFh1mr933eTq9cYJizEEY7JcOY8F69f38jCuAxaxVk2Lq_UofFS7Oe4uRahqVsYPZHvwNN1oIJ92oQ5TQ74tSHNwoPdE1zPGRQWUouP46wewtUYDYjrbDti1vqO4DnjS4LkzjWdaIVoVIZhSJ7jtjWDq8VAyf42GTkcxVcqXpePQB1PNdnSkET3JZAW2m93ugS9m_TX4jCm-Byx-k9DAbzo8LODnISV8uqmpOgPcUU1KIkqUl2BHo9ET9ZUfgPETV85CDRd0MZxw-idCexy96ot7B8JPzO7LnBbanwnBFQE222g9FW2hYyr9UmMyet7eVN9e0CHN1GO0UaWktDO0cmxUzUbX_8H7WYsICa8-RYrnCDbI0NNlFoObU6oH9BBIhi_8TBr30YQ_pttTFLGprhuB2oegKh2Z15a-87kDyiHhN3iHnj1f9jWDR-hVKQgOXV-RzDugIuxsVPLPdgPFccBk5ghe3ryc0QkpRh00_eORa-lEpJU6vVD63cUf-tp-oUueFAVEnJd6uOaGpzufiSqiMz8auijNx_u-FnEsYkdjgtbVK8yonX4Wj_sAmMuDbUalXibqtKijtXIfjqt6jytY9prdd13qMkKsivKCDO6BWneP8WDSSI4vYZ0W-_Zg_McBHTvoV-QBziVjINGBB4StXq_nysPovTpRzMHZfxLOk6CDQ772RtQ0xl9z_eoZCMVrnxuEdN5Ee7UajDPldrrt1r8Gx1L7A6kiHfPF5qw0qyC3n3NUYUKSrB-Dc3DKAknWUFm7WfLs3c3yTb_8oiTNPGqDizP9pbeM0bxTUzUUsLyvahfNnrFq9fM5ij5eEosaEbFKC1qtl42MASKSB5DtGUlZEnSINfImtAhFRylcvgxF173m9Rhaj5SsclAMElFyoIOrSJGTPn0R37-FxZ3W0XEB8ZfCypWIFu2wQCQLMrml0JndzShfnqrwLV5nWsg4DYutwQHM-K9GTmEfMu56ZhtlBJxiJ_uSfTDGwkprUcF532g_0s0K0vWymeaDgV4AjKvLk2qycXstWfW9OPABpU7I64I9U_VE9uwh8MrYiOvMt7_Z0FeVznSWM48XoLbbbBtvMmELg-C9hTyjQ8zhSthr3--UjB73o_AdRVCts-j_LJafmMnlfJlEhnitUULI_YirDMzyN1TycDf0Z_kCD3ya-2sbPBLUsQMCQ90svQArDeJL1WYdZxchYCNsco9GpRuJ6OsPln6LmoSw1F1oxGThPr_MYB7u9iDh539r8go7mnGNL7iGLQubkzRVa7EK8AOtKBemuADSVayjSSQSWRuwTguAunEjWZ-XSS-K9sOtXgmSIFcE7yzIy4ign02Wq4tUbts9tgb6eqmsSHA98U0CF6rj22Tt-eY0gSX_tYFAJQ51rk6uFRzuGGeuPcn7eHupP3no5WjYYiG72DSaSOGiDrfO7gWizXW_48LusloyhEd-3akXNuTvOoER-OSB_BuFVFICnIqL8535QcBV6t1T97wnnsgIvOX1YCKg59lbWne-ZAubkwO1mBQdWisPzulLJiTW3-KKSNQqFWxJ8TfiLd2Wnmv7vMwA_0_lYc8N5hxZ_eu75KZxkHR1H5ezVQwQd1r5-gc4uRSn8KjK9XXftKxNGJ6NAHGxc01NyfO_VeYPaMn3Fi1GFXdfbElAcXGuVPKHAOt-rJMe5vNZhUFb48mjVCKDF9unWLjImmf_bU0KAZHecQqxMtFVZN2Mbq94bNyOMo-pvldZuAgsMF-cxxbK-s-35ZO0iWobf6xCIWCis4uFrps6xQGYLpLxfBV_tAOZ4YTGLlD_Tq7YCiktaLy4dxqRzsztxinOTlgZT3J62qSiE4G8KIVpJok7TERWsCvQDAu_MOF9U6JXHhAoEqFl4Jz55HALVGuRM1Jmw4utU2oP2ZJqsLqJsXDKKKKXGtReNri56CH2MU8LHnvtDylF-Q4BrdbxY-DgrPdqyTUzpoWlj3PcMaDs5NkzcedRO_gFYo9C2soPP2SXddT_hzmTmDmt3RUU1hCp6B-pL7Y9EPyUZFd0xWlqrunTuJiXpJ8RvzP11z1ogrAISTHjRpf0am1X1q0eiS1b9LUpn_v_GkWk1T8tCtzUOnYh9jNljNOVQuuixey8O3MDwqJmv3GvHg511e3yOhWwpvDNH5ppCfHVD_zKkS9zSnOQL1HAAnATaL0RT3Fk8qhlt_7cVm5LFHBD9RRPtSiIs4aFFPkuoWXHYyfcBrrAmtGBdhWua2BuB_qFbqCPHgIri4mGKRcAJFZ_jhTBTXkdQahXxPFouJ1kPsUkaH5YZ4jfxq2C5sPPvcBSI164QrDxvccyshlWOTjMidU2SPLPNQ0J-p4pIqjCj4fAex3sjmCl3PiT3tcXpXUIcJZae_h7IIVQo8_oH29I0F0OQEhKAupW29_i1H_CWr6H4ml81-29AkdgFtHmreYglnI0A9ZxeiWXFkvoEicpsaYEt9EqM8hSei76oE26cETCJppEHvhOR1OHq79_pu85HxZIG0IVDy5kFuZbi6OPx1at4hbJaen25PEzukhnE5jABa2OHkWPIaHTShaWHAahGqfoiZjKZu3Sided77daEQYkE4hBy0BpCaxkTgngRz6YqJD2o_kqlNyOGSS99rQpQPt7fYxdJPlSoF158U4kr9QOsvkqaWS3PsYDwUg8Mti-LbXNpmttL44-OcBd6B5cP1msuLVTmqg1Ql3Eeubxjj0xVf0YQrMoyL6EmlFJAwWhPqESkxkXNB0JB_mA643jV1G6I2wDFHePOJ0aQ-WgzxIqouSWj-sUtyS-yznpWO0dGN42RO1bAzz54ZXZb4On4KvPhRUyLzjLKod2TthahndcHtuczB7f7KMCIWx0LVq7vv7-dvOqfj9F_VA9oZ1ChvL_AS2N-9RCs7_wbSbPKcfwkWYE0-jh66liD5KvBZcR7uOz1IJ2HtRDJ8lPh2C7Sp00Iu1JINAT7RJF4UYLrIiJGQd9aIUMZ_r_36q1HMykHpibuvZQ5tivDIdXV3T5UtYIJJuHyIaoV89XTO7hOY-N4LNp3-oyeU1IU6EBgSg0enseYfVY7wzNIhr2efF5r6h4e_iwqki2Enz6KqBAdL6LbIv0-gVvkMn0HIyHPnf6CgYqynQEfgWMyt6dVRTgWc5EYLVvuWmbQno0HKn0q-w_H6J2jyM7xOJiJWg1LhGToC7txqhvCrIIf4SRiJ0e6Xtu4vDKMlLbHA48v7b8nrBMA0kIOmFRFxHy-KqnTNMFm1bNTtA_NOLssyE-X9uaySzSJyUiWyi5lqLFrJdUD84vdjcIgB5XUMCh-SqxXq9SPCWyt6XEZ02G3LxwgUA1-j1iKZO5EIIs6G31qhYg3-BHm0a4goNYDVI7M2PZug1-UYjByimWFeZ6VRnyizbFEMUQbGqqlSelaa-WR7JDKNvypqek7E58vnL0MLWKsKGsqLEGinNSMwNdoi0wF4w5wo-bgnj_uxTjNLu1uUzYHCJV_K3MyD1W4WWrz1KVkJDvNISrClu6pAvn6Crv_WbbjQbVWX3bjYEG6i9_ECKhgOYs7YGGonze4O5SuhPuaLxA71uas0VmpLRVkdsSxOjpCYMYH0UEDxXea4TprhMQMNSuH_zJoVHoiHF9QYFgcF_wt5g8gmkZ2deoFJF_rLfr0QuuCcT4MbfS0izfLBJBtsuyDzvviIYN7zWuE3sBaVJFYhRoi4zoRUjDrueXp0eKH8JCCAoHjOrwyZ-XWNEimNScA7rCudNXuUAWd3TQdWD4g3_J7pcqv9ZSmBuzh8higHi_oU97kgAzG6CxMH9OwQVQWZpZb4fr-Lp4-bym_lj-AxS34Qtqj4b5SqQ0co9Qweex0WscKbyR7yyrofJx_bZqTHcF_8KsQU4Vf48DXi8f4DKWW4RhKR8oT4pV0oUNqEVHqd7mlzxaX7Z22NcRICS2Zy-JB2l7OCmzEJoy74OhzjiEN6aYFPA5Jm_qnFz1IQ94r4_eVodHMsOl8zoZr5JulqXxFxKBPQXNVIlUiFydhxma8grCLIMY6HqqDH8ATiA-HaX7j50iBifxpgmmvEi7I-n6GAUiRcGin4CYdxyI9WmqQSBA0eaampfwErbGTOnY=",
+      "summary": []
+    },
+    {
+      "id": "msg_0ba6e27a46678a73006ad8f33af74487d09fd3b354dc7513dd",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\n  \"passageId\": \"corporate-law\",\n  \"questions\": [\n    {\n      \"number\": 10,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": true,\n          \"explanationAgreement\": \"DIFFER\",\n          \"note\": \"원문은 법인격의 부여 대상을 '구성원 단체'로 명시한다. 선지의 '구성원들에게'를 구성원 개인들에게 부여된다는 뜻으로 읽으면 부여 대상이 달라진다. 참고 해설은 개인들과 단체를 동일시하므로 원문을 따른 판단과 다르며, 제시 정답 외에도 부적절한 선지가 생긴다.\",\n          \"parts\": [\n            {\n              \"quote\": \"주식회사의 법인격은 주식회사의 구성원들에게 주어진다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-5\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-4\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"법인격 부여 대상을 단체에서 개인들로 변경\",\n              \"evidenceQuote\": \"법인격은 주식회사의 구성원 단체에 부여된다.\",\n              \"choiceQuote\": \"주식회사의 구성원들에게\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"재단 법인의 기본 재산은 법인을 설립할 때 정관에 기재해야 한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-12\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"공통 서술어가 두 자산에 모두 적용된다. 자본금에는 누적 손실 보전이라는 예외가 있고, 기본 재산에는 관할 기관의 허가라는 감액 요건이 있다.\",\n          \"parts\": [\n            {\n              \"quote\": \"주식회사의 자본금과 재단 법인의 기본 재산은 어떠한 경우에도 감액이 금지되어 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-6\", \"P2-13\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P4-14\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"원칙적 금지와 허가 요건을 절대적 금지로 강화\",\n              \"evidenceQuote\": \"이는 회사의 지급 능력과 재무 안정성을 보장하는 기초 자산이므로 원칙적으로 감액이 금지된다.\",\n              \"choiceQuote\": \"어떠한 경우에도 감액이 금지되어 있다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"공동체 질서 유지라는 최종 목적에 이르는 중간 목표인 자율성과 책임의 균형을 제시한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"법인에게 주어진 자율성과 책임의 균형을 이루기 위해 법인의 자산 운용은 법적으로 통제된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-9\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"법인의 자산이 법적 통제 아래 운용되어야 한다는 것은 법인의 종류에 관계 없이 지켜져야 하는 원칙이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 11,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"기본 재산의 본래 기능을 말하는 데 그치지 않고 '대로만'이라고 제한하여, 관할 기관의 허가에 따른 처분·용도 변경 가능성을 배제한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"기본 재산은 법인의 설립 목적대로만 사용되어야 한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-13\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-11\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"허가에 따른 용도 변경 가능성 배제\",\n              \"evidenceQuote\": \"이를 처분하거나 용도를 변경하여 액수를 줄이려면 반드시 관할 기관의 허가가 필요하다.\",\n              \"choiceQuote\": \"설립 목적대로만 사용되어야 한다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"법인의 목적 사업을 위한 재원은 개인의 출자에 의해서만 형성될 수 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-15\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-14\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"목적 사업 재원 형성 경로를 개인 출자로 한정\",\n              \"evidenceQuote\": \"이는 영리 목적이 아니라 법인의 목적 사업 재원을 마련하기 위한 것으로\",\n              \"choiceQuote\": \"개인의 출자에 의해서만 형성될 수 있다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"DIFFER\",\n          \"note\": \"소유권 부정이 틀렸다는 점은 해설과 같다. 다만 '절차에 따라'라는 제한을 준수하는 운용까지 관할 기관의 허가가 필요하다는 이유만으로 부정할 수는 없다. 후반부는 정해진 허가·보고 절차와 범위 안에서 운용할 수 있다는 뜻으로 판단하였다.\",\n          \"parts\": [\n            {\n              \"quote\": \"자산에 대한 소유권은 인정되지 않지만\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P1-5\"],\n              \"supportIds\": [],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"법인의 자산 소유권 부정\",\n              \"evidenceQuote\": \"자산의 소유권은 특정 개인이 아닌 법인에게 귀속된다.\",\n              \"choiceQuote\": \"소유권은 인정되지 않지만\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"자산을 절차에 따라 자유롭게 운용하는 것은 가능하다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-7\", \"C2-5\"],\n              \"contextIds\": [\"P1-8\"],\n              \"inferenceBasisIds\": [\"P1-7\", \"C2-5\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"재산 자체에 법인격이 주어진다는 사실만으로 대행 주체의 필요가 직접 도출되는 것은 아니다. 지문에 명시된 '법인은 행위 능력이 없다'는 전제를 보충하면 성립하는 압축된 설명으로 판단하였다.\",\n          \"parts\": [\n            {\n              \"quote\": \"특정 목적을 위해 출연된 재산에 법인격이 주어지기 때문에\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-1\", \"P1-2\", \"P2-6\"],\n              \"contextIds\": [\"P2-7\"],\n              \"inferenceBasisIds\": [\"P1-1\", \"P1-2\", \"P2-6\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"권리 및 의무를 대신 행사할 주체가 필요하다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R9\"],\n              \"contextIds\": [\"P2-6\"],\n              \"inferenceBasisIds\": [\"P2-7\", \"P2-8\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"공동체 질서는 법적 통제의 목적이지 개별 자산 운용을 결정하는 주체가 아니다.\",\n          \"parts\": [\n            {\n              \"quote\": \"원래의 목적에 맞게 자산을 사용할 수 있도록\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-8\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P1-8\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"운용 과정에서의 결정은 사회ㆍ경제 공동체 전체의 판단에 의해 이루어진다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-10\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-9\", \"P1-9\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"관할 기관의 허가를 공동체 전체의 판단으로 대체\",\n              \"evidenceQuote\": \"주요 사항을 결정할 때는 반드시 관할 기관의 허가를 받아야 한다.\",\n              \"choiceQuote\": \"사회ㆍ경제 공동체 전체의 판단에 의해\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 12,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"유지되는 것은 자산의 총 규모이지 자본금이 아니다. 총 주식 수와 액면가로 자본금을 산정한다는 정의와 추가 주식 발행을 결합하면 무상 증자로 자본금이 증가함을 알 수 있다. 배당과의 대비도 자산 총 규모의 변화와 자본금의 변화를 혼동한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠은 ㉡과 달리 실행 이후에도 자본금의 총량은 그대로 유지된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P5-6\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P4-4\", \"P5-2\", \"P5-10\"],\n              \"inferenceBasisIds\": [\"P4-4\", \"P5-2\"],\n              \"twistName\": \"총량 불변 대상을 자산에서 자본금으로 변경\",\n              \"evidenceQuote\": \"자산의 총 규모는 변하지 않기 때문에\",\n              \"choiceQuote\": \"자본금의 총량은 그대로 유지된다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"㉡은 ㉠과 달리 이사회의 결정만으로는 실행될 수 없다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R37\"],\n              \"contextIds\": [\"P5-7\", \"P5-11\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 주주들의 손익에 영향을 미칠 수 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P5-4\", \"P4-8\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P5-4\", \"P4-8\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"주식회사의 자산 운용에 상법이 적용된다는 일반 규정을 무상 증자와 배당에도 연결한다. 〈보기〉 사례의 적용이 아니므로 INFER로 분류하였다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 상법에 규정된 요건과 절차에 따라 실행되어야 한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-2\", \"P3-7\"],\n              \"contextIds\": [\"P5-2\", \"P5-11\"],\n              \"inferenceBasisIds\": [\"P3-2\", \"P3-7\", \"P5-2\", \"P5-11\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 회사에 대한 긍정적 평가를 유도하는 방법으로 활용할 수 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P5-3\", \"P5-8\", \"P5-9\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P5-3\", \"P5-8\", \"P5-9\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 13,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [\n        {\n          \"id\": \"S1a\",\n          \"parentId\": \"S1\",\n          \"quote\": \"주식회사 A는 경영 부진으로 인해 적자가 누적되어\"\n        },\n        {\n          \"id\": \"S1b\",\n          \"parentId\": \"S1\",\n          \"quote\": \"새로운 사업 투자나 이익 분배를 위해 적립해 두었던 재원이 크게 줄어들었다.\"\n        },\n        {\n          \"id\": \"S3a\",\n          \"parentId\": \"S3\",\n          \"quote\": \"이사회는 현 상황에 대한 주주들의 불만을 잠재우기 위해 회사의 영업 이익을 분배하는 방안을 검토하였으나\"\n        },\n        {\n          \"id\": \"S3b\",\n          \"parentId\": \"S3\",\n          \"quote\": \"필요한 재원의 부족으로 실행을 보류하였다.\"\n        },\n        {\n          \"id\": \"S4a\",\n          \"parentId\": \"S4\",\n          \"quote\": \"A의 설립자이자 현재 대표 이사인 갑\"\n        },\n        {\n          \"id\": \"S4b\",\n          \"parentId\": \"S4\",\n          \"quote\": \"회사의 평판을 개선하기 위해\"\n        },\n        {\n          \"id\": \"S4c\",\n          \"parentId\": \"S4\",\n          \"quote\": \"회사를 설립할 당시에 자신이 출연했던 부동산을 기부하였다.\"\n        }\n      ],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"A의 이사회가 배당을 실시하려는 방안의 실행을 보류한 것은\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S3a\", \"S3b\"],\n              \"contextIds\": [\"P4-8\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"이익 잉여금이 충분하지 않았기 때문이겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1b\", \"S3b\"],\n              \"contextIds\": [\"P4-7\", \"P4-9\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"갑의 운용 권한과 법인격은 구별된다. 법인격의 부여 대상은 갑 개인이 아니라 구성원 단체이며, 실제 운용 권한의 근거는 정관이나 법령이다. 주주들이 법인격을 부여한다는 주장 역시 원문에 없다.\",\n          \"parts\": [\n            {\n              \"quote\": \"갑에게 자산 운용의 권한이 주어진 것은\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S4a\"],\n              \"contextIds\": [\"P1-7\", \"P3-6\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"A를 설립할 당시 개인의 재산을 출연하여\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S4c\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"주주들에 의해 법인격이 부여되었기 때문이겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P1-7\", \"P3-5\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-6\", \"S4a\", \"S4c\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"운용 권한의 근거와 법인격 부여 대상 혼동\",\n              \"evidenceQuote\": \"실제 자산의 운용은 법인의 정관이나 법령에서 권한을 부여한 사람에 의해 이루어진다.\",\n              \"choiceQuote\": \"주주들에 의해 법인격이 부여되었기 때문\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"자본 거래를 고려할 수 있다는 가능성 판단이며, 실제 이익 획득이나 주가 회복을 보장하는 진술은 아니다.\",\n          \"parts\": [\n            {\n              \"quote\": \"A의 신용도가 낮아져서 주가가 하락한 상황에서\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"A가 법인의 설립 목적을 달성하기 위해서는 자본 거래를 통해 이익을 얻는 방법을 고려할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1a\", \"P3-4\", \"P4-10\", \"P4-13\"],\n              \"contextIds\": [\"P1-3\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"'더 이상 누적된 적자를 해소할 수 없게 되면'은 자본 잉여금으로도 손실을 보전할 수 없는 상황까지 포함한다. 이익 잉여금 소진만으로 곧바로 자본금 감소를 단정한 것으로 읽지 않았다.\",\n          \"parts\": [\n            {\n              \"quote\": \"A의 이익 잉여금이 모두 소진되고, 이후 더 이상 누적된 적자를 해소할 수 없게 되면\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P4-14\"],\n              \"contextIds\": [\"S1a\", \"S1b\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"이는 자본금의 감소로 이어져 회사의 존립을 위태롭게 할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R28\"],\n              \"contextIds\": [\"P4-14\", \"P4-15\", \"S1a\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"'법인격에 의해 부여된 독립된 권리'는 갑 개인의 법인격이 아니라 갑이 대신 행사하는 A의 권리로 해석하였다. 기부의 구체적 의결 기관은 지도에 없으므로 P1-8과 P3-6·P3-7의 일반적 절차 준수 원칙에 연결한다. 절차 위반에 따른 책임의 가능성을 말하는 선지이지, 모든 기부에 두 기관의 의결이 필수라고 확정하는 선지는 아니다.\",\n          \"parts\": [\n            {\n              \"quote\": \"갑이 이사회나 주주 총회와 같은 절차를 거치지 않고 부동산을 기부하였다면\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S4c\", \"P3-6\", \"P3-7\"],\n              \"contextIds\": [\"P1-8\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"법인격에 의해 부여된 독립된 권리를 행사하였더라도\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-1\", \"P1-4\", \"P1-7\", \"S4a\"],\n              \"contextIds\": [\"P1-5\", \"S4c\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"법적 책임이 발생할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-8\"],\n              \"contextIds\": [\"S4a\", \"S4c\", \"P3-7\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": "24h",
+  "reasoning": {
+    "context": "all_turns",
+    "effort": "medium",
+    "mode": "standard",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "description": null,
+      "name": "choice_link_v2",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "passageId": {
+            "type": "string"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "stemPolarity": {
+                  "type": "string",
+                  "enum": [
+                    "SELECT_INCORRECT",
+                    "SELECT_CORRECT",
+                    "OTHER"
+                  ]
+                },
+                "extraSegments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "parentId": {
+                        "type": "string"
+                      },
+                      "quote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parentId",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "choices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "number": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "truth": {
+                        "type": "string",
+                        "enum": [
+                          "TRUE",
+                          "FALSE",
+                          "UNDETERMINED"
+                        ]
+                      },
+                      "answerConflict": {
+                        "type": "boolean"
+                      },
+                      "explanationAgreement": {
+                        "type": "string",
+                        "enum": [
+                          "AGREE",
+                          "DIFFER",
+                          "NO_EXPLANATION"
+                        ]
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "parts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "quote": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "PASSAGE",
+                                "SUPPLEMENT",
+                                "BOTH",
+                                "NONE"
+                              ]
+                            },
+                            "operation": {
+                              "type": "string",
+                              "enum": [
+                                "RESTATE",
+                                "INFER",
+                                "APPLY"
+                              ]
+                            },
+                            "twisted": {
+                              "type": "boolean"
+                            },
+                            "twistTargetIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "supportIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "contextIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "inferenceBasisIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "twistName": {
+                              "type": "string"
+                            },
+                            "evidenceQuote": {
+                              "type": "string"
+                            },
+                            "choiceQuote": {
+                              "type": "string"
+                            },
+                            "relationTypeChange": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "original": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CAUSE",
+                                        "PROCESS",
+                                        "CONDITION",
+                                        "MEANS_END",
+                                        "CONTRAST",
+                                        "PARALLEL",
+                                        "CLASSIFICATION",
+                                        "GROUNDS",
+                                        "ELABORATION",
+                                        "APPLICATION",
+                                        "DEFINITION",
+                                        "CONCESSION",
+                                        "PROBLEM_RESPONSE",
+                                        "VIEW_DIFFERENCE",
+                                        "VIEW_AGREEMENT",
+                                        "CRITIQUE",
+                                        "INTERPRETATION",
+                                        "BACKGROUND",
+                                        "DEVELOPMENT",
+                                        "OTHER"
+                                      ]
+                                    },
+                                    "claimed": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CAUSE",
+                                        "PROCESS",
+                                        "CONDITION",
+                                        "MEANS_END",
+                                        "CONTRAST",
+                                        "PARALLEL",
+                                        "CLASSIFICATION",
+                                        "GROUNDS",
+                                        "ELABORATION",
+                                        "APPLICATION",
+                                        "DEFINITION",
+                                        "CONCESSION",
+                                        "PROBLEM_RESPONSE",
+                                        "VIEW_DIFFERENCE",
+                                        "VIEW_AGREEMENT",
+                                        "CRITIQUE",
+                                        "INTERPRETATION",
+                                        "BACKGROUND",
+                                        "DEVELOPMENT",
+                                        "OTHER"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "original",
+                                    "claimed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "quote",
+                            "source",
+                            "operation",
+                            "twisted",
+                            "twistTargetIds",
+                            "supportIds",
+                            "contextIds",
+                            "inferenceBasisIds",
+                            "twistName",
+                            "evidenceQuote",
+                            "choiceQuote",
+                            "relationTypeChange"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "number",
+                      "truth",
+                      "answerConflict",
+                      "explanationAgreement",
+                      "note",
+                      "parts"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "number",
+                "stemPolarity",
+                "extraSegments",
+                "choices"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "passageId",
+          "questions"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tool_usage": {
+    "image_gen": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "web_search": {
+      "num_requests": 0
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 18959,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 18956
+    },
+    "output_tokens": 6931,
+    "output_tokens_details": {
+      "reasoning_tokens": 496
+    },
+    "total_tokens": 25890
+  },
+  "user": null,
+  "metadata": {},
+  "output_text": "{\n  \"passageId\": \"corporate-law\",\n  \"questions\": [\n    {\n      \"number\": 10,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": true,\n          \"explanationAgreement\": \"DIFFER\",\n          \"note\": \"원문은 법인격의 부여 대상을 '구성원 단체'로 명시한다. 선지의 '구성원들에게'를 구성원 개인들에게 부여된다는 뜻으로 읽으면 부여 대상이 달라진다. 참고 해설은 개인들과 단체를 동일시하므로 원문을 따른 판단과 다르며, 제시 정답 외에도 부적절한 선지가 생긴다.\",\n          \"parts\": [\n            {\n              \"quote\": \"주식회사의 법인격은 주식회사의 구성원들에게 주어진다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-5\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-4\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"법인격 부여 대상을 단체에서 개인들로 변경\",\n              \"evidenceQuote\": \"법인격은 주식회사의 구성원 단체에 부여된다.\",\n              \"choiceQuote\": \"주식회사의 구성원들에게\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"재단 법인의 기본 재산은 법인을 설립할 때 정관에 기재해야 한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-12\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"공통 서술어가 두 자산에 모두 적용된다. 자본금에는 누적 손실 보전이라는 예외가 있고, 기본 재산에는 관할 기관의 허가라는 감액 요건이 있다.\",\n          \"parts\": [\n            {\n              \"quote\": \"주식회사의 자본금과 재단 법인의 기본 재산은 어떠한 경우에도 감액이 금지되어 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-6\", \"P2-13\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P4-14\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"원칙적 금지와 허가 요건을 절대적 금지로 강화\",\n              \"evidenceQuote\": \"이는 회사의 지급 능력과 재무 안정성을 보장하는 기초 자산이므로 원칙적으로 감액이 금지된다.\",\n              \"choiceQuote\": \"어떠한 경우에도 감액이 금지되어 있다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"공동체 질서 유지라는 최종 목적에 이르는 중간 목표인 자율성과 책임의 균형을 제시한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"법인에게 주어진 자율성과 책임의 균형을 이루기 위해 법인의 자산 운용은 법적으로 통제된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-9\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"법인의 자산이 법적 통제 아래 운용되어야 한다는 것은 법인의 종류에 관계 없이 지켜져야 하는 원칙이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 11,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"기본 재산의 본래 기능을 말하는 데 그치지 않고 '대로만'이라고 제한하여, 관할 기관의 허가에 따른 처분·용도 변경 가능성을 배제한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"기본 재산은 법인의 설립 목적대로만 사용되어야 한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-13\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-11\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"허가에 따른 용도 변경 가능성 배제\",\n              \"evidenceQuote\": \"이를 처분하거나 용도를 변경하여 액수를 줄이려면 반드시 관할 기관의 허가가 필요하다.\",\n              \"choiceQuote\": \"설립 목적대로만 사용되어야 한다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"법인의 목적 사업을 위한 재원은 개인의 출자에 의해서만 형성될 수 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-15\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-14\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"목적 사업 재원 형성 경로를 개인 출자로 한정\",\n              \"evidenceQuote\": \"이는 영리 목적이 아니라 법인의 목적 사업 재원을 마련하기 위한 것으로\",\n              \"choiceQuote\": \"개인의 출자에 의해서만 형성될 수 있다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"DIFFER\",\n          \"note\": \"소유권 부정이 틀렸다는 점은 해설과 같다. 다만 '절차에 따라'라는 제한을 준수하는 운용까지 관할 기관의 허가가 필요하다는 이유만으로 부정할 수는 없다. 후반부는 정해진 허가·보고 절차와 범위 안에서 운용할 수 있다는 뜻으로 판단하였다.\",\n          \"parts\": [\n            {\n              \"quote\": \"자산에 대한 소유권은 인정되지 않지만\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P1-5\"],\n              \"supportIds\": [],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"법인의 자산 소유권 부정\",\n              \"evidenceQuote\": \"자산의 소유권은 특정 개인이 아닌 법인에게 귀속된다.\",\n              \"choiceQuote\": \"소유권은 인정되지 않지만\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"자산을 절차에 따라 자유롭게 운용하는 것은 가능하다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-7\", \"C2-5\"],\n              \"contextIds\": [\"P1-8\"],\n              \"inferenceBasisIds\": [\"P1-7\", \"C2-5\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"재산 자체에 법인격이 주어진다는 사실만으로 대행 주체의 필요가 직접 도출되는 것은 아니다. 지문에 명시된 '법인은 행위 능력이 없다'는 전제를 보충하면 성립하는 압축된 설명으로 판단하였다.\",\n          \"parts\": [\n            {\n              \"quote\": \"특정 목적을 위해 출연된 재산에 법인격이 주어지기 때문에\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-1\", \"P1-2\", \"P2-6\"],\n              \"contextIds\": [\"P2-7\"],\n              \"inferenceBasisIds\": [\"P1-1\", \"P1-2\", \"P2-6\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"권리 및 의무를 대신 행사할 주체가 필요하다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R9\"],\n              \"contextIds\": [\"P2-6\"],\n              \"inferenceBasisIds\": [\"P2-7\", \"P2-8\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"공동체 질서는 법적 통제의 목적이지 개별 자산 운용을 결정하는 주체가 아니다.\",\n          \"parts\": [\n            {\n              \"quote\": \"원래의 목적에 맞게 자산을 사용할 수 있도록\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-8\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P1-8\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"운용 과정에서의 결정은 사회ㆍ경제 공동체 전체의 판단에 의해 이루어진다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-10\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-9\", \"P1-9\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"관할 기관의 허가를 공동체 전체의 판단으로 대체\",\n              \"evidenceQuote\": \"주요 사항을 결정할 때는 반드시 관할 기관의 허가를 받아야 한다.\",\n              \"choiceQuote\": \"사회ㆍ경제 공동체 전체의 판단에 의해\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 12,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"유지되는 것은 자산의 총 규모이지 자본금이 아니다. 총 주식 수와 액면가로 자본금을 산정한다는 정의와 추가 주식 발행을 결합하면 무상 증자로 자본금이 증가함을 알 수 있다. 배당과의 대비도 자산 총 규모의 변화와 자본금의 변화를 혼동한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠은 ㉡과 달리 실행 이후에도 자본금의 총량은 그대로 유지된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P5-6\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P4-4\", \"P5-2\", \"P5-10\"],\n              \"inferenceBasisIds\": [\"P4-4\", \"P5-2\"],\n              \"twistName\": \"총량 불변 대상을 자산에서 자본금으로 변경\",\n              \"evidenceQuote\": \"자산의 총 규모는 변하지 않기 때문에\",\n              \"choiceQuote\": \"자본금의 총량은 그대로 유지된다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"㉡은 ㉠과 달리 이사회의 결정만으로는 실행될 수 없다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R37\"],\n              \"contextIds\": [\"P5-7\", \"P5-11\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 주주들의 손익에 영향을 미칠 수 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P5-4\", \"P4-8\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P5-4\", \"P4-8\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"주식회사의 자산 운용에 상법이 적용된다는 일반 규정을 무상 증자와 배당에도 연결한다. 〈보기〉 사례의 적용이 아니므로 INFER로 분류하였다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 상법에 규정된 요건과 절차에 따라 실행되어야 한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-2\", \"P3-7\"],\n              \"contextIds\": [\"P5-2\", \"P5-11\"],\n              \"inferenceBasisIds\": [\"P3-2\", \"P3-7\", \"P5-2\", \"P5-11\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 회사에 대한 긍정적 평가를 유도하는 방법으로 활용할 수 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P5-3\", \"P5-8\", \"P5-9\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P5-3\", \"P5-8\", \"P5-9\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 13,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [\n        {\n          \"id\": \"S1a\",\n          \"parentId\": \"S1\",\n          \"quote\": \"주식회사 A는 경영 부진으로 인해 적자가 누적되어\"\n        },\n        {\n          \"id\": \"S1b\",\n          \"parentId\": \"S1\",\n          \"quote\": \"새로운 사업 투자나 이익 분배를 위해 적립해 두었던 재원이 크게 줄어들었다.\"\n        },\n        {\n          \"id\": \"S3a\",\n          \"parentId\": \"S3\",\n          \"quote\": \"이사회는 현 상황에 대한 주주들의 불만을 잠재우기 위해 회사의 영업 이익을 분배하는 방안을 검토하였으나\"\n        },\n        {\n          \"id\": \"S3b\",\n          \"parentId\": \"S3\",\n          \"quote\": \"필요한 재원의 부족으로 실행을 보류하였다.\"\n        },\n        {\n          \"id\": \"S4a\",\n          \"parentId\": \"S4\",\n          \"quote\": \"A의 설립자이자 현재 대표 이사인 갑\"\n        },\n        {\n          \"id\": \"S4b\",\n          \"parentId\": \"S4\",\n          \"quote\": \"회사의 평판을 개선하기 위해\"\n        },\n        {\n          \"id\": \"S4c\",\n          \"parentId\": \"S4\",\n          \"quote\": \"회사를 설립할 당시에 자신이 출연했던 부동산을 기부하였다.\"\n        }\n      ],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"A의 이사회가 배당을 실시하려는 방안의 실행을 보류한 것은\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S3a\", \"S3b\"],\n              \"contextIds\": [\"P4-8\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"이익 잉여금이 충분하지 않았기 때문이겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1b\", \"S3b\"],\n              \"contextIds\": [\"P4-7\", \"P4-9\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"갑의 운용 권한과 법인격은 구별된다. 법인격의 부여 대상은 갑 개인이 아니라 구성원 단체이며, 실제 운용 권한의 근거는 정관이나 법령이다. 주주들이 법인격을 부여한다는 주장 역시 원문에 없다.\",\n          \"parts\": [\n            {\n              \"quote\": \"갑에게 자산 운용의 권한이 주어진 것은\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S4a\"],\n              \"contextIds\": [\"P1-7\", \"P3-6\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"A를 설립할 당시 개인의 재산을 출연하여\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S4c\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"주주들에 의해 법인격이 부여되었기 때문이겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P1-7\", \"P3-5\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-6\", \"S4a\", \"S4c\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"운용 권한의 근거와 법인격 부여 대상 혼동\",\n              \"evidenceQuote\": \"실제 자산의 운용은 법인의 정관이나 법령에서 권한을 부여한 사람에 의해 이루어진다.\",\n              \"choiceQuote\": \"주주들에 의해 법인격이 부여되었기 때문\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"자본 거래를 고려할 수 있다는 가능성 판단이며, 실제 이익 획득이나 주가 회복을 보장하는 진술은 아니다.\",\n          \"parts\": [\n            {\n              \"quote\": \"A의 신용도가 낮아져서 주가가 하락한 상황에서\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"A가 법인의 설립 목적을 달성하기 위해서는 자본 거래를 통해 이익을 얻는 방법을 고려할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1a\", \"P3-4\", \"P4-10\", \"P4-13\"],\n              \"contextIds\": [\"P1-3\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"'더 이상 누적된 적자를 해소할 수 없게 되면'은 자본 잉여금으로도 손실을 보전할 수 없는 상황까지 포함한다. 이익 잉여금 소진만으로 곧바로 자본금 감소를 단정한 것으로 읽지 않았다.\",\n          \"parts\": [\n            {\n              \"quote\": \"A의 이익 잉여금이 모두 소진되고, 이후 더 이상 누적된 적자를 해소할 수 없게 되면\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P4-14\"],\n              \"contextIds\": [\"S1a\", \"S1b\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"이는 자본금의 감소로 이어져 회사의 존립을 위태롭게 할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R28\"],\n              \"contextIds\": [\"P4-14\", \"P4-15\", \"S1a\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"'법인격에 의해 부여된 독립된 권리'는 갑 개인의 법인격이 아니라 갑이 대신 행사하는 A의 권리로 해석하였다. 기부의 구체적 의결 기관은 지도에 없으므로 P1-8과 P3-6·P3-7의 일반적 절차 준수 원칙에 연결한다. 절차 위반에 따른 책임의 가능성을 말하는 선지이지, 모든 기부에 두 기관의 의결이 필수라고 확정하는 선지는 아니다.\",\n          \"parts\": [\n            {\n              \"quote\": \"갑이 이사회나 주주 총회와 같은 절차를 거치지 않고 부동산을 기부하였다면\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S4c\", \"P3-6\", \"P3-7\"],\n              \"contextIds\": [\"P1-8\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"법인격에 의해 부여된 독립된 권리를 행사하였더라도\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-1\", \"P1-4\", \"P1-7\", \"S4a\"],\n              \"contextIds\": [\"P1-5\", \"S4c\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"법적 책임이 발생할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-8\"],\n              \"contextIds\": [\"S4a\", \"S4c\", \"P3-7\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+}

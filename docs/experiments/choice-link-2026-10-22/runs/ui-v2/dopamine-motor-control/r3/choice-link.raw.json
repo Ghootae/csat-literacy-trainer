@@ -1,0 +1,360 @@
+{
+  "id": "resp_079ca8300eaf55a5006ad8f2c9ccac87d0946f4e34f3146d85",
+  "object": "response",
+  "created_at": 1792602825,
+  "status": "completed",
+  "access_programs": null,
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1792602922,
+  "error": null,
+  "frequency_penalty": 0,
+  "incomplete_details": null,
+  "instructions": "너는 수능 국어 독서 문항의 선지를 지문 분석 지도와 〈보기〉에 연결한다. 목적은 학생이 어떤 선지를 골랐을 때, 그 선지가 지문·〈보기〉의 어느 내용을 어떻게 다루었는지 좌표로 남기는 것이다. 지도와 〈보기〉 조각은 고치지 않는다. 지문과 〈보기〉에 없는 내용을 지어내지 않는다.\n\n참고 해설은 정답과 선지별 판단의 이유를 적은 참고 자료다. 판단과 근거는 반드시 지문·〈보기〉 원문과 지도에서 확인한다. 해설과 원문이 어긋나면 원문을 따르고 `note`에 적는다. 해설 문장을 근거 인용으로 쓰지 않는다.\n\n문항마다 다음을 한다.\n\n1. **발문 극성** `stemPolarity`: 적절하지 않은 것을 고르면 `SELECT_INCORRECT`, 적절한(가장 적절한) 것을 고르면 `SELECT_CORRECT`, 둘 다 아니면 `OTHER`.\n2. **〈보기〉 조각**은 입력의 `S…`·`F…`를 그대로 쓴다. 한 조각 안에 선지가 기대는 단위가 둘 이상이면 `extraSegments`에 `S2a`처럼 더 나눈 조각을 둔다(`parentId`, `quote`는 부모 조각 글의 정확한 부분 문자열).\n3. **선지마다**\n   - `truth`: 지문과 〈보기〉에 비추어 선지 진술이 맞으면 `TRUE`, 틀리면 `FALSE`, 판단할 수 없으면 `UNDETERMINED`.\n   - `answerConflict`: 정답 번호와 발문 극성으로 보아 `truth`가 정답과 어긋나면 `true`, `note`에 이유. 정답 번호를 바꾸지 않는다.\n   - `explanationAgreement`: 참고 해설과 같은 지점을 근거·비틂으로 잡았으면 `AGREE`, 다른 지점을 잡았으면 `DIFFER`(이유를 `note`에), 해설이 없으면 `NO_EXPLANATION`.\n   - `parts`: 선지를 내용 조각으로 나눈다. 조각을 모두 이으면 선지 문장에서 조사·어미·문장부호 말고는 빠지는 부분이 없어야 하고, 조각끼리 겹치지 않아야 한다. 각 조각은\n     - `quote`: 선지 문장의 정확한 부분 문자열.\n     - `source` 근거 위치: `PASSAGE`(지문), `SUPPLEMENT`(〈보기〉), `BOTH`(둘 다), `NONE`(어디에도 없음).\n     - `operation` 다룬 방식: `RESTATE`(근거를 그대로 옮기거나 바꿔 씀), `INFER`(근거에서 한 단계 이끌어 낸 판단), `APPLY`(〈보기〉의 대상·사례를 지문의 원리·개념에 대응시킨 판단).\n     - `twisted`: 근거 내용과 다르게 바뀌었으면 `true`.\n     - `twistTargetIds`: `twisted`이면 실제로 바뀐 단위만. 인과·조건 등 이어짐을 바꿨으면 그 관계(`R…`) 하나, 명제 내용을 바꿨으면 그 명제, 〈보기〉를 잘못 옮겼으면 그 〈보기〉 조각. `twisted`가 아니면 빈 배열.\n     - `supportIds`: `twisted`가 아니면 이 조각이 맞다는 근거 단위(지도·〈보기〉 id). `twisted`이면 빈 배열.\n     - `contextIds`: 판단하려면 함께 봐야 하는 단위(관계의 양 끝 명제, 대응시킨 원리 등). 바뀐 곳·근거와 겹치지 않게 둔다.\n     - `inferenceBasisIds`: `operation`이 `INFER`이면 추론의 전제 단위. 한 단계를 넘는 추론이면 `note`에 적는다. 아니면 빈 배열.\n     - 지도 단위는 가장 작은 것부터: 한 문장 내용은 명제(`P…`), 두 내용의 이어짐은 관계(`R…`), 문단이나 여러 묶음의 요약은 합성·요지(`C…`·`G…`).\n     - `twistName`: `twisted`이면 무엇이 어떻게 바뀌었는지 드러나는 짧은 명사구. 정해진 목록은 없다. 아니면 빈 문자열.\n     - `evidenceQuote`: `twisted`이면 근거 원문의 정확한 부분 문자열(지문 문단 원문 또는 〈보기〉 조각 글; 그림이면 그림 요소 설명). `source`가 `NONE`이면 빈 문자열로 두고 `note`에 \"지문·〈보기〉에 해당 내용 없음\"을 적는다.\n     - `choiceQuote`: `twisted`이면 선지에서 바뀐 부분의 정확한 부분 문자열.\n     - `relationTypeChange`: `twistTargetIds`가 관계이면 `{ original, claimed }`. `original`은 입력의 관계 유형, `claimed`는 선지가 주장한 이어짐을 같은 유형 목록에서 고른 것. 아니면 `null`.\n   - `truth`가 `FALSE`이면 `twisted` 조각이 하나 이상, `TRUE`이면 하나도 없다.\n   - 선지가 누구의 주장인지(인물·학파·입장)를 말하면 명제별 입장과 대조한다. 주인이 바뀐 것도 비틂이다.\n4. 지도에 알맞은 단위가 없으면 가장 가까운 단위를 넣고 `note`에 무엇이 모자란지 적는다.\n\n출력은 주어진 JSON 스키마를 따른다.",
+  "max_output_tokens": 24000,
+  "max_tool_calls": null,
+  "model": "gpt-6.1-sol",
+  "moderation": null,
+  "output": [
+    {
+      "id": "rs_079ca8300eaf55a5006ad8f2cb1bc887d0b8e6a7c35c748d09",
+      "type": "reasoning",
+      "content": [],
+      "encrypted_content": "gAAAAABq2PMqhf242EquzBFRafpuFLTdPTPjMWC7aftuLT5E6QkAuS2gDn8ccfY4awIrpttxSBaqUsktII8OfDaQwehQFZk7ByBpCsOq2LI3nu1FHxP21xW8chEANGxn8TLmEM7-9maxTvOUEg53jmmEVXvj0wwbcDn6R8-bD-awVLw3wIe4VXyKkfnPuZ4juHOQIRShl-Ydz0EpvejLXipmlMiLl-YbxI74nZj5Zjqq0FPRY2gHeS2s5j13dN0AJezE24vN0MLVUpX0JvMupDT-wuzAzxvpQixO3UB3LyK0xWDV-uv87rRsciPx66u4WlB_v3zTeT5JykLO_LJSd6pzlH6CgbIAZ_FmEENJsJA-iRe_32FAw_p59SPZPJZGuO9PlXydC4oAZdu7V-xJUm_2yrM-_L-SFA2BpQlEPY6VN3UZQrDhTVvpYnqXc2lv1PHd317jQLE3qeWP-8EluggE_cdpEFaUBJ53CgQfh6PgAfSLNZJauIC2BNiw0LqwVFhdC6g6bV7uN6sV8JcgIyXZYobHumSqoRY-ImfO_QzDeTlREwYpxDgN-mDJJxaTFWMMiYOUf03Q9Gqdvpk6JrOR6tbxr4MBbh7ZCoIn13p0GyAv3z6s6KSwQ0kUa5rMUWqPoljYIr1trH-JpiUBFdC3MbSZMlcu-WL8HuMQ-7Au60VKFZsWsrAttRi69OZ4T0hUERzkZxEF7jPdG2Csq2mtgn9QUTkqi1a_zOJBsoXeDPkJRp6GoS40JwgK--v1Ve2_iahWthfY1GWazQP_7BkQYX9Iz9txqOSXuHE10nRrn6f1DB-ygW-Oq6KcTYW0R4eN-KIknAPc2Mc97EuBgvqR_iiyv9GQB2wwwziMBvtUZjlN05UN8LauPlQXlV46rJseBb8hQvkY4BfSxPbhTZWTUS7SVBPtaFkONr8VzwLKfwvyenzhamN7OqPolCj-s5l5NYcOAgx4emqU_qB_ht0Hove7AGocYigswQt7QXng75ZPCAnqiEcP7CYMq9bLHX5weilaoSqkBM4i7Gi_2fAaa0sLzFcRliXJVHlBsjA9GQIhTJnn9ipDBs1wTFdDJZaK7xN09pcahHYuSo4d45cK2MN1faxbhi7KOO5erPJmtCVeCb2Br-u7EPZc_D5EZJCrbMrgxCUfXVd7xvGqidyhA8jE0JYm_HQB-ihdsv6OZ-E6IiVSlsYmTc66YCY-FdEcyUfK_pulJPZXQOeQx_oGNvAsmYSf64MgMFNr6mTK66DFH1CFMmymEiKWK6FRf2SV-yn49NMGc4xT7kFm0LcvIWYVG2dSnXRT-bZb5C0oezpCKgtfnFNPvU9JnVoyKhQVNqKqbQA8xYp3KPxEb-dLKMwgcs1U8vPtUglbv8Ei8LxZGWJXliROJ4tsT2Ml0ui_AI1QcvBNfi-Twdjq7s5r3lI1Ztipiqn4FV38uqiQ4C7iQAVVJDjcxc0AJx8tozn9JL4X9LHBEQqWxW1p4tmuhfBHLKdsbN5p-UPjL2bCwCpc9N0g7Ss4Fi6820gkZUgWgiRmW35YkQWLRs8M3LLcrAUxRU6W01x0etsoO0GRRQvxz9C9-B9U1Nk4y_H598zyx3kcewwvcnPNM0GJ5iMjlMqFgoorETw4C6Js9_blQPa1Av-cA-whC-CX9eXqB39dz1iracDzbIWj7JbU1YLEMlkE7Oe8Jn9-MJPTpPo6n5t4kPfJEoiJORU37taAkum_l0o02Qwe2F5H-ee71EcW1R4Mso7U-WEgU9pAMDNiRQEDtU27i6qWhAO89WbhAuGWqmDilGEsYFW51iScAkXDwMqqq8Ujd3x4ewHvlLrZvJQwsPx4QJLwhPzS4VXG6FqNQFWcKWWf-QacM_bLwoE8re6oJLoK1eVOVCdVYUyYtu8OsjYxYin1HD63SyLfdaWxLUoCXUzXlpyPXv4RrpxYDbRaCMd0_3cevfP2LkPks_nHF1nOCE8SzN4bXQ8xtip2Yr3Ck1sZvmO8S8-T4efVmsd_YZ3JM0RuNFlf5ocA6atBNKw8zjnXrRVQf_LKUaFXRswI6ICG2I4eluQoifYvAUPdNoix3tcXFhS54I_jcaLaMJoktS1aWnswH-iTSo0PKnl9LrEBMF_TLGhOPMc5uiflj9jKiCIU6GSGUqbY3dU_MUvsxoSslOIsc8ML7qDOdtx7JIuWcyBMtUlqsTFzGCZ5tHeSAdGMvsrHkuoTTphASDhavvdUq-HnxZJTF_YG75gzadvSs7LKYvlU5L-liLNd_9dFMHzKaGlGObGyuoCQ87bG-aEtUEELmPsWMkrH5mao6GA2APPr5EtEPsIKH4zLOZYmxqYmjOsjO4vIyQrw0oQCoi64eB5I_19KAgqyphnWj3gZNVI8HL6vHSM9wKkUO3RGK4bxbwTCDVpdo7rGdDGalx1N2wqvbJ7SHit3ybcP2Cx6eUSm_3C0Z82r-tT3MT6DvvgWGoAtAQRSp1_jdmNpjG97J_TJq9FtRdywNKdX7XuIHPN8PdUcHUMWxjHuHwt61Mln55dUKUa5vCnmzClNiP3dhkBy_aBCyDK4PpRTDYRwgYwWxpBofRaZj8wL_cLUj_OWAGxWnX-VdYGpXHM2E4-XTIozsXdgA6dCY-71ih6ToJDnjnC7bCqZp2TzLBb0kBvZEUY4Q2ci1djhnIo92TZKNqS7OIvqYssATo120WNCXaQ1Kjo-NgHnZO7ZMLQH4n-csPnaCQYdowEjb5n66BggcFbsQoYrFCRs7YfzrqXUFywqkoPx_zhmQaqktvspnAZRajXJsH8FaznXyBHqdPPRj78pYMw34WUQoyOdSctVuHP4The_-hDQasrHoWvVP3_zc6GoNz4wMSKFMzxvuy5L9y8YmuR7ytUhxp3nA3QeY0c_QMVSuzMfpzyQubNMHtnrl8bveiI4U65UUJnTFqyMUAB1YenSSZ56JPVoT0hoNSEs9r4n4PlKWrKqDJQ7WuXtZLwMC0SO835ZzZwQJvAhi-gUNp9n7ELExdDeTfowaRCXiMwhtuAfvv5IkvfBYEDZ0mQBoi_vfmIBuydsAVM1p1oU6VQ-IWAnCjnKqJFCrpvR3Qmlt8ozfK48-Yyd9WtvHY1yvebQ5AsLLKFOhfwCVS02Hks5WawCgeaVI2gWuHe1Md6b1zm0-jM_SIz9JY41BZJWIcDqAdS0pNgph9g271PYqKv5re2XyFxcgkNDy0F5LBg6va9qHTj2msT66qrr06HZw0CnbvjkYqow_13H6zrgIOYF9AHC6iiPp2Hg-eErFl7e2YPyt5_HG8t1gH29SDdKcp1Cz9FioNcwbxkDUTB_7ZafqLvqV_Rg6zqMZQw1-xoIXUAYFQRqAvwFksk8lbMI5IHWuZ0rUZgR7bvBG6oDpMknyzVO62hOuDw7kwJXXH-pLesBftCw8z83tvgFBUFQRj16WE1QbMGG87IWeZxuhGBvltEMPQOfW_MhSLr6pHqBHAMpPXyI_jjHJuuxI9DE2O4u2lgBDtusBu5N4Zb2vfEhBOnTWdDL-Gheleu_AUvdz4hOP3kd5-1JRmluhZhJ4K-dZ_ej0C7HfMR1V4jW_qJtC5uuiFrXFcoXseK-5a_anSoQfNHHK4ULac8dPe9RRyfBboZ39KZirGFQQfxhFs1ErBSMN90XLrx3xbC4_8OkEZzkRPFguBMrbVcQ_gGt-4CbKkVyaReiT_42a_VIsblcyfk0V6EWOMxduApOYMRz0i24_-m-ltgF1bqz_kWeegsD0tvnvfWZiFyTnhUCZqlp_B1p3VFeW4lY-p9UXmHXQgKMs7ZGowT-KzrrG8Tlw0oTLHJu9kvuZBUPXLA8NVYtQOVFUiWtZ0YDKIFQ4VsKkM2ilAezU6lyAbtSExaQjqsY6zNsTV-94NlQImWRYrbn78V6v5vR6Z93P3utowhXEV7PT34WIEFtfOCeF4ym3rJYXg8RwlbqqSfX-c16uR1hJABS3VyYFkWUZmx3rgdtRjGqcR9jtzozszbqrN9ID32d9HUpRkLfeZlIAuYAS4wuEzQOwmvVqFCNZaH3W5ZWVf4dBQm80SH9cDh0yWySH245a7VEc8FJ9IGIrJtE-0yGVAqX2gOSro9Qcyh5A0EapMlWCfGFCTcpoFaueGcgM21jQzKL61eFicfEzDn_0GtFSRrWhcvma81t_sQitoIT8VH9itvMYYSohdkDI_M2CafjKsTVLOBzdNznuNNn6E2LwQtS6JiB8wwU2egj69FGRdgIkVJtn8t13o2k0e5EOlccMMV8233ETiXb_rBQyn8d7v_kG211b0cxhpdl7vjsKNkXSRJVAftyfaZ8ACrSwiO4QN5TpN3T2ZeGAu7pPo-wazX_52hz80aAtPZQdADj11slbs3SZnj-4Nj1RRRAPDt08jFf9mNf1FHRqZmJNm_kGaIKeP1HiWcbno1LWZzAG74Xu6_Z1-0kBG9jw4op1yAbfTIDAOLJVj2JnqObVsVjXXpDM0Fle9spwMa4QatN25uynnKbSQKPgcOfV4wUXnFDJ-ZrcRl6PIZpqNZPw3jYcs4X7RxcbvRo405qbowQ1Rj1R251J9kItcRWI0aeyM-ItP9UWXsWOuotBWEJsiFPlwseIrFF_cXPcmoSM_Df1T7PAvsQFnKpAVBzQgbkP4mH0mQMKqQzlya-PdHmuKhZY2HRram6N6zfE_B4JPMyI6PRpB7d-tnb82m4_2c6aA-J6HX8IgM-esImK2LjklvrfHJrAegj10w2HGhaJ6IONTSB-u8suC6r6A==",
+      "summary": []
+    },
+    {
+      "id": "msg_079ca8300eaf55a5006ad8f2d2692c87d08fc22bce19e8bf77",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\n  \"passageId\": \"dopamine-motor-control\",\n  \"questions\": [\n    {\n      \"number\": 10,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"선조체 뉴런 중에는 D1 계열의 도파민 수용체가 있는 것이 존재한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P4-3\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"뉴런에서 신경 전달 물질이 합성되는 과정에 효소의 작용이 필요할 수 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-12\", \"P1-13\"],\n              \"contextIds\": [\"P1-1\"],\n              \"inferenceBasisIds\": [\"P1-12\", \"P1-13\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"뇌에 존재하는 여러 가지 신경 전달 물질의 작용을 통해 수의적 운동이 조절될 수 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-7\", \"P3-12\", \"P4-8\"],\n              \"contextIds\": [\"P3-3\", \"P3-5\", \"P3-11\"],\n              \"inferenceBasisIds\": [\"P3-7\", \"P3-12\", \"P4-8\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"뉴런 밖 분해의 조건인 DAT 부재를 없애고, 수용체에 결합하지 않은 도파민 전체로 대상을 확대했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"도파민성 뉴런에서 분비된 도파민 중 도파민 수용체에 결합하지 않은 것은\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-10\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"모두 뉴런 밖에서 분해된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-14\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-10\", \"P2-11\", \"P2-12\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"DAT 부재 조건 삭제와 분해 대상의 전칭화\",\n              \"evidenceQuote\": \"DAT가 없는 도파민성 뉴런에서 분비된 도파민은 뉴런 밖에서 분해된다.\",\n              \"choiceQuote\": \"모두 뉴런 밖에서 분해된다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"시냅스 틈으로 분비된 도파민이 어떤 계열의 도파민 수용체에 결합하느냐에 따라 뉴런 내 신호 전달의 활성 여부가 달라진다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R9\"],\n              \"contextIds\": [\"P2-2\", \"P2-3\", \"P1-16\"],\n              \"inferenceBasisIds\": [\"P2-2\", \"P2-3\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 11,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"빈칸에 넣어 완성한 인과 판단을 평가했다. 분해 효소가 뉴런 내부에 있다는 사실 자체가 아니라, 그것이 뉴런별 조절 양상의 차이를 설명한다는 연결이 부적절하다. 지도에는 이 잘못된 연결에 대응하는 관계가 없어, 이유를 요구하는 보기 S2를 비틂 대상으로 삼았다.\",\n          \"parts\": [\n            {\n              \"quote\": \"도파민 분해 효소가 도파민성 뉴런 내부에 있기\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S2\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-12\", \"P2-8\", \"P2-13\", \"S1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"세포 내 분해 위치를 뉴런별 조절 차이의 원인으로 대입\",\n              \"evidenceQuote\": \"그렇지만 그 양이 조절되는 양상은 ⓐ 때문에 도파민성 뉴런에 따라 다를 수 있겠군.\",\n              \"choiceQuote\": \"도파민 분해 효소가 도파민성 뉴런 내부에 있기\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"D2 계열 수용체의 선택적 존재와 DAT의 부재 가능성에서 조절 장치의 차이를 도출하고, 이를 뉴런별 조절 양상의 차이에 연결하는 복합 추론이다. D2 수용체가 없는 뉴런의 가능성은 '위치할 수 있다' 및 '있는 경우'라는 한정에 근거한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"DAT나 D2 계열 수용체가 없는 도파민성 뉴런이 있기\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-13\", \"P2-4\", \"P2-8\", \"S2\"],\n              \"contextIds\": [\"P2-6\", \"P2-7\", \"P2-10\", \"S1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"빈칸에 넣어 완성한 인과 판단을 평가했다. D2 계열의 도파민성 뉴런 내 위치 가능성은 자기 조절의 기작을 설명하지만, 선지는 조절 장치의 뉴런별 존재 차이를 이유로 제시하지 않는다. 지도에 해당 오연결 관계가 없어 S2에 연결했다. 'D1 계열과 달리'라는 배타적 표현도 지문에 명시되어 있지는 않다.\",\n          \"parts\": [\n            {\n              \"quote\": \"D1 계열 수용체와 달리 D2 계열 수용체는 도파민성 뉴런에도 위치할 수 있기\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S2\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-4\", \"P2-5\", \"P2-8\", \"S1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"자기 조절의 가능 기작을 뉴런별 차이의 이유로 대입\",\n              \"evidenceQuote\": \"그렇지만 그 양이 조절되는 양상은 ⓐ 때문에 도파민성 뉴런에 따라 다를 수 있겠군.\",\n              \"choiceQuote\": \"D1 계열 수용체와 달리 D2 계열 수용체는 도파민성 뉴런에도 위치할 수 있기\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"빈칸에 넣어 완성한 인과 판단을 평가했다. 저장된다는 사실 자체는 맞지만, 재흡수 이후의 처리 방식만으로 뉴런별 조절 양상의 차이를 설명하지 못한다. 지도에 해당 오연결 관계가 없어 S2에 연결했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"도파민성 뉴런으로 재흡수된 도파민 중 일부는 분해되지 않고 시냅스 소포에 저장되기\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S2\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-11\", \"P2-12\", \"P2-13\", \"P2-8\", \"S1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"재흡수 후 저장을 뉴런별 조절 차이의 원인으로 대입\",\n              \"evidenceQuote\": \"그렇지만 그 양이 조절되는 양상은 ⓐ 때문에 도파민성 뉴런에 따라 다를 수 있겠군.\",\n              \"choiceQuote\": \"도파민성 뉴런으로 재흡수된 도파민 중 일부는 분해되지 않고 시냅스 소포에 저장되기\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"DAT의 재흡수 기능을 새 도파민의 합성량 조절 기능으로 바꾸었다. 지문에는 DAT 유무가 합성량을 달라지게 한다는 내용이 없다.\",\n          \"parts\": [\n            {\n              \"quote\": \"도파민성 뉴런의 DAT 존재 여부에 따라 도파민성 뉴런에서 합성되는 도파민의 양이 달라지기\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-10\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-13\", \"P1-12\", \"P1-13\", \"S2\"],\n              \"inferenceBasisIds\": [\"P2-10\", \"P2-13\"],\n              \"twistName\": \"재흡수량 조절을 합성량 조절로 치환\",\n              \"evidenceQuote\": \"시냅스 틈으로 분비된 도파민 중 일부는 도파민 수용체에 결합하지 않고 도파민성 뉴런에 위치한 도파민 수송체(DAT)에 의해 도파민성 뉴런으로 재흡수되기도 한다.\",\n              \"choiceQuote\": \"도파민성 뉴런에서 합성되는 도파민의 양이 달라지기\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 12,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"도파민이 간접 경로를 억제하면 내측 창백핵 활성화와 시상 억제가 줄어드는 방향으로 작동한다는 복합 추론이 필요하다. 지도에는 도파민 작용 시 두 경로의 최종 효과를 직접 비교한 관계가 없어, 가장 가까운 경로 비교 관계 R28에 연결했다. R28의 대비는 각 경로가 활성화될 때의 대비이며, 이를 도파민 분비 시에도 그대로 적용한 것이 오류다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠은 ㉡과 달리\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"R28\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"C3-5\", \"C3-6\", \"P4-5\", \"P4-6\"],\n              \"inferenceBasisIds\": [\"P4-5\", \"P4-6\", \"P3-7\", \"P3-15\", \"P3-16\", \"P3-9\", \"P3-10\"],\n              \"twistName\": \"경로 활성화 시 대비를 도파민 작용 시 대비로 전용\",\n              \"evidenceQuote\": \"흑질의 도파민성 뉴런에서 분비된 도파민은 직접 경로를 활성화하고 간접 경로는 억제하여 목표하는 운동의 시작을 수월하게 함으로써 운동을 촉진하게 된다.\",\n              \"choiceQuote\": \"㉠은 ㉡과 달리\",\n              \"relationTypeChange\": {\n                \"original\": \"CONTRAST\",\n                \"claimed\": \"CONTRAST\"\n              }\n            },\n            {\n              \"quote\": \"흑질의 도파민성 뉴런에서 도파민이 분비되면 대뇌 피질의 운동 영역으로 글루타메이트가 분비된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P4-5\", \"C3-5\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P4-5\", \"P3-7\", \"P3-8\", \"P3-9\", \"P3-10\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"시상으로 가바가 분비되지 않는다는 직접 경로의 결과를 간접 경로의 결과로 바꾸고, 직접 경로에서는 그렇지 않은 것처럼 서술했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉡은 ㉠과 달리 선조체 뉴런이 활성화되면 시상으로 가바가 분비되지 않는다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-8\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-7\", \"P3-14\", \"P3-15\", \"P3-16\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"직접 경로 결과의 간접 경로 귀속\",\n              \"evidenceQuote\": \"이로 인해 시상으로 가바가 분비되지 않으면\",\n              \"choiceQuote\": \"㉡은 ㉠과 달리\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"직접 경로 활성화→내측 창백핵 억제, 간접 경로 억제→내측 창백핵으로의 흥분성 입력 감소를 결합하는 복합 추론이다. 간접 경로 억제에 따른 입력 감소는 지문의 활성화 기작을 반대 방향으로 적용한 문맥적 추론이다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 흑질의 도파민성 뉴런에서 도파민이 분비되면 내측 창백핵 뉴런의 활성이 억제된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P4-5\", \"P4-6\", \"P3-7\", \"P3-14\", \"P3-15\"],\n              \"contextIds\": [\"P2-2\", \"P2-3\", \"P4-3\", \"P4-4\"],\n              \"inferenceBasisIds\": [\"P4-5\", \"P4-6\", \"P3-7\", \"P3-14\", \"P3-15\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"직접 경로에서는 맞는 결과이지만 간접 경로까지 일반화했다. 간접 경로의 시상 억제는 P3-16의 '상반된 작용'을 직접 경로의 후속 작용과 대조하여 파악한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 선조체 뉴런이 활성화되면 시상의 글루타메이트성 뉴런이 억제 상태에서 벗어나 활성화된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-16\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-7\", \"P3-8\", \"P3-9\", \"P3-14\", \"P3-15\"],\n              \"inferenceBasisIds\": [\"P3-7\", \"P3-8\", \"P3-9\", \"P3-15\", \"P3-16\"],\n              \"twistName\": \"직접 경로의 시상 활성화를 간접 경로까지 일반화\",\n              \"evidenceQuote\": \"따라서 이후 직접 경로와는 상반된 작용이 일어나 운동이 차단된다.\",\n              \"choiceQuote\": \"㉠과 ㉡은 모두\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"직접 경로의 활성 유도를 간접 경로까지 확대했다. 간접 경로의 선조체 뉴런은 D2 계열 수용체를 통해 억제된다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 흑질의 도파민성 뉴런에서 분비된 도파민이 각 경로를 이루는 선조체 뉴런 내 신호 전달의 활성을 유도하게 된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-6\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P4-5\", \"P4-3\", \"P4-4\", \"P2-2\", \"P2-3\"],\n              \"inferenceBasisIds\": [\"P4-3\", \"P4-4\", \"P2-2\", \"P2-3\"],\n              \"twistName\": \"간접 경로 억제를 활성 유도로 반전\",\n              \"evidenceQuote\": \"흑질의 도파민성 뉴런에서 분비된 도파민은 직접 경로를 활성화하고 간접 경로는 억제하여\",\n              \"choiceQuote\": \"㉠과 ㉡은 모두\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 13,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [\n        {\n          \"id\": \"S1a\",\n          \"parentId\": \"S1\",\n          \"quote\": \"흑질의 도파민성 뉴런이 파괴되어 선조체로 분비되는 도파민의 양이 감소함으로써\"\n        },\n        {\n          \"id\": \"S1b\",\n          \"parentId\": \"S1\",\n          \"quote\": \"수의적 운동에 장애가 나타나는 질환이다.\"\n        },\n        {\n          \"id\": \"S2a\",\n          \"parentId\": \"S2\",\n          \"quote\": \"도파민성 뉴런이 파괴되는 것의 진행을 막을 수는 없기 때문에 병의 완치는 불가능하지만\"\n        },\n        {\n          \"id\": \"S2b\",\n          \"parentId\": \"S2\",\n          \"quote\": \"약물 치료를 통해 병의 증상을 완화할 수 있다.\"\n        },\n        {\n          \"id\": \"S4a\",\n          \"parentId\": \"S4\",\n          \"quote\": \"모든 약물은 입을 통해 투여되며\"\n        },\n        {\n          \"id\": \"S4b\",\n          \"parentId\": \"S4\",\n          \"quote\": \"두 가지 이상의 약물을 병용할 수 있다.\"\n        },\n        {\n          \"id\": \"S5a\",\n          \"parentId\": \"S5\",\n          \"quote\": \"흑질의 도파민성 뉴런으로 흡수되어 도파민 합성을 증가시킴.\"\n        },\n        {\n          \"id\": \"S5b\",\n          \"parentId\": \"S5\",\n          \"quote\": \"투여된 레보도파의 상당량은 뇌로 전달되기 전에 말초 조직에서 도파민으로 합성됨.\"\n        },\n        {\n          \"id\": \"S6a\",\n          \"parentId\": \"S6\",\n          \"quote\": \"레보도파를 도파민으로 합성하는 효소의 작용을 억제하며\"\n        },\n        {\n          \"id\": \"S6b\",\n          \"parentId\": \"S6\",\n          \"quote\": \"혈액-뇌 장벽을 통과하지 못하여 말초 조직에서만 작용함.\"\n        }\n      ],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"(가)는 도파민과 달리 약물로 투여할 경우 혈액-뇌 장벽을 통과하여 뇌로 진입할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S5a\", \"P1-4\"],\n              \"contextIds\": [\"S4a\", \"P1-2\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"말초 조직에서 도파민 합성 효소를 억제하는 기능을 뇌에서 이미 합성된 도파민의 작용 기간 연장으로 바꾸었다. 작용 장소와 효소 기능을 함께 잘못 적용했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"(나)는 효소의 작용을 억제하여\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S6a\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"흑질에서 합성된 도파민의 작용 기간을 연장할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S6a\", \"S6b\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-13\", \"P2-12\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"말초 합성 억제를 뇌 내 도파민 작용 연장으로 치환\",\n              \"evidenceQuote\": \"레보도파를 도파민으로 합성하는 효소의 작용을 억제하며 혈액-뇌 장벽을 통과하지 못하여 말초 조직에서만 작용함.\",\n              \"choiceQuote\": \"흑질에서 합성된 도파민의 작용 기간을 연장할 수 있겠군.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"보기에서 제시한 약물의 직접 작용을 기준으로 한 판단이다. 수용체 결합과 도파민 합성을 구별하며, 제시되지 않은 간접적 생리 효과까지 부정하는 것으로 확대하지 않는다.\",\n          \"parts\": [\n            {\n              \"quote\": \"(다)는 흑질의 도파민성 뉴런에서 도파민이 합성되는 과정에는 영향을 주지 않겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S7\"],\n              \"contextIds\": [\"P1-12\", \"P1-13\", \"P1-16\", \"P4-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"말초에서의 효소 억제→레보도파의 말초 전환 감소→뇌로 전달될 레보도파 증가라는 복합 적용이다.\",\n          \"parts\": [\n            {\n              \"quote\": \"(나)를 (가)와 함께 투여하면 말초 조직에서 레보도파가 도파민으로 합성되는 것이 차단되어\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S6a\", \"S6b\", \"S5b\", \"S4b\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"S6a\", \"S6b\", \"S5b\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"뇌로 전달되는 레보도파의 양이 증가하겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S5a\", \"S5b\", \"S6a\", \"S6b\"],\n              \"contextIds\": [\"P1-4\", \"P1-13\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"질환 진행에 따른 도파민 부족 심화와 두 약물의 서로 다른 보완 기능을 결합하는 복합 적용이다. 실제 투약량의 안전성이나 처방 기준이 아니라 보기에서 설명한 작용에 따른 치료 가능성을 판단한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"파킨슨병이 진행됨에 따라 증상을 완화하기 위해서는\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1a\", \"S1b\", \"S2a\", \"S2b\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"S1a\", \"S1b\", \"S2a\", \"S2b\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"(가)의 양을 늘리거나\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S5a\", \"S1a\"],\n              \"contextIds\": [\"P1-13\", \"P4-8\", \"S2b\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"(가)와 (다)를 병용할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S4b\", \"S5a\", \"S7\"],\n              \"contextIds\": [\"S1a\", \"P1-17\", \"P4-8\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": "24h",
+  "reasoning": {
+    "context": "all_turns",
+    "effort": "medium",
+    "mode": "standard",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "description": null,
+      "name": "choice_link_v2",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "passageId": {
+            "type": "string"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "stemPolarity": {
+                  "type": "string",
+                  "enum": [
+                    "SELECT_INCORRECT",
+                    "SELECT_CORRECT",
+                    "OTHER"
+                  ]
+                },
+                "extraSegments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "parentId": {
+                        "type": "string"
+                      },
+                      "quote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parentId",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "choices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "number": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "truth": {
+                        "type": "string",
+                        "enum": [
+                          "TRUE",
+                          "FALSE",
+                          "UNDETERMINED"
+                        ]
+                      },
+                      "answerConflict": {
+                        "type": "boolean"
+                      },
+                      "explanationAgreement": {
+                        "type": "string",
+                        "enum": [
+                          "AGREE",
+                          "DIFFER",
+                          "NO_EXPLANATION"
+                        ]
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "parts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "quote": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "PASSAGE",
+                                "SUPPLEMENT",
+                                "BOTH",
+                                "NONE"
+                              ]
+                            },
+                            "operation": {
+                              "type": "string",
+                              "enum": [
+                                "RESTATE",
+                                "INFER",
+                                "APPLY"
+                              ]
+                            },
+                            "twisted": {
+                              "type": "boolean"
+                            },
+                            "twistTargetIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "supportIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "contextIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "inferenceBasisIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "twistName": {
+                              "type": "string"
+                            },
+                            "evidenceQuote": {
+                              "type": "string"
+                            },
+                            "choiceQuote": {
+                              "type": "string"
+                            },
+                            "relationTypeChange": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "original": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CAUSE",
+                                        "PROCESS",
+                                        "CONDITION",
+                                        "MEANS_END",
+                                        "CONTRAST",
+                                        "PARALLEL",
+                                        "CLASSIFICATION",
+                                        "GROUNDS",
+                                        "ELABORATION",
+                                        "APPLICATION",
+                                        "DEFINITION",
+                                        "CONCESSION",
+                                        "PROBLEM_RESPONSE",
+                                        "VIEW_DIFFERENCE",
+                                        "VIEW_AGREEMENT",
+                                        "CRITIQUE",
+                                        "INTERPRETATION",
+                                        "BACKGROUND",
+                                        "DEVELOPMENT",
+                                        "OTHER"
+                                      ]
+                                    },
+                                    "claimed": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CAUSE",
+                                        "PROCESS",
+                                        "CONDITION",
+                                        "MEANS_END",
+                                        "CONTRAST",
+                                        "PARALLEL",
+                                        "CLASSIFICATION",
+                                        "GROUNDS",
+                                        "ELABORATION",
+                                        "APPLICATION",
+                                        "DEFINITION",
+                                        "CONCESSION",
+                                        "PROBLEM_RESPONSE",
+                                        "VIEW_DIFFERENCE",
+                                        "VIEW_AGREEMENT",
+                                        "CRITIQUE",
+                                        "INTERPRETATION",
+                                        "BACKGROUND",
+                                        "DEVELOPMENT",
+                                        "OTHER"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "original",
+                                    "claimed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "quote",
+                            "source",
+                            "operation",
+                            "twisted",
+                            "twistTargetIds",
+                            "supportIds",
+                            "contextIds",
+                            "inferenceBasisIds",
+                            "twistName",
+                            "evidenceQuote",
+                            "choiceQuote",
+                            "relationTypeChange"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "number",
+                      "truth",
+                      "answerConflict",
+                      "explanationAgreement",
+                      "note",
+                      "parts"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "number",
+                "stemPolarity",
+                "extraSegments",
+                "choices"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "passageId",
+          "questions"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tool_usage": {
+    "image_gen": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "web_search": {
+      "num_requests": 0
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 18702,
+    "input_tokens_details": {
+      "cache_write_tokens": 0,
+      "cached_tokens": 18699
+    },
+    "output_tokens": 7387,
+    "output_tokens_details": {
+      "reasoning_tokens": 275
+    },
+    "total_tokens": 26089
+  },
+  "user": null,
+  "metadata": {},
+  "output_text": "{\n  \"passageId\": \"dopamine-motor-control\",\n  \"questions\": [\n    {\n      \"number\": 10,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"선조체 뉴런 중에는 D1 계열의 도파민 수용체가 있는 것이 존재한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P4-3\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"뉴런에서 신경 전달 물질이 합성되는 과정에 효소의 작용이 필요할 수 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-12\", \"P1-13\"],\n              \"contextIds\": [\"P1-1\"],\n              \"inferenceBasisIds\": [\"P1-12\", \"P1-13\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"뇌에 존재하는 여러 가지 신경 전달 물질의 작용을 통해 수의적 운동이 조절될 수 있다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-7\", \"P3-12\", \"P4-8\"],\n              \"contextIds\": [\"P3-3\", \"P3-5\", \"P3-11\"],\n              \"inferenceBasisIds\": [\"P3-7\", \"P3-12\", \"P4-8\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"뉴런 밖 분해의 조건인 DAT 부재를 없애고, 수용체에 결합하지 않은 도파민 전체로 대상을 확대했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"도파민성 뉴런에서 분비된 도파민 중 도파민 수용체에 결합하지 않은 것은\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-10\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"모두 뉴런 밖에서 분해된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-14\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-10\", \"P2-11\", \"P2-12\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"DAT 부재 조건 삭제와 분해 대상의 전칭화\",\n              \"evidenceQuote\": \"DAT가 없는 도파민성 뉴런에서 분비된 도파민은 뉴런 밖에서 분해된다.\",\n              \"choiceQuote\": \"모두 뉴런 밖에서 분해된다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"시냅스 틈으로 분비된 도파민이 어떤 계열의 도파민 수용체에 결합하느냐에 따라 뉴런 내 신호 전달의 활성 여부가 달라진다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R9\"],\n              \"contextIds\": [\"P2-2\", \"P2-3\", \"P1-16\"],\n              \"inferenceBasisIds\": [\"P2-2\", \"P2-3\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 11,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"빈칸에 넣어 완성한 인과 판단을 평가했다. 분해 효소가 뉴런 내부에 있다는 사실 자체가 아니라, 그것이 뉴런별 조절 양상의 차이를 설명한다는 연결이 부적절하다. 지도에는 이 잘못된 연결에 대응하는 관계가 없어, 이유를 요구하는 보기 S2를 비틂 대상으로 삼았다.\",\n          \"parts\": [\n            {\n              \"quote\": \"도파민 분해 효소가 도파민성 뉴런 내부에 있기\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S2\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-12\", \"P2-8\", \"P2-13\", \"S1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"세포 내 분해 위치를 뉴런별 조절 차이의 원인으로 대입\",\n              \"evidenceQuote\": \"그렇지만 그 양이 조절되는 양상은 ⓐ 때문에 도파민성 뉴런에 따라 다를 수 있겠군.\",\n              \"choiceQuote\": \"도파민 분해 효소가 도파민성 뉴런 내부에 있기\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"D2 계열 수용체의 선택적 존재와 DAT의 부재 가능성에서 조절 장치의 차이를 도출하고, 이를 뉴런별 조절 양상의 차이에 연결하는 복합 추론이다. D2 수용체가 없는 뉴런의 가능성은 '위치할 수 있다' 및 '있는 경우'라는 한정에 근거한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"DAT나 D2 계열 수용체가 없는 도파민성 뉴런이 있기\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-13\", \"P2-4\", \"P2-8\", \"S2\"],\n              \"contextIds\": [\"P2-6\", \"P2-7\", \"P2-10\", \"S1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"빈칸에 넣어 완성한 인과 판단을 평가했다. D2 계열의 도파민성 뉴런 내 위치 가능성은 자기 조절의 기작을 설명하지만, 선지는 조절 장치의 뉴런별 존재 차이를 이유로 제시하지 않는다. 지도에 해당 오연결 관계가 없어 S2에 연결했다. 'D1 계열과 달리'라는 배타적 표현도 지문에 명시되어 있지는 않다.\",\n          \"parts\": [\n            {\n              \"quote\": \"D1 계열 수용체와 달리 D2 계열 수용체는 도파민성 뉴런에도 위치할 수 있기\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S2\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-4\", \"P2-5\", \"P2-8\", \"S1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"자기 조절의 가능 기작을 뉴런별 차이의 이유로 대입\",\n              \"evidenceQuote\": \"그렇지만 그 양이 조절되는 양상은 ⓐ 때문에 도파민성 뉴런에 따라 다를 수 있겠군.\",\n              \"choiceQuote\": \"D1 계열 수용체와 달리 D2 계열 수용체는 도파민성 뉴런에도 위치할 수 있기\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"빈칸에 넣어 완성한 인과 판단을 평가했다. 저장된다는 사실 자체는 맞지만, 재흡수 이후의 처리 방식만으로 뉴런별 조절 양상의 차이를 설명하지 못한다. 지도에 해당 오연결 관계가 없어 S2에 연결했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"도파민성 뉴런으로 재흡수된 도파민 중 일부는 분해되지 않고 시냅스 소포에 저장되기\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S2\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-11\", \"P2-12\", \"P2-13\", \"P2-8\", \"S1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"재흡수 후 저장을 뉴런별 조절 차이의 원인으로 대입\",\n              \"evidenceQuote\": \"그렇지만 그 양이 조절되는 양상은 ⓐ 때문에 도파민성 뉴런에 따라 다를 수 있겠군.\",\n              \"choiceQuote\": \"도파민성 뉴런으로 재흡수된 도파민 중 일부는 분해되지 않고 시냅스 소포에 저장되기\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"DAT의 재흡수 기능을 새 도파민의 합성량 조절 기능으로 바꾸었다. 지문에는 DAT 유무가 합성량을 달라지게 한다는 내용이 없다.\",\n          \"parts\": [\n            {\n              \"quote\": \"도파민성 뉴런의 DAT 존재 여부에 따라 도파민성 뉴런에서 합성되는 도파민의 양이 달라지기\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-10\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P2-13\", \"P1-12\", \"P1-13\", \"S2\"],\n              \"inferenceBasisIds\": [\"P2-10\", \"P2-13\"],\n              \"twistName\": \"재흡수량 조절을 합성량 조절로 치환\",\n              \"evidenceQuote\": \"시냅스 틈으로 분비된 도파민 중 일부는 도파민 수용체에 결합하지 않고 도파민성 뉴런에 위치한 도파민 수송체(DAT)에 의해 도파민성 뉴런으로 재흡수되기도 한다.\",\n              \"choiceQuote\": \"도파민성 뉴런에서 합성되는 도파민의 양이 달라지기\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 12,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"도파민이 간접 경로를 억제하면 내측 창백핵 활성화와 시상 억제가 줄어드는 방향으로 작동한다는 복합 추론이 필요하다. 지도에는 도파민 작용 시 두 경로의 최종 효과를 직접 비교한 관계가 없어, 가장 가까운 경로 비교 관계 R28에 연결했다. R28의 대비는 각 경로가 활성화될 때의 대비이며, 이를 도파민 분비 시에도 그대로 적용한 것이 오류다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠은 ㉡과 달리\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"R28\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"C3-5\", \"C3-6\", \"P4-5\", \"P4-6\"],\n              \"inferenceBasisIds\": [\"P4-5\", \"P4-6\", \"P3-7\", \"P3-15\", \"P3-16\", \"P3-9\", \"P3-10\"],\n              \"twistName\": \"경로 활성화 시 대비를 도파민 작용 시 대비로 전용\",\n              \"evidenceQuote\": \"흑질의 도파민성 뉴런에서 분비된 도파민은 직접 경로를 활성화하고 간접 경로는 억제하여 목표하는 운동의 시작을 수월하게 함으로써 운동을 촉진하게 된다.\",\n              \"choiceQuote\": \"㉠은 ㉡과 달리\",\n              \"relationTypeChange\": {\n                \"original\": \"CONTRAST\",\n                \"claimed\": \"CONTRAST\"\n              }\n            },\n            {\n              \"quote\": \"흑질의 도파민성 뉴런에서 도파민이 분비되면 대뇌 피질의 운동 영역으로 글루타메이트가 분비된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P4-5\", \"C3-5\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P4-5\", \"P3-7\", \"P3-8\", \"P3-9\", \"P3-10\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"시상으로 가바가 분비되지 않는다는 직접 경로의 결과를 간접 경로의 결과로 바꾸고, 직접 경로에서는 그렇지 않은 것처럼 서술했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉡은 ㉠과 달리 선조체 뉴런이 활성화되면 시상으로 가바가 분비되지 않는다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-8\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-7\", \"P3-14\", \"P3-15\", \"P3-16\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"직접 경로 결과의 간접 경로 귀속\",\n              \"evidenceQuote\": \"이로 인해 시상으로 가바가 분비되지 않으면\",\n              \"choiceQuote\": \"㉡은 ㉠과 달리\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"직접 경로 활성화→내측 창백핵 억제, 간접 경로 억제→내측 창백핵으로의 흥분성 입력 감소를 결합하는 복합 추론이다. 간접 경로 억제에 따른 입력 감소는 지문의 활성화 기작을 반대 방향으로 적용한 문맥적 추론이다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 흑질의 도파민성 뉴런에서 도파민이 분비되면 내측 창백핵 뉴런의 활성이 억제된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P4-5\", \"P4-6\", \"P3-7\", \"P3-14\", \"P3-15\"],\n              \"contextIds\": [\"P2-2\", \"P2-3\", \"P4-3\", \"P4-4\"],\n              \"inferenceBasisIds\": [\"P4-5\", \"P4-6\", \"P3-7\", \"P3-14\", \"P3-15\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"직접 경로에서는 맞는 결과이지만 간접 경로까지 일반화했다. 간접 경로의 시상 억제는 P3-16의 '상반된 작용'을 직접 경로의 후속 작용과 대조하여 파악한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 선조체 뉴런이 활성화되면 시상의 글루타메이트성 뉴런이 억제 상태에서 벗어나 활성화된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P3-16\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-7\", \"P3-8\", \"P3-9\", \"P3-14\", \"P3-15\"],\n              \"inferenceBasisIds\": [\"P3-7\", \"P3-8\", \"P3-9\", \"P3-15\", \"P3-16\"],\n              \"twistName\": \"직접 경로의 시상 활성화를 간접 경로까지 일반화\",\n              \"evidenceQuote\": \"따라서 이후 직접 경로와는 상반된 작용이 일어나 운동이 차단된다.\",\n              \"choiceQuote\": \"㉠과 ㉡은 모두\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"직접 경로의 활성 유도를 간접 경로까지 확대했다. 간접 경로의 선조체 뉴런은 D2 계열 수용체를 통해 억제된다.\",\n          \"parts\": [\n            {\n              \"quote\": \"㉠과 ㉡은 모두 흑질의 도파민성 뉴런에서 분비된 도파민이 각 경로를 이루는 선조체 뉴런 내 신호 전달의 활성을 유도하게 된다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-6\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P4-5\", \"P4-3\", \"P4-4\", \"P2-2\", \"P2-3\"],\n              \"inferenceBasisIds\": [\"P4-3\", \"P4-4\", \"P2-2\", \"P2-3\"],\n              \"twistName\": \"간접 경로 억제를 활성 유도로 반전\",\n              \"evidenceQuote\": \"흑질의 도파민성 뉴런에서 분비된 도파민은 직접 경로를 활성화하고 간접 경로는 억제하여\",\n              \"choiceQuote\": \"㉠과 ㉡은 모두\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 13,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [\n        {\n          \"id\": \"S1a\",\n          \"parentId\": \"S1\",\n          \"quote\": \"흑질의 도파민성 뉴런이 파괴되어 선조체로 분비되는 도파민의 양이 감소함으로써\"\n        },\n        {\n          \"id\": \"S1b\",\n          \"parentId\": \"S1\",\n          \"quote\": \"수의적 운동에 장애가 나타나는 질환이다.\"\n        },\n        {\n          \"id\": \"S2a\",\n          \"parentId\": \"S2\",\n          \"quote\": \"도파민성 뉴런이 파괴되는 것의 진행을 막을 수는 없기 때문에 병의 완치는 불가능하지만\"\n        },\n        {\n          \"id\": \"S2b\",\n          \"parentId\": \"S2\",\n          \"quote\": \"약물 치료를 통해 병의 증상을 완화할 수 있다.\"\n        },\n        {\n          \"id\": \"S4a\",\n          \"parentId\": \"S4\",\n          \"quote\": \"모든 약물은 입을 통해 투여되며\"\n        },\n        {\n          \"id\": \"S4b\",\n          \"parentId\": \"S4\",\n          \"quote\": \"두 가지 이상의 약물을 병용할 수 있다.\"\n        },\n        {\n          \"id\": \"S5a\",\n          \"parentId\": \"S5\",\n          \"quote\": \"흑질의 도파민성 뉴런으로 흡수되어 도파민 합성을 증가시킴.\"\n        },\n        {\n          \"id\": \"S5b\",\n          \"parentId\": \"S5\",\n          \"quote\": \"투여된 레보도파의 상당량은 뇌로 전달되기 전에 말초 조직에서 도파민으로 합성됨.\"\n        },\n        {\n          \"id\": \"S6a\",\n          \"parentId\": \"S6\",\n          \"quote\": \"레보도파를 도파민으로 합성하는 효소의 작용을 억제하며\"\n        },\n        {\n          \"id\": \"S6b\",\n          \"parentId\": \"S6\",\n          \"quote\": \"혈액-뇌 장벽을 통과하지 못하여 말초 조직에서만 작용함.\"\n        }\n      ],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"(가)는 도파민과 달리 약물로 투여할 경우 혈액-뇌 장벽을 통과하여 뇌로 진입할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S5a\", \"P1-4\"],\n              \"contextIds\": [\"S4a\", \"P1-2\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"말초 조직에서 도파민 합성 효소를 억제하는 기능을 뇌에서 이미 합성된 도파민의 작용 기간 연장으로 바꾸었다. 작용 장소와 효소 기능을 함께 잘못 적용했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"(나)는 효소의 작용을 억제하여\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S6a\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"흑질에서 합성된 도파민의 작용 기간을 연장할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S6a\", \"S6b\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-13\", \"P2-12\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"말초 합성 억제를 뇌 내 도파민 작용 연장으로 치환\",\n              \"evidenceQuote\": \"레보도파를 도파민으로 합성하는 효소의 작용을 억제하며 혈액-뇌 장벽을 통과하지 못하여 말초 조직에서만 작용함.\",\n              \"choiceQuote\": \"흑질에서 합성된 도파민의 작용 기간을 연장할 수 있겠군.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"보기에서 제시한 약물의 직접 작용을 기준으로 한 판단이다. 수용체 결합과 도파민 합성을 구별하며, 제시되지 않은 간접적 생리 효과까지 부정하는 것으로 확대하지 않는다.\",\n          \"parts\": [\n            {\n              \"quote\": \"(다)는 흑질의 도파민성 뉴런에서 도파민이 합성되는 과정에는 영향을 주지 않겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S7\"],\n              \"contextIds\": [\"P1-12\", \"P1-13\", \"P1-16\", \"P4-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"말초에서의 효소 억제→레보도파의 말초 전환 감소→뇌로 전달될 레보도파 증가라는 복합 적용이다.\",\n          \"parts\": [\n            {\n              \"quote\": \"(나)를 (가)와 함께 투여하면 말초 조직에서 레보도파가 도파민으로 합성되는 것이 차단되어\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S6a\", \"S6b\", \"S5b\", \"S4b\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"S6a\", \"S6b\", \"S5b\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"뇌로 전달되는 레보도파의 양이 증가하겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S5a\", \"S5b\", \"S6a\", \"S6b\"],\n              \"contextIds\": [\"P1-4\", \"P1-13\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"질환 진행에 따른 도파민 부족 심화와 두 약물의 서로 다른 보완 기능을 결합하는 복합 적용이다. 실제 투약량의 안전성이나 처방 기준이 아니라 보기에서 설명한 작용에 따른 치료 가능성을 판단한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"파킨슨병이 진행됨에 따라 증상을 완화하기 위해서는\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1a\", \"S1b\", \"S2a\", \"S2b\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"S1a\", \"S1b\", \"S2a\", \"S2b\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"(가)의 양을 늘리거나\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S5a\", \"S1a\"],\n              \"contextIds\": [\"P1-13\", \"P4-8\", \"S2b\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"(가)와 (다)를 병용할 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S4b\", \"S5a\", \"S7\"],\n              \"contextIds\": [\"S1a\", \"P1-17\", \"P4-8\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+}

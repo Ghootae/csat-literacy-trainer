@@ -1,0 +1,360 @@
+{
+  "id": "resp_0b387937ef12dfd2006ad8ef34139c87d097c569b897e65eaf",
+  "object": "response",
+  "created_at": 1792601908,
+  "status": "completed",
+  "access_programs": null,
+  "background": false,
+  "billing": {
+    "payer": "developer"
+  },
+  "completed_at": 1792601987,
+  "error": null,
+  "frequency_penalty": 0,
+  "incomplete_details": null,
+  "instructions": "너는 수능 국어 독서 문항의 선지를 지문 분석 지도와 〈보기〉에 연결한다. 목적은 학생이 어떤 선지를 골랐을 때, 그 선지가 지문·〈보기〉의 어느 내용을 어떻게 다루었는지 좌표로 남기는 것이다. 지도와 〈보기〉 조각은 고치지 않는다. 지문과 〈보기〉에 없는 내용을 지어내지 않는다.\n\n참고 해설은 정답과 선지별 판단의 이유를 적은 참고 자료다. 판단과 근거는 반드시 지문·〈보기〉 원문과 지도에서 확인한다. 해설과 원문이 어긋나면 원문을 따르고 `note`에 적는다. 해설 문장을 근거 인용으로 쓰지 않는다.\n\n문항마다 다음을 한다.\n\n1. **발문 극성** `stemPolarity`: 적절하지 않은 것을 고르면 `SELECT_INCORRECT`, 적절한(가장 적절한) 것을 고르면 `SELECT_CORRECT`, 둘 다 아니면 `OTHER`.\n2. **〈보기〉 조각**은 입력의 `S…`·`F…`를 그대로 쓴다. 한 조각 안에 선지가 기대는 단위가 둘 이상이면 `extraSegments`에 `S2a`처럼 더 나눈 조각을 둔다(`parentId`, `quote`는 부모 조각 글의 정확한 부분 문자열).\n3. **선지마다**\n   - `truth`: 지문과 〈보기〉에 비추어 선지 진술이 맞으면 `TRUE`, 틀리면 `FALSE`, 판단할 수 없으면 `UNDETERMINED`.\n   - `answerConflict`: 정답 번호와 발문 극성으로 보아 `truth`가 정답과 어긋나면 `true`, `note`에 이유. 정답 번호를 바꾸지 않는다.\n   - `explanationAgreement`: 참고 해설과 같은 지점을 근거·비틂으로 잡았으면 `AGREE`, 다른 지점을 잡았으면 `DIFFER`(이유를 `note`에), 해설이 없으면 `NO_EXPLANATION`.\n   - `parts`: 선지를 내용 조각으로 나눈다. 조각을 모두 이으면 선지 문장에서 조사·어미·문장부호 말고는 빠지는 부분이 없어야 하고, 조각끼리 겹치지 않아야 한다. 각 조각은\n     - `quote`: 선지 문장의 정확한 부분 문자열.\n     - `source` 근거 위치: `PASSAGE`(지문), `SUPPLEMENT`(〈보기〉), `BOTH`(둘 다), `NONE`(어디에도 없음).\n     - `operation` 다룬 방식: `RESTATE`(근거를 그대로 옮기거나 바꿔 씀), `INFER`(근거에서 한 단계 이끌어 낸 판단), `APPLY`(〈보기〉의 대상·사례를 지문의 원리·개념에 대응시킨 판단).\n     - `twisted`: 근거 내용과 다르게 바뀌었으면 `true`.\n     - `twistTargetIds`: `twisted`이면 실제로 바뀐 단위만. 인과·조건 등 이어짐을 바꿨으면 그 관계(`R…`) 하나, 명제 내용을 바꿨으면 그 명제, 〈보기〉를 잘못 옮겼으면 그 〈보기〉 조각. `twisted`가 아니면 빈 배열.\n     - `supportIds`: `twisted`가 아니면 이 조각이 맞다는 근거 단위(지도·〈보기〉 id). `twisted`이면 빈 배열.\n     - `contextIds`: 판단하려면 함께 봐야 하는 단위(관계의 양 끝 명제, 대응시킨 원리 등). 바뀐 곳·근거와 겹치지 않게 둔다.\n     - `inferenceBasisIds`: `operation`이 `INFER`이면 추론의 전제 단위. 한 단계를 넘는 추론이면 `note`에 적는다. 아니면 빈 배열.\n     - 지도 단위는 가장 작은 것부터: 한 문장 내용은 명제(`P…`), 두 내용의 이어짐은 관계(`R…`), 문단이나 여러 묶음의 요약은 합성·요지(`C…`·`G…`).\n     - `twistName`: `twisted`이면 무엇이 어떻게 바뀌었는지 드러나는 짧은 명사구. 정해진 목록은 없다. 아니면 빈 문자열.\n     - `evidenceQuote`: `twisted`이면 근거 원문의 정확한 부분 문자열(지문 문단 원문 또는 〈보기〉 조각 글; 그림이면 그림 요소 설명). `source`가 `NONE`이면 빈 문자열로 두고 `note`에 \"지문·〈보기〉에 해당 내용 없음\"을 적는다.\n     - `choiceQuote`: `twisted`이면 선지에서 바뀐 부분의 정확한 부분 문자열.\n     - `relationTypeChange`: `twistTargetIds`가 관계이면 `{ original, claimed }`. `original`은 입력의 관계 유형, `claimed`는 선지가 주장한 이어짐을 같은 유형 목록에서 고른 것. 아니면 `null`.\n   - `truth`가 `FALSE`이면 `twisted` 조각이 하나 이상, `TRUE`이면 하나도 없다.\n   - 선지가 누구의 주장인지(인물·학파·입장)를 말하면 명제별 입장과 대조한다. 주인이 바뀐 것도 비틂이다.\n4. 지도에 알맞은 단위가 없으면 가장 가까운 단위를 넣고 `note`에 무엇이 모자란지 적는다.\n\n출력은 주어진 JSON 스키마를 따른다.",
+  "max_output_tokens": 18000,
+  "max_tool_calls": null,
+  "model": "gpt-6.1-sol",
+  "moderation": null,
+  "output": [
+    {
+      "id": "rs_0b387937ef12dfd2006ad8ef35232c87d09da8fd22061c0079",
+      "type": "reasoning",
+      "content": [],
+      "encrypted_content": "gAAAAABq2O-Dwcx5mChLQZGsBA7TT7CFUhR3GlO6m2udJouNar6RGV8k_GUrCenw2c4QIZJVj4T25XSv5heGLE3v6m-Rc1dAh3fDVlG4BSSBB5xcRag1UQdGB_AKSzG87NZY3oV219SGEeqf4TFSLwOLpm4QhUF90IpJAQK12jOduMShh5tn-A0wdcsG5uY5iTWyT9BNJuS82l8PACKsIp58_Ju-lTMhWtBY_LTr1oO3YFqBrgrqnVvNwUr2weEBdQbJJ-9B2LqKrRbGwXPi-UjmDlmHal9y5Py0SsM4LgDh3bkk44-eVEL9wWxf85vV0UJWGPo62WouQN0VphcvmuNjBdIreZCsAIyNNEHh2-XhaVtiROdqxrLyOs0UBhe6hnYB9Obm59ZDo_SF794sjAdvz3SwXo3Q624c9rZP6rcqdUoxSAxhEj1MG9cxe5eKNM4FJd-fp5RQYz5xDAoJNhKtJioHv8xsrOl-WnlLFDEhyRwLjGjPXmTC3VPY4YiR7PZvct9duH1w0p_HM__C9JeGSyNwNfI3f38XuXHs6UIOmIEkYmLBz3d33BA43jvJCtkkljGN8L8drKKkPMaB0Bw_ioTtgximbXsQogzA4FptMRkP0MCCQLSXMyoWGz2AKdQ2KVbD1sDnJV3l7zhvUGdYPBJLlRZ0XxICUfxGD6CoHFxMm-qppBEZVLncQA99iIQE1RbR_bQe8piGKtLWxGOsYRYgk-CQdGGu1mZvI9vidKF-nGVudTlzwIcw-7RXhfHrOaxyFFC5nFqRrUCXBmtYK23X7TAl9ISK2ciB_GToQW2bqsfxfNKH-wGwJUcmV7k1iU4eM-os7D7achJqmkkTM72MftwFD1mtbiVnAAR2JTc1CIo59zJXRDNd182SJCxoTpdswDpbFl_nyBvMgQFsi5oACz67DmdCrkvjI-sCkVB7-cT5RgdeSqjz4Xq8UmI-2kyDVPHyeCPV-Cf6oSvNJekpqLANZDeFiIkYTsSzFdd6iYDI6O5DL5N_fZnQ-JuREL6sth3OrgLnzOBitLo7ovoKN3aX3AgYrg5xFO_FXXztUwXcHpCtCMFLEmk66Eb0DxDPI67cnOAjlqZR49rySXV9NsyJ5MVx9OlqpJ1WKlCNk4osFGRYtGnqK2DQbxnLY8Ag2ERkuOrqalx9kQWi3FUXRWOVhKopQ57ackP3kVfGT89fJ9Cx3EX2OoLJmqjAZ7MAF11uPkEdHXVV2pr16TWlcOHnzU9P3hBChzTfKoP3d_N-gcp4l1fqfsslSVfWYiTYHttULPZVFQlQI3KHNZdILEtf14Ke3exNRDp37eFMrUrTHpyx0T64iKPPqcvySCshlkwjvM7_RCcN2ML8mG3SNerA6dx3E6nMYuVsOJUzARmlYFwYH72HKOAH9fKZRkVi0Aza1Y1JaMJVJBLq_N75ejrjtyBrZo2G2tR3CZxiaRTygz8rINk4kKk9BLhQu2aDS98LFXDFiE9DXDgjIgsNub7FXpJtNrH0FmykdJbXCBzhY3HfSO9Rs7k3kAKMhqLPVaxywop9LXt4VEVGlOGvEazZKg4PB4lobvl6cAETDXXD30zAkvIuj0RKSARbXsuvNw3OFbPsGfexQif2qHVHZGy-lnima7o6kg-yeqx3l3YBeOWbXvVJLHvEqrw_TYDW_atvJ-vKUlZWwfCYcLxwzAWXV4bFXL7Fyx1BYS4XrldrxeaqOtq8VVf8mBUPUXdi6E00zX17pwFl-zdoHq9Jq_o443w0EXbyCDUAmJktBUfyq-8Jk2wP3WaZLppE9jSDVQBu7yqsNxg8zZc3aczDIeunadeB8MLqQYkqdpeRglSeGcwCIXPZfVLdYRvSIiDNsvUWJSeXnw79x2mbPY-cTEHkpDTq4u-ngaLHRleIGd--orBbZHQp7swNxX9VaQmJzCo6VPXCEib_g_C2DWhCFL0DsdkGigubkKp4XJ-NjcKyREmECzrpoWIa4sK1apABpvEvaDLeF8B5hAXjsJjspnEG7u0ebR83dd2ReXKX_hA2rG9_iIb7Q5io9VYQltDa68ABKH3f2vT-2Ixmn_VPuR8rhht91xFEMAsUZsJwNsOa6EeNFDg-nSkFeMLDVKtE7TSJ0z9JAUenlkuOFKKz4VhVp3JIu0QUFzl1nsxIjPtWItTHcRNcN6OCoMY0WiO5WIemY1dNAYXXpzWVkb_FFjhirc3n90KL4KbWBMLpZlJFz9b6ZdueTYvmWg1CTLYUyhjCB_nh-vu243M0TTMb_WIlQKzeaQQdg1ySdQrgzFOJlC-5D4s9oe0c6L8hkWlJNtsu1FlW2OhQOJZlsBJG2Uyzz18p8QWc2B02reYKOCKYx766iEU6-6z3I9lF_uBRZPoCBozvrjLO2Q-S4EDMfZiTJ3Ms0zCAa5NRcMSJ7Ue7ynqlKTbk1hbJgQavfywO62pF89_WQvsnH3zIIsT6aOSwGjPgv8rYnJK6wdcw0iSW8aqGxYbYG3_yxN7HI6m1M3GL1z3vjDezg3rNFRzqWm1JDA5tzYqxJT_Gn59Z2QczkkbHKxuOD78ZCZVLH1gP-RC7OXMtWh1bSzAqZYXcm5FvfgfGEgYP1zDiRrP45_B3dBnIEI3iGevdo0vb5pRe2zFuUsHgahi6rpkY2qv8fDTvLphonF3z9AgiNDCcQ0BV1hktv4pEBwjwzfjsgag55maLQPqUfEoeixXPGm-Oskll5rU5f5-4jpf8Gu5sGl4lfjDghpwl_4ORE_bhzEYHm243SovGMVSbIY_lHsdIb-4QLMQpcFeZeRq8Qltbty8lALJIcV03ZrhSN3jXxV2TEaRgwe20LL3nDwa6_AQA1Rgmc_lzANRQ70Yb3fpcEEQ35QdrsurnCBm6CC_6PTEosm0sOXM3TDQWjEPzIyczX10oQN7coNlNkVXX1WP7dnd6eY_U6Ljdx8QhgiuU-8v92WfHDyPmig9EeEM9h-6eL02YgUX1HOa94M2lpu6NL9PsS41EKi32wNrBUL2CuWdMF7kZzlf7jVToo9kI1iMzIynKRKp4SwINYV1QnR2_VYWDg8mDMvDR-tSawuw7IheoYCeZqrldw3pI6crhHKCxB3WjspHMA40HCqHHybB_wvrinIRBkNTXm_dQYgS1RK3Y4rMsdOhSJ1TFiGvHMV31bzpREgAWaOXLIXqwJk1aBbMoY-Sa3yD0HAr45wi9s6CF4fuumhF4DDX0AkPgP1wJmMA4pd3nP3uXx6uDNtYV2AsDJJh8DwWuuNrJKZcd-HNgvxT6FGjKDOMgcprd73f24pHe7sH9_saotrEtBGy03ODm5tDFLNmaJXL87u7gAuJKBFrGB1xQ__hVIjvvsLA55LVim8UZHvnvOnn0EqQ1WpVpaDr3T9SfQZ0thSHzLCmatMdrnbCG04VjTkDPRnpy-Ntq8lJvadhmvsp3xWHkEdZL9_Zsab1zNGMjrHXiLZvPu4hlsirPOtYKUMN0sMVDpkYFRBe2ry5O2zv4U6c-FkmB_AGLIbVWBM69uUAoOLwpTtd1EngiUlIO9Gb02_kZf7Ui3s4VOpggEB9l0l42ChnF6NIgT7i0zoG1bpK7AYnr2zE1spjLMnQlRKg9yrGG3Efk1H3JZ_NkziJw5dfDBxt8DEfyJjvFOM-d5AjzFIsAv7NNy6ItIE3IJywU-KGOKcW6yenex1PSaMVb5pfenCwCGqhMLdFyTfnhy0Gy4Qrd2kVB13IM-RXh_bkPZiK0sRcrN0tiom9zdJPpX2adVHRCk36ihif3C7acEqEx-saPDsT-vScg6SYXd5DosDXtWHdp8GR0fNsoC21GwnLJ2vK2rBvlACZ-0Rzj3MCp9TxMbvudCMHT9cOHdmKvwPkVAxz6VNE_TNpxi__pWHOT4H7IUDC7bINRpcHDXwiC0Tv_A09I2j5pjlBxHsd5hTu2j2K0OcC_GYr-Xih6jOKvUT8DJlp1qHpapaBx25WIoXiE7fIsUN3_bT6Yxyr2aSBcwQwx5V9GuhxreXyAyhEdzE_97RPjBZIbX4Osk3mEB5x35vZi3ab2mcPoTxoxDxS5wUWvgO7_xLnnDVD1Bhl4x5HFfz7WXLQPJVoW1hPhltod2AOytwAuDqkGe8jQIeD263xwwo4Dm0xpVtTv486LjhyTZLGQte--DjSFOqvk0dyWkyd791QfHF7DsB7pabmgylshSTqwspKa2Eq1ityaf7r24KHhj_lRKQj3J8elg1GL_8gxnBbJ7EvqgxkH4bkCb96AlSnXHah1JcpTsYKukqJlldLdHCVp2eU6klNoe9zrosK3YG3Lfourmmd49bcTB2B4l2_VGA1y28r4L0VgykVH94SWltHkaMrLM2e-dbBKBkPFF3VhFW9rTzLa9rsbbt0y5KBKEhzUMNUOIl0OGjCvGgOWsUgjGAn3s0WVKjpD8UIZgTxFe1JM2civ4b1nn3GaCbce1bKL03qxjK2ZTV28SWDGXWhPzCB-1UGzT0oxJffDAPXLzAqXrykcLYaaZ8Slc26-DoqloHm1tzUsGaILuji4a4raK0Tnvdw-1L7XzVVsPk2ZFG7jivIUnNreypilXV64uNmB7udQorOKKe3W5xVtca_KVNR3_5cgstjJ1MkmDNPwR-3tTbz4F-YRB1jjWFHDNIkfPHJdzRO1Fzbf-zRvXv03J2H3zMDFt_ch9c2HmG4gxGOyq2M2p3qQ9sCbg8H52ThMVCYMTr7H1KCdveuKPDEM0-aXk1WelGfRHkw7XeZ5CvohHCUUayP4CUXiUo8Uosku-6zeV2Uoww-aX6gjbpNU4oXrMVF4MM51anAgeuomIgxaWOpoEqrI4p1xxVeyXGSD3kN5a5GjL8itvRC0BkpYANB04JfZCOwrMKx1cXEDcuMZg1xeqvd9htuG_U-VJIk7OpUJwNIO194OWXiCuIZBBc5LXzClRDjOwlSiKUfTvNUofeFVrJzgeFHKzfHoyGm2xKKo68OfzcvQtDpJj5I6AoPUSB10Lm1MMNjFYHknwoDbkkM7F_Y77STC1YYcDixjGBhduxO4IOkjp7Fq5PCAoazkmgTiTBNSI36cADNGV1nlCo4DCyy6Qqr7kN9BOLkIJPZ7gclJ6YFrVnWPjJO7c9LGsnBBbDyGM8ETUKrQ2EQ7R0UwvJGEDVYRzFdIKvZcGDxKKsxQQvn_uasi-5eHx-75WRtl3AtUeOqBnb_8ECjBneY3VH6a-Q_u3k_IS9OlETTzlGpMITVrIzpZDYrugVqESXTsuVreIg9UFPV6ZjypkzGMzt06zRP8keTcgdMpK9Pv6pHsvXDzvxZ_nptRQOQsBZZzwjDhQ1FFtF3hX9uTniCJFqXMpgf1nkh-kb1LLM3nkhoaTqksVmtSKBXXs04xF7EgGYlWu2jj4q7Y5PZWiJ1Cm8GylZxCXu7iA6Hw3Yp0L14uZ0lYJHKIAaVSPSB2k_Kww4KWH5uUhAE3GyBXTL6-l-UTwxgtgOqjKJSoafSD3NAHbfh-67ftFZsTu4LAtYEqAjsdeTeMJxj-HQZRV0ybSsbXwhj5VYITgxhMG6X_UOomkoC_LgXfDEdqW-pfBPBykXZq6Ovw_1HIWOB2L-cD7BcO09j__KB78lfAx5uPy0LXQyQo5dagNlYB3foJ-VaDQOqmTeVjj1Olc-sZmutK4V1CfsDidjo0p_4KSZ5YYeIY72vAe01TnU5laSmeb8Nh4VPR4s3IENwY2Nef5cAayHWRsOZBkatQCfkFfCBKXtSYweywSCy-8g_6xLC8to1zr5bE_nKXsNUTkiJTJjoA6vvK1taI__1GrVZ0mDnE9EbcZ3KusCilzuEAj82bV_s-FtaaX6L26zRTfLlsUJqbCCZvCw9P0R4z6DXhsqtcxBtF5NUkL2-YsuKum7c8I7LOnJ5qniUiEwEHOxZ94UWmui1Tg0TZ1HOE61ziqbAo4F2v5iIbgmJXcQwNTCyO0xhv0-TicuhfxE_LH_jKKrzRKiRA_Lbzs4alQ-Y_7Hbw3evcVlqbTv0fAx6yUyrszraA0KNYQSADmsuqdx27QKmFCVAORyDdgTSod5jF9YjlVXiv8lPtPZRoznaMcxQJEdggaxmIMd1GvyvVbdH_-r-GXlBa7lKfjXQb1rk3GfZh-Dywyq78_upEA9Ex1DEwyS9YFU2f1GafOnbRZsbVu6yckeXrBy_baLENhT6iKCPvvJ4n6sxUgvsEak1-kTaAZbSIgx4OTFVPJPUA7tHQ_LbtaTB0uu8rjLSwuZAT-LBZAorAK7etp1NwWKwgoVugpQEs9JYGgltL7Su2eDhVZ-Wkg9zkYY6-i5oJCrrUek69sqDF2EdReT9jWpKeEe1DNmHv4vISZq_aJn-Qus2x0TIfpYmcO4F3mKSMGkgwouYpWr3MYm9jTbuWee6olWMe0ln92iPkZm9Z4W9cfgrqfTGhZb9wcm0WbRbFY-zmN8r2ot9zD-KOiGLhW0nPCnHesdJMN1rAk0opoCkvOmxXlTfImu1S4PCdmd599DZyB5tPBSDEJpzfxbd8nIgt1Atoz8-6eQFtRCUxgwmDFRqbtm-amEAtxPGjThBkZ6MTjfrWpMFp3Uvj-i3MArbLUegX1PHgxUqEdR3zZhMONi9T03mblYow_-HBswofpv6X7MX-JOkdkPk3Tevv4rVZUBre59pASc8YdWoVfalVQ9hu9YNdOB2RguPsajTO7CIAoALF9zN-tbzx3p_EKJ-l24nAJd2OS5A23QA9WZ7qMXUimOKXmsbzA9KMLBaiuxD8iMIC45DC3rNIVq8WnkydpBMnLJnfL86gYRNwYqyfC1vxFAjp-2f4cknkosARBBCdTywNI8RUKKop76IPPsS2SiMjKjepr7fzQtrItYf21OEvYAISEKXvkGyXu0SwGmU3IRFeKk6RoZOpVzsEPm3wYj2Q3iwM_AWbkGd-yfu1TPmOO_MuoE2GZh3-jvSkezgP1cP1x_C0gsczmb4qX6Ndgo_ZzjB_J0B_l_0zR9xEMjrv3sffgTBEycoDNhD1jHUIwHGghPFJ5dMbUO4gyL3NFXvKzIT6PXQGf1BrPZsVELdQ_XxJ2JCo0dUMBpQ_qrb4-Bxp6oqCy0_cQfhXGvaMMnxCSp_SqsSLNbOeDXOxQ20Yf42mIFbFyJB5gyw8NGd-cgfQClP_tVzn7Qu2eOcYq9OJnB-k65ZNl_Kn86Mi07Zcb1pLw6BwEibMYls0IKJUla7PTluvRvLpBTP2g4ZzFxccRosjIkNKncjYy917EcWK1eDq4UQbLpJTfqc4SBUjcSsxsPdtS-acTWjjmi_6xXxJilmY4bt8gR99LvmyVZpDzi4rwzO_p5AURQ==",
+      "summary": []
+    },
+    {
+      "id": "msg_0b387937ef12dfd2006ad8ef42686c87d0a5b97e16ee1578c2",
+      "type": "message",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "annotations": [],
+          "logprobs": [],
+          "text": "{\n  \"passageId\": \"surface-tension-laplace\",\n  \"questions\": [\n    {\n      \"number\": 14,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"액체 방울이 구형을 이루는 것은 액체에 표면 장력이 작용하기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R1\"],\n              \"contextIds\": [\"P1-3\", \"P1-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"동일한 부피의 액체는 구형을 이루고 있을 때가 다른 형태를 이루고 있을 때보다 표면적이 작다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"호흡이 일어나려면 폐포 내부 압력과 인체 외부 압력의 차이가 발생해야 한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-2\", \"P2-3\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P2-2\", \"P2-3\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"지질은\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-5\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"폐포를 수축하게 하는 압력을 약화하는 물질의\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-4\", \"P2-6\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P2-4\", \"P2-6\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"구성 성분 중 하나이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-5\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"노즐의 기능을 잉크 분사에서 방울 합체로 바꾸었다. 방울 합체는 3문단의 기포 사례이며 노즐의 기능으로 제시되지 않는다.\",\n          \"parts\": [\n            {\n              \"quote\": \"잉크젯 프린터에서 노즐은\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P4-2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"작은 잉크 방울을 합쳐 큰 잉크 방울로 만드는 역할을 한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-2\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P4-3\", \"P3-3\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"노즐의 분사 기능을 방울 합체 기능으로 대체\",\n              \"evidenceQuote\": \"잉크젯 프린터에서는 분사 장치의 노즐을 통해 잉크가 분사된다.\",\n              \"choiceQuote\": \"작은 잉크 방울을 합쳐 큰 잉크 방울로 만드는 역할을 한다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 15,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"반지름 차이로 내부 압력의 대소를 판단한 뒤 고압에서 저압으로의 이동을 연결하는 다단계 추론이다. 지도에는 기포 크기별 이동 방향을 직접 나타낸 단위가 없어 가장 가까운 이동 원리 P2-3을 비틂 대상으로 연결했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"기포 안의 공기는\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"큰 기포에서 작은 기포로 이동한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-3\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-8\", \"P1-9\", \"P3-2\"],\n              \"inferenceBasisIds\": [\"P1-8\", \"P1-9\", \"P3-2\", \"P2-3\"],\n              \"twistName\": \"기포 사이 공기 이동 방향 역전\",\n              \"evidenceQuote\": \"공기가 압력이 높은 곳에서 낮은 곳으로 이동하기 때문이다.\",\n              \"choiceQuote\": \"큰 기포에서 작은 기포로 이동한다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"지도에 크기와 무관한 기포의 표면 장력 작용을 독립적으로 진술한 명제가 없어, 이를 포함하는 가장 가까운 합성 단위 C1-1에 연결했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"작은 기포와는 달리, 큰 기포에는 표면 장력이 작용하지 않는다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"C1-1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-2\"],\n              \"inferenceBasisIds\": [\"C1-1\", \"P3-2\"],\n              \"twistName\": \"큰 기포를 표면 장력 작용 대상에서 제외\",\n              \"evidenceQuote\": \"우리는 물방울, 비눗방울, 기포 등이 구의 형태를 취하고 있는 것을 볼 수 있다. 구형은 동일한 부피에서 표면적이 최소인 형태인데 이는 액체 분자 간의 인력으로 발생하는 표면 장력의 작용 때문이다.\",\n              \"choiceQuote\": \"작은 기포와는 달리, 큰 기포에는 표면 장력이 작용하지 않는다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"지도에 기포 사이 압력 차이와 공기 이동의 인과 관계가 별도로 없어 가장 가까운 일반 원리 P2-3을 연결했다. 크기 차이에서 압력 차이를 도출한 뒤 이동 원리와 연결한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"접해 있는 두 기포 간에 공기의 이동이 이루어지는 것은\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"두 기포 내부의 압력이 동일하기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-3\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-9\", \"P3-2\"],\n              \"inferenceBasisIds\": [\"P1-9\", \"P3-2\", \"P2-3\"],\n              \"twistName\": \"공기 이동의 압력 차이를 압력 동일로 대체\",\n              \"evidenceQuote\": \"공기가 압력이 높은 곳에서 낮은 곳으로 이동하기 때문이다.\",\n              \"choiceQuote\": \"두 기포 내부의 압력이 동일하기 때문이다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"새롭게 만들어진 기포의 내부와 외부의 압력 차이는 처음의 큰 기포의 내부와 외부의 압력 차이보다 작다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-9\", \"P3-2\", \"P3-3\"],\n              \"contextIds\": [\"P1-8\"],\n              \"inferenceBasisIds\": [\"P1-9\", \"P3-2\", \"P3-3\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"압력 평형식을 정리하면 합체 전후 모두 내외부 압력 차이가 표면 장력으로 인한 압력과 같다. 따라서 '처음의 두 기포와 달리'라는 구별과 '보다 크다'는 비교가 함께 잘못되었다.\",\n          \"parts\": [\n            {\n              \"quote\": \"처음의 두 기포와 달리, 나중에 생성된 기포의 내부와 외부의 압력 차이는 표면 장력으로 인한 압력보다 크다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P1-4\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-2\", \"P3-3\"],\n              \"inferenceBasisIds\": [\"P1-4\", \"P3-2\", \"P3-3\"],\n              \"twistName\": \"내외부 압력 차이와 표면 장력 압력의 등량 관계를 초과 관계로 변경\",\n              \"evidenceQuote\": \"액체 방울에서 방울의 외부 압력과 표면 장력으로 인한 압력의 합이 내부 압력과 균형을 이룰 때 방울은 그 크기를 유지한다.\",\n              \"choiceQuote\": \"처음의 두 기포와 달리, 나중에 생성된 기포의 내부와 외부의 압력 차이는 표면 장력으로 인한 압력보다 크다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 16,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [\n        {\n          \"id\": \"S3a\",\n          \"parentId\": \"S3\",\n          \"quote\": \"빨간색 잉크가 구입했을 때보다 더 끈적끈적해서\"\n        },\n        {\n          \"id\": \"S3b\",\n          \"parentId\": \"S3\",\n          \"quote\": \"첨가제를 넣어 끈적거림의 정도를 조절하여 다시 인쇄하였다.\"\n        }\n      ],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"구입 당시 두 잉크 모두 안정적으로 출력되었으므로 적정 범위에 있다는 판단을 파란색에만 한정할 수 없다.\",\n          \"parts\": [\n            {\n              \"quote\": \"구입 당시의 빨간색 잉크의 오네소르게 수와 달리,\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P6-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"두 색의 공통된 안정 출력 상태를 차이로 변경\",\n              \"evidenceQuote\": \"빨간색 잉크와 파란색 잉크 모두 안정적으로 출력되었다.\",\n              \"choiceQuote\": \"구입 당시의 빨간색 잉크의 오네소르게 수와 달리,\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"구입 당시 파란색 잉크의 오네소르게 수는 대략 0.1에서 1.0 사이에 있었겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1\", \"P6-1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"점도 증가와 미분사 상태를 결합하여 적정 범위 초과를 판단하고, 정상 인쇄로 회복되었다는 가정에서 오네소르게 수의 감소를 판단한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"빨간색 잉크에 첨가제를 넣어 인쇄가 문제없이 잘 이루어졌다면,\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S3b\", \"P6-1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"첨가제를 넣어 잉크의 오네소르게 수가 더 커진 것이겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P5-5\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S2\", \"S3a\", \"S3b\", \"P5-4\", \"P6-1\", \"P6-3\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"인쇄 회복에 필요한 오네소르게 수 감소를 증가로 역전\",\n              \"evidenceQuote\": \"오네소르게 수는 잉크의 점도가 클수록 크고\",\n              \"choiceQuote\": \"오네소르게 수가 더 커진\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"선지의 변경 조건은 실제 발생 사실이 아니라 가정이다. 밀도와 노즐 지름의 변화가 상쇄되어 세 값의 곱이 유지되는지를 판단한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"파란색 잉크의 점도와 표면 장력은 유지한 채, 밀도를 두 배로 높이고 노즐의 지름을 반으로 줄인다면 파란색 잉크의 오네소르게 수는 변함이 없겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P5-3\", \"P5-5\", \"P5-6\", \"S1\", \"S6\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"구입 당시 안정적으로 출력되었고 두 달 후에도 파란색 잉크는 달라지지 않았다. 노즐 조건도 동일하므로 적정 범위 이탈을 도출할 수 없다.\",\n          \"parts\": [\n            {\n              \"quote\": \"구입 당시와 달리, 두 달이 지난 후 파란색 잉크의 오네소르게 수는 인쇄의 적정 범위를 벗어났겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S4\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S1\", \"S2\", \"S6\", \"P5-3\", \"P6-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"파란색 잉크의 상태 유지를 적정 범위 이탈로 변경\",\n              \"evidenceQuote\": \"이 시점에 파란색 잉크는 구입했을 때와 차이가 없었다.\",\n              \"choiceQuote\": \"구입 당시와 달리, 두 달이 지난 후 파란색 잉크의 오네소르게 수는 인쇄의 적정 범위를 벗어났겠군.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"구입 당시 적정 범위였던 파란색 잉크의 점도만 높아지면 오네소르게 수는 증가한다. 따라서 적정 범위 미만에서 생기는 위성 방울을 그 결과로 예측한 것이 잘못이다. 조건절의 물성 변화는 선지가 제시한 가정이지 〈보기〉의 실제 관찰 내용은 아니다.\",\n          \"parts\": [\n            {\n              \"quote\": \"구입 후 다섯 달이 지났을 때,\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2\", \"S5\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"S2\", \"S5\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"파란색 잉크가 구입할 당시의 밀도와 표면 장력은 변하지 않았으나 더 끈적거리는 성질로 변하였다면\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P5-4\", \"P5-5\", \"P5-6\", \"S1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"파란색 위성 잉크 방울이 생성될 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P6-4\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S1\", \"S6\", \"P5-4\", \"P5-5\", \"P5-6\", \"P6-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"오네소르게 수 증가 상황에 범위 미달의 결과 적용\",\n              \"evidenceQuote\": \"이와 반대의 경우, 수많은 위성 잉크 방울이 생겨 원치 않는 오염이 발생한다.\",\n              \"choiceQuote\": \"파란색 위성 잉크 방울이 생성될 수 있겠군.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+        }
+      ],
+      "phase": "final_answer",
+      "role": "assistant"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": "24h",
+  "reasoning": {
+    "context": "all_turns",
+    "effort": "medium",
+    "mode": "standard",
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1,
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "description": null,
+      "name": "choice_link_v2",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "passageId": {
+            "type": "string"
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "stemPolarity": {
+                  "type": "string",
+                  "enum": [
+                    "SELECT_INCORRECT",
+                    "SELECT_CORRECT",
+                    "OTHER"
+                  ]
+                },
+                "extraSegments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "parentId": {
+                        "type": "string"
+                      },
+                      "quote": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "parentId",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "choices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "number": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "truth": {
+                        "type": "string",
+                        "enum": [
+                          "TRUE",
+                          "FALSE",
+                          "UNDETERMINED"
+                        ]
+                      },
+                      "answerConflict": {
+                        "type": "boolean"
+                      },
+                      "explanationAgreement": {
+                        "type": "string",
+                        "enum": [
+                          "AGREE",
+                          "DIFFER",
+                          "NO_EXPLANATION"
+                        ]
+                      },
+                      "note": {
+                        "type": "string"
+                      },
+                      "parts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "quote": {
+                              "type": "string"
+                            },
+                            "source": {
+                              "type": "string",
+                              "enum": [
+                                "PASSAGE",
+                                "SUPPLEMENT",
+                                "BOTH",
+                                "NONE"
+                              ]
+                            },
+                            "operation": {
+                              "type": "string",
+                              "enum": [
+                                "RESTATE",
+                                "INFER",
+                                "APPLY"
+                              ]
+                            },
+                            "twisted": {
+                              "type": "boolean"
+                            },
+                            "twistTargetIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "supportIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "contextIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "inferenceBasisIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "twistName": {
+                              "type": "string"
+                            },
+                            "evidenceQuote": {
+                              "type": "string"
+                            },
+                            "choiceQuote": {
+                              "type": "string"
+                            },
+                            "relationTypeChange": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "original": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CAUSE",
+                                        "PROCESS",
+                                        "CONDITION",
+                                        "MEANS_END",
+                                        "CONTRAST",
+                                        "PARALLEL",
+                                        "CLASSIFICATION",
+                                        "GROUNDS",
+                                        "ELABORATION",
+                                        "APPLICATION",
+                                        "DEFINITION",
+                                        "CONCESSION",
+                                        "PROBLEM_RESPONSE",
+                                        "VIEW_DIFFERENCE",
+                                        "VIEW_AGREEMENT",
+                                        "CRITIQUE",
+                                        "INTERPRETATION",
+                                        "BACKGROUND",
+                                        "DEVELOPMENT",
+                                        "OTHER"
+                                      ]
+                                    },
+                                    "claimed": {
+                                      "type": "string",
+                                      "enum": [
+                                        "CAUSE",
+                                        "PROCESS",
+                                        "CONDITION",
+                                        "MEANS_END",
+                                        "CONTRAST",
+                                        "PARALLEL",
+                                        "CLASSIFICATION",
+                                        "GROUNDS",
+                                        "ELABORATION",
+                                        "APPLICATION",
+                                        "DEFINITION",
+                                        "CONCESSION",
+                                        "PROBLEM_RESPONSE",
+                                        "VIEW_DIFFERENCE",
+                                        "VIEW_AGREEMENT",
+                                        "CRITIQUE",
+                                        "INTERPRETATION",
+                                        "BACKGROUND",
+                                        "DEVELOPMENT",
+                                        "OTHER"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "original",
+                                    "claimed"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "quote",
+                            "source",
+                            "operation",
+                            "twisted",
+                            "twistTargetIds",
+                            "supportIds",
+                            "contextIds",
+                            "inferenceBasisIds",
+                            "twistName",
+                            "evidenceQuote",
+                            "choiceQuote",
+                            "relationTypeChange"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "number",
+                      "truth",
+                      "answerConflict",
+                      "explanationAgreement",
+                      "note",
+                      "parts"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "number",
+                "stemPolarity",
+                "extraSegments",
+                "choices"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "passageId",
+          "questions"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tool_usage": {
+    "image_gen": {
+      "input_tokens": 0,
+      "input_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "output_tokens": 0,
+      "output_tokens_details": {
+        "image_tokens": 0,
+        "text_tokens": 0
+      },
+      "total_tokens": 0
+    },
+    "web_search": {
+      "num_requests": 0
+    }
+  },
+  "tools": [],
+  "top_logprobs": 0,
+  "top_p": 0.98,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 14969,
+    "input_tokens_details": {
+      "cache_write_tokens": 13173,
+      "cached_tokens": 1793
+    },
+    "output_tokens": 5713,
+    "output_tokens_details": {
+      "reasoning_tokens": 516
+    },
+    "total_tokens": 20682
+  },
+  "user": null,
+  "metadata": {},
+  "output_text": "{\n  \"passageId\": \"surface-tension-laplace\",\n  \"questions\": [\n    {\n      \"number\": 14,\n      \"stemPolarity\": \"SELECT_INCORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"액체 방울이 구형을 이루는 것은 액체에 표면 장력이 작용하기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"R1\"],\n              \"contextIds\": [\"P1-3\", \"P1-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"동일한 부피의 액체는 구형을 이루고 있을 때가 다른 형태를 이루고 있을 때보다 표면적이 작다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"호흡이 일어나려면 폐포 내부 압력과 인체 외부 압력의 차이가 발생해야 한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-2\", \"P2-3\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P2-2\", \"P2-3\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"지질은\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-5\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"폐포를 수축하게 하는 압력을 약화하는 물질의\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-4\", \"P2-6\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"P2-4\", \"P2-6\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"구성 성분 중 하나이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P2-5\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"노즐의 기능을 잉크 분사에서 방울 합체로 바꾸었다. 방울 합체는 3문단의 기포 사례이며 노즐의 기능으로 제시되지 않는다.\",\n          \"parts\": [\n            {\n              \"quote\": \"잉크젯 프린터에서 노즐은\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P4-2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"작은 잉크 방울을 합쳐 큰 잉크 방울로 만드는 역할을 한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P4-2\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P4-3\", \"P3-3\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"노즐의 분사 기능을 방울 합체 기능으로 대체\",\n              \"evidenceQuote\": \"잉크젯 프린터에서는 분사 장치의 노즐을 통해 잉크가 분사된다.\",\n              \"choiceQuote\": \"작은 잉크 방울을 합쳐 큰 잉크 방울로 만드는 역할을 한다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 15,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"반지름 차이로 내부 압력의 대소를 판단한 뒤 고압에서 저압으로의 이동을 연결하는 다단계 추론이다. 지도에는 기포 크기별 이동 방향을 직접 나타낸 단위가 없어 가장 가까운 이동 원리 P2-3을 비틂 대상으로 연결했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"기포 안의 공기는\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"큰 기포에서 작은 기포로 이동한다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-3\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-8\", \"P1-9\", \"P3-2\"],\n              \"inferenceBasisIds\": [\"P1-8\", \"P1-9\", \"P3-2\", \"P2-3\"],\n              \"twistName\": \"기포 사이 공기 이동 방향 역전\",\n              \"evidenceQuote\": \"공기가 압력이 높은 곳에서 낮은 곳으로 이동하기 때문이다.\",\n              \"choiceQuote\": \"큰 기포에서 작은 기포로 이동한다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"지도에 크기와 무관한 기포의 표면 장력 작용을 독립적으로 진술한 명제가 없어, 이를 포함하는 가장 가까운 합성 단위 C1-1에 연결했다.\",\n          \"parts\": [\n            {\n              \"quote\": \"작은 기포와는 달리, 큰 기포에는 표면 장력이 작용하지 않는다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"C1-1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-2\"],\n              \"inferenceBasisIds\": [\"C1-1\", \"P3-2\"],\n              \"twistName\": \"큰 기포를 표면 장력 작용 대상에서 제외\",\n              \"evidenceQuote\": \"우리는 물방울, 비눗방울, 기포 등이 구의 형태를 취하고 있는 것을 볼 수 있다. 구형은 동일한 부피에서 표면적이 최소인 형태인데 이는 액체 분자 간의 인력으로 발생하는 표면 장력의 작용 때문이다.\",\n              \"choiceQuote\": \"작은 기포와는 달리, 큰 기포에는 표면 장력이 작용하지 않는다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"지도에 기포 사이 압력 차이와 공기 이동의 인과 관계가 별도로 없어 가장 가까운 일반 원리 P2-3을 연결했다. 크기 차이에서 압력 차이를 도출한 뒤 이동 원리와 연결한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"접해 있는 두 기포 간에 공기의 이동이 이루어지는 것은\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"RESTATE\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P3-2\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"두 기포 내부의 압력이 동일하기 때문이다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P2-3\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P1-9\", \"P3-2\"],\n              \"inferenceBasisIds\": [\"P1-9\", \"P3-2\", \"P2-3\"],\n              \"twistName\": \"공기 이동의 압력 차이를 압력 동일로 대체\",\n              \"evidenceQuote\": \"공기가 압력이 높은 곳에서 낮은 곳으로 이동하기 때문이다.\",\n              \"choiceQuote\": \"두 기포 내부의 압력이 동일하기 때문이다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"\",\n          \"parts\": [\n            {\n              \"quote\": \"새롭게 만들어진 기포의 내부와 외부의 압력 차이는 처음의 큰 기포의 내부와 외부의 압력 차이보다 작다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P1-9\", \"P3-2\", \"P3-3\"],\n              \"contextIds\": [\"P1-8\"],\n              \"inferenceBasisIds\": [\"P1-9\", \"P3-2\", \"P3-3\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"압력 평형식을 정리하면 합체 전후 모두 내외부 압력 차이가 표면 장력으로 인한 압력과 같다. 따라서 '처음의 두 기포와 달리'라는 구별과 '보다 크다'는 비교가 함께 잘못되었다.\",\n          \"parts\": [\n            {\n              \"quote\": \"처음의 두 기포와 달리, 나중에 생성된 기포의 내부와 외부의 압력 차이는 표면 장력으로 인한 압력보다 크다.\",\n              \"source\": \"PASSAGE\",\n              \"operation\": \"INFER\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P1-4\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P3-2\", \"P3-3\"],\n              \"inferenceBasisIds\": [\"P1-4\", \"P3-2\", \"P3-3\"],\n              \"twistName\": \"내외부 압력 차이와 표면 장력 압력의 등량 관계를 초과 관계로 변경\",\n              \"evidenceQuote\": \"액체 방울에서 방울의 외부 압력과 표면 장력으로 인한 압력의 합이 내부 압력과 균형을 이룰 때 방울은 그 크기를 유지한다.\",\n              \"choiceQuote\": \"처음의 두 기포와 달리, 나중에 생성된 기포의 내부와 외부의 압력 차이는 표면 장력으로 인한 압력보다 크다.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    },\n    {\n      \"number\": 16,\n      \"stemPolarity\": \"SELECT_CORRECT\",\n      \"extraSegments\": [\n        {\n          \"id\": \"S3a\",\n          \"parentId\": \"S3\",\n          \"quote\": \"빨간색 잉크가 구입했을 때보다 더 끈적끈적해서\"\n        },\n        {\n          \"id\": \"S3b\",\n          \"parentId\": \"S3\",\n          \"quote\": \"첨가제를 넣어 끈적거림의 정도를 조절하여 다시 인쇄하였다.\"\n        }\n      ],\n      \"choices\": [\n        {\n          \"number\": 1,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"구입 당시 두 잉크 모두 안정적으로 출력되었으므로 적정 범위에 있다는 판단을 파란색에만 한정할 수 없다.\",\n          \"parts\": [\n            {\n              \"quote\": \"구입 당시의 빨간색 잉크의 오네소르게 수와 달리,\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S1\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"P6-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"두 색의 공통된 안정 출력 상태를 차이로 변경\",\n              \"evidenceQuote\": \"빨간색 잉크와 파란색 잉크 모두 안정적으로 출력되었다.\",\n              \"choiceQuote\": \"구입 당시의 빨간색 잉크의 오네소르게 수와 달리,\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"구입 당시 파란색 잉크의 오네소르게 수는 대략 0.1에서 1.0 사이에 있었겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S1\", \"P6-1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 2,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"점도 증가와 미분사 상태를 결합하여 적정 범위 초과를 판단하고, 정상 인쇄로 회복되었다는 가정에서 오네소르게 수의 감소를 판단한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"빨간색 잉크에 첨가제를 넣어 인쇄가 문제없이 잘 이루어졌다면,\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S3b\", \"P6-1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"첨가제를 넣어 잉크의 오네소르게 수가 더 커진 것이겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P5-5\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S2\", \"S3a\", \"S3b\", \"P5-4\", \"P6-1\", \"P6-3\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"인쇄 회복에 필요한 오네소르게 수 감소를 증가로 역전\",\n              \"evidenceQuote\": \"오네소르게 수는 잉크의 점도가 클수록 크고\",\n              \"choiceQuote\": \"오네소르게 수가 더 커진\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 3,\n          \"truth\": \"TRUE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"선지의 변경 조건은 실제 발생 사실이 아니라 가정이다. 밀도와 노즐 지름의 변화가 상쇄되어 세 값의 곱이 유지되는지를 판단한다.\",\n          \"parts\": [\n            {\n              \"quote\": \"파란색 잉크의 점도와 표면 장력은 유지한 채, 밀도를 두 배로 높이고 노즐의 지름을 반으로 줄인다면 파란색 잉크의 오네소르게 수는 변함이 없겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P5-3\", \"P5-5\", \"P5-6\", \"S1\", \"S6\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 4,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"구입 당시 안정적으로 출력되었고 두 달 후에도 파란색 잉크는 달라지지 않았다. 노즐 조건도 동일하므로 적정 범위 이탈을 도출할 수 없다.\",\n          \"parts\": [\n            {\n              \"quote\": \"구입 당시와 달리, 두 달이 지난 후 파란색 잉크의 오네소르게 수는 인쇄의 적정 범위를 벗어났겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"S4\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S1\", \"S2\", \"S6\", \"P5-3\", \"P6-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"파란색 잉크의 상태 유지를 적정 범위 이탈로 변경\",\n              \"evidenceQuote\": \"이 시점에 파란색 잉크는 구입했을 때와 차이가 없었다.\",\n              \"choiceQuote\": \"구입 당시와 달리, 두 달이 지난 후 파란색 잉크의 오네소르게 수는 인쇄의 적정 범위를 벗어났겠군.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        },\n        {\n          \"number\": 5,\n          \"truth\": \"FALSE\",\n          \"answerConflict\": false,\n          \"explanationAgreement\": \"AGREE\",\n          \"note\": \"구입 당시 적정 범위였던 파란색 잉크의 점도만 높아지면 오네소르게 수는 증가한다. 따라서 적정 범위 미만에서 생기는 위성 방울을 그 결과로 예측한 것이 잘못이다. 조건절의 물성 변화는 선지가 제시한 가정이지 〈보기〉의 실제 관찰 내용은 아니다.\",\n          \"parts\": [\n            {\n              \"quote\": \"구입 후 다섯 달이 지났을 때,\",\n              \"source\": \"SUPPLEMENT\",\n              \"operation\": \"INFER\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"S2\", \"S5\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [\"S2\", \"S5\"],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"파란색 잉크가 구입할 당시의 밀도와 표면 장력은 변하지 않았으나 더 끈적거리는 성질로 변하였다면\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": false,\n              \"twistTargetIds\": [],\n              \"supportIds\": [\"P5-4\", \"P5-5\", \"P5-6\", \"S1\"],\n              \"contextIds\": [],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"\",\n              \"evidenceQuote\": \"\",\n              \"choiceQuote\": \"\",\n              \"relationTypeChange\": null\n            },\n            {\n              \"quote\": \"파란색 위성 잉크 방울이 생성될 수 있겠군.\",\n              \"source\": \"BOTH\",\n              \"operation\": \"APPLY\",\n              \"twisted\": true,\n              \"twistTargetIds\": [\"P6-4\"],\n              \"supportIds\": [],\n              \"contextIds\": [\"S1\", \"S6\", \"P5-4\", \"P5-5\", \"P5-6\", \"P6-1\"],\n              \"inferenceBasisIds\": [],\n              \"twistName\": \"오네소르게 수 증가 상황에 범위 미달의 결과 적용\",\n              \"evidenceQuote\": \"이와 반대의 경우, 수많은 위성 잉크 방울이 생겨 원치 않는 오염이 발생한다.\",\n              \"choiceQuote\": \"파란색 위성 잉크 방울이 생성될 수 있겠군.\",\n              \"relationTypeChange\": null\n            }\n          ]\n        }\n      ]\n    }\n  ]\n}"
+}
