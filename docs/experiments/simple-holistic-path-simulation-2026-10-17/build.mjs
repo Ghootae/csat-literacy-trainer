@@ -1,6 +1,7 @@
 // 단순 형식 문단 v4.1 전체 경로(29) 시뮬레이션 생성기. 문단 두 개 × 29 경로 = 58 사례.
 // node docs/experiments/simple-holistic-path-simulation-2026-10-17/build.mjs
 // 출력: cases.json(실험 스크립트용), SIMULATION.md(사람이 읽는 기대 대화)
+// 2026-10-22: 교정 질문에 내용 없이 답한 경로 2개 추가(P30 '맞지 않아.' — 다르다는 건 알아챘음, P31 '잘 모르겠어.'). 문단마다 31 경로.
 // 2026-10-19(3): v4.6 — 질문 뒤 마무리 말풍선을 '전체 피드백 + 부분별 핵심 상자'로 바꿔 기대 bubbles를 새 문자열로 맞춤(별도 도입·빠진 내용 말풍선 없음).
 // 2026-10-19(2): v4.4 원칙에 맞게 기대값 2건 수정 — 공손룡 '왜?'에 틀린 이유는 질문 1번 오류(빠진 내용 없음), 공손룡 교정 실패 답은 관계+목적 오류 둘. 새 문단 3개 추가(법인 5, 정보 비대칭 4, 표면 장력 2).
 // 2026-10-19: 구멍 하나 질문에 질문과 무관한 틀린 말(도파민 'D1이 억제성…')은 판정하지 않는다(사용자 원칙, v4.4). 공손룡 쪽은 이유를 물은 질문에 틀린 이유를 댄 것이라 오류 그대로.
@@ -329,7 +330,7 @@ const S = {
     { category: 'GAP', action: 'GAP_QUESTION', gaps: ['B'], bubbles: ['생각해 보기(번호 질문 1)'], highlights: [], points: ['잡은 A를 짧게 인정', '질문 하나로 B를 방향만 물음'] },
     [{ label: '생각해 보기', text: p.reply.gap1, items: [p.questions.B] }]),
   oneError: (p, stage, withB) => step(stage, withB ? p.say.oneErrWithB : p.say.oneErrNoB,
-    { category: 'ONE_ERROR', action: 'CORRECTION_QUESTION', errors: [{ key: 'relMany', part: 'A', gapIndex: null }], bubbles: ['확인하기'], highlights: [], points: ['학생 말을 되짚고 문단과 맞는지 다시 보게 함', '맞는 답을 알려 주지 않음', withB ? 'B는 이미 말함' : 'B가 빠져 있어도 확인 질문만'] },
+    { category: 'ONE_ERROR', action: 'CORRECTION_QUESTION', errors: [{ key: 'relMany', part: 'A', gapIndex: null }], bubbles: ['확인하기'], highlights: [], points: ['학생 말의 어느 부분인지 짚고, 그 부분을 문단이 어떻게 말하는지 묻는 열린 질문(맞는지 예/아니오로 묻지 않음)', '맞는 답을 알려 주지 않음', withB ? 'B는 이미 말함' : 'B가 빠져 있어도 확인 질문만'] },
     [{ label: '확인하기', text: p.reply.correction }]),
   multi: (p, stage) => step(stage, p.say.multi,
     { category: 'MULTI_ERROR', action: 'CLOSE_ERRORS', errors: [{ key: 'relManyMulti', part: 'A', gapIndex: null }, { key: 'purposeFlexMulti', part: 'B', gapIndex: null }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '바로잡기', '바로잡기(마무리+상자)'], highlights: ['A', 'B'], points: ['질문 없이 오류 2개를 각각 인용하고 바로잡음', '마지막 말풍선에 마무리 피드백과 부분별 핵심 상자'] },
@@ -338,6 +339,12 @@ const S = {
 
 // 확인 질문에 한 답 (AFTER_CORRECTION)
 const C = {
+  bare: p => step('AFTER_CORRECTION', '맞지 않아.',
+    { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetErrorResolved: false, errors: [{ key: 'relMany', part: 'A', gapIndex: null }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '바로잡기(마무리+상자)'], highlights: ['A'], points: ['내용 없이 다르다고만 함 → 고침 아님', '도입에서 다르다는 걸 알아챈 점은 짧게 인정(고쳤다고 하지 않음)', '그 오류를 인용하고 바로잡음', '마지막 말풍선에 마무리 피드백과 부분별 핵심 상자'] },
+    [{ label: '바로잡기', text: '맞아, 지문과 달라. 어떻게 다른지 짚어 볼게.' }, ...fixBubbles(p, ['relMany'], '').slice(1), coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]),
+  unknown: p => step('AFTER_CORRECTION', '잘 모르겠어.',
+    { category: 'ONE_ERROR', action: 'CLOSE_ERRORS', targetErrorResolved: false, errors: [{ key: 'relMany', part: 'A', gapIndex: null }], missingNote: false, bubbles: ['바로잡기(도입)', '바로잡기', '바로잡기(마무리+상자)'], highlights: ['A'], points: ['모르겠다는 답은 고침 아님', '알아챘다고 인정하지 않음', '그 오류를 인용하고 바로잡음'] },
+    [...fixBubbles(p, ['relMany'], '괜찮아, 지문과 다른 부분을 같이 볼게.'), coreBubble(p, '내가 보는 이 문단의 핵심은 이래.')]),
   resolvedCaptured: p => step('AFTER_CORRECTION', p.say.fixResolvedFull,
     { category: 'CAPTURED', action: 'PRAISE', targetErrorResolved: true, bubbles: ['피드백(상자)'], highlights: [], points: ['고친 것을 칭찬하는 피드백 아래 부분별 핵심 상자'] },
     [coreBubble(p), { label: '피드백', text: '바로 고쳤네. 이제 두 부분을 모두 잡았어.' }]),
@@ -410,6 +417,9 @@ function paths(p) {
   fin('첫 요약: 오류 하나 → 못 고침', [S.oneError(p, 'INITIAL', true), C.failed(p)]);
   // P29
   fin('첫 요약: 오류 둘 이상', [S.multi(p, 'INITIAL')]);
+  // P30~P31 (2026-10-22): 교정 질문에 내용 없이 답함
+  fin('첫 요약: 오류 하나 → 내용 없이 "맞지 않아"', [S.oneError(p, 'INITIAL', true), C.bare(p)]);
+  fin('첫 요약: 오류 하나 → "잘 모르겠어"', [S.oneError(p, 'INITIAL', true), C.unknown(p)]);
   return out;
 }
 
@@ -430,7 +440,7 @@ for (const [key, p] of Object.entries(P)) {
     });
   });
 }
-if (cases.length !== 29 * Object.keys(P).length) throw new Error(`사례 수 ${cases.length} ≠ ${29 * Object.keys(P).length}`);
+if (cases.length !== 31 * Object.keys(P).length) throw new Error(`사례 수 ${cases.length} ≠ ${31 * Object.keys(P).length}`);
 if (cases.some(c => c.questionsAsked > 2)) throw new Error('질문 3회 이상 경로');
 
 const meta = {
@@ -446,7 +456,7 @@ writeFileSync(join(here, 'cases.json'), JSON.stringify({ meta, cases }, null, 2)
 const outLabel = { CAPTURED: '핵심을 잡음', GAP_REVEALED: '빠진 내용 공개', ERRORS_REVEALED: '바로잡고 공개', NO_RESPONSE: '응답 없음' };
 const lines = ['# 단순 형식 문단 전체 경로 시뮬레이션 (2026-10-17)', '',
   '`build.mjs`가 생성한다. 손으로 고치지 말고 생성기를 고친다.', '',
-  `- 규칙: ${meta.rules}`, `- 사례: 문단 2개 × 경로 29 = ${cases.length}`, `- 경로 번호는 전체 경로 수형도(https://claude.ai/artifact/JivxbidCQbSLA4HdS7TCxd)의 P01~P29와 같다.`,
+  `- 규칙: ${meta.rules}`, `- 사례: 문단 ${Object.keys(P).length}개 × 경로 31 = ${cases.length}`, `- 경로 번호는 전체 경로 수형도(https://claude.ai/artifact/JivxbidCQbSLA4HdS7TCxd)의 P01~P29와 같다. P30·P31은 2026-10-22에 더한 교정 질문 무내용 답 경로다.`,
   `- ${meta.comparison}`, ''];
 for (const [k, p] of Object.entries(P)) {
   lines.push(`## ${p.title}`, '', `- 문단 핵심(모델 판단 예): ${p.core}`, `- A: ${p.parts.A}`, `- B: ${p.parts.B}`, `- A 근거 문장: ${p.sentences.A}`, `- B 근거 문장: ${p.sentences.B}`, '');

@@ -28,6 +28,8 @@ let usd = 0, calls = 0, stopped = false;
 const sentenceKey = (p, quote) => (Object.entries(meta.paragraphs[p].sentences).find(([, s]) => s === quote)?.[0] ?? '기타').replace(/_alt\d*$/, '');
 // 서버와 같게: 모델 입력 대화의 튜터 발화는 message(+번호 질문). 마무리 뒤에는 더 판정하지 않으므로 질문형 행동만 이어 붙인다.
 const tutorText = o => o.action === 'GAP_QUESTION' ? `${o.message}\n${o.gaps.map((g, i) => `${i + 1}. ${g.question}`).join('\n')}` : o.message;
+// 교정 질문이 예/아니오로 답할 수 있는 형태인지(2026-10-22, 참고 지표 — 구조 대조에는 넣지 않는다).
+const YES_NO = /(맞을까|맞아|맞나|맞는 걸까|맞는지[^?]*(볼래|살펴볼래|확인해 볼래|생각해 볼래)|일치할까|같을까|그럴까|그랬을까)\?*\s*$/u;
 const bubblesOf = (o, stage) => {
   const after = stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP';
   if (o.action === 'GAP_QUESTION') return [`생각해 보기(번호 질문 ${o.gaps.length})`];
@@ -78,6 +80,7 @@ async function runCase(c, run) {
       coreParts: o.coreParts?.map(x => ({ description: x.description, sentence: sentenceKey(c.paragraphKey, x.sourceQuote) })), corePartsCovered: o.corePartsCovered,
       bubbles: bubblesOf(o, input.stage), highlights: next.revealQuotes.map(q => sentenceKey(c.paragraphKey, q)),
       message: o.message, corePartSummaries: o.corePartSummaries, closingFeedback: o.closingFeedback, restatedSummary: o.restatedSummary, reason: o.reason, retries: result.call.attempts - 1,
+      ...(o.action === 'CORRECTION_QUESTION' ? { yesNo: YES_NO.test(o.message.trim()) } : {}),
     };
     // 자동 대조(구조). 내용 방향은 REVIEW.md에서 사람이 본다.
     const check = {
@@ -122,6 +125,8 @@ const summary = {
   model, promptVersion: PARAGRAPH_SIMPLE_PROMPT_VERSION, runs, calls, usdEstimate: Number(usd.toFixed(4)), stoppedByCap: stopped,
   conversations: results.length,
   status: results.reduce((m, r) => (m[r.status] = (m[r.status] ?? 0) + 1, m), {}),
+  correctionQuestions: results.flatMap(r => r.steps).filter(s => s.actual?.action === 'CORRECTION_QUESTION').length,
+  correctionYesNo: results.flatMap(r => r.steps).filter(s => s.actual?.yesNo === true).length,
   allChecksPass: results.filter(r => r.status === 'COMPLETED' && r.steps.every(s => s.check && Object.values(s.check).every(Boolean))).length,
 };
 writeFileSync(join(outDir, 'results.json'), JSON.stringify({ summary, results }, null, 2) + '\n');
@@ -130,7 +135,7 @@ writeFileSync(join(outDir, 'results.json'), JSON.stringify({ summary, results },
 const mark = ok => (ok ? '✓' : '✗');
 const lines = [`# 전체 경로 시뮬레이션 실행 결과 (${outDir.split('/').at(-1)})`, '',
   `- 모델 ${model} · 프롬프트 ${PARAGRAPH_SIMPLE_PROMPT_VERSION} · 사례당 ${runs}회 · 호출 ${calls} · 추정 비용 $${summary.usdEstimate}${stopped ? ' · 비용 상한으로 중단' : ''}`,
-  `- 대화 ${results.length}: ${Object.entries(summary.status).map(([k, v]) => `${k} ${v}`).join(', ')} · 구조 대조 전부 일치 ${summary.allChecksPass}`,
+  `- 대화 ${results.length}: ${Object.entries(summary.status).map(([k, v]) => `${k} ${v}`).join(', ')} · 구조 대조 전부 일치 ${summary.allChecksPass} · 교정 질문 ${summary.correctionQuestions}개 중 예/아니오형 ${summary.correctionYesNo}`,
   '- ✓/✗는 구조 대조(행동·분류·고침·빈 곳 수·채움·오류 수·질문 번호·말풍선·지문 표시). 내용 방향은 아래 문구로 직접 판단한다.', ''];
 const keys = ['action', 'category', 'targetErrorResolved', 'gapsCount', 'targetGapsFilled', 'errorsCount', 'gapIndex', 'bubbles', 'highlights'];
 for (const c of cases) {
@@ -153,7 +158,7 @@ for (const c of cases) {
       if (a.coreParts?.length) lines.push(`  - 핵심 부분: ${a.coreParts.map((x, j) => `${j}. ${x.description}(${x.sentence})`).join(' ')}`);
       if (a.corePartsCovered) lines.push(`  - 부분 담음: ${JSON.stringify(a.corePartsCovered)}`);
       if (a.gaps.length) lines.push(`  - 질문: ${a.gaps.map((g, j) => `${j + 1}. ${g.question}(${g.sentence})`).join(' ')}`);
-      lines.push(`  - 말: ${a.message.replace(/\n/g, ' ')}`);
+      lines.push(`  - 말: ${a.message.replace(/\n/g, ' ')}${a.yesNo ? ' 〔예/아니오형〕' : ''}`);
       for (const x of a.errors) if (x.feedback) lines.push(`  - 바로잡기: (“${x.studentQuote}”) ${x.feedback}`);
       if (a.corePartSummaries?.length) lines.push(`  - 핵심 부분 문장: ${a.corePartSummaries.map((x, j) => `${j + 1}. ${x}`).join(' ')}`);
       if (a.closingFeedback) lines.push(`  - 마무리: ${a.closingFeedback}`);
