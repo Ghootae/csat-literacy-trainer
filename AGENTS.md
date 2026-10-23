@@ -16,6 +16,15 @@ This repository keeps durable project memory in `memory/`. Chat history and
 불명확한 부분을 임의의 가정으로 대체해 작업을 시작하지 않는다. 목록의 질문이
 충분히 해소된 뒤 작업을 수행한다. 근거: `memory/decisions/D-0069-clarify-user-instructions-before-work.md`.
 
+## 실행 주체 명칭
+
+근거: `memory/decisions/D-0169-actor-names.md`. 기록과 보고에서 "Claude"만으로 쓰지 않는다.
+
+- **호출 모델**: API로 부르는 모델(luna, sol 등).
+- **코드 에이전트**: Claude Code 메인 세션.
+- **하위 에이전트**: 코드 에이전트가 띄우는 executor 등.
+- **웹 에이전트**: claude.ai 웹·데스크톱 앱의 Claude(기존 문서의 "Desktop Claude").
+
 ## 클로드·코덱스 업무 분장
 
 근거: `memory/decisions/D-0092-claude-codex-work-division.md`.
@@ -39,11 +48,11 @@ This repository keeps durable project memory in `memory/`. Chat history and
 
 - 실험이나 생성을 실행하고 결과를 해석할 때(예: 선지 연결 3회 실행, 분석 골드 생성).
 - 결과를 보고 설계 판단(방안 선택 등)이 필요할 때.
-- Desktop Claude와 논의할 거리가 생긴 큰 작업 단위를 마쳤을 때.
+- 웹 에이전트(Desktop Claude)와 논의할 거리가 생긴 큰 작업 단위를 마쳤을 때.
 
 문서·규칙 기록, 커밋, 작은 코드 수정, 설명 요청에 대한 답, 진행 알림은 채팅에 짧게만 보고한다.
 
-1. **Desktop 보고서**(`REPORT-<작업>-desktop.md`, 논의 목적): 정확성과 빠짐없음이 우선이다.
+1. **Desktop 보고서**(`REPORT-<작업>-desktop.md`, 웹 에이전트와 논의 목적, 파일명은 유지): 정확성과 빠짐없음이 우선이다.
    측정과 해석을 나누고, 실행 조건·수치 표·사례·정정·제안·열린 질문·파일 경로를 담는다.
 2. **인간 보고서**(`REPORT-<작업>-human.md`, 이해와 판단 목적):
    - **1. 개요**: 1) 작업의 목적, 2) 작업의 결과, 3) 다음 스텝. 분량에 제한이 없고, 사례와
