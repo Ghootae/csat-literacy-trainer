@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TWIST_TYPES } from './run-choice-link.mjs';
@@ -8,6 +8,7 @@ import { SOL, LUNA } from './run-end-explanation-choice-link-compare.mjs';
 import {
   PROMPT_PATH, LIMITS, DEEPSEEK, MAP_ID_PATTERN_INPUT, extractInstructions, parseTargets, findSource, loadCtx, buildInput, buildRequest, reserveUsd, limitCheck,
   runChecks, generateWithRetry, isTransient, markdownToHtml, main, parseConditions, parseOutput, quotedSpans, partsMatchOf, sourceTextsOfId,
+  allFalseTargets, rawSource, assertPartsCover, renderReviewSheet, targetKey,
 } from './run-examiner-strategy.mjs';
 
 const target = { passageId: 'corporate-law', number: 13, choice: 2 };
@@ -344,4 +345,102 @@ test('real v2 run with fake transport: retry on mismatch, USER-REVIEW hides mode
   assert.equal(failed.checks.partsMatch, false);
   assert.ok(JSON.parse(readFileSync(`${out}/KEY.json`, 'utf8')).key['corporate-law-q13-c2:글 A'].condition);
   assert.ok(readFileSync(`${out}/ledger.jsonl`, 'utf8').includes('"condition":"constrained"'));
+});
+
+// ---- 3rd: full generation (raw source, all-false targets, gold fixes, review sheet) -------------------------------------------------------
+
+const FULL_V4 = `${DIR2}/PROMPT-v4.md`;
+const rawBuilt = (t = target) => buildInput(t, rawSource(t.passageId, t.number), loadCtx(t.passageId, t.number), { sourceQuotes: true });
+const dry = (extra = {}) => main({ dryRun: true, out: tmp(), runs: 1, models: [SOL], conditions: parseConditions(`v4=${FULL_V4}`), schema: 'v2', sourceQuotes: true, source: 'raw', limits: { maxRequests: 130, usdCap: 100 }, ...extra });
+
+test('all-false targets: frozen map holds 57 FALSE choices (the handoff and D-0170 say 61: 24 questions, not 25); order and examples', () => {
+  const all = allFalseTargets();
+  assert.equal(all.length, 57);
+  assert.deepEqual(parseTargets('all-false'), all);
+  assert.ok(all.some(t => t.passageId === 'corporate-law' && t.number === 13 && t.choice === 2));
+  assert.ok(all.some(t => t.passageId === 'surface-tension-laplace' && t.number === 16 && t.choice === 2));
+  assert.equal(all[0].passageId, 'corporate-law');
+  assert.equal(all.at(-1).passageId, 'surface-tension-laplace');
+  const keys = all.map(targetKey), sorted = [...all].sort((a, b) => a.passageId.localeCompare(b.passageId) || a.number - b.number || a.choice - b.choice).map(targetKey);
+  assert.deepEqual(keys, sorted);
+});
+
+test('raw source input matches the sessions input: passage, stem, choices, answer, target parts identical; scenario differs only in newline vs space (raw joins segments with newline)', () => {
+  const a = built().input, b = rawBuilt().input;
+  assert.equal(b.passage, a.passage);
+  assert.equal(b.question.stem, a.question.stem);
+  assert.deepEqual(b.question.choices, a.question.choices);
+  assert.equal(b.question.answer, a.question.answer);
+  assert.deepEqual(b.target, buildInput(target, findSource('corporate-law', 13), loadCtx('corporate-law', 13), { sourceQuotes: true }).input.target);
+  assert.notEqual(b.question.scenario, a.question.scenario);
+  assert.equal(b.question.scenario.replace(/\n/gu, ' '), a.question.scenario);
+  assert.ok(b.question.supplementSegments.length > a.question.supplementSegments.length);
+  assert.ok(b.question.textAnnotations.length > 0);
+});
+
+test('raw officialExplanation.choice is the target choice explanation; summary is the question summary', () => {
+  const { input: raw } = rawBuilt(), q = loadCtx('corporate-law', 13).question;
+  assert.equal(raw.officialExplanation.choice, q.choices.find(c => c.number === 2).explanation);
+  assert.equal(raw.officialExplanation.summary, q.explanationSummary);
+});
+
+test('figure question (mRNA 19): request carries input_image, the saved request file has no data URL and the figure text counts as a source for quote checks', async () => {
+  const t = allFalseTargets().find(x => x.passageId === 'mrna-vaccine-lipid-nanoparticle' && x.number === 19);
+  const out = tmp(), s = await dry({ out, targets: [t] });
+  assert.equal(s.requests, 1);
+  const saved = readFileSync(`${out}/requests/${targetKey(t)}__v4__${SOL}__r1.json`, 'utf8');
+  assert.ok(!saved.includes('data:image') && saved.includes('input_image') && saved.includes('<base64 생략'));
+  const b = rawBuilt(t);
+  assert.equal(b.images.length, 1);
+  const req = buildRequest(SOL, 'x', b.input, 'v2', b.images);
+  assert.ok(JSON.stringify(req).includes('data:image'));
+  assert.equal(req.input[0].content.filter(c => c.type === 'input_image').length, 1);
+  const fig = b.input.question.supplementSegments.find(x => x.id === 'F1');
+  assert.ok(fig);
+  const out2 = { parts: b.input.target.parts.map(p => ({ choiceQuote: p.choiceQuote, twisted: p.twisted, evidenceQuotes: [fig.quote], trapIntent: '', intentQuotes: [] })), text: 'x' };
+  assert.equal(runChecks(out2, b.input, 'v2').quotesFound.ok, true);
+  const plain = buildRequest(SOL, 'x', built().input, 'v2');
+  assert.equal(plain.input[0].content.length, 1);
+});
+
+const fixFile = parts => { const f = join(tmp(), 'gold-fixes.json'); writeFileSync(f, JSON.stringify({ version: 1, items: [{ passageId: 'corporate-law', question: 13, choice: 2, parts, reason: 'test', decidedBy: 'test', date: '2026-10-23' }] })); return f; };
+const frozenParts = () => JSON.parse(readFileSync(loadCtx('corporate-law', 13).frozenPath, 'utf8')).questions.find(q => q.number === 13).choices.find(c => c.number === 2).parts;
+
+test('gold fix replaces the frozen parts, RUN.json lists applied items and the file SHA-256', async () => {
+  const parts = frozenParts().map((p, i) => i === 1 ? { ...p, twistDetail: 'FIXED-DETAIL' } : p);
+  const out = tmp(), file = fixFile(parts);
+  await dry({ out, targets: [target], goldFixes: file });
+  const run = JSON.parse(readFileSync(`${out}/RUN.json`, 'utf8'));
+  assert.deepEqual(run.goldFixes.applied.map(x => [x.passageId, x.question, x.choice]), [['corporate-law', 13, 2]]);
+  assert.match(run.goldFixes.sha256, /^[0-9a-f]{64}$/u);
+  assert.ok(readFileSync(`${out}/requests/${targetKey(target)}__v4__${SOL}__r1.json`, 'utf8').includes('FIXED-DETAIL'));
+  assert.ok(readFileSync(`${out}/REVIEW-SHEET.md`, 'utf8').includes('골드 수정 적용'));
+  const none = tmp();
+  await dry({ out: none, targets: [target], goldFixes: `${DIR2}/gold-fixes.json` });
+  assert.deepEqual(JSON.parse(readFileSync(`${none}/RUN.json`, 'utf8')).goldFixes.applied, []);
+});
+
+test('gold fix whose parts do not cover the choice stops before the run', async () => {
+  const parts = frozenParts().slice(0, 2);
+  await assert.rejects(dry({ targets: [target], goldFixes: fixFile(parts) }), /GOLD_FIX_COVER.*gap/u);
+  assert.throws(() => assertPartsCover([{ quote: '없는 말' }], '선지 문장이다.', 'x'), /quote not in choice/u);
+  assert.throws(() => assertPartsCover([{ quote: '선지 문장' }, { quote: '문장이다.' }], '선지 문장이다.', 'x'), /overlaps/u);
+  assertPartsCover([{ quote: '선지 문장' }], '선지 문장이다.', 'x');
+});
+
+test('REVIEW-SHEET.md has the official explanation, gold and verdict boxes per target (empty text slot in dry-run; text and checks after a real run)', async () => {
+  const two = parseTargets('corporate-law:13:2,surface-tension-laplace:16:2');
+  const out = tmp();
+  await dry({ out, targets: two });
+  const sheet = readFileSync(`${out}/REVIEW-SHEET.md`, 'utf8');
+  for (const h of ['### 공식 해설', '### 골드', '- [ ] 통과', '- [ ] 글 수정 필요', '- [ ] 골드 의심']) assert.equal(sheet.split(h).length - 1, 2, h);
+  assert.ok(sheet.includes('(생성 전)') && sheet.includes('틀림 (CAUSE_SWAP)') && sheet.includes('맞음'));
+  const runOut = tmp(), b = rawBuilt();
+  const text = '출제자는 이렇게 비틀었어.';
+  const o = { parts: b.input.target.parts.map(p => ({ choiceQuote: p.choiceQuote, twisted: p.twisted, evidenceQuotes: [], trapIntent: p.twisted ? 'INTENT-X' : '', intentQuotes: [] })), text };
+  const ok = { status: 'completed', output_text: JSON.stringify(o), usage: { input_tokens: 1, output_tokens: 1 } };
+  await main({ out: runOut, targets: [target], runs: 1, models: [SOL], conditions: parseConditions(`v4=${FULL_V4}`), schema: 'v2', source: 'raw', limits: { maxRequests: 5, usdCap: 100 }, transports: { [SOL]: { create: async () => ok } } });
+  const real = readFileSync(`${runOut}/REVIEW-SHEET.md`, 'utf8');
+  assert.ok(real.includes(`> ${text}`) && real.includes('INTENT-X') && real.includes('자동 검사') && !real.includes('(생성 전)'));
+  assert.ok(renderReviewSheet([]).startsWith('# 출제자 전략 글 검토 대조표'));
 });
