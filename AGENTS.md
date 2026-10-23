@@ -55,6 +55,12 @@ This repository keeps durable project memory in `memory/`. Chat history and
 3. 파일은 실험이면 그 실험 폴더에, 아니면 `docs/reports/`에 둔다. 본보기:
    `docs/experiments/choice-link-2026-10-22/REPORT-v2-run-human.md`, `REPORT-v2-run-desktop.md`.
 
+## 비교 실험 전 기존 자료 재활용 검토
+
+근거: `memory/decisions/D-0168-reuse-existing-data-in-comparison-experiments.md`.
+
+비교 실험을 설계할 때는 외부 전송 계획을 세우기 전에 재활용할 수 있는 기존 자료(지난 실험의 저장된 요청·응답·출력, 동결 자료)가 있는지 먼저 찾는다. 기존 출력이 같은 지시문·모델·입력으로 만들어졌으면 기준 조건으로 다시 쓰고 새 조건만 생성한다. 같은지 확인한 방법(지시문·모델·입력 비교)과 재활용하지 않는 경우 그 이유를 전송 승인 요청에 적는다.
+
 ## At the start of a task
 
 1. Read `memory/WORK_TREE.md` for the branch map, then `memory/CURRENT_STATE.md`.
