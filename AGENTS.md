@@ -40,6 +40,29 @@ This repository keeps durable project memory in `memory/`. Chat history and
 - 커밋: 검증 통과·diff 검토 통과·결정 기록 직후에 클로드가 파일 목록과 메시지 초안을 보여
   주고 사용자 승인 후에만 커밋한다. 그 작업의 변경분만 담고(`git add -A` 금지), 푸시는 별도 승인.
 
+## 모델 배분과 긴 산출물 검토
+
+근거: `memory/decisions/D-0171-session-usage-rules.md`.
+
+- 하위 에이전트 모델은 과제 종류로 고른다: 구현·인계 문서 실행은 sonnet, 단순 조회·파일 수집은
+  haiku, 독립 검토·까다로운 디버깅은 opus.
+- 메인 세션 모델은 사용자가 `/model`로 바꾼다. 과제 시작 때 한 줄로 권고한다: 커밋·기록 갱신·
+  단순 확인 같은 일상 작업은 Sonnet, 설계·실험 해석은 Opus 유지.
+- 대량 생성 결과·긴 로그·긴 실험 출력의 검토는 하위 에이전트에 맡기고 요약·판정·문제 사례만
+  돌려받는다. 원문을 메인 맥락에 쌓지 않는다. 사용자가 직접 판정할 때(예: 학생용 설명의 이해
+  용이성)는 원문을 보여 준다.
+
+## 과제 종료 절차
+
+근거: `memory/decisions/D-0171-session-usage-rules.md`.
+
+과제 한 단위가 끝나면 코드 에이전트가 판단해 다음을 묻는다.
+
+1. 변경이 있으면 커밋 여부(위 커밋 규칙대로 파일 목록·메시지 초안 제시).
+2. 세션 재시작 여부. 맥락이 많이 쌓였거나 다음 과제가 지금 맥락과 관련이 적으면 재시작을,
+   이어지는 과제면 계속을 권한다. 재시작하기로 하면 체크포인트·`memory/CURRENT_STATE.md`에 다음
+   할 일을 적은 뒤 사용자에게 `/clear` 입력을 안내한다.
+
 ## 결과 보고 형식
 
 근거: `memory/decisions/D-0163-two-format-task-reports.md`.
@@ -73,7 +96,10 @@ This repository keeps durable project memory in `memory/`. Chat history and
 ## At the start of a task
 
 1. Read `memory/WORK_TREE.md` for the branch map, then `memory/CURRENT_STATE.md`.
-2. Read `memory/INDEX.md` and open only the sources relevant to the task.
+2. Do not read `memory/INDEX.md` whole. Read its heading list first
+   (`grep -n '^#' memory/INDEX.md`), read the sections relevant to the task,
+   then supplement with keyword search. Open only the sources relevant to the
+   task (D-0171).
 3. Read the applicable records in `memory/decisions/` before proposing a change
    to an accepted policy.
 4. If memory conflicts with code, tests, or a newer primary report, surface the
@@ -95,7 +121,8 @@ Update durable memory only when the task changes project knowledge or direction:
 
 1. Add a checkpoint in `memory/checkpoints/` containing only the task delta.
 2. Update `memory/CURRENT_STATE.md` if a currently true fact, status, risk, or
-   next action changed. Update `memory/WORK_TREE.md` and its date when a
+   next action changed. Keep it to currently true facts only and under 20KB
+   (D-0171). Update `memory/WORK_TREE.md` and its date when a
    branch status or next step changed (D-0113).
 3. Add a decision record for a newly accepted, rejected, or superseded choice.
    Preserve the old record and link the replacement instead of rewriting history.

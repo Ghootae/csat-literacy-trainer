@@ -89,9 +89,15 @@ for (const file of decisionFiles) {
 
 const currentState = join(memoryRoot, 'CURRENT_STATE.md');
 if (existsSync(currentState)) {
-  const lineCount = readFileSync(currentState, 'utf8').split(/\r?\n/).length;
+  const text = readFileSync(currentState, 'utf8');
+  const lineCount = text.split(/\r?\n/).length;
   if (lineCount > 200) {
     errors.push(`memory/CURRENT_STATE.md가 ${lineCount}줄임: 최대 200줄`);
+  }
+  // D-0171: 줄이 길어지며 커지는 것을 막는 크기 상한
+  const byteCount = Buffer.byteLength(text, 'utf8');
+  if (byteCount > 20 * 1024) {
+    errors.push(`memory/CURRENT_STATE.md가 ${byteCount}바이트임: 최대 20KB`);
   }
 }
 
