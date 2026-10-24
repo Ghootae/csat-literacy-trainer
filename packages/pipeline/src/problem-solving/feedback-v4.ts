@@ -147,7 +147,7 @@ export function createFeedbackSession(sessionId: string, source: SourceDirectPro
     choiceImpliedVerdict: normalizeFeedbackPolarity(parsed.stemPolarity),
     phase: 'AWAITING_SELECTION', evaluationMode: null, pendingEnd: null, endExplanation: null, observations: [], assessments: [],
     selections: [], selectionComparisons: [], errors: [], additionalErrors: [], activeErrorId: null, correctionSucceeded: false,
-    message: '답을 고르고, 그렇게 판단한 근거를 적어 줘. 근거 없이 답만 내도 돼.', result: null,
+    message: '문제에서 답을 고르고, 그렇게 판단한 근거를 적어 줘. 근거 없이 답만 내도 돼.', result: null,
   };
 }
 function selected(s: FeedbackSession) {

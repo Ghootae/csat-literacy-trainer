@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FeedbackV4MediaView, FeedbackV4Request, FeedbackV4WorkbenchView } from '../shared/problem-feedback-v4.js';
-import { getFeedbackV4, startFeedbackV4, submitFeedbackV4 } from './problem-feedback-v4-api.js';
+import type { ExaminerStrategyView, FeedbackV4MediaView, FeedbackV4Request, FeedbackV4WorkbenchView } from '../shared/problem-feedback-v4.js';
+import { getExaminerStrategy, getFeedbackV4, markExaminerStrategyView, startFeedbackV4, submitFeedbackV4 } from './problem-feedback-v4-api.js';
 import { FeedbackV4Drawer } from './FeedbackV4Drawer.js';
 import './problem-feedback-workbench.css';
 import { Markdown } from './markdown.js';
 import { composerState, sequenceState, instantWaitingDelay, waitingKind, waitingText, type WaitingKind, type ButtonId } from './v4-composer-state.js';
+import { choiceHintText, circled, currentStrategyPosition, defaultStrategyPosition, initialStrategyState, strategyLeadText, nextStrategyParagraph, openStrategy, seenStrategyPositions, strategyBubbles, strategyStage } from './examiner-strategy-state.js';
 import { AnnotatedText } from './annotated-text.js';
 import { DevPartNav } from './DevPartNav.js';
 import { paragraphLink, resolveReturnTo } from './dev-part-nav-links.js';
@@ -39,6 +40,8 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const sequenceSession = useRef<string | null>(null);
   const previousButtons = useRef<{ id: ButtonId; label: string; disabled: boolean }[]>([]);
+  const [strategy, setStrategy] = useState<ExaminerStrategyView>({ available: false });
+  const [strategyState, setStrategyState] = useState(initialStrategyState);
   const [pane, setPane] = useState('chat');
   const [drawer, setDrawer] = useState(false);
   const initialization = useRef<Promise<FeedbackV4WorkbenchView> | null>(null);
@@ -51,6 +54,7 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
   function accept(next: FeedbackV4WorkbenchView) {
     if (sequenceSession.current !== next.sessionId) {
       sequenceSession.current = next.sessionId; setRevealed(next.transcript.length); setReleased(false); previousButtons.current = [];
+      setStrategy({ available: false }); setStrategyState(initialStrategyState);
     }
     setView(next); setChoice(next.phase === 'AWAITING_RESELECTION' ? null : next.selectedChoiceId);
     store(cacheKey, next.sessionId);
@@ -93,6 +97,13 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
       store(`csat.problem.v4.pending.${view.sessionId}`, null); store(draftKey, null);
     }
   }, [view?.revision, view?.evaluationStatus, pending]);
+  const completedSession = view?.phase === 'COMPLETED' ? view.sessionId : null;
+  useEffect(() => {
+    if (!completedSession) return;
+    let active = true;
+    getExaminerStrategy(completedSession).then(next => { if (active) setStrategy(next); }).catch(() => { /* 전략 보기만 생략한다. */ });
+    return () => { active = false; };
+  }, [completedSession]);
   const waiting = busy || view?.evaluationStatus === 'PROCESSING';
   const sequence = sequenceState(view?.transcript ?? [], revealed, reducedMotion, released);
   useEffect(() => {
@@ -110,7 +121,7 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
   const hasView = !!view;
   const bottom = () => { const el = chat.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' }); };
   // New bubbles always bring the bottom into view, even when the student had scrolled up.
-  useEffect(() => { stickToBottom.current = true; bottom(); }, [sequence.visibleCount, sequence.showDots, pending?.transitionId, waiting, view?.result?.answerRevealed, view?.phase, view?.transcript.length, pane]);
+  useEffect(() => { stickToBottom.current = true; bottom(); }, [sequence.visibleCount, sequence.showDots, pending?.transitionId, waiting, view?.result?.answerRevealed, view?.phase, view?.transcript.length, pane, strategyState.opened.length, strategyState.opened.at(-1)?.shown]);
   // Size changes (markdown, images, composer, window) keep the bottom only if the student was near it.
   useEffect(() => {
     const el = chat.current;
@@ -201,8 +212,37 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
   const correction = view.phase === 'AWAITING_CORRECTION';
   const basePhase = (waiting || pending) && view.phase === 'AWAITING_EVALUATION' ? (previousView.current ?? view).phase : view.phase;
   const choosable = basePhase === 'AWAITING_SELECTION' || basePhase === 'AWAITING_RESELECTION' || basePhase === 'AWAITING_RATIONALE';
-  const composer = composerState(view, { choice, draft, omit, waiting, pending: !!pending, error, previousView: previousView.current, sequence, previousButtons: previousButtons.current });
+  const strategyChoices = strategy.available ? strategy.choices : [];
+  const strategyStageNow = strategy.available && sequence.complete ? strategyStage(strategyState, strategyChoices) : null;
+  const strategyPosition = strategyStageNow ? currentStrategyPosition(strategyState) : null;
+  const seenPositions = strategyStageNow ? seenStrategyPositions(strategyState, strategyStageNow) : [];
+  const solving = basePhase === 'AWAITING_SELECTION' || basePhase === 'AWAITING_RESELECTION';
+  function openStrategyChoice(position: number) {
+    if (!view || !strategy.available) return;
+    setStrategyState(openStrategy(strategyState, position, strategy.choices));
+    void markExaminerStrategyView(view.sessionId, position).catch(() => { /* 사용 기록 실패가 화면을 막지 않는다. */ });
+  }
+  const composer = composerState(view, { strategy: strategyStageNow ? { stage: strategyStageNow, position: strategyPosition } : undefined, choice, draft, omit, waiting, pending: !!pending, error, previousView: previousView.current, sequence, previousButtons: previousButtons.current });
   if (composer.actions.buttons.length && (sequence.complete || sequence.needsNext)) previousButtons.current = composer.actions.buttons;
+  const options = view.question.choices.map(c => {
+    const pressed = composer.choices.find(x => x.choiceId === c.choiceId)!;
+    if (view.phase === 'COMPLETED') {
+      const has = strategyChoices.some(s => s.position === c.position);
+      const reading = strategyStageNow === 'READING' && c.position === strategyPosition;
+      return { choice: c, enabled: has && !!strategyStageNow && !waiting, selected: reading, dim: strategy.available && !has, tag: reading ? '전략 보는 중' : seenPositions.includes(c.position) ? '봤음' : '' };
+    }
+    const selected = choice === c.choiceId;
+    return { choice: c, enabled: !pressed.disabled, selected, dim: false, tag: choosable && selected ? '고름' : '' };
+  });
+  const focusTarget = (options.find(o => o.enabled && o.selected) ?? options.find(o => o.enabled))?.choice.choiceId;
+  function pickChoice(c: { choiceId: string; position: number }) {
+    if (view!.phase === 'COMPLETED') openStrategyChoice(c.position); else setChoice(c.choiceId);
+  }
+  function changeChoice() {
+    if (window.matchMedia('(max-width: 900px)').matches) { setPane('problem'); return; }
+    const target = sourcePanes.current?.querySelector<HTMLElement>('.v4-choices li[data-selected=true]');
+    target?.scrollIntoView({ block: 'nearest', behavior: reducedMotion ? 'instant' : 'smooth' }); target?.focus({ preventScroll: true });
+  }
   const canSubmit = composer.actions.buttons.some(button => button.id === 'SUBMIT' && !button.disabled);
   const pendingCommand = pending?.command;
   const pendingText = !pendingCommand || pendingCommand.type === 'RESUME' ? null : pendingCommand.type === 'RESELECT' || pendingCommand.type === 'REQUEST_EXPLANATION' || pendingCommand.type === 'FINISH' || pendingCommand.type === 'END_START' || pendingCommand.type === 'UNDERSTOOD' ? null : pendingCommand.type === 'CORRECT' ? pendingCommand.text
@@ -219,8 +259,18 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
     <div className="workbench-columns" ref={sourcePanes}>
       <section className="workbench-pane source-pane" aria-label="전체 지문"><header className="pane-header source-head"><div className="source-title"><h1 title={view.title}>{view.title}</h1><small>{view.exam}</small></div>{navPassage && <DevPartNav currentParagraph={null} currentIsProblem problem={{ onSelect: () => {} }}
             paragraphs={Array.from({ length: navPassage.paragraphCount }, (_, i) => ({ label: `문단 ${i + 1}`, onSelect: () => window.location.assign(paragraphLink(returnTo, navPassage.passageId, i)) }))} />}</header><div className="source-scroll"><AnnotatedText text={view.question.passageText} annotations={view.question.textAnnotations.filter(a => a.location === 'PASSAGE')} highlights={view.correctionHighlights.filter(a => a.location === 'PASSAGE')} /><Media items={view.question.media.filter(m => m.placement.scope === 'PASSAGE')} /></div></section>
-      <section className="workbench-pane question-pane" aria-label="문제와 선지"><header className="pane-header question-head"><h2>문제 {view.questionNumber}</h2><h3>{view.question.stem}</h3></header><div className="v4-question-scroll">{(view.question.scenarioText || view.question.media.some(m => m.placement.scope === 'SCENARIO')) && <section className="v4-scenario"><h4>보기</h4><AnnotatedText text={view.question.scenarioText} annotations={view.question.textAnnotations.filter(a => a.location === 'SCENARIO')} highlights={view.correctionHighlights.filter(a => a.location === 'SCENARIO')} /><Media items={view.question.media.filter(m => m.placement.scope === 'SCENARIO')} /></section>}
-        <div className="v4-choices-scroll"><ol className="v4-choices">{view.question.choices.map(c => <li key={c.choiceId} data-selected={choice === c.choiceId}><span>{c.position}</span><div><p>{c.text}</p><Media items={view.question.media.filter(m => m.placement.scope === 'CHOICE' && m.placement.choiceId === c.choiceId)} /></div></li>)}</ol></div></div></section>
+      <section className="workbench-pane question-pane" aria-label="문제와 선지"><header className="pane-header question-head"><h2>문제 {view.questionNumber}</h2><h3>{view.question.stem}</h3></header><div className="v4-question-scroll"><p className="v4-choice-hint">{choiceHintText(solving, strategyStageNow, strategyChoices.length)}</p>{(view.question.scenarioText || view.question.media.some(m => m.placement.scope === 'SCENARIO')) && <section className="v4-scenario"><h4>보기</h4><AnnotatedText text={view.question.scenarioText} annotations={view.question.textAnnotations.filter(a => a.location === 'SCENARIO')} highlights={view.correctionHighlights.filter(a => a.location === 'SCENARIO')} /><Media items={view.question.media.filter(m => m.placement.scope === 'SCENARIO')} /></section>}
+        <div className="v4-choices-scroll"><ol className="v4-choices" role="radiogroup" aria-label="선지">{options.map(o => <li key={o.choice.choiceId} role="radio" aria-checked={o.selected} aria-disabled={!o.enabled} aria-label={`${circled(o.choice.position)}번 선지`} aria-describedby={`v4-choice-text-${o.choice.position}`} tabIndex={o.choice.choiceId === focusTarget ? 0 : -1} data-selected={o.selected} data-dim={o.dim}
+          onClick={() => { if (o.enabled) pickChoice(o.choice); }}
+          onKeyDown={e => {
+            if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (o.enabled) pickChoice(o.choice); return; }
+            const step = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 0;
+            if (!step) return;
+            e.preventDefault();
+            const items = Array.from(e.currentTarget.parentElement!.querySelectorAll<HTMLElement>('[role=radio]:not([aria-disabled=true])'));
+            const at = items.indexOf(e.currentTarget);
+            items[(at + step + items.length) % items.length]?.focus();
+          }}><span>{o.choice.position}</span><div><p id={`v4-choice-text-${o.choice.position}`}>{o.choice.text}{o.tag && <em className={`v4-choice-tag${o.tag === '봤음' ? ' is-seen' : ''}`}>{o.tag}</em>}</p><Media items={view.question.media.filter(m => m.placement.scope === 'CHOICE' && m.placement.choiceId === o.choice.choiceId)} /></div></li>)}</ol></div></div></section>
       <section className="workbench-pane chat-pane" aria-label="응답과 피드백"><header className="pane-header"><h2>생각을 나누는 공간</h2><small>{view.phase === 'COMPLETED' ? '풀이 완료' : correction ? '생각 다시 살피기' : view.phase === 'AWAITING_RESELECTION' ? '마지막 선택' : '선택과 근거'}</small></header>
         <div className="chat-scroll v4-chat-scroll" ref={chat} aria-label="대화 기록">{view.transcript.slice(0, sequence.visibleCount).map(entry => <article className={`chat-message ${entry.role === 'STUDENT' ? 'student' : 'tutor'}`} key={entry.id}><small>{entry.role === 'STUDENT' ? '나의 응답' : entry.phase === 'AWAITING_CORRECTION' ? '함께 확인하기' : '피드백'}</small>{entry.role === 'COACH' ? <Markdown text={entry.text} /> : <p>{entry.text}</p>}{correction && firstHighlight && entry.role === 'COACH' && entry.phase === 'AWAITING_CORRECTION' && entry.id === view.transcript.at(-1)?.id && <button onClick={() => { setPane(firstHighlight.location === 'PASSAGE' ? 'source' : 'problem'); scrollToHighlight(); }}>지문에서 보기</button>}</article>)}
           {sequence.showDots && <article className="chat-message tutor v4-sequence-waiting" role="status" aria-label="다음 이야기 준비 중"><span className="v4-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></article>}
@@ -228,18 +278,23 @@ export function ProblemFeedbackV4App(): React.JSX.Element {
           {(waiting || pending) && (!pendingInstant || (instant?.id === `instant-${pending?.transitionId}` && (reducedMotion || instantWaitReady))) && <article className="chat-message tutor v4-waiting" role="status" aria-live="polite"><small>피드백</small><p>{waitingText(waitClock.kind, waitClock.elapsedMs)}<span className="v4-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></article>}
           {view.result?.answerRevealed && view.result.answer && <article className="v4-answer-reveal"><h3>정답 {view.result.answer.position}번</h3><p>{view.result.answer.text}</p></article>}
           {view.phase === 'COMPLETED' && view.transcript.filter(m => m.role === 'COACH').at(-1)?.sequence !== 'CLOSING' && <p className="v4-terminal">이 문제 풀이는 여기까지야.</p>}
+          {strategyStageNow && <article className="chat-message tutor"><small>피드백</small><p>{strategy.available ? strategyLeadText(strategy.stemPolarity) : ''}</p></article>}
+          {strategyStageNow && strategyBubbles(strategyState, strategyChoices).map(b => <article className="chat-message tutor" key={b.key}><small>{b.label}</small>{b.end ? <p>{b.text}</p> : <Markdown text={b.text} />}</article>)}
         </div>
         <div className="chat-footer v4-composer">
-          <div className="v4-composer-notice" role={composer.notice.kind === 'error' ? 'alert' : 'status'} title={composer.notice.text || undefined}>{composer.notice.text}</div>
+          <div className="v4-composer-top"><div className="v4-composer-notice" role={composer.notice.kind === 'error' ? 'alert' : 'status'} title={composer.notice.text || undefined}>{composer.notice.text || composer.status.text}{!composer.notice.text && composer.status.canChange && <button type="button" className="v4-change-choice" onClick={changeChoice}>문제에서 바꾸기</button>}</div>
+            <label className="v4-omit"><input type="checkbox" checked={composer.actions.check ? omit : false} disabled={!composer.actions.check || composer.actions.checkDisabled} onChange={e => setOmit(e.target.checked)} />{composer.actions.check ?? '정답만 입력'}</label></div>
           <div className="v4-composer-input"><label className="v4-sr-only" htmlFor="v4-response">{composer.input.label}</label><textarea ref={response} id="v4-response" value={draft} disabled={composer.input.disabled} onChange={e => setDraft(e.target.value)} placeholder={composer.input.placeholder} /></div>
-          <div className="v4-compose-actions"><div className="v4-compose-left">{composer.actions.check && <label className="v4-omit"><input type="checkbox" checked={omit} disabled={composer.actions.checkDisabled} onChange={e => setOmit(e.target.checked)} />{composer.actions.check}</label>}{choosable && <fieldset className="v4-choice-buttons"><legend className="v4-sr-only">선지 선택</legend>{composer.choices.map(c => <button type="button" key={c.choiceId} disabled={c.disabled} aria-label={`${c.position}번 선택`} aria-pressed={c.pressed} onClick={() => { setChoice(c.choiceId); response.current?.focus(); }}>{c.position}</button>)}</fieldset>}</div><div className="v4-primary-actions">{composer.actions.buttons.map(button => button.id === 'RETURN' ? <a key={button.id} className="v4-return" href={button.disabled ? undefined : returnTo} aria-disabled={button.disabled}>{button.label}</a> : <button key={button.id} className="primary" disabled={button.disabled} onClick={() => {
+          <div className="v4-compose-actions"><div className="v4-primary-actions">{composer.actions.buttons.map(button => <button key={button.id} className={button.id === 'RESTART' ? undefined : 'primary'} disabled={button.disabled} onClick={() => {
             if (button.id === 'SUBMIT') submit();
             else if (button.id === 'RETRY') void send();
             else if (button.id === 'RESTART') void restart(true);
             else if (button.id === 'NEXT') setReleased(true);
+            else if (button.id === 'STRATEGY_OPEN') { if (strategy.available) { const position = defaultStrategyPosition(strategyState, strategy.choices, view.question.choices.find(c => c.choiceId === view.selectedChoiceId)?.position ?? null); if (position !== null) openStrategyChoice(position); } }
+            else if (button.id === 'STRATEGY_NEXT') { if (strategy.available) setStrategyState(nextStrategyParagraph(strategyState, strategy.choices)); }
             else if (button.id === 'END_YES' || button.id === 'END_NO') void send({ type: 'END_START', accept: button.id === 'END_YES' });
             else if (button.id === 'UNDERSTOOD_YES' || button.id === 'UNDERSTOOD_NO') void send({ type: 'UNDERSTOOD', answer: button.id === 'UNDERSTOOD_YES' });
-            else if (button.id !== 'RETURN') void send({ type: button.id });
+            else void send({ type: button.id });
           }}>{button.label}</button>)}</div></div>
         </div>
       </section>

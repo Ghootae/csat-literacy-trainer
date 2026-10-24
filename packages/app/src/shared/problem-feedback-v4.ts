@@ -81,3 +81,7 @@ export interface FeedbackV4Inspection {
   errors: { errorId: string; description: string; kind: string; status: string; asked: boolean; skipped: boolean }[];
   additionalErrors: { errorId: string; description: string; status: string }[];
 }
+
+/** 출제자 전략 글. COMPLETED 전에는 항상 available: false다. */
+export type ExaminerStrategyView = { available: false }
+  | { available: true; stemPolarity: 'SELECT_INCORRECT' | 'SELECT_CORRECT'; firstPosition: number; choices: { position: number; paragraphs: string[] }[] };

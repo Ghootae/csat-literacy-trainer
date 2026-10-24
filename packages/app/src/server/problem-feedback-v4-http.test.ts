@@ -53,6 +53,7 @@ describe('headless v4 HTTP integration', () => {
   });
   it('actual Q13 source runs choice → correction → one reselection → completed without exposing key early', async () => {
     const records: FeedbackV4Record[] = [];
+    const strategyLog: { sessionId: string; questionId: string; position: number; first: boolean }[] = [];
     const evaluator: FeedbackEvaluator = { async evaluate(s) {
       const o = s.observations.at(-1)!;
       const text = o.command.type === 'CORRECT' ? o.command.text : 'rationale' in o.command && o.command.rationale.mode === 'PROVIDED' ? o.command.rationale.text : '';
@@ -73,7 +74,7 @@ describe('headless v4 HTTP integration', () => {
           errorHypothesis: null, selectionMismatchQuestion: null, coaching: '여론 왜곡의 사례가 소수 의견의 우려를 강화합니다.',
         } };
     } };
-    const base = await server({ developerMode: true, problemFeedbackV4Evaluator: evaluator, problemFeedbackV4Save(r) { records.push(r); } });
+    const base = await server({ developerMode: true, problemFeedbackV4Evaluator: evaluator, problemFeedbackV4Save(r) { records.push(r); }, examinerStrategyLog(r) { strategyLog.push(r); } });
     let v = await (await post(base + root, { questionId })).json() as FeedbackV4View;
     const endpoint = base + root + '/' + v.sessionId;
     async function step(command: unknown, transitionId: string) {
@@ -86,6 +87,9 @@ describe('headless v4 HTTP integration', () => {
     }
     await step({ type: 'SELECT', choiceId: 'C4', rationale: { mode: 'PROVIDED', text: '실명 없이도 법 제정이 가능하다는 것을 근거로 소수파는 실명 확인을 주장할 수 없음.' } }, 'T1');
     expect(v.phase).toBe('AWAITING_CORRECTION'); expect(JSON.stringify(v)).not.toContain('answerChoiceId');
+    // 정답 노출 방지: COMPLETED 전에는 전략 글도 사용 기록도 없다.
+    expect(await (await fetch(`${endpoint}/examiner-strategy`)).json()).toEqual({ available: false });
+    expect((await post(`${endpoint}/examiner-strategy/view`, { position: 5 })).status).toBe(400);
     expect(records.at(-1)?.session.errors.map(e => e.kind)).toEqual(['CONTENT']);
     await step({ type: 'CORRECT', errorId: v.activeErrorId, text: '동일인이 여러 이름을 쓴 글이 시민의 진정한 의견으로 오인돼 법 제정에 영향을 줬으므로 우려가 강화됩니다.' }, 'T2');
     expect(v.phase).toBe('AWAITING_POST_REPAIR_CHOICE');
@@ -98,5 +102,13 @@ describe('headless v4 HTTP integration', () => {
     expect(v.result?.answerRevealed).toBe(false); expect(v.result?.correctionSucceeded).toBe(true);
     expect((await (await fetch(endpoint)).json()) as FeedbackV4View).toEqual(v);
     expect(records.at(-1)?.session.observations).toHaveLength(4);
+    expect(v.phase).toBe('COMPLETED');
+    const strategy = await (await fetch(`${endpoint}/examiner-strategy`)).json() as { available: boolean; firstPosition: number; choices: { position: number; paragraphs: string[] }[] };
+    expect(strategy).toMatchObject({ available: true, firstPosition: 5 });
+    expect(strategy.choices.map(c => c.position)).toEqual([5]); expect(strategy.choices[0]!.paragraphs.length).toBeGreaterThan(1);
+    expect((await post(`${endpoint}/examiner-strategy/view`, { position: 1 })).status).toBe(400);
+    expect(strategyLog).toEqual([]);
+    expect(await (await post(`${endpoint}/examiner-strategy/view`, { position: 5 })).json()).toEqual({ ok: true });
+    expect(strategyLog).toMatchObject([{ sessionId: v.sessionId, questionId, position: 5, first: true }]);
   });
 });

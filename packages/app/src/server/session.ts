@@ -39,6 +39,18 @@ export function appendFeedbackV4Record(record: FeedbackV4Record): void {
   appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
 }
 
+/** 출제자 전략 글 파일을 읽는다. 파일시스템 접근은 이 파일 안에만 둔다(D4 규칙 1). */
+export function readExaminerStrategyFile(path: string): string {
+  return readFileSync(path, 'utf8');
+}
+
+/** 출제자 전략 보기 사용 기록. v4 이벤트 기록(events.jsonl)은 세션 전체 스냅샷 형식이라 따로 둔다. */
+export function appendExaminerStrategyLog(record: object): void {
+  const file = resolve(process.env['CSAT_EXAMINER_STRATEGY_LOG'] ?? '.omc/logs/problem-feedback-v4/examiner-strategy.jsonl');
+  mkdirSync(dirname(file), { recursive: true });
+  appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
+}
+
 /**
  * 호출 시점에 푼다. 운영은 cwd의 `sessions/`를 쓰고, E2E는 `CSAT_SESSION_ROOT`로
  * 임시 디렉터리를 주입해 실제 학생 기록과 서로 오염되지 않게 한다.

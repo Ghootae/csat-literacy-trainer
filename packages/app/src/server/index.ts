@@ -46,6 +46,7 @@ import type {
 import { DialogueController } from './dialogue.js';
 import { ProblemSolvingController } from './problem-solving.js';
 import { SimpleDialogueController } from './dialogue-simple.js';
+import { loadExaminerStrategies, strategyFor } from './examiner-strategy.js';
 import { ProblemFeedbackV4Controller, type FeedbackV4Record } from './problem-feedback-v4.js';
 import {
   findPassageManifestForParagraph,
@@ -64,6 +65,7 @@ import {
   revisedRegions,
   savePassageTitle,
   JsonlProblemSessionLogger,
+  appendExaminerStrategyLog,
 } from './session.js';
 import { bestOf, isBlocked, toRecord, toRegionViews, viewsFromRecords } from './view.js';
 import { restoreTitleView, toTitleView } from './title-view.js';
@@ -129,6 +131,8 @@ export interface LearningServerOptions {
   readonly problemPathEvaluator?: SourceDirectProblemEvaluator;
   readonly problemFeedbackV4Evaluator?: FeedbackEvaluator;
   readonly problemFeedbackV4Save?: (record: FeedbackV4Record) => void;
+  readonly examinerStrategyPath?: string;
+  readonly examinerStrategyLog?: (record: { savedAt: string; sessionId: string; questionId: string; position: number; first: boolean }) => void;
   readonly dialogueSimpleEvaluator?: SimpleEvaluator;
   readonly dialogueSimpleLogDirectory?: string;
   readonly studentEvidencePath?: string;
@@ -173,6 +177,9 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
     ...(options.problemFeedbackV4Evaluator === undefined ? {} : { evaluator: options.problemFeedbackV4Evaluator }),
     ...(options.problemFeedbackV4Save === undefined ? {} : { save: options.problemFeedbackV4Save }),
   });
+  const examinerStrategies = loadExaminerStrategies(options.examinerStrategyPath);
+  const strategyViews = new Map<string, Set<number>>();
+  const logExaminerStrategy = options.examinerStrategyLog ?? appendExaminerStrategyLog;
   const dialogueSimple = new SimpleDialogueController({
     ...(options.dialogueSimpleEvaluator === undefined ? {} : { evaluator: options.dialogueSimpleEvaluator }),
     ...(options.dialogueSimpleLogDirectory === undefined ? {} : { logDirectory: options.dialogueSimpleLogDirectory }),
@@ -219,6 +226,19 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
         }
         const match = /^\/api\/developer\/problem-feedback-v4\/session\/([^/]+)$/u.exec(url.pathname);
         const inspection = /^\/api\/developer\/problem-feedback-v4\/session\/([^/]+)\/inspect$/u.exec(url.pathname);
+        const strategy = /^\/api\/developer\/problem-feedback-v4\/session\/([^/]+)\/examiner-strategy(\/view)?$/u.exec(url.pathname);
+        if (strategy && req.method === 'GET' && !strategy[2]) return json(res, 200, strategyFor(problemFeedbackV4.get(strategy[1]!), examinerStrategies));
+        if (strategy && req.method === 'POST' && strategy[2]) {
+          const view = problemFeedbackV4.get(strategy[1]!);
+          const { position } = await readBody(req) as { position?: unknown };
+          const available = strategyFor(view, examinerStrategies);
+          if (!available.available || typeof position !== 'number' || !available.choices.some(c => c.position === position)) return json(res, 400, { error: '볼 수 있는 출제자 전략이 없습니다.' });
+          const seen = strategyViews.get(view.sessionId) ?? new Set<number>();
+          strategyViews.set(view.sessionId, seen);
+          logExaminerStrategy({ savedAt: new Date().toISOString(), sessionId: view.sessionId, questionId: view.question.questionId, position, first: seen.size === 0 });
+          seen.add(position);
+          return json(res, 200, { ok: true });
+        }
         if (inspection && req.method === 'GET') return json(res, 200, problemFeedbackV4.inspect(inspection[1]!));
         if (match) {
           if (req.method === 'GET') return json(res, 200, problemFeedbackV4.get(match[1]!));

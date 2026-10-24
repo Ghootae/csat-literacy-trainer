@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import type { FeedbackEvaluator } from '@csat/pipeline';
 import { createLearningServer } from '../src/server/index.js';
 
+const shots = '/Users/mac/Projects/csat-literacy-problem-solving-mvp/docs/handoffs/2026-10-24-choice-direct';
 let server: Server;
 const failed = new Set<string>();
 const failures = new Map<string, number>();
@@ -38,7 +39,7 @@ const evaluator: FeedbackEvaluator = { async evaluate(s) {
 } };
 
 test.beforeAll(async () => {
-  server = createLearningServer({ developerMode: true, problemFeedbackV4Evaluator: evaluator, problemFeedbackV4Save() {}, warmer: () => Promise.resolve() });
+  server = createLearningServer({ developerMode: true, problemFeedbackV4Evaluator: evaluator, problemFeedbackV4Save() {}, examinerStrategyLog() {}, warmer: () => Promise.resolve() });
   await new Promise<void>(resolve => server.listen(port, '127.0.0.1', resolve));
 });
 test.beforeEach(async ({ page }) => {
@@ -52,32 +53,38 @@ async function open(page: Page) {
   await page.goto(`/problem/dev/v4?questionId=${questionId}&returnTo=%2Fdialogue%2Fdev`);
   await expect(page.locator('h1')).toContainText('정보 비대칭');
 }
+const circled = (n: number) => '①②③④⑤'[n - 1]!;
+const radio = (page: Page, n: number) => page.getByRole('radio', { name: `${circled(n)}번 선지`, exact: true });
+// 좁은 화면에서는 문제 탭에서 고르고 대화 탭에서 근거를 쓴다.
+const isNarrow = (page: Page) => (page.viewportSize()?.width ?? 1600) <= 900;
 async function select(page: Page, number: number, text: string) {
-  await page.getByRole('button', { name: `${number}번 선택`, exact: true }).click();
+  if (isNarrow(page)) await page.getByRole('button', { name: '문제', exact: true }).click();
+  await radio(page, number).click();
+  if (isNarrow(page)) await page.getByRole('button', { name: '대화', exact: true }).click();
   await page.locator('#v4-response').fill(text);
-  await page.getByRole('button', { name: '선택·근거 전송' }).click();
+  await page.getByRole('button', { name: '제출', exact: true }).click();
 }
 
 test('three panes, persistent draft, multiple corrections, reselection and verified finish', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 }); await open(page);
   await expect(page.locator('.workbench-pane:visible')).toHaveCount(3);
-  await expect(page.getByRole('button', { name: '선택·근거 전송' })).toBeDisabled();
-  await page.getByRole('button', { name: '1번 선택', exact: true }).click();
+  await expect(page.getByRole('button', { name: '제출', exact: true })).toBeDisabled();
+  await radio(page, 1).click();
   await page.locator('#v4-response').fill('두 가지 관계를 잘못 이해했습니다.');
   await page.reload();
   await expect(page.locator('#v4-response')).toHaveValue('두 가지 관계를 잘못 이해했습니다.');
-  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: '선택·근거 전송' }).click();
-  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toHaveCount(0);
+  await expect(radio(page, 1)).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: '제출', exact: true }).click();
+  await expect(radio(page, 1)).toHaveAttribute('aria-disabled', 'true');
   await expect(page.getByLabel('대화 기록')).toContainText('1번째 관계를 원문과 비교');
   await page.locator('#v4-response').fill('첫 번째 관계를 수정했습니다.');
   await page.getByRole('button', { name: '답변 전송' }).click();
   await expect(page.getByLabel('대화 기록')).toContainText('2번째 관계를 원문과 비교');
-  await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toHaveCount(0);
+  await expect(radio(page, 5)).toHaveAttribute('aria-disabled', 'true');
   await page.locator('#v4-response').fill('두 번째 관계도 수정했습니다.');
   await page.getByRole('button', { name: '답변 전송' }).click();
   await page.getByRole('button', { name: '다시 선택', exact: true }).click();
-  await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toBeEnabled();
+  await expect(radio(page, 5)).toHaveAttribute('aria-disabled', 'false');
   await page.getByRole('button', { name: '응답 평가', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('수정 확인');
   await expect(page.getByRole('dialog')).toContainText('거짓인 선지');
@@ -97,16 +104,20 @@ test('three panes, persistent draft, multiple corrections, reselection and verif
 });
 
 test('explicit omission → wrong → omitted rationale → coaching, answer reveal and no reselection', async ({ page }) => {
-  await open(page); await page.getByRole('button', { name: '1번 선택', exact: true }).click();
+  await open(page); await radio(page, 1).click();
   await page.getByLabel('정답만 입력', { exact: true }).check();
   await expect(page.locator('#v4-response')).toBeDisabled();
-  await page.getByRole('button', { name: '선택·근거 전송' }).click();
+  await page.getByRole('button', { name: '제출', exact: true }).click();
   await expect(page.getByLabel('대화 기록')).toContainText('정답이 아니야.');
   await page.getByLabel('근거 미제출', { exact: true }).check();
-  await page.getByRole('button', { name: '근거 전송', exact: true }).click();
+  await page.getByRole('button', { name: '제출', exact: true }).click();
   await page.getByRole('button', { name: '아니', exact: true }).click();
   await expect(page.locator('.v4-answer-reveal')).toContainText('정답 5번');
-  await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toHaveCount(0);
+  // 재선택은 없다: 제출 버튼도 없고, 풀이 단계의 선지는 답으로 고를 수 없다(⑤는 전략 보기용으로만 눌린다).
+  await expect(page.getByRole('button', { name: '제출', exact: true })).toHaveCount(0);
+  await expect(page.locator('#v4-response')).toBeDisabled();
+  await expect(radio(page, 1)).toHaveAttribute('aria-disabled', 'true');
+  await expect(radio(page, 5)).toHaveAttribute('aria-checked', 'false');
 });
 
 test('ambiguous correct can decline end coaching without questions or answer reveal; mobile panes fit', async ({ page }) => {
@@ -122,6 +133,8 @@ test('ambiguous correct can decline end coaching without questions or answer rev
   await expect(page.locator('.v4-answer-reveal')).toHaveCount(0);
   await page.screenshot({ path: '/private/tmp/problem-v4-workbench-mobile.png' });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const mobilePane = (await page.locator('.chat-pane').boundingBox())!; const mobileMain = (await page.locator('.v4-primary-actions button').first().boundingBox())!;
+  expect(mobileMain.y + mobileMain.height).toBeLessThanOrEqual(mobilePane.y + mobilePane.height - 8);
   await page.getByRole('button', { name: '응답 평가', exact: true }).click();
   await expect(page.getByRole('region', { name: '최종 평가' })).toContainText('근거 미검증');
 });
@@ -153,7 +166,7 @@ test('failed correction ends with coaching; item boundary is not student failure
   await page.getByRole('button', { name: '아니', exact: true }).click();
   await expect(page.locator('.v4-answer-reveal')).toBeVisible();
   page.once('dialog', d => d.accept()); await page.getByRole('button', { name: '새 테스트', exact: true }).click();
-  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toBeEnabled();
+  await expect(radio(page, 1)).toHaveAttribute('aria-disabled', 'false');
   await select(page, 1, '자료 경계 확인');
   await expect(page.locator('.v4-composer')).toContainText('자료 검토가 필요한 문항');
   await expect(page.locator('.v4-answer-reveal')).toHaveCount(0);
@@ -182,9 +195,9 @@ test('composer keeps three rows and identical height through correction, post re
     heights.push((await composer.boundingBox())!.height);
   }
   await measure();
-  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toBeVisible();
+  await expect(radio(page, 1)).toBeVisible();
   await select(page, 1, '관계가 반대라고 생각합니다.');
-  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toHaveCount(0);
+  await expect(radio(page, 1)).toHaveAttribute('aria-disabled', 'true');
   await expect(page.locator('.v4-highlight').first()).toBeVisible();
   await expect(page.getByRole('button', { name: '지문에서 보기' })).toBeVisible();
   await expect(page.getByRole('button', { name: '답변 전송', exact: true })).toBeVisible();
@@ -193,12 +206,12 @@ test('composer keeps three rows and identical height through correction, post re
   await page.getByRole('button', { name: '답변 전송', exact: true }).click();
   await expect(page.locator('.v4-highlight')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '다시 선택', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toHaveCount(0);
+  await expect(radio(page, 5)).toHaveAttribute('aria-disabled', 'true');
   await expect(page.locator('#v4-response')).toBeDisabled(); await measure();
   await page.getByRole('button', { name: '다시 선택', exact: true }).click();
-  await expect(page.getByRole('button', { name: '5번 선택', exact: true })).toBeEnabled(); await measure();
-  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(radio(page, 5)).toHaveAttribute('aria-disabled', 'false'); await measure();
+  await expect(radio(page, 1)).toHaveAttribute('aria-disabled', 'true');
+  await expect(radio(page, 1)).toHaveAttribute('aria-checked', 'false');
   await expect(page.locator('#v4-response')).toHaveValue('');
   await expect(page.locator('.v4-composer-notice')).toHaveText('이번이 마지막 선택이야.');
   await expect(page.getByLabel('대화 기록')).not.toContainText('이번이 마지막 선택이야.');
@@ -332,6 +345,11 @@ for (const size of [{ width: 1600, height: 1000 }, { width: 1280, height: 720 }]
       expect((await page.locator('.source-head').boundingBox())!.height).toBeLessThanOrEqual(72);
     }
     if (big) await page.screenshot({ path: '/private/tmp/problem-v4-layout-economy.png' });
+    const pane = (await page.locator('.chat-pane').boundingBox())!;
+    const main = (await page.locator('.v4-primary-actions button').first().boundingBox())!;
+    // 주 버튼이 대화 칸 안에 완전히 들어가고 아래에 여백이 남는다.
+    expect(main.y + main.height).toBeLessThanOrEqual(pane.y + pane.height - 8);
+    expect(main.x + main.width).toBeLessThanOrEqual(pane.x + pane.width - 8);
     const list = page.locator('.v4-choices-scroll');
     const stem = page.locator('.question-head h3');
     const scenario = page.locator('.v4-scenario');
@@ -347,7 +365,7 @@ for (const size of [{ width: 1600, height: 1000 }, { width: 1280, height: 720 }]
     await expect(page.locator('.source-pane .v4-highlight, .question-pane .v4-highlight').first()).toBeInViewport();
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     await expect(page.locator('.chat-message').last()).toBeInViewport();
-    await expect(page.getByRole('button', { name: '1번 선택', exact: true })).toHaveCount(0);
+    await expect(radio(page, 1)).toHaveAttribute('aria-disabled', 'true');
     await page.locator('#v4-response').fill('중복 게시가 여론을 왜곡할 수 있어.');
     await page.getByRole('button', { name: '답변 전송', exact: true }).click();
     await expect(page.getByRole('button', { name: '다시 선택', exact: true })).toBeVisible();
@@ -360,3 +378,93 @@ for (const size of [{ width: 1600, height: 1000 }, { width: 1280, height: 720 }]
     await expect(page.locator('.chat-message').last()).toBeInViewport();
   });
 }
+
+test('choice list is a radio group: keyboard selection, disabled while locked', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 }); await open(page);
+  await expect(page.getByRole('radiogroup', { name: '선지' })).toBeVisible();
+  await expect(page.locator('.v4-choice-hint')).toHaveText('선지를 눌러 답을 골라');
+  await expect(page.locator('.v4-composer-notice')).toContainText('문제에서 답을 골라 줘');
+  await radio(page, 1).focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(radio(page, 2)).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(radio(page, 2)).toHaveAttribute('aria-checked', 'true');
+  await expect(radio(page, 2)).toContainText('고름');
+  await expect(page.locator('#v4-response')).not.toBeFocused();
+  await expect(page.locator('.v4-composer-notice')).toContainText('②번을 골랐어');
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+  await expect(radio(page, 3)).toHaveAttribute('aria-checked', 'true');
+  await expect(radio(page, 2)).toHaveAttribute('aria-checked', 'false');
+});
+
+test('narrow screen: choosing stays on the problem tab and the change link returns to it', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await open(page);
+  await page.getByRole('button', { name: '문제', exact: true }).click();
+  await radio(page, 1).click();
+  await expect(page.getByRole('button', { name: '문제', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: '대화', exact: true }).click();
+  await expect(page.locator('.v4-composer-notice')).toContainText('①번을 골랐어');
+  await page.getByRole('button', { name: '문제에서 바꾸기', exact: true }).click();
+  await expect(page.getByRole('button', { name: '문제', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('region', { name: '문제와 선지' })).toBeVisible();
+});
+
+test('direct choice flow on the negative-stem question: only the answer has a strategy, buttons keep their place, no number or return buttons', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 }); await open(page);
+  const composer = page.locator('.v4-composer');
+  const chat = page.getByLabel('대화 기록');
+  await expect(chat).toContainText('문제에서 답을 고르고, 그렇게 판단한 근거를 적어 줘. 근거 없이 답만 내도 돼.');
+  await expect(composer.getByRole('button', { name: /번 선택/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /학습 맵으로 돌아가기/ })).toHaveCount(0);
+  await expect(composer.getByRole('button', { name: '정답만 입력' })).toHaveCount(0);
+  // 가운데(③)를 눌러 고르고 제출한다. 정답 ⑤가 아니라 오답이다.
+  await radio(page, 3).click();
+  await page.locator('#v4-response').fill('이 선지가 가장 그럴듯해서 골랐어.');
+  await page.screenshot({ path: `${shots}-after-1.png`, animations: 'disabled' });
+  await page.getByLabel('정답만 입력', { exact: true }).check();
+  await page.getByRole('button', { name: '제출', exact: true }).click();
+  await expect(chat).toContainText('정답이 아니야.');
+  await page.getByLabel('근거 미제출', { exact: true }).check();
+  await page.getByRole('button', { name: '제출', exact: true }).click();
+  await page.getByRole('button', { name: '아니', exact: true }).click();
+  await expect(page.locator('.v4-answer-reveal')).toContainText('정답 5번');
+  await expect(chat).toContainText('선지를 누르면 출제자가 어떤 전략으로 정답 선지에 함정을 만들었는지 검토할 수 있어.');
+  await expect(page.locator('.v4-choice-hint')).toHaveText('틀린 내용을 담은 선지를 누르면 그 선지의 전략을 볼 수 있어');
+  // 끝난 뒤에는 정답 ⑤만 누를 수 있다.
+  for (const n of [1, 2, 3, 4]) { await expect(radio(page, n)).toHaveAttribute('aria-disabled', 'true'); await expect(radio(page, n)).toHaveAttribute('data-dim', 'true'); }
+  await expect(radio(page, 5)).toHaveAttribute('aria-disabled', 'false');
+  await expect(composer.getByRole('button', { name: /번 선택/ })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /학습 맵으로 돌아가기/ })).toHaveCount(0);
+  const main = composer.locator('.v4-primary-actions button').first();
+  await expect(main).toHaveText('전략 보기');
+  await expect(composer.getByRole('button', { name: '다시 풀기', exact: true })).toBeVisible();
+  const boxes = [(await main.boundingBox())!];
+  await page.screenshot({ path: `${shots}-after-2.png`, animations: 'disabled' });
+  await radio(page, 5).click();
+  await expect(chat.locator('small', { hasText: '출제자 전략 · ⑤' })).toHaveCount(1);
+  await expect(main).toHaveText('다음');
+  await expect(page.locator('.v4-choice-hint')).toHaveText('');
+  await expect(radio(page, 5)).toHaveAttribute('data-selected', 'true');
+  await expect(radio(page, 5)).toContainText('전략 보는 중');
+  await expect(page.locator('.v4-composer-notice')).toContainText('⑤ 전략');
+  boxes.push((await main.boundingBox())!);
+  await page.screenshot({ path: `${shots}-after-3.png`, animations: 'disabled' });
+  while (await main.innerText() === '다음') await main.click();
+  await expect(chat).toContainText('⑤번 전략은 여기까지야.');
+  await expect(chat).not.toContainText('다른 선지의 함정도 볼 수 있어.');
+  await expect(main).toHaveText('전략 보기');
+  await expect(page.locator('.v4-choice-hint')).toHaveText('본 선지도 다시 누를 수 있어');
+  await expect(radio(page, 5)).toContainText('봤음');
+  await expect(radio(page, 5)).toHaveAttribute('aria-disabled', 'false');
+  boxes.push((await main.boundingBox())!);
+  for (const box of boxes) expect(box).toEqual(boxes[0]);
+  await page.screenshot({ path: `${shots}-after-4.png`, animations: 'disabled' });
+  // 끝 말풍선 뒤에도 ⑤를 다시 누르면 처음 문단부터 다시 보인다.
+  await radio(page, 5).click();
+  await expect(main).toHaveText('다음');
+  await expect(chat.locator('small', { hasText: '출제자 전략 · ⑤' })).not.toHaveCount(1);
+  await page.reload();
+  await expect(chat).toContainText('선지를 누르면 출제자가 어떤 전략으로 정답 선지에 함정을 만들었는지 검토할 수 있어.');
+  await expect(main).toHaveText('전략 보기');
+  await expect(chat.locator('small', { hasText: '출제자 전략' })).toHaveCount(0);
+});

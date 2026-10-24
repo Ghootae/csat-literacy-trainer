@@ -9,17 +9,17 @@ const view = (phase: FeedbackV4WorkbenchView['phase']): FeedbackV4WorkbenchView 
 const local: ComposerLocal = { choice: 'C2', draft: '근거', omit: false, waiting: false, pending: false, error: '' };
 describe('composerState', () => {
   it.each([
-    ['AWAITING_SELECTION', true, true, '정답만 입력', ['선택·근거 전송']],
-    ['AWAITING_RATIONALE', false, true, '근거 미제출', ['근거 전송']],
+    ['AWAITING_SELECTION', true, true, '정답만 입력', ['제출']],
+    ['AWAITING_RATIONALE', false, true, '근거 미제출', ['제출']],
     ['AWAITING_CORRECTION', false, true, null, ['답변 전송']],
     ['AWAITING_POST_REPAIR_CHOICE', false, false, null, ['다시 선택', '코칭 보기']],
-    ['AWAITING_RESELECTION', true, true, '정답만 입력', ['선택·근거 전송']],
-    ['COMPLETED', false, false, null, ['같은 문제 다시 풀기', '학습 맵으로 돌아가기 →']],
+    ['AWAITING_RESELECTION', true, true, '정답만 입력', ['제출']],
+    ['COMPLETED', false, false, null, ['다시 풀기']],
     ['ITEM_REVIEW', false, false, null, []],
     ['AWAITING_EVALUATION', false, false, null, []],
   ] as const)('%s has all four rows with the contracted controls', (phase, choices, input, check, labels) => {
     const state = composerState(view(phase), local);
-    expect(Object.keys(state)).toEqual(['notice', 'choices', 'input', 'actions']);
+    expect(Object.keys(state)).toEqual(['status', 'notice', 'choices', 'input', 'actions']);
     expect(state.choices).toHaveLength(5);
     expect(state.choices[1]?.disabled).toBe(!choices);
     expect(state.input.disabled).toBe(!input);
@@ -75,6 +75,24 @@ describe('composerState', () => {
     const state = composerState(view('AWAITING_SELECTION'), { ...local, draft: '', omit: true });
     expect(state.input.disabled).toBe(true); expect(state.actions.buttons[0]?.disabled).toBe(false);
     expect(composerState(view('AWAITING_CORRECTION'), { ...local, draft: '', omit: true }).actions.buttons[0]?.disabled).toBe(true);
+  });
+  it('puts the strategy open/next button in the primary slot and keeps restart fixed, without number or return buttons', () => {
+    const labels = (strategy?: ComposerLocal['strategy'], phase: FeedbackV4WorkbenchView['phase'] = 'COMPLETED') => composerState(view(phase), { ...local, strategy }).actions.buttons.map(b => b.label);
+    expect(labels()).toEqual(['다시 풀기']);
+    expect(labels({ stage: 'INTRO', position: null })).toEqual(['전략 보기', '다시 풀기']);
+    expect(labels({ stage: 'READING', position: 2 })).toEqual(['다음', '다시 풀기']);
+    expect(labels({ stage: 'ENDED', position: 2 })).toEqual(['전략 보기', '다시 풀기']);
+    expect(labels({ stage: 'INTRO', position: null }, 'AWAITING_SELECTION')).toEqual(['제출']);
+    expect(composerState(view('COMPLETED'), local).actions).not.toHaveProperty('strategyChoices');
+  });
+  it('status line: chosen choice while solving, strategy choice while reading, otherwise empty; notice stays separate', () => {
+    expect(composerState(view('AWAITING_SELECTION'), { ...local, choice: null }).status).toEqual({ text: '문제에서 답을 골라 줘', canChange: false });
+    expect(composerState(view('AWAITING_SELECTION'), local).status).toEqual({ text: '②번을 골랐어', canChange: true });
+    expect(composerState(view('AWAITING_SELECTION'), { ...local, pending: true, waiting: true }).status.canChange).toBe(false);
+    expect(composerState(view('COMPLETED'), { ...local, strategy: { stage: 'READING', position: 2 } }).status).toEqual({ text: '② 전략', canChange: false });
+    expect(composerState(view('COMPLETED'), { ...local, strategy: { stage: 'ENDED', position: 2 } }).status.text).toBe('');
+    expect(composerState(view('COMPLETED'), local).status.text).toBe('');
+    expect(composerState(view('AWAITING_CORRECTION'), local).status.text).toBe('');
   });
 });
 describe('waitingText', () => {

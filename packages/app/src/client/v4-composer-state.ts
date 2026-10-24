@@ -1,3 +1,4 @@
+import { circled } from './examiner-strategy-state.js';
 import type { FeedbackV4Message, FeedbackV4Request, FeedbackV4WorkbenchView } from '../shared/problem-feedback-v4.js';
 
 export type WaitingKind = 'ANSWER' | 'CORRECTION' | 'EXPLANATION' | 'UNKNOWN';
@@ -18,12 +19,14 @@ export function waitingText(kind: WaitingKind, elapsedMs: number): string {
   if (kind === 'EXPLANATION') return '설명을 정리하고 있어';
   return '네 답을 살펴보고 있어';
 }
-export type ButtonId = 'SUBMIT' | 'RESELECT' | 'REQUEST_EXPLANATION' | 'FINISH' | 'RESUME' | 'RETRY' | 'RESTART' | 'RETURN' | 'END_YES' | 'END_NO' | 'UNDERSTOOD_YES' | 'UNDERSTOOD_NO' | 'NEXT';
+export type ButtonId = 'SUBMIT' | 'RESELECT' | 'REQUEST_EXPLANATION' | 'FINISH' | 'RESUME' | 'RETRY' | 'RESTART' | 'END_YES' | 'END_NO' | 'UNDERSTOOD_YES' | 'UNDERSTOOD_NO' | 'NEXT' | 'STRATEGY_OPEN' | 'STRATEGY_NEXT';
 export interface ComposerLocal {
   choice: string | null; draft: string; omit: boolean; waiting: boolean; pending: boolean; error: string;
   previousView?: FeedbackV4WorkbenchView | null;
   sequence?: { complete: boolean; needsNext: boolean };
   previousButtons?: { id: ButtonId; label: string; disabled: boolean }[];
+  /** 출제자 전략이 있는 COMPLETED 문항에서만 준다. position은 지금 읽는 선지 번호. */
+  strategy?: { stage: 'INTRO' | 'READING' | 'ENDED'; position: number | null } | undefined;
 }
 export function composerState(view: FeedbackV4WorkbenchView, local: ComposerLocal) {
   const base = (local.waiting || local.pending) && view.phase === 'AWAITING_EVALUATION' ? local.previousView ?? view : view;
@@ -34,7 +37,7 @@ export function composerState(view: FeedbackV4WorkbenchView, local: ComposerLoca
   const writable = !locked && (selection || rationale || correction);
   const canSubmit = writable && (!selection || (local.choice !== null && !(base.phase === 'AWAITING_RESELECTION' && local.choice === base.selectedChoiceId))) && (correction ? !!local.draft.trim() : local.omit || !!local.draft.trim());
   const buttons: { id: ButtonId; label: string; disabled: boolean }[] = [];
-  if (selection || rationale || correction) buttons.push({ id: 'SUBMIT', label: correction ? '답변 전송' : rationale ? '근거 전송' : '선택·근거 전송', disabled: !canSubmit });
+  if (selection || rationale || correction) buttons.push({ id: 'SUBMIT', label: correction ? '답변 전송' : '제출', disabled: !canSubmit });
   if (base.phase === 'AWAITING_POST_REPAIR_CHOICE') for (const id of base.postRepairOptions ?? []) buttons.push({ id, label: id === 'RESELECT' ? '다시 선택' : id === 'FINISH' ? '마치기' : base.postRepairOptions?.includes('RESELECT') ? '코칭 보기' : '설명 보기', disabled: locked });
   if (base.phase === 'AWAITING_END_START') buttons.push({ id: 'END_YES', label: '응', disabled: locked || local.sequence?.complete === false }, { id: 'END_NO', label: '아니', disabled: locked || local.sequence?.complete === false });
   if (base.phase === 'AWAITING_UNDERSTANDING') {
@@ -42,12 +45,19 @@ export function composerState(view: FeedbackV4WorkbenchView, local: ComposerLoca
     else if (local.sequence.needsNext) buttons.push({ id: 'NEXT', label: '다음으로 넘어가기', disabled: locked });
     else buttons.push(...(local.previousButtons ?? [{ id: 'NEXT' as const, label: '다음으로 넘어가기', disabled: true }]).map(b => ({ ...b, disabled: true })));
   }
-  if (base.phase === 'COMPLETED') buttons.push({ id: 'RESTART', label: '같은 문제 다시 풀기', disabled: locked }, { id: 'RETURN', label: '학습 맵으로 돌아가기 →', disabled: locked });
+  const strategy = base.phase === 'COMPLETED' ? local.strategy : undefined;
+  if (strategy && strategy.stage !== 'READING') buttons.push({ id: 'STRATEGY_OPEN', label: '전략 보기', disabled: locked });
+  if (strategy?.stage === 'READING') buttons.push({ id: 'STRATEGY_NEXT', label: '다음', disabled: locked });
+  if (base.phase === 'COMPLETED') buttons.push({ id: 'RESTART', label: '다시 풀기', disabled: locked });
   if (local.pending && !local.waiting) buttons.splice(0, buttons.length, { id: 'RETRY', label: '같은 제출 다시 보내기', disabled: false });
   else if (view.evaluationStatus === 'RETRYABLE_ERROR' && !local.pending) buttons.splice(0, buttons.length, { id: 'RESUME', label: '평가 다시 시도', disabled: local.waiting });
   const error = local.error || view.evaluationError;
   const notice = error || (base.phase === 'ITEM_REVIEW' ? '자료 검토가 필요한 문항입니다. 학생의 오류로 처리하지 않습니다.' : correction ? '지금은 번호를 바꾸지 말고 질문에 답해 줘.' : selection && local.omit ? '틀리면 감점돼. 개발 버전에서는 실제로 깎지 않아.' : base.phase === 'AWAITING_RESELECTION' ? '이번이 마지막 선택이야.' : '');
+  const chosen = view.question.choices.find(c => c.choiceId === local.choice)?.position;
+  const status = selection ? { text: chosen ? `${circled(chosen)}번을 골랐어` : '문제에서 답을 골라 줘', canChange: !locked && !!chosen }
+    : strategy?.stage === 'READING' && strategy.position ? { text: `${circled(strategy.position)} 전략`, canChange: false } : { text: '', canChange: false };
   return {
+    status,
     notice: { text: notice, kind: error ? 'error' as const : 'info' as const },
     choices: view.question.choices.map(c => {
       const blocked = base.phase === 'AWAITING_RESELECTION' && c.choiceId === base.selectedChoiceId;
