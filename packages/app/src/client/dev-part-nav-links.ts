@@ -8,9 +8,7 @@ export function parseInitialParagraph(search: string): { sessionId: string | nul
   return { sessionId: params.get('sessionId'), passageId: params.get('passageId'), paragraph };
 }
 
-export function problemLink(questionId: string, sessionId: string): string {
-  return '/problem/lab?' + new URLSearchParams({ questionId, returnTo: `${dialogueBase}?sessionId=${sessionId}` });
-}
+export { problemLink } from '../shared/problem-link.js';
 
 // 옛 단순 형식 주소 /dialogue/dev/simple(D-0174)과 축 기반 /dialogue/dev도 돌아갈 곳으로 받는다.
 const returnPattern = /^\/dialogue\/(?:lab\?sessionId=[a-zA-Z0-9-]+|dev(?:\?sessionId=[a-zA-Z0-9-]+|\/simple\?sessionId=[a-zA-Z0-9-]+)?)$/;

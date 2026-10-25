@@ -254,7 +254,7 @@ export function ProblemLabApp(): React.JSX.Element {
   }
   return <main className="reading-workbench is-developer problem-lab-workbench" data-pane={pane}>
     <header className="workbench-header"><div className="lab-strip-lead"><p className="dialogue-kicker">COGAXIS / PERSONAL LAB</p><p className="developer-notice" title="문제 풀이 개발자 테스트 · 평가 서랍에 내부 판정이 공개됩니다. 실제 포인트는 차감하지 않습니다.">문제 풀이 개발자 테스트 · 평가 서랍에 내부 판정이 공개됩니다. 실제 포인트는 차감하지 않습니다.</p></div>
-      <div className="workbench-actions"><span>선택 {view.selectionCount} / 2</span><button ref={trigger} aria-haspopup="dialog" aria-expanded={drawer} onClick={() => setDrawer(true)}>응답 평가</button><a href={returnTo}>학습 맵</a><button disabled={waiting} onClick={() => void restart()}>새 테스트</button></div></header>
+      <div className="workbench-actions"><span>선택 {view.selectionCount} / {view.maxSelections}</span><button ref={trigger} aria-haspopup="dialog" aria-expanded={drawer} onClick={() => setDrawer(true)}>응답 평가</button><a href={returnTo}>학습 맵</a><button disabled={waiting} onClick={() => void restart()}>새 테스트</button></div></header>
     <nav className="workbench-tabs" aria-label="문제 화면 전환">{[['source', '지문'], ['problem', '문제'], ['chat', '대화']].map(([id, title]) => <button key={id} aria-pressed={pane === id} onClick={() => setPane(id!)}>{title}</button>)}</nav>
     <div className="workbench-columns" ref={sourcePanes}>
       <section className="workbench-pane source-pane" aria-label="전체 지문"><header className="pane-header source-head"><div className="source-title"><h1 title={view.title}>{view.title}</h1><small>{view.exam}</small></div>{navPassage && <DevPartNav currentParagraph={null} currentIsProblem problem={{ onSelect: () => {} }}

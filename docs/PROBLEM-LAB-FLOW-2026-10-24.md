@@ -4,6 +4,7 @@
 이 문서는 코드를 직접 읽고 쓴 운영 기록이다. 근거 표기는 저장소 루트 기준 `파일:줄`이다.
 약칭: `PA` = `packages/app/src`, `PP` = `packages/pipeline/src/problem-solving`.
 코드에서 확인하지 못한 것은 '미확인'으로 적는다.
+2026-10-25 6절 처리로 바뀐 코드는 화면의 선택 횟수 표시 한 곳이다(본문 반영).
 
 ## 1. 개요
 
@@ -123,7 +124,7 @@
 - `evaluationStatus === 'PROCESSING'`이면 1.5초마다 GET으로 상태를 확인한다 (`PA/client/ProblemLabApp.tsx:138-146`).
 - 평가 중 `phase`는 `AWAITING_EVALUATION`이고, 화면은 직전 보기(`previousView`)를 기준으로 입력 영역을 그린다 (`PA/client/problem-composer-state.ts:32`).
 - 대기 문구는 명령 종류(ANSWER/CORRECTION/EXPLANATION)와 경과 시간으로 정한다 (`PA/client/problem-composer-state.ts:5-21`).
-- 선택 횟수 표시는 화면에 `선택 N / 2`로 고정돼 있다 (`PA/client/ProblemLabApp.tsx:257`). 서버 보기는 `maxSelections: 2`를 준다 (`PP/feedback.ts:493`).
+- 선택 횟수 표시는 화면에 `선택 N / M`이고, M은 서버 보기의 `maxSelections`(현재 2)다 (`PA/client/ProblemLabApp.tsx:257`, `PP/feedback.ts:493`).
 - 평가 서랍은 `GET …/inspect`로 저장된 판정을 보여 줄 뿐 재채점하지 않는다 (`PA/client/FeedbackDrawer.tsx:30`, `:20-25`; `PA/server/problem-feedback.ts:61-74`).
 
 ### 2.4 교정 질문 한도
@@ -296,16 +297,19 @@
 | D-0170 | 선택형 출제자 전략 피드백: 미리 만든 고정 글, 세션 종료 뒤 버튼 |
 | D-0172 | 선지는 가운데 문제 칸에서 직접 눌러 고름 |
 
-## 6. 확인 필요
+## 6. 확인 필요 → 대조 결과 (2026-10-25)
 
-사실만 적는다. 판단과 수정은 하지 않았다.
+작성 때 '확인 필요'로 적은 9건을 코드·결정 기록과 대조했다(사용자 승인 "권고대로 진행해", 2026-10-25).
+처리: **해소**(기록끼리 충돌 아님), **사실 기록**(의도된 동작 또는 도달 불가, 변경 없음), **수정**(코드 변경, 인계 `docs/handoffs/2026-10-25-lab-flow-check-items.md`), **남김**(별도 과제).
 
-1. 프롬프트와 코드의 `coaching` 처리가 다르다. 프롬프트는 "`coaching`은 서버가 코칭 종료 경로에서 공개할 상세 설명", "서버는 모든 정상 코칭 종료에 정답과 해설을 덧붙인다"고 쓴다 (`packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md:251-254`). 코드에서 M1·M3의 `coaching`은 스키마 필드와 형식 검증(`PP/feedback-evaluator.ts:182`, `PP/feedback.ts:176-185`)에만 쓰이고, 대화 기록에는 들어가지 않는다. 종료 때 학생에게 보이는 설명은 M4의 세 칸이다 (`PA/server/problem-feedback.ts:229-238`). M4 입력에서도 `coaching`은 제외된다 (`PP/feedback-end-explanation.ts:119`). 평가 서랍 상세에는 `raw`로 그대로 보인다 (`PA/client/FeedbackDrawer.tsx:47`).
-2. D-0107은 오답 세션 종료에 판정기의 COACHING 요청 종류를 활용할 수 있다고 적는다(D-0107 '결정' 마지막 항목). 현재 코드의 `COACHING` kind는 코칭 문자열 검증 실패 뒤의 재시도에서만 쓰이고 (`PP/feedback-evaluator.ts:141`, `:198`), 종료 설명은 `END_EXPLANATION` kind가 맡는다.
-3. D-0112 5번은 서버가 오답 종료 메시지에 붙이던 "정답은 N번입니다." 줄을 뺀다고 적는다. 현재 코드에는 게이트 말풍선에 `정답은 N번이야.`를 서버가 넣는 줄이 있다 (`PA/server/problem-feedback.ts:227`; `PP/feedback.ts:203-204`). 게이트 구조는 D-0117의 구간 순차 표시 이후의 것으로 보이나, 이 연결은 결정 본문을 끝까지 대조하지 않았다(미확인).
-4. D-0112 4번이 인용한 종료 지시문 파일 이름은 `feedback-v5-end-explanation.ts`다. 현재 파일은 `PP/feedback-end-explanation.ts`이다(D-0173 이름 정리 이후).
-5. D-0172 본문과 `memory/CURRENT_STATE.md:61`은 개발자 문제 화면을 `/problem/dev/v4`로 적는다. 코드의 정식 주소는 `/problem/lab`이고 옛 주소는 넘김용이다 (`PA/client/main.tsx:22-25`).
-6. 프롬프트 파일 제목은 "v3 기반 v4 연결 후보"이고 `promptVersion`은 `problem-feedback-v5`이다 (프롬프트 `:1`, `PP/feedback-evaluator.ts:106`).
-7. 평가 루프는 최대 2회 도는 `for` 문이다 (`PA/server/problem-feedback.ts:132`). `applyFeedbackAssessment`가 끝난 뒤 `phase`가 `AWAITING_EVALUATION`으로 남는 경로를 이 문서 작성 때 읽은 `PP/feedback.ts:413-472`에서 찾지 못했다. 두 번째 반복이 실제로 도는 경우는 미확인이다.
-8. 화면의 `선택 N / 2`는 숫자 2를 직접 쓴다 (`PA/client/ProblemLabApp.tsx:257`). 서버 보기는 `maxSelections: 2`를 준다 (`PP/feedback.ts:493`). 화면이 이 값을 쓰지는 않는다.
-9. 교정 질문의 별도 상한 숫자와, 오류 목록 길이의 상한은 코드에서 찾지 못했다(2.4).
+| # | 내용 | 처리 | 근거·결과 |
+|---|---|---|---|
+| 1 | M1·M3의 `coaching` 필드는 만들어지지만 학생에게 보이지 않는다. 형식 검증 실패 시 COACHING 재요청이 일어나고, 한도를 넘으면 판정 전체가 실패한다. 프롬프트 251-254행("서버는 모든 정상 코칭 종료에 정답과 해설을 덧붙인다")은 현재 동작과 다르다. | **남김** | 필드를 없애면 v5 지시문·스키마가 바뀌어 실모델 회귀(외부 전송)가 필요하다. 6번과 함께 별도 과제로 한다. |
+| 2 | D-0107의 "COACHING 요청 종류 활용" | **해소** | D-0107은 "활용할 수 있음"이라는 선택지만 적었다. 실제 구현은 D-0112 2·4항과 D-0117이 정한 별도 종료 설명(`END_EXPLANATION`)이다. `COACHING` kind는 코칭 문자열 검증 실패 재시도용으로만 남아 있다. |
+| 3 | D-0112 5항(정답 줄 제거)과 게이트의 `정답은 N번이야.` | **해소** | D-0112 5항이 뺀 것은 종료 메시지(`finish()`)에 서버가 덧붙이던 줄이다(`PP/feedback.ts:164` 주석). 게이트 문장은 D-0117 3항·7항이 정한 시작 확인 문장("정답은 ⑤번이야. 네 답을 하나씩 같이 볼까?")이다. |
+| 4 | D-0112 4항의 파일 이름 `feedback-v5-end-explanation.ts` | **해소** | D-0173 이름 정리로 `PP/feedback-end-explanation.ts`가 됐다. 결정 기록은 당시 기록으로 둔다. |
+| 5 | D-0172·`CURRENT_STATE.md`의 `/problem/dev/v4` | **해소** | `CURRENT_STATE.md`는 D-0173 커밋에서 이미 `/problem/lab`(옛 주소 넘김)으로 고쳐졌다. D-0172는 당시 기록이다. |
+| 6 | 프롬프트 제목 "v3 기반 v4 연결 후보"와 `promptVersion: problem-feedback-v5` | **남김** | 지시문 본문이 바뀌는 일이라 1번과 함께 처리한다. |
+| 7 | 평가 루프의 두 번째 반복 | **사실 기록** | `applyFeedbackAssessment`(`PP/feedback.ts:413-472`)에는 `AWAITING_EVALUATION`을 돌려주는 경로가 없다. 이 단계를 만드는 `endExplanation(COACHING_REQUESTED)`(`:199`)는 학생 명령(`REQUEST_EXPLANATION`)에서만 불린다. 그래서 `for`의 두 번째 반복은 돌지 않는다. 동작에는 영향이 없고, 정리는 1번 과제 때 한다. |
+| 8 | 화면의 `선택 N / 2` 하드코딩 | **수정** | 화면이 `view.maxSelections`를 쓴다(`PA/client/ProblemLabApp.tsx`). |
+| 9 | 교정 질문·오류 목록의 숫자 상한 | **사실 기록** | 숫자 상한은 설계상 없다. 지시문이 "확인된 내용 오류를 모두 기록"하라고 하고(프롬프트 `:141`), CONTRADICTED 주장마다 오류를 하나씩, OFF_TARGET은 TARGET 오류 하나로 묶는다(`:292`). 질문 수는 첫 선택의 오류 수와 같다(2.4). |

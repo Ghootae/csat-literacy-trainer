@@ -4,6 +4,7 @@
 이 문서는 코드를 직접 읽고 쓴 운영 기록이다. 근거 표기는 저장소 루트 기준 `파일:줄`이다.
 약칭: `PA` = `packages/app/src`, `PS` = `packages/pipeline/src/paragraph-simple`, `PE` = `packages/pipeline/experiments/dialogue`.
 코드에서 확인하지 못한 것은 '미확인'으로 적는다. 본보기 형식은 `docs/PROBLEM-LAB-FLOW-2026-10-24.md`이다.
+2026-10-25 6절 처리로 코드가 바뀌었다(`docs/handoffs/2026-10-25-lab-flow-check-items.md`). 바뀐 동작은 본문에 반영했고, 바뀐 파일의 다른 줄 번호는 1~2줄 어긋날 수 있다.
 
 ## 1. 개요
 
@@ -61,10 +62,10 @@
 ### 1.5 문제 화면으로의 연결
 
 - 지문 JSON에 `problemQuestionId`가 있으면 연결된 문제가 있는 것이다 (`PA/server/content.ts:62`). 보기(view)는 `problemQuestionId`를 완료 여부와 무관하게 준다 (`PA/server/dialogue-simple.ts:247`).
-- `problemUrl`: 모든 문단이 완료(`allDone`)이고 `problemQuestionId`가 있을 때만 `/problem/lab?questionId=<id>`이다. 아니면 null (`PA/server/dialogue-simple.ts:246`). 이 주소에는 `returnTo`가 없다.
+- `problemUrl`: 모든 문단이 완료(`allDone`)이고 `problemQuestionId`가 있을 때만 `problemLink(questionId, sessionId)`, 즉 `/problem/lab?questionId=<id>&returnTo=/dialogue/lab?sessionId=<id>`이다. 아니면 null (`PA/server/dialogue-simple.ts:247`, `PA/shared/problem-link.ts`). 파트 이동 막대의 [문제] 링크와 같은 주소다(6절 6번에서 수정).
 - 마지막 문단이 끝나면 [문제 풀기] 버튼이 `problemUrl`로 이동한다 (`PA/client/SimpleDialogueApp.tsx:138`). 마지막 문단인데 `allDone`이 아니면 '끝나지 않은 문단이 있어요' 안내만 보인다 (`:139`).
 - 원문 패널의 파트 이동 막대(`DevPartNav`) 맨 끝 [문제] 버튼은 `problemLink`를 쓴다. 이 링크는 `returnTo=/dialogue/lab?sessionId=<id>`를 붙인다 (`PA/client/SimpleDialogueApp.tsx:113`, `PA/client/dev-part-nav-links.ts:11-13`). 이 버튼은 문단이 끝났는지와 무관하게 `problemQuestionId`만 있으면 눌린다 (`PA/client/DevPartNav.tsx:14-15`).
-- 문제 화면은 `returnTo`를 `resolveReturnTo`로 검사해, `/dialogue/lab?sessionId=<id>`, `/dialogue/dev`, `/dialogue/dev?sessionId=<id>`, 옛 `/dialogue/dev/simple?sessionId=<id>`만 받고 나머지는 `/dialogue/lab`으로 바꾼다 (`PA/client/dev-part-nav-links.ts:15-19`, `PA/client/ProblemLabApp.tsx:24-25`). 따라서 `returnTo`가 없는 [문제 풀기] 경로는 문제 화면의 돌아가기가 `/dialogue/lab`(세션 없음)이 된다 (`:25`).
+- 문제 화면은 `returnTo`를 `resolveReturnTo`로 검사해, `/dialogue/lab?sessionId=<id>`, `/dialogue/dev`, `/dialogue/dev?sessionId=<id>`, 옛 `/dialogue/dev/simple?sessionId=<id>`만 받고 나머지는 `/dialogue/lab`으로 바꾼다 (`PA/client/dev-part-nav-links.ts:15-19`, `PA/client/ProblemLabApp.tsx:24-25`). [문제 풀기]와 [문제] 모두 같은 세션(`/dialogue/lab?sessionId=<id>`)으로 돌아간다.
 - 문제 화면의 문단 이동은 `returnTo`가 `/dialogue/lab?sessionId=`로 시작하면 `&paragraph=<i>`를 붙여 같은 세션으로, 아니면 `/dialogue/lab?passageId=…&paragraph=…`로 새 세션을 연다 (`PA/client/dev-part-nav-links.ts:21-25`).
 
 ## 2. 전체 흐름도
@@ -173,7 +174,7 @@
 | `stage` | 지금 시도의 `stage` | `dialogue-simple.ts:153` |
 | `dialogue` | 이 시도의 대화에서 `role`, `text`, `copied`(있을 때)만. 번호 질문은 본문 아래 `1. …` 줄로 합친다. 말풍선 라벨·인용·핵심 상자는 넣지 않는다 | `dialogue-simple.ts:153`, `:28` |
 | `coreParts` | INITIAL이면 null, 그 밖에는 첫 판정에서 정해 저장한 값 | `dialogue-simple.ts:154` |
-| `targetError` | 가장 최근 교정 질문이 겨냥한 오류(없으면 null) | `dialogue-simple.ts:154`, `rules.ts:166` |
+| `targetError` | `stage=AFTER_CORRECTION`일 때만 교정 질문이 겨냥한 오류, 그 밖에는 null(상태 값은 힌트 표시용으로 남는다) | `dialogue-simple.ts:155`, `rules.ts:166` |
 | `targetGaps` | AFTER_GAP일 때만 직전에 물은 빈 곳 목록, 그 밖에는 null | `dialogue-simple.ts:154` |
 | `sourceCopyDetected` | INITIAL·RETRY일 때만 서버가 정해 싣는다 | `evaluator.ts:30`, `:51-56` |
 | `validationFeedback` | 재요청일 때만 직전 검증 문제 목록을 줄바꿈으로 이은 문자열 | `evaluator.ts:34-35` |
@@ -212,8 +213,8 @@
   12. `closingFeedback`은 CLOSE_ERRORS에서만 비어 있지 않고, `errors[].feedback`도 CLOSE_ERRORS에서만 비어 있지 않다 (`rules.ts:114-118`).
   13. `coreSourceQuote`는 CLOSE_NO_RESPONSE에서만 대상 문단의 연속 부분 문자열 (`rules.ts:119-120`). `message`는 비어 있으면 안 된다 (`rules.ts:121`).
 - 실패 처리 (`PS/evaluator.ts:28-49`):
-  - 모델 호출 자체가 예외(API 오류·타임아웃·`status !== 'completed'`)이면 재요청 없이 바로 `SimpleEvaluationError`를 던진다 (`:37-38`, `:81`).
-  - 검증이 실패하면 문제 목록을 `validationFeedback`으로 붙여 1회 재요청한다. 최대 2번 호출한다 (`:33-35`, `:46`). 두 번 다 실패하면 `검증 2회 실패: …`로 던진다 (`:48`).
+  - 모델 호출 자체가 `OpenAI.APIError`이고 상태가 408·409·429·500 이상이면 첫 호출에 한해 다시 묻는다(`validationFeedback` 없이). 그 밖의 예외(상태 없는 타임아웃·연결 오류·`status !== 'completed'`)는 재요청 없이 바로 `SimpleEvaluationError`를 던진다 (`PS/evaluator.ts` `evaluateSimple`, `isTransientApiError`).
+  - 검증이 실패하면 문제 목록을 `validationFeedback`으로 붙여 1회 재요청한다. 재요청 한도는 API 재시도와 공유해 전체 호출은 최대 2번이다(문제 판정기와 같은 방식, 6절 11번에서 수정). 두 번째 호출의 검증도 실패하면 `검증 2회 실패: …`로 던진다.
   - 성공하면 시도별 `durationMs`, 토큰은 합산하고 `attempts`에 호출 횟수를 담는다 (`:42-44`). 버려진 원출력과 문제는 `validationFailures`에 남는다 (`:46`).
 - 적용 (`PA/server/dialogue-simple.ts:156-165`): 검증을 통과한 출력을 `applySimpleAction`으로 문단 상태에 반영하고 (`:159`, `PS/rules.ts:155-173`), 단계 기록(`steps`)을 쌓고, 상태를 `IDLE`로 돌린다. COPY면 방금 학생 발화에 `copied`를 단다 (`:163`). 튜터 말풍선을 쌓고 기록을 남긴다 (`:164-165`).
 - 실패 시 서버 (`PA/server/dialogue-simple.ts:166-170`): `status = 'RETRYABLE_ERROR'`로 두고 `EVALUATION_FAILED`를 기록한다. 문단 상태와 학생 발화는 그대로 남는다. 학생에게는 원 오류 문구가 아닌 고정 문구 '피드백을 만들지 못했어. 쓴 내용은 저장돼 있으니 다시 시도해 줘.'를 준다 (`:245`). 화면 제출 버튼은 [다시 시도]로 바뀐다 (`PA/client/SimpleDialogueApp.tsx:145`).
@@ -256,7 +257,7 @@
 | 언제 | S1·S2에서 CORRECTION_QUESTION이 나간 뒤 학생이 답을 제출했을 때. |
 | 프롬프트 | 3.2의 파일. 교정 처리 `:75-76`, 교정 질문 작성 `:176`, CLOSE_ERRORS `:181`. |
 | 목적 | 앞서 고치게 한 오류(`targetError`)를 학생이 바로잡았는지 `targetErrorResolved`로 적고, 바로잡은 뒤의 누적 발화 전체로 분류를 다시 한다. 내용 없이 "틀렸다/다르다/모르겠다"만 답하면 바로잡은 것이 아니다 (프롬프트 `:75-76`, 체크포인트 v4.7 교정 질문). |
-| 입력 | 3.2 표. `coreParts`=저장한 값, `targetError`=질문이 겨냥한 오류, `targetGaps=null`, `sourceCopyDetected`는 없다 (`PS/evaluator.ts:53`). |
+| 입력 | 3.2 표. `coreParts`=저장한 값, `targetError`=질문이 겨냥한 오류, `targetGaps=null`, `sourceCopyDetected`는 없다 (`PS/evaluator.ts` `withSourceCopy`). |
 | 출력 핵심 | `targetErrorResolved`(true/false), 누적 발화 기준 `category`, `corePartsCovered`. |
 | 행동 | resolved=true이고 CAPTURED→PRAISE, resolved=true이고 GAP→GAP_QUESTION, 그 밖의 모든 경우→CLOSE_ERRORS (`PS/rules.ts:17-20`). |
 | 적용 | PRAISE는 종료. GAP_QUESTION은 `stage=AFTER_GAP`, 질문 2 (`PS/rules.ts:164-165`). CLOSE_ERRORS는 종료, `errors`는 아직 남은 오류(바로잡지 못한 `targetError` 포함) (프롬프트 `:145`). |
@@ -271,7 +272,7 @@
 | 언제 | GAP_QUESTION이 나간 뒤 학생이 답을 제출했을 때. |
 | 프롬프트 | 3.2의 파일. `:78-95`(AFTER_GAP 평가 순서), GAP_QUESTION `:172-175`, CLOSE_GAP `:177-180`. |
 | 목적 | 물은 것으로만 평가한다. 물은 빈 곳마다 질문과 학생 답을 합쳐 한 문장으로 읽고(`targetGapReadings`), 그 문장으로 채웠는지(`targetGapsFilled`)와 오류 여부를 가른다. 묻지 않은 새 빈 곳은 평가하지 않고, 질문과 무관한 말은 맞든 틀리든 판정하지 않는다 (프롬프트 `:78-94`). |
-| 입력 | 3.2 표. `targetGaps`=직전에 물은 빈 곳 목록(`description`, `sourceQuote`, `question` 포함, 상태에 저장된 그대로), `targetError`는 질문 순서에 따라 이전 교정 질문의 오류일 수 있다. `sourceCopyDetected`는 없다. |
+| 입력 | 3.2 표. `targetGaps`=직전에 물은 빈 곳 목록(`description`, `sourceQuote`, `question` 포함, 상태에 저장된 그대로), `targetError`는 null이다(교정 질문 뒤 빈 곳 질문으로 온 경우도 같다, 6절 2번에서 수정). `sourceCopyDetected`는 없다. |
 | 출력 핵심 | `targetGapReadings`, `targetGapsFilled`, `category`, 오류의 `gapIndex`. |
 | 행동 | CAPTURED→PRAISE, ONE_ERROR·MULTI_ERROR→CLOSE_ERRORS, GAP·IRRELEVANT·COPY→CLOSE_GAP (`PS/rules.ts:21-24`). |
 | 적용 | CLOSE_GAP는 종료(GAP_REVEALED), 공개 구절은 못 채운 항목의 `sourceQuote`(중복 제거) (`PS/rules.ts:168`). CLOSE_ERRORS는 종료, 공개 구절은 오류의 `sourceQuote`와 오류도 아니고 채우지도 못한 물은 항목의 `sourceQuote` (`PS/rules.ts:169-172`). |
@@ -298,7 +299,7 @@
 |---|---|---|---|
 | 단계 기록 | `.omc/logs/dialogue-experiment/simple-holistic/sessions.jsonl` (저장소 루트가 아닌 서버 `process.cwd()` 기준). 한 줄 JSON | `schemaVersion: 'dialogue-simple-holistic-record-v2'`, `savedAt`, `event`, `sessionId`, `passageId`, `paragraphIndex`, `attemptNumber`, `paragraphId`, `state`(문단 상태 전체), `transcript`(라벨 포함 대화 전체), `step`(STEP일 때만 마지막 단계 기록, 아니면 null), `error`, `validationFailures` | `PA/server/dialogue-simple.ts:51`, `:62`, `:195-201` |
 | 이벤트 종류 | 같은 파일의 `event` 값 | `STEP`(판정 성공), `EVALUATION_FAILED`(호출·검증 최종 실패; `error`에 원 오류 문구), `ATTEMPT_STARTED`(새 시도), `ATTEMPT_ABANDONED`(끝나지 않은 시도를 새 시도로 넘길 때) | `PA/server/dialogue-simple.ts:42`, `:112`, `:116`, `:165`, `:169` |
-| 단계(step) 내용 | `step` 안 | `stepIndex`, `stage`, `studentText`, `output`(검증 통과한 모델 출력 전체), `expectedAction`, `action`, `validationFailures`, `call`(모델·`promptVersion`·시간·토큰·호출 횟수), `message`, `highlights` | `PA/server/dialogue-simple.ts:185-189` |
+| 단계(step) 내용 | `step` 안 | `stepIndex`, `stage`, `studentText`, `output`(검증 통과한 모델 출력 전체), `expectedAction`, `action`, `validationFailures`, `call`(모델·`promptVersion`·시간·토큰·호출 횟수), `sourceCopyDetected`(서버의 원문 옮김 판정, INITIAL·RETRY 외에는 null), `message`, `highlights` | `PA/server/dialogue-simple.ts:185-189` |
 | 인상 메모 | 같은 폴더 `memos.jsonl` | `savedAt`, `sessionId`, `passageId`, `paragraphId`, `attemptNumber`(null=문단 메모), `stepIndex`(null=시도 메모), `text`. 같은 키의 마지막 줄이 현재 값 | `PA/server/dialogue-simple.ts:142-144`, `:203-215` |
 | 서버 메모리 | `SimpleDialogueController.sessions` | 진행 중 세션·시도·단계(재시작하면 사라짐) | `PA/server/dialogue-simple.ts:55`, `:25-35` |
 | 브라우저 | 저장 없음. 초안(`drafts`)은 컴포넌트 상태이다 | 새로 고침하면 초안은 사라지고, 주소의 `sessionId`로 세션만 복구 | `PA/client/SimpleDialogueApp.tsx:18`, `:44-47` |
@@ -334,18 +335,21 @@
 - `memory/checkpoints/2026-10-22-paragraph-simple-v46-dev-ui.md`: v4.6에서 출력 필드를 `corePartSummaries`·`closingFeedback`으로 바꾸고 질문 뒤 마무리를 "전체 피드백 + 부분별 핵심 상자"로. 개발 화면에 파트 이동 막대, 판정 중 대기 말풍선, 교정 질문 힌트(교정 질문에만 근거 문장 표시, 빈 곳 질문에는 안 함).
 - `memory/checkpoints/2026-10-22-paragraph-simple-v47-correction-question.md`: v4.7에서 교정 질문을 예/아니오형이 아닌 열린 질문으로, 내용 없는 "다르다"·"모르겠다"는 고침으로 보지 않고 CLOSE_ERRORS 도입에서 알아챈 점을 인정. 정보 비대칭 첫 요약의 MULTI_ERROR 4/30은 판단 보류, 첫 판정 규칙은 바꾸지 않음.
 
-## 6. 확인 필요
+## 6. 확인 필요 → 대조 결과 (2026-10-25)
 
-사실만 적는다. 판단과 수정은 하지 않았다.
+작성 때 '확인 필요'로 적은 11건을 코드·결정 기록·실행 기록과 대조했다(사용자 승인 "권고대로 진행해", 2026-10-25).
+처리: **해소**(기록 정리로 끝남), **사실 기록**(의도된 동작 또는 도달 불가, 변경 없음), **수정**(코드 변경, 인계 `docs/handoffs/2026-10-25-lab-flow-check-items.md`), **남김**(재검토 조건을 두고 보류).
 
-1. 지문 목록의 `available`은 골드 상태에 묶여 있다. 목록은 `DialogueController.listPassages()`가 만들고, 어느 문단이든 `goldPath === null`이거나 `goldReviewStatus === 'awaiting_human_review'`이면 그 지문은 `available=false`이다 (`PA/server/dialogue.ts:105-113`). 문단 화면은 `available`인 지문만 보인다 (`PA/client/SimpleDialogueApp.tsx:69`). 문단 판정은 골드를 쓰지 않는다 (`PA/server/dialogue-simple.ts:53`). 또 이 목록 경로(`GET /api/dialogue/passages`)는 `/api/developer/` 아래가 아니어서 개발자 모드·공개 조건 검사를 거치지 않는다 (`PA/server/index.ts:297-299`).
-2. 프롬프트는 `targetError`를 "`stage=AFTER_CORRECTION`일 때 앞서 고치게 한 오류. 아니면 null"이라고 쓴다 (프롬프트 `:18`). 코드는 모든 단계에서 `p.state.targetError`를 그대로 넘긴다 (`PA/server/dialogue-simple.ts:154`). 상태에서 `targetError`는 `GAP_QUESTION`으로 넘어갈 때 지워지지 않는다 (`PS/rules.ts:157`, `:165`). 따라서 교정 질문 뒤 구멍 질문으로 간 경우의 AFTER_GAP 입력에는 `targetError`가 null이 아닌 값으로 들어갈 수 있다. 실제 기록에서 확인하지는 않았다(미확인).
-3. 서버가 정한 `sourceCopyDetected` 값은 단계 기록·로그에 저장되지 않는다. `buildStep`은 입력을 담지 않고 (`PA/server/dialogue-simple.ts:185-189`), 로그는 `state`, `transcript`, `step`만 담는다 (`:197-200`). 서랍 화면에도 이 값을 보이는 곳이 없다 (`PA/client/SimpleDialogueDrawer.tsx:43-68`). 판정이 COPY였는지는 `category`로만 알 수 있다.
-4. 프롬프트와 지시문의 파일 경로가 `process.cwd()` 기준이다 (`PS/evaluator.ts:66`, `:77`). 로그 폴더 기본값도 `process.cwd()` 기준이다 (`PA/server/dialogue-simple.ts:62`). 서버를 저장소 루트가 아닌 곳에서 띄우면 어떻게 되는지는 이 문서 작성 때 확인하지 않았다(미확인).
-5. 질문 상한 불변식(`MAX_SIMPLE_QUESTIONS = 2`)은 `applySimpleAction`이 예외로 지킨다 (`PS/rules.ts:164`). 이 예외는 검증 통과 뒤 `evaluate`의 `try` 안에서 나서 `RETRYABLE_ERROR`로 처리된다 (`PA/server/dialogue-simple.ts:156-170`). 행동표대로면 질문은 AFTER_CORRECTION → GAP_QUESTION까지가 최대 2회이고 AFTER_GAP에는 질문 행동이 없다 (`PS/rules.ts:21-24`). 이 예외가 실제로 나는 경로는 찾지 못했다(미확인).
-6. `[문제 풀기]` 버튼의 `problemUrl`에는 `returnTo`가 없고 (`PA/server/dialogue-simple.ts:246`), 파트 이동 막대의 [문제] 버튼은 `returnTo`를 붙인다 (`PA/client/dev-part-nav-links.ts:11-13`). 둘은 같은 문제로 가지만 문제 화면의 '학습 맵' 돌아가기 주소가 다르다. 전자는 `/dialogue/lab`(세션 없음), 후자는 `/dialogue/lab?sessionId=<id>`이다 (`PA/client/ProblemLabApp.tsx:24-25`, `PA/client/dev-part-nav-links.ts:15-19`).
-7. D-0140은 "질문 중에는 지문을 표시하지 않는다(답 누출)"고 적고, D-0144도 질문 중 표시를 보류했다. 현재 코드는 교정 질문 대기 중에 그 오류의 근거 문장 하나를 힌트로 지문에 표시한다 (`PA/server/dialogue-simple.ts:233-236`). 이 변경은 결정 기록이 아닌 체크포인트 v4.6에 "사용자 권고 동의"로 적혀 있다 (`memory/checkpoints/2026-10-22-paragraph-simple-v46-dev-ui.md`). 별도 결정 기록은 찾지 못했다(미확인).
-8. D-0142·D-0144 본문의 필드 이름(`coreIntro`, `coreSummary`, `missingNote`)은 현재 스키마에 없다. 현재 필드는 `corePartSummaries`, `closingFeedback`, `coreSourceQuote`이다 (`PS/schema.ts:38-40`). 대체 사실은 체크포인트 v4.6에 적혀 있다.
-9. D-0148·D-0149는 프롬프트 파일을 `…-v4.4.md`, `…-v4.5.md`로 지정한다. 현재 코드가 읽는 파일은 `…-v4.7.md`이다 (`PS/evaluator.ts:66`). v4.5→v4.7 변경 중 v4.6·v4.7은 결정 기록 없이 D-0149 "부분 수정" 범위로 처리됐다고 체크포인트가 적는다 (v4.6 체크포인트 '결정된 것', v4.7 체크포인트 '결정된 것').
-10. 같은 `transitionId`를 다시 보내면 첫 요청의 결과(실패로 끝났어도 실패 상태의 보기)를 그대로 돌려준다 (`PA/server/dialogue-simple.ts:86-90`, `:171`). 화면은 제출마다 새 UUID를 만들어 이 경로를 쓰지 않는다 (`PA/client/SimpleDialogueApp.tsx:90`). `transitions` 맵을 비우는 코드는 찾지 못했다(미확인).
-11. 모델 호출 실패의 종류별 처리 차이: API 오류·타임아웃은 재요청 없이 즉시 실패이고 (`PS/evaluator.ts:37-38`), 검증 실패만 1회 재요청한다 (`:33-35`). 같은 원인이 문제 풀이 판정기(`packages/pipeline/src/problem-solving/feedback-evaluator.ts:192-194`)에서는 상태 코드별 재시도 대상이다. 이 문서는 문단 쪽만 코드에서 확인했고, 이 차이를 결정 기록으로 정한 것인지는 찾지 못했다(미확인).
+| # | 내용 | 처리 | 근거·결과 |
+|---|---|---|---|
+| 1 | 지문 목록 `available`이 골드 상태에 묶여 있고, 목록 경로가 개발자 검사를 거치지 않는다. | **남김** | 지금은 영향이 없다. 7개 지문 중 정확한 원문(`exact-local-source`)인 6개는 모두 골드가 있고, 빠지는 것은 원문이 불완전한 헤겔 지문 하나다(2026-10-25 `packages/pipeline/fixtures/experiments/dialogue/passages/` 확인). 목록은 학생용 `/dialogue`가 함께 쓰는 공개 읽기 경로다. **재검토 조건:** 골드 없는 지문을 추가할 때 단순 형식 화면의 필터 기준을 따로 둔다. |
+| 2 | AFTER_GAP 입력에 앞서 고친 `targetError`가 들어갈 수 있다. | **수정** | 실행 기록 107단계 중 1건(교정 질문 → 빈 곳 질문 → 판정)이 이 경로를 탔다(`.omc/logs/dialogue-experiment/simple-holistic/sessions.jsonl`, 2026-10-22까지). 이제 `targetError`는 `stage=AFTER_CORRECTION`일 때만 넘기고, 그 밖에는 null이다(프롬프트 `:18` 계약). 상태 값은 힌트 표시용으로 남긴다. |
+| 3 | `sourceCopyDetected`가 기록에 남지 않는다. | **수정** | `evaluateSimple` 결과에 이 값을 담고 단계 기록(`SimpleStepInspection.sourceCopyDetected`, INITIAL·RETRY 외에는 null)에 저장한다. 로그는 단계를 그대로 담으므로 함께 남는다. |
+| 4 | 프롬프트·지시문·로그 경로가 `process.cwd()` 기준이다. | **사실 기록** | 저장소 전체 관례다(앱 서버·판정기 15곳). 서버는 저장소 루트에서 `npm run app:server`로 띄운다. 다른 곳에서 띄우면 시작할 때 지문 폴더(`DIALOGUE_ROOT`, `PA/server/content.ts:31-34`)를 읽지 못해 바로 멈춘다. 조용히 다른 파일을 읽지는 않는다. |
+| 5 | `MAX_SIMPLE_QUESTIONS` 예외가 나는 경로 | **사실 기록** | 도달할 수 없다. AFTER_CORRECTION은 질문 1회 뒤에만 오고(질문 수 1 → 빈 곳 질문으로 2), AFTER_GAP에는 질문 행동이 없다(`PS/rules.ts:17-24`). 이 예외는 방어용 불변식이다. |
+| 6 | `[문제 풀기]`의 `problemUrl`에 `returnTo`가 없다. | **수정** | 서버가 파트 이동 막대와 같은 `problemLink(questionId, sessionId)`로 주소를 만든다(공용 `PA/shared/problem-link.ts`). |
+| 7 | 교정 질문 중 힌트 표시가 D-0140·D-0144와 다르다. | **해소** | 2026-10-22 사용자 결정("권고 동의")을 [D-0175](../memory/decisions/D-0175-paragraph-simple-correction-hint-during-question.md)로 기록했다. D-0140·D-0144의 해당 항목에 대체 링크를 달았다. |
+| 8 | D-0142·D-0144의 필드 이름(`coreIntro` 등) | **해소** | v4.6에서 `corePartSummaries`·`closingFeedback`으로 바뀌었다(v4.6 체크포인트). D-0144 해당 항목에 이 사실과 링크를 달았다. |
+| 9 | D-0148·D-0149의 프롬프트 파일(v4.4·v4.5)과 현재 v4.7 | **해소** | [D-0174](../memory/decisions/D-0174-paragraph-simple-v47-operating-candidate.md)가 v4.7을 운영 후보로 확정했다. v4.6·v4.7은 D-0149의 부분 수정 범위로 처리됐다(각 체크포인트). |
+| 10 | 같은 `transitionId`의 결과 재사용과 `transitions` 맵 | **사실 기록** | 같은 요청의 중복 제출을 막는 의도된 동작이다. 맵은 세션과 함께 서버 메모리에만 있고, 서버를 다시 띄우면 사라진다. 개발자 경로라 지금은 비우지 않는다. |
+| 11 | 모델 호출 실패의 재시도 정책이 문제 판정기와 다르다. | **수정** | `OpenAI.APIError` 중 408·409·429·500 이상이면 1회 다시 묻는다. 한도는 검증 실패와 공유한다(전체 호출 최대 2회, 문제 판정기와 같음). 타임아웃·연결 오류·응답 미완료는 지금처럼 즉시 실패한다. |

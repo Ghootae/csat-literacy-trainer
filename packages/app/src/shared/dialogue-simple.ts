@@ -54,6 +54,8 @@ export interface SimpleStepInspection {
   action: string;
   validationFailures: { rawOutput: unknown; problems: string[] }[];
   call: { provider: string; model: string; promptVersion: string; durationMs: number; inputTokens: number; outputTokens: number; cachedTokens: number; attempts: number };
+  /** 서버가 정한 원문 옮김 판정. INITIAL·RETRY만 값이 있고 그 밖은 null. */
+  sourceCopyDetected: boolean | null;
   message: string;
   highlights: SimpleHighlightView[];
 }

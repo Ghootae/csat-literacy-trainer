@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import OpenAI from 'openai';
 import { OpenAISimpleEvaluator, SimpleEvaluationError, evaluateSimple, type SimpleEvaluator, type SimpleModelCall, type SimpleTransport } from './evaluator.js';
 import type { SimpleEvaluationInput, SimpleOutput } from './schema.js';
 
@@ -15,7 +16,30 @@ const evaluator = (...raws: unknown[]): SimpleEvaluator & { seen: SimpleEvaluati
   return { seen, async complete(i) { seen.push(i); const rawOutput = raws.shift(); if (rawOutput instanceof Error) throw rawOutput; return { rawOutput, metadata: meta(1) } satisfies SimpleModelCall; } };
 };
 
+const apiError = (status: number) => new OpenAI.APIError(status as never, {}, 'api', new Headers());
+
 describe('evaluateSimple', () => {
+  it('429 뒤 성공하면 성공이고 호출은 2회다(검증 피드백 없음)', async () => {
+    const e = evaluator(apiError(429), good);
+    const r = await evaluateSimple(e, input);
+    expect(r.output).toEqual(good); expect(e.seen).toHaveLength(2); expect(e.seen[1]!.validationFeedback).toBeUndefined();
+    expect(r.sourceCopyDetected).toBe(false);
+  });
+  it('400은 즉시 실패하고 호출은 1회다', async () => {
+    const e = evaluator(apiError(400), good);
+    await expect(evaluateSimple(e, input)).rejects.toBeInstanceOf(SimpleEvaluationError);
+    expect(e.seen).toHaveLength(1);
+  });
+  it('500이 두 번 나오면 실패하고 호출은 2회다', async () => {
+    const e = evaluator(apiError(500), apiError(503), good);
+    await expect(evaluateSimple(e, input)).rejects.toBeInstanceOf(SimpleEvaluationError);
+    expect(e.seen).toHaveLength(2);
+  });
+  it('검증 실패 1회 뒤 429면 한도를 공유해 실패한다', async () => {
+    const e = evaluator(bad, apiError(429), good);
+    await expect(evaluateSimple(e, input)).rejects.toBeInstanceOf(SimpleEvaluationError);
+    expect(e.seen).toHaveLength(2);
+  });
   it('통과하면 재요청 없이 반환한다', async () => {
     const e = evaluator(good);
     const r = await evaluateSimple(e, input);

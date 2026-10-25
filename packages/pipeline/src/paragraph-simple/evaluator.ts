@@ -20,12 +20,14 @@ export interface SimpleEvaluationResult {
   call: SimpleCallMetadata & { attempts: number };
   /** 검증에 실패해 버려진 원출력과 이유. */
   validationFailures: { rawOutput: unknown; problems: string[] }[];
+  /** 서버가 정한 원문 옮김 판정. INITIAL·RETRY만 값이 있고 그 밖은 null. */
+  sourceCopyDetected: boolean | null;
 }
 export class SimpleEvaluationError extends Error {
   constructor(message: string, readonly validationFailures: { rawOutput: unknown; problems: string[] }[]) { super(message); }
 }
 
-/** 검증 실패 시 이유를 담아 1회만 재요청한다. 그래도 실패하면 오류. API 오류·타임아웃은 재요청하지 않는다. */
+/** 검증 실패 시 이유를 담아 1회만 재요청한다. 일시적 API 오류(408·409·429·5xx)도 1회 다시 묻는다. 재요청 한도는 둘이 공유해 전체 호출은 최대 2회. 그 밖의 오류·타임아웃은 즉시 오류. */
 export async function evaluateSimple(evaluator: SimpleEvaluator, baseInput: SimpleEvaluationInput): Promise<SimpleEvaluationResult> {
   const input = withSourceCopy(baseInput);
   const failures: SimpleEvaluationResult['validationFailures'] = [];
@@ -35,17 +37,25 @@ export async function evaluateSimple(evaluator: SimpleEvaluator, baseInput: Simp
       ? { ...input, validationFeedback: failures.at(-1)!.problems.join('\n') } : input;
     let call: SimpleModelCall;
     try { call = await evaluator.complete(structuredClone(request)); }
-    catch (error) { throw new SimpleEvaluationError(error instanceof Error ? error.message : String(error), failures); }
+    catch (error) {
+      if (attempt === 0 && isTransientApiError(error)) continue;
+      throw new SimpleEvaluationError(error instanceof Error ? error.message : String(error), failures); }
     calls.push(call.metadata);
     const { output, problems } = checkSimpleOutput(input, call.rawOutput);
     if (output && !problems.length) {
       const sum = (key: 'durationMs' | 'inputTokens' | 'outputTokens' | 'cachedTokens') => calls.reduce((n, c) => n + c[key], 0);
-      return { output, validationFailures: failures, call: { ...call.metadata, durationMs: sum('durationMs'),
+      return { output, validationFailures: failures, sourceCopyDetected: input.sourceCopyDetected ?? null, call: { ...call.metadata, durationMs: sum('durationMs'),
         inputTokens: sum('inputTokens'), outputTokens: sum('outputTokens'), cachedTokens: sum('cachedTokens'), attempts: calls.length } };
     }
     failures.push({ rawOutput: call.rawOutput, problems });
   }
   throw new SimpleEvaluationError(`검증 2회 실패: ${failures.at(-1)!.problems.join(' / ')}`, failures);
+}
+
+function isTransientApiError(error: unknown): boolean {
+  if (!(error instanceof OpenAI.APIError)) return false;
+  const status = error.status;
+  return typeof status === 'number' && ([408, 409, 429].includes(status) || status >= 500);
 }
 
 /** INITIAL·RETRY의 마지막 학생 발화가 원문 옮겨 적기인지 서버가 정해 입력에 싣는다. 판정 검증이 COPY를 강제한다. */

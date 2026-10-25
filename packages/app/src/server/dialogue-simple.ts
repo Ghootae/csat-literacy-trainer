@@ -10,6 +10,7 @@ import type {
   SimpleAttemptInspection, SimpleDialogueView, SimpleHighlightView, SimpleInspection, SimpleMemoRecord, SimpleMessageLabel, SimpleMessageView, SimpleStepInspection,
 } from '../shared/dialogue-simple.js';
 import { simpleStudentLabel } from '../shared/dialogue-simple.js';
+import { problemLink } from '../shared/problem-link.js';
 
 export const SimpleRespondSchema = z.object({
   transitionId: z.string().trim().min(1), paragraphIndex: z.number().int().nonnegative(), text: z.string().trim().min(1),
@@ -151,7 +152,7 @@ export class SimpleDialogueController {
       passage: { title: r.passage.title, paragraphs: r.passage.paragraphs.map(({ paragraphId, text }) => ({ paragraphId, text })) },
       targetParagraph: { paragraphId: paragraph.paragraphId, text: paragraph.text },
       stage: p.state.stage, dialogue: p.transcript.map(({ role, text, items, copied }) => ({ role, text: items ? `${text}\n${items.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : text, ...(copied ? { copied } : {}) })),
-      coreParts: p.state.stage === 'INITIAL' ? null : p.state.coreParts, targetError: p.state.targetError, targetGaps: p.state.stage === 'AFTER_GAP' ? p.state.targetGaps : null,
+      coreParts: p.state.stage === 'INITIAL' ? null : p.state.coreParts, targetError: p.state.stage === 'AFTER_CORRECTION' ? p.state.targetError : null, targetGaps: p.state.stage === 'AFTER_GAP' ? p.state.targetGaps : null,
     };
     try {
       const stage = p.state.stage;
@@ -185,7 +186,7 @@ export class SimpleDialogueController {
   private buildStep(p: AttemptRuntime, paragraphText: string, studentText: string, result: SimpleEvaluationResult, next: SimpleParagraphState): Step {
     const output: SimpleOutput = result.output;
     return { stepIndex: p.steps.length, stage: p.state.stage, studentText, output, expectedAction: expectedAction(p.state.stage, output),
-      action: output.action, validationFailures: result.validationFailures, call: result.call, message: output.message,
+      action: output.action, validationFailures: result.validationFailures, call: result.call, sourceCopyDetected: result.sourceCopyDetected, message: output.message,
       highlights: next.revealQuotes.map(q => this.locate(paragraphText, q)).filter((h): h is SimpleHighlightView => h !== null) };
   }
   private locate(text: string, quote: string): SimpleHighlightView | null {
@@ -243,7 +244,7 @@ export class SimpleDialogueController {
         stage: p.state.stage, highlights, highlightKind,
         canRespond: !p.state.done && p.status !== 'PROCESSING', evaluationStatus: p.status,
         evaluationError: p.status === 'RETRYABLE_ERROR' ? '피드백을 만들지 못했어. 쓴 내용은 저장돼 있으니 다시 시도해 줘.' : null },
-      allDone, problemUrl: allDone && r.passage.problemQuestionId ? `/problem/lab?questionId=${encodeURIComponent(r.passage.problemQuestionId)}` : null,
+      allDone, problemUrl: allDone && r.passage.problemQuestionId ? problemLink(r.passage.problemQuestionId, r.sessionId) : null,
       problemQuestionId: r.passage.problemQuestionId ?? null,
     });
   }

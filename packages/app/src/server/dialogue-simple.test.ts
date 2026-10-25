@@ -6,6 +6,7 @@ import type { SimpleEvaluationInput, SimpleEvaluator, SimpleOutput } from '@csat
 import { SimpleDialogueController } from './dialogue-simple.js';
 import type { DialoguePassageContent } from './content.js';
 import type { SimpleDialogueView } from '../shared/dialogue-simple.js';
+import { problemLink } from '../shared/problem-link.js';
 
 const P1 = '광합성은 빛에너지를 화학에너지로 바꾼다. 이 과정에서 산소가 나온다.';
 const P2 = '엽록체에서 광합성이 일어난다.';
@@ -147,6 +148,29 @@ describe('흐름 시나리오 8개', () => {
   });
 });
 
+describe('판정 입력 계약', () => {
+  it('targetError는 AFTER_CORRECTION에서만 상태 값이고, 교정 뒤 빈 곳 질문 단계에서는 null이다', async () => {
+    const { controller: c, view, inputs } = setup(
+      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' }),
+      out({ category: 'GAP', gaps: [gap], targetErrorResolved: true, action: 'GAP_QUESTION' }),
+      out({ ...after, targetGapReadings: ['읽기'], targetGapsFilled: [true] }));
+    const q = await say(c, view, quoted);
+    const g = await say(c, q, '다시 말해 볼게');
+    await say(c, g, '산소가 나와');
+    expect(inputs.map(i => i.stage)).toEqual(['INITIAL', 'AFTER_CORRECTION', 'AFTER_GAP']);
+    expect(inputs[1]!.targetError).not.toBeNull();
+    expect(inputs[2]!.targetError).toBeNull();
+  });
+  it('서버가 정한 sourceCopyDetected를 단계 기록에 남긴다(INITIAL은 값, 그 밖은 null)', async () => {
+    const { controller: c, view } = setup(out({ category: 'GAP', gaps: [gap], action: 'GAP_QUESTION' }), out({ ...after, targetGapReadings: ['읽기'], targetGapsFilled: [true] }));
+    const mid = await say(c, view, '빛이 변한다');
+    await say(c, mid, '산소가 나와');
+    expect(c.inspect(view.sessionId, 0).attempts[0]!.steps.map(s => s.sourceCopyDetected)).toEqual([false, null]);
+    const logged = readFileSync(join(dir, 'sessions.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l) as { event: string; step: { sourceCopyDetected: boolean | null } | null });
+    expect(logged.filter(l => l.event === 'STEP').map(l => l.step!.sourceCopyDetected)).toEqual([false, null]);
+  });
+});
+
 describe('입력·공개 범위', () => {
   it('모델 입력에 골드·축이 없고, 공개 view에 판정·원출력이 없다', async () => {
     const { controller: c, view, inputs } = setup(out({}));
@@ -215,7 +239,7 @@ describe('자유 이동과 문제 연결', () => {
     await say(c, view, '답1', 0);
     const done = await say(c, view, '답2', 1);
     expect(done.allDone).toBe(true); expect(done.paragraphs.map(p => p.done)).toEqual([true, true]);
-    expect(done.problemUrl).toBe('/problem/lab?questionId=q-1');
+    expect(done.problemUrl).toBe(problemLink('q-1', done.sessionId));
     expect(done.problemUrl).not.toMatch(/handoff/i);
   });
 });
@@ -404,7 +428,7 @@ describe('v2: 새 시도', () => {
     expect(v.paragraphs[0]!.done).toBe(false);
     expect(logLines().map(l => [l.event, l.attemptNumber])).toEqual([['STEP', 1], ['ATTEMPT_ABANDONED', 1], ['ATTEMPT_STARTED', 2]]);
     await say(c, v, 'b'); expect((await say(c, c.navigate(v.sessionId, { paragraphIndex: 1 }), 'c', 1)).allDone).toBe(true);
-    expect(c.get(v.sessionId).problemUrl).toBe('/problem/lab?questionId=q-1');
+    expect(c.get(v.sessionId).problemUrl).toBe(problemLink('q-1', v.sessionId));
   });
   it('학생 발화가 없는 빈 시도와 평가 중에는 거부한다', async () => {
     const { controller: c, view } = setup(out({}));
