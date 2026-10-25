@@ -23,6 +23,10 @@ if (window.location.pathname === '/') {
 if (window.location.pathname === '/problem/dev/v4') {
   window.history.replaceState(null, '', `/problem/lab${window.location.search}${window.location.hash}`);
 }
+// 옛 단순 형식 문단 주소(D-0174)도 같은 방식으로 새 주소로 바꾼다.
+if (window.location.pathname === '/dialogue/dev/simple') {
+  window.history.replaceState(null, '', `/dialogue/lab${window.location.search}${window.location.hash}`);
+}
 
 createRoot(el).render(
   <StrictMode>
@@ -32,7 +36,7 @@ createRoot(el).render(
       ? <ProblemLabApp />
       : window.location.pathname.startsWith('/problem')
       ? <ProblemApp />
-      : window.location.pathname === '/dialogue/dev/simple'
+      : window.location.pathname === '/dialogue/lab'
       ? <SimpleDialogueApp />
       : window.location.pathname.startsWith('/dialogue')
         ? <DialogueApp />

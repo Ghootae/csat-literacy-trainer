@@ -13,17 +13,19 @@ describe('dev part nav links', () => {
     const url = new URL(problemLink('q-1', 's-1'), 'http://x');
     expect(url.pathname).toBe('/problem/lab');
     expect(url.searchParams.get('questionId')).toBe('q-1');
-    expect(url.searchParams.get('returnTo')).toBe('/dialogue/dev/simple?sessionId=s-1');
+    expect(url.searchParams.get('returnTo')).toBe('/dialogue/lab?sessionId=s-1');
   });
   it('accepts the simple session returnTo and keeps the old forms', () => {
+    expect(resolveReturnTo('/dialogue/lab?sessionId=ab-12')).toBe('/dialogue/lab?sessionId=ab-12');
     expect(resolveReturnTo('/dialogue/dev/simple?sessionId=ab-12')).toBe('/dialogue/dev/simple?sessionId=ab-12');
     expect(resolveReturnTo('/dialogue/dev?sessionId=ab-12')).toBe('/dialogue/dev?sessionId=ab-12');
     expect(resolveReturnTo('/dialogue/dev')).toBe('/dialogue/dev');
-    expect(resolveReturnTo('https://evil.example')).toBe('/dialogue/dev');
-    expect(resolveReturnTo('/dialogue/dev/simple?sessionId=a&x=1')).toBe('/dialogue/dev');
+    expect(resolveReturnTo('https://evil.example')).toBe('/dialogue/lab');
+    expect(resolveReturnTo('/dialogue/dev/simple?sessionId=a&x=1')).toBe('/dialogue/lab');
+    expect(resolveReturnTo('/dialogue/lab?sessionId=a&x=1')).toBe('/dialogue/lab');
   });
   it('builds paragraph links from a session or a passage', () => {
-    expect(paragraphLink('/dialogue/dev/simple?sessionId=s-1', 'p', 3)).toBe('/dialogue/dev/simple?sessionId=s-1&paragraph=3');
-    expect(paragraphLink('/dialogue/dev', 'p', 3)).toBe('/dialogue/dev/simple?passageId=p&paragraph=3');
+    expect(paragraphLink('/dialogue/lab?sessionId=s-1', 'p', 3)).toBe('/dialogue/lab?sessionId=s-1&paragraph=3');
+    expect(paragraphLink('/dialogue/dev', 'p', 3)).toBe('/dialogue/lab?passageId=p&paragraph=3');
   });
 });

@@ -61,7 +61,8 @@ export interface SimpleTransport {
     usage?: { input_tokens: number; output_tokens: number; input_tokens_details?: { cached_tokens: number } } | null;
   }>;
 }
-export const PARAGRAPH_SIMPLE_DEFAULT_MODEL = 'gpt-5.6-terra';
+// 운영 후보 판정 모델(D-0174). 환경변수 PARAGRAPH_SIMPLE_OPENAI_MODEL로만 바꾼다.
+export const PARAGRAPH_SIMPLE_DEFAULT_MODEL = 'gpt-6-luna';
 const PROMPT_PATH = 'packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.7.md';
 
 export class OpenAISimpleEvaluator implements SimpleEvaluator {

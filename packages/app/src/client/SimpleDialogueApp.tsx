@@ -10,7 +10,7 @@ import { getSimple, navigateSimple, newAttemptSimple, respondSimple, startSimple
 import { simpleWaitingText } from './simple-waiting.js';
 import './simple-dialogue.css';
 
-const base = '/dialogue/dev/simple';
+const base = '/dialogue/lab';
 
 export function SimpleDialogueApp(): React.JSX.Element {
   const [passages, setPassages] = useState<readonly DialoguePassageSummary[] | null>(null);

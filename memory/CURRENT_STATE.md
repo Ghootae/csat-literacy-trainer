@@ -32,8 +32,8 @@
 - V4 동작: 불필요한 개입 최소화, OK는 확인된 부분만 공개·자동 질문 없음. SERIOUS/ERROR는 질문을 제시하지만 모든 상태에서 진행 선택 가능, SKIPPED와 기존 판정을 함께 보존하며 PASS로 승격하지 않는다. 모든 문단이 완료·진행되면 문제를 연다. 질문은 최대 3회, 후속 응답을 누적해 다시 판정한다.
 - 통과 기준은 중심축 description에 표현된 의미뿐이다. 원문은 의미 해석·학생 주장 사실 확인용 보조자료이며 새 통과 조건을 만들 수 없다.
 - 청킹·압축 측정과 보상·처벌은 보류([D-0012](./decisions/D-0012-paragraph-compression-measurement-deferred.md)).
-- **근본 검토 중**([D-0138](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md)): 축 구조 전제를 재검토한다. 단순 형식+질문 규칙 4가 후보([D-0139](./decisions/D-0139-paragraph-simple-format-question-rules.md)), 검증은 사용자 직접 사용감 기록([D-0140](./decisions/D-0140-paragraph-simple-holistic-dev-mode.md)). 사용감 메모로 v2·v3·v4(D-0142·D-0144·D-0145) 구현·검토 완료, 판정 모델 luna. 다음: v4로 사용자 직접 사용, 메모 6(이미 말한 관계 GAP) 재발 관찰.
-- 보여 주기 개발자 모드(D-0134~D-0137)는 근본 검토가 끝날 때까지 구현 중지. 경계 규칙 방향은 (나″)([D-0133](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md)), 운영 미변경.
+- **운영 후보: 단순 형식 v4.7**([D-0174](./decisions/D-0174-paragraph-simple-v47-operating-candidate.md)): 근본 검토([D-0138](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md))를 끝내고 확정. 지시문 `paragraph-simple-holistic-prompt-v4.7.md`, 판정 모델 luna(코드 기본값), 개발자 주소 `/dialogue/lab`(옛 `/dialogue/dev/simple` 넘김), 골드 미사용, 학생 상태 원장·문제 판정 미연결. 작동 순서 [문서](../docs/PARAGRAPH-LAB-FLOW-2026-10-25.md). 학생용 전환은 별도 결정.
+- 축 기반 쪽(개발자 화면 `/dialogue/dev`, 보여 주기 개발자 모드 D-0134~D-0137, Q-0036)은 단순 형식 채택으로 보류(D-0174). 학생용이 V4라 코드는 유지, 폐기 여부는 학생용 전환 때 결정. 경계 규칙 방향은 (나″)([D-0133](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md)), 운영 미변경.
 - 중심 이야기 2단계 골드 생성은 v3에서 멈춤(과적합 우려, 재개 여부 미정, [체크포인트](./checkpoints/2026-10-08-two-stage-paused-at-v3.md)). 원문 분할·JEV 흐름은 중단([D-0094](./decisions/D-0094-source-jev-gold-flow-stopped.md)). JEV 제품 적용은 `PARKED`([D-0036](./decisions/D-0036-jev-product-work-parked.md)).
 - 축 묶임 문제는 [Q-0036](./OPEN_QUESTIONS.md)(gold-v2 미변경).
 
@@ -58,7 +58,7 @@
 ## 웹 흐름·서버
 
 - 학생용 `/dialogue`는 연결 가능한 6개 지문을 제공한다. 웹 루트 `/`는 `/dialogue`로 간다. 이전 문단 훈련 UI는 `/legacy`에 보존한다.
-- 개발자 화면: `/dialogue/dev`(문단), `/problem/lab`(문제, API는 5175 분리 실행 `problem-feedback-entry.js`). 앞으로 URL은 개발자 화면만 안내하며 학생용 UI는 개발자 UI 확정 전 수정하지 않는다([D-0031](./decisions/D-0031-developer-ui-url-only.md)).
+- 개발자 화면: `/dialogue/lab`(문단 단순 형식), `/dialogue/dev`(문단 축 기반), `/problem/lab`(문제, API는 5175 분리 실행 `problem-feedback-entry.js`). 앞으로 URL은 개발자 화면만 안내하며 학생용 UI는 개발자 UI 확정 전 수정하지 않는다([D-0031](./decisions/D-0031-developer-ui-url-only.md)).
 - Cloudflare Named Tunnel `csat-dialogue` → `https://dialogue.cogaxis.net`. 상시 서버는 보류. 로컬 ingress 파일이 없어 `--url http://127.0.0.1:5173`이 필요하고, 자동 시작 미등록이라 프로세스가 살아 있어야 한다. 인증 없는 골드·내부 판정 공개는 기존 사용자 승인 범위다. 인증·서버 재시작 복원은 미완료.
 - 2026-09-12 사용자가 학생 역할로 6지문·30문단·연결 문항 6개를 직접 수행했다(문단 최종 PASS 30/30, 문제 최종 정답 6/6). UI 실사용 자료이지 외부 학생 효과 자료가 아니다.
 
@@ -72,7 +72,7 @@
 ## 현재 우선순위
 
 1. 실제 학생 사용성·학습 흐름 확인과 지문·문항 세트 확장. 반복되거나 학습을 방해하는 실패만 일반화된 수정으로 연결한다.
-2. 문단: 단순 형식 v4 사용자 직접 사용(근본 검토).
+2. 문단: 단순 형식 v4.7 작동 순서 문서의 확인 필요 항목 검토, 학생용 전환 결정.
 3. 문제: 개발자 경로 메모장 논의, 출제자 전략·선지 직접 누르기 화면의 사용 메모 반영.
 4. 학생 상태 모델: 남은 승인 항목(위 절).
 
