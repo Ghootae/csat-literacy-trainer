@@ -215,7 +215,7 @@ describe('자유 이동과 문제 연결', () => {
     await say(c, view, '답1', 0);
     const done = await say(c, view, '답2', 1);
     expect(done.allDone).toBe(true); expect(done.paragraphs.map(p => p.done)).toEqual([true, true]);
-    expect(done.problemUrl).toBe('/problem/dev/v4?questionId=q-1');
+    expect(done.problemUrl).toBe('/problem/lab?questionId=q-1');
     expect(done.problemUrl).not.toMatch(/handoff/i);
   });
 });
@@ -404,7 +404,7 @@ describe('v2: 새 시도', () => {
     expect(v.paragraphs[0]!.done).toBe(false);
     expect(logLines().map(l => [l.event, l.attemptNumber])).toEqual([['STEP', 1], ['ATTEMPT_ABANDONED', 1], ['ATTEMPT_STARTED', 2]]);
     await say(c, v, 'b'); expect((await say(c, c.navigate(v.sessionId, { paragraphIndex: 1 }), 'c', 1)).allDone).toBe(true);
-    expect(c.get(v.sessionId).problemUrl).toBe('/problem/dev/v4?questionId=q-1');
+    expect(c.get(v.sessionId).problemUrl).toBe('/problem/lab?questionId=q-1');
   });
   it('학생 발화가 없는 빈 시도와 평가 중에는 거부한다', async () => {
     const { controller: c, view } = setup(out({}));

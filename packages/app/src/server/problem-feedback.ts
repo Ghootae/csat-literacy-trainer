@@ -6,16 +6,17 @@ import {
   type FeedbackEvaluationCall, type FeedbackEvaluator, type FeedbackSession, type SourceDirectProblemBundle,
 } from '@csat/pipeline';
 import { loadProblemSolvingBundle } from './content.js';
-import { appendFeedbackV4Record } from './session.js';
-import type { FeedbackV4View, FeedbackV4WorkbenchView, FeedbackV4Message, FeedbackV4Inspection } from '../shared/problem-feedback-v4.js';
-export type { FeedbackV4Request, FeedbackV4View } from '../shared/problem-feedback-v4.js';
+import { appendFeedbackRecord } from './session.js';
+import type { FeedbackView, FeedbackWorkbenchView, FeedbackMessage, FeedbackInspection } from '../shared/problem-feedback.js';
+export type { FeedbackRequest, FeedbackView } from '../shared/problem-feedback.js';
 
-export const FeedbackV4RequestSchema = z.object({
+export const FeedbackRequestSchema = z.object({
   transitionId: z.string().trim().min(1),
   expectedRevision: z.number().int().nonnegative(),
   command: z.union([FeedbackCommandSchema, z.object({ type: z.literal('RESUME') }).strict()]),
 }).strict();
-export interface FeedbackV4Record {
+export interface FeedbackRecord {
+  // 저장 자료 호환을 위해 값 유지(D-0173)
   schemaVersion: 'problem-feedback-v4-record-v1';
   savedAt: string;
   evidenceContext: 'DEVELOPER';
@@ -24,7 +25,7 @@ export interface FeedbackV4Record {
   session: FeedbackSession;
   call: FeedbackEvaluationCall | null;
   error: string | null;
-  transcript?: FeedbackV4Message[];
+  transcript?: FeedbackMessage[];
 }
 interface Runtime {
   session: FeedbackSession;
@@ -32,21 +33,21 @@ interface Runtime {
   busy: boolean;
   endGeneration: Promise<boolean> | null;
   evaluation: Promise<void> | null;
-  transcript: FeedbackV4Message[];
-  transitions: Map<string, { fingerprint: string; promise: Promise<FeedbackV4View> }>;
+  transcript: FeedbackMessage[];
+  transitions: Map<string, { fingerprint: string; promise: Promise<FeedbackView> }>;
 }
 
 /** Developer-only controller. No actual points or student-state promotion. */
-export class ProblemFeedbackV4Controller {
+export class ProblemFeedbackController {
   private readonly sessions = new Map<string, Runtime>();
   private readonly evaluator: FeedbackEvaluator;
   constructor(private readonly options: {
     evaluator?: FeedbackEvaluator;
     loadSource?: (questionId: string) => SourceDirectProblemBundle;
-    save?: (record: FeedbackV4Record) => void;
+    save?: (record: FeedbackRecord) => void;
   } = {}) { this.evaluator = options.evaluator ?? new OpenAIFeedbackEvaluator(); }
 
-  start(questionId: string): FeedbackV4WorkbenchView {
+  start(questionId: string): FeedbackWorkbenchView {
     const source = this.options.loadSource?.(questionId) ?? loadProblemSolvingBundle(questionId).source;
     const session = createFeedbackSession(randomUUID(), source);
     const r: Runtime = { session, evaluationStatus: 'IDLE', busy: false, endGeneration: null, evaluation: null, transitions: new Map(), transcript: [] };
@@ -55,9 +56,9 @@ export class ProblemFeedbackV4Controller {
     this.sessions.set(session.sessionId, r);
     return this.view(r);
   }
-  get(sessionId: string): FeedbackV4WorkbenchView { return this.view(this.require(sessionId)); }
+  get(sessionId: string): FeedbackWorkbenchView { return this.view(this.require(sessionId)); }
 
-  inspect(sessionId: string): FeedbackV4Inspection {
+  inspect(sessionId: string): FeedbackInspection {
     const s = this.require(sessionId).session;
     return structuredClone({ revision: s.revision, choiceImpliedVerdict: s.choiceImpliedVerdict,
       comparisons: s.selectionComparisons,
@@ -72,8 +73,8 @@ export class ProblemFeedbackV4Controller {
     });
   }
 
-  submit(sessionId: string, raw: unknown): Promise<FeedbackV4View> {
-    const request = FeedbackV4RequestSchema.parse(raw);
+  submit(sessionId: string, raw: unknown): Promise<FeedbackView> {
+    const request = FeedbackRequestSchema.parse(raw);
     const r = this.require(sessionId);
     const fingerprint = JSON.stringify({ expectedRevision: request.expectedRevision, command: request.command });
     const prior = r.transitions.get(request.transitionId);
@@ -120,12 +121,12 @@ export class ProblemFeedbackV4Controller {
     return promise;
   }
   /** Internal test helper; gate explanation generation remains independent. */
-  async settled(sessionId: string): Promise<FeedbackV4WorkbenchView> {
+  async settled(sessionId: string): Promise<FeedbackWorkbenchView> {
     const r = this.require(sessionId);
     await r.evaluation;
     return this.view(r);
   }
-  private async evaluate(r: Runtime, transitionId: string): Promise<FeedbackV4View> {
+  private async evaluate(r: Runtime, transitionId: string): Promise<FeedbackView> {
     if (r.session.phase !== 'AWAITING_EVALUATION') return this.view(r);
     r.evaluationStatus = 'PROCESSING';
     for (let evaluation = 0; evaluation < 2 && r.session.phase === 'AWAITING_EVALUATION'; evaluation++) {
@@ -186,18 +187,18 @@ export class ProblemFeedbackV4Controller {
     r.endGeneration = promise;
     return promise;
   }
-  private save(r: Runtime, event: FeedbackV4Record['event'], transitionId: string | null, call: FeedbackEvaluationCall | null, error: string | null) {
-    (this.options.save ?? appendFeedbackV4Record)(structuredClone({ schemaVersion: 'problem-feedback-v4-record-v1',
+  private save(r: Runtime, event: FeedbackRecord['event'], transitionId: string | null, call: FeedbackEvaluationCall | null, error: string | null) {
+    (this.options.save ?? appendFeedbackRecord)(structuredClone({ schemaVersion: 'problem-feedback-v4-record-v1',
       savedAt: new Date().toISOString(), evidenceContext: 'DEVELOPER', transitionId, event, session: r.session, transcript: r.transcript, call, error }));
   }
   private require(id: string) {
-    const r = this.sessions.get(id); if (!r) throw new Error('문제 피드백 v4 세션을 찾을 수 없습니다.'); return r;
+    const r = this.sessions.get(id); if (!r) throw new Error('문제 풀이 세션을 찾을 수 없습니다.'); return r;
   }
   private appendCoach(r: Runtime): void {
     if (r.session.phase === 'AWAITING_EVALUATION' || r.session.phase === 'AWAITING_RESELECTION') return;
     const s = r.session;
     const id = `coach-${s.revision}`;
-    const add = (suffix: string, text: string, sequence?: FeedbackV4Message['sequence']) => {
+    const add = (suffix: string, text: string, sequence?: FeedbackMessage['sequence']) => {
       const messageId = id + suffix;
       if (!r.transcript.some(m => m.id === messageId)) r.transcript.push({ id: messageId, role: 'COACH', text, phase: s.phase, ...(sequence ? { sequence } : {}) });
     };
@@ -241,7 +242,7 @@ export class ProblemFeedbackV4Controller {
     }
   }
 
-  private view(r: Runtime): FeedbackV4WorkbenchView {
+  private view(r: Runtime): FeedbackWorkbenchView {
     return structuredClone({ ...feedbackPublicView(r.session), evaluationStatus: r.evaluationStatus,
       title: r.session.source.title, exam: r.session.source.exam, questionNumber: r.session.source.questionNumber,
       selectedChoiceId: r.session.selections.at(-1)?.choiceId ?? null, transcript: r.transcript,

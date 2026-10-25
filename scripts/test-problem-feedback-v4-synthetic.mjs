@@ -22,10 +22,10 @@ const MAX_CALLS = 64;
 const MAX_OUTPUT = 8000;
 const prices = { input: 2, cachedInput: 0.2, output: 12 };
 const paths = [casesPath,
-  resolve('packages/pipeline/src/problem-solving/feedback-v4.ts'),
-  resolve('packages/pipeline/src/problem-solving/feedback-v4-evaluator.ts'),
-  resolve('packages/pipeline/dist/problem-solving/feedback-v4.js'),
-  resolve('packages/pipeline/dist/problem-solving/feedback-v4-evaluator.js'),
+  resolve('packages/pipeline/src/problem-solving/feedback.ts'),
+  resolve('packages/pipeline/src/problem-solving/feedback-evaluator.ts'),
+  resolve('packages/pipeline/dist/problem-solving/feedback.js'),
+  resolve('packages/pipeline/dist/problem-solving/feedback-evaluator.js'),
   resolve('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v4.md'),
   join(SOURCE_ROOT, 'source-direct-runtime-v1.json')];
 const catalog = read(paths.at(-1));

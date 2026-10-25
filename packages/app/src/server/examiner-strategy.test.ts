@@ -2,14 +2,14 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FeedbackV4WorkbenchView } from '../shared/problem-feedback-v4.js';
+import type { FeedbackWorkbenchView } from '../shared/problem-feedback.js';
 import { loadExaminerStrategies, splitParagraphs, stemPolarity, strategyFor } from './examiner-strategy.js';
 
 const real = join(process.cwd(), 'docs/experiments/examiner-strategy-2026-10-23/FINAL.json');
-const view = (questionId: string, phase: FeedbackV4WorkbenchView['phase'], selectedPosition: number): FeedbackV4WorkbenchView => ({
+const view = (questionId: string, phase: FeedbackWorkbenchView['phase'], selectedPosition: number): FeedbackWorkbenchView => ({
   phase, selectedChoiceId: `C${selectedPosition}`, result: { selectedChoiceId: `C${selectedPosition}` },
   question: { questionId, choices: [1, 2, 3, 4, 5].map(position => ({ choiceId: `C${position}`, position, text: '' })) },
-} as unknown as FeedbackV4WorkbenchView);
+} as unknown as FeedbackWorkbenchView);
 afterEach(() => vi.restoreAllMocks());
 
 describe('examiner strategy loading', () => {

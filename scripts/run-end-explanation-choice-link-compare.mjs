@@ -8,7 +8,7 @@ import OpenAI from 'openai';
 import { z } from 'zod/v4';
 import { TIMEOUT_MS, hash } from './run-analysis-map-gongsun.mjs';
 import { TWIST_KO, loadQuestions, FIXED_PATH } from './run-choice-link.mjs';
-import { INCORRECT_END_INSTRUCTIONS, CORRECT_END_INSTRUCTIONS } from '../packages/pipeline/dist/problem-solving/feedback-v5-end-explanation.js';
+import { INCORRECT_END_INSTRUCTIONS, CORRECT_END_INSTRUCTIONS } from '../packages/pipeline/dist/problem-solving/feedback-end-explanation.js';
 
 export const REGRESSION_DIR = 'docs/experiments/v5-diverse-48-regression-2026-10-22';
 export const B3_RECHECK_DIR = 'docs/experiments/v5-diverse-48-b3-recheck-2026-10-22';

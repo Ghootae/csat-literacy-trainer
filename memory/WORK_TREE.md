@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-10-22
+갱신: 2026-10-25
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -34,15 +34,23 @@
 │  ├─✓ 교정: 국소 오류만 판정, 선지를 가르는 관계까지 질문                   D-0108·D-0105
 │  ├─✓ 피드백·코칭: 해요체·마크다운 렌더링, 교정 뒤 [다시 선택]/[코칭 보기]  D-0110·D-0106
 │  ├─● 개발자 경로 연결 — 구현·실모델 확인·48가상 세션 기록 완료             D-0112·CP-D·D-0150·D-0152~0154
+│  │     경로 `/problem/lab`·코드 이름 버전 제거, 작동 순서 문서 작성       D-0173
 │  │     메모장 23·24·25·29 반영 D-0156·D-0157·D-0159·D-0161, 48세션 회귀 통과(B3 수정 D-0164), "없음" 근거 판정 D-0166
 │  │     다음: UI 메모장 30번 논의(16번 정답 피드백 규칙), 이어받기 CP-2026-10-23
+│  │     리마인드: luna 자신의 기호 오독(S2-r3) 해결 — 질문 자동 검사 vs 교정 단계 sol   Q-0030
 │  ├─○ 학생용 전환 — 개발자 경로 확인 뒤 운영 반영 승인 필요                 CP-B
 │  └─? 경계 응답 판정 기준(짧지만 충분 vs 대상만 언급)                       Q-0032
 │
 ├─ 학습자 생각 진단 — 큰 논의는 문단·문제 안정화 뒤 재개                     Q-0034
 │  ├─✗ 함정 강도·선택률 예측 — LLM·JEV 모두 실패, 목표 재정의                D-0109
-│  ├─○ 문단 분석 지도 — 방향 합의(상향 지도·동결·닫힌 어휘·생성형 판정)    D-0141
-│  │     다음: 분야별 지문 샘플링·라벨 목록 논의(브레인스토밍 단계)
+│  ├─● 문단 분석 지도 — 방향 합의, 공손룡 1지문 실험 중                    D-0141·D-0143·D-0146
+│  │     공손룡 기준선(r3·입장·판정 v3·오류 집계), 도파민 일반화 기준 ①②③ 통과 D-0146
+│  │     관계 유형 18유형 검증 완료(블라인드 85%), v3 새 지문 4개 기타 0  D-0147
+│  │     분석 골드 절차: 맞춰 보기 종료, 동결·입장 Claude 검토 운용     D-0151·D-0155·D-0158
+│  │     선지 연결: 비교 실험 차이 없음(D-0167) → 선택형 출제자 전략 피드백 확정, 지시문 v4·sol D-0170
+│  │       57편 생성·검토 → 화면 연결·선지 직접 누르기(D-0172) 완료 → 다음: 사용 메모 반영
+│  │     선지 연결 v4 맞춰 보기 검증 통과(기타 0·일치 96%·정답 91%), 다음 정의 확정→v5 D-0162
+│  │     다음: 1차 관계 목록 → 검증 6지문, 그 뒤 선지 연결
 │  └─● 사고 진단 v0.1 — 가상 풀이 36/36, 과잉 분류 0                         D-0111
 │        운영 방향: 실시간 아닌 주기 실행, 모델 sol 고정(주기 기준 미정)       D-0115
 │        다음: 처음 보는 사례·실제 학생 풀이로 검증
@@ -59,6 +67,7 @@
 | D-0013 | [문단 선택적 보완 V4](./decisions/D-0013-paragraph-optional-revision-v4.md) |
 | D-0138 | [문단 요약 근본 검토](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md), [질문 비교 묶음](../docs/experiments/question-quality-h0-vs-v4-2026-10-15/README.md), [D-0139 질문 규칙](./decisions/D-0139-paragraph-simple-format-question-rules.md), [D-0140 개발자 모드](./decisions/D-0140-paragraph-simple-holistic-dev-mode.md) |
 | D-0090 | [v5 명칭](./decisions/D-0090-problem-evaluator-v5-naming.md) |
+| D-0173 | [개발자 문제 경로 이름 정리](./decisions/D-0173-problem-lab-version-free-code-names.md), [작동 순서](../docs/PROBLEM-LAB-FLOW-2026-10-24.md) |
 | D-0093·D-0114 | [v5 구성과 자동 해석본](./decisions/D-0093-v5-composition-auto-gloss-pipeline.md), [v5 실제 구성 정정](./decisions/D-0114-v5-current-composition-methods-without-gloss.md) |
 | D-0094 | [원문 분할·JEV 골드 흐름 중단](./decisions/D-0094-source-jev-gold-flow-stopped.md) |
 | D-0103 | [전체 판정·축 기록 방향](./decisions/D-0103-holistic-verdict-axis-recording-direction.md) |
@@ -67,7 +76,7 @@
 | D-0106·D-0110 | [교정 뒤 흐름](./decisions/D-0106-post-repair-choice-reselect-or-coaching.md), [공개 설명 형식](./decisions/D-0110-public-coaching-format-haeyo-and-markdown.md) |
 | D-0109 | [함정 지도 v0](./decisions/D-0109-trap-map-v0-external-rate-experiment.md), [JEV 결과](./checkpoints/2026-10-10-trap-map-jev-choice-results.md) |
 | D-0111 | [사고 진단 v0](./decisions/D-0111-thought-diagnosis-v0-experiment.md), [v0.1 결과](./checkpoints/2026-10-10-thought-diagnosis-v01-results.md) |
-| D-0141 | [문단 분석 지도 방향](./decisions/D-0141-paragraph-analysis-map-direction.md), [논의 기록](../docs/review/paragraph-analysis-map-brainstorm-2026-10-16.md) |
+| D-0141·D-0143 | [문단 분석 지도 방향](./decisions/D-0141-paragraph-analysis-map-direction.md), [논의 기록](../docs/review/paragraph-analysis-map-brainstorm-2026-10-16.md), [공손룡 실험](./decisions/D-0143-analysis-map-gongsun-pilot.md), [1단계 인계](../docs/handoffs/2026-10-16-analysis-map-gongsun-stage1.md), [2단계 인계](../docs/handoffs/2026-10-16-analysis-map-gongsun-stage2.md) |
 | D-0115 | [사고 진단 주기 실행·sol 고정](./decisions/D-0115-thought-diagnosis-periodic-sol.md) |
 | D-0112 | [v5 개발자 경로 종료 상태](./decisions/D-0112-v5-developer-path-connection-end-states.md), [연결 기록](./checkpoints/2026-10-10-v5-developer-path-connected.md) |
 | Q-0032·Q-0033·Q-0034·Q-0036 | [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md) |

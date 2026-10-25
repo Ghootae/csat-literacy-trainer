@@ -78,7 +78,7 @@ export async function main({ mode = 'prepare', dir = 'docs/experiments/v5-substi
   const MODEL = 'gpt-5.6-terra', MAX_OUTPUT = 8000, MAX_REQUESTS = 150, CAP_USD = 2.5;
   const prices = { input: 2, cached: 0.2, output: 12 };
   const distDir = 'packages/pipeline/dist/problem-solving';
-  const filePaths = [v5Path, v4Path, ...readdirSync(distDir).filter(p => /^feedback-v4.*\.js$/u.test(p)).sort().map(p => `${distDir}/${p}`),
+  const filePaths = [v5Path, v4Path, ...readdirSync(distDir).filter(p => /^feedback(-evaluator)?\.js$/u.test(p)).sort().map(p => `${distDir}/${p}`),
     'scripts/lib/v5-marker-judgment.mjs', 'scripts/lib/v5-substitution-check.mjs', 'scripts/lib/marker-gloss-validation.mjs',
     productPath, basePath, answerPath, responsesPath];
   const frozen = {

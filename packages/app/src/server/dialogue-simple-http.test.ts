@@ -51,7 +51,7 @@ describe('dialogue-simple HTTP', () => {
     expect((await send(closed.base + root, 'POST', { passageId: passage.passageId }, { host: 'dialogue.example.org' })).status).toBe(404);
     expect((await send(closed.base + root, 'POST', { passageId: passage.passageId }, { host: 'dialogue.cogaxis.net' })).status).toBe(404);
     expect((await send(closed.base + root + '/x/inspect?paragraphIndex=0', 'GET', undefined, { host: 'other.example.org' })).status).toBe(404);
-    const open = await server({ problemFeedbackV4Public: true });
+    const open = await server({ problemFeedbackPublic: true });
     expect((await send(open.base + root, 'POST', { passageId: passage.passageId }, { host: 'dialogue.cogaxis.net' })).status).toBe(200);
     expect((await send(open.base + root, 'POST', { passageId: passage.passageId }, { host: 'other.example.org' })).status).toBe(404);
   });

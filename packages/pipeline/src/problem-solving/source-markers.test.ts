@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { SourceDirectProblemBundleSchema, createSourceDirectProblemEvaluatorInput } from './source-direct-evaluator.js';
 import { createSourceDirectProblemRequestContent } from './source-direct-evaluator-runtime.js';
 import { createProblemSolvingSession, submitInitialProblemResponse } from './session.js';
-import { createFeedbackSession, submitFeedbackCommand, applyFeedbackAssessment } from './feedback-v4.js';
-import { feedbackRequestContent } from './feedback-v4-evaluator.js';
+import { createFeedbackSession, submitFeedbackCommand, applyFeedbackAssessment } from './feedback.js';
+import { feedbackRequestContent } from './feedback-evaluator.js';
 
 const root = 'packages/pipeline/fixtures/experiments';
 const read = (p: string) => JSON.parse(readFileSync(p, 'utf8'));

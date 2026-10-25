@@ -3,8 +3,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { FeedbackEvaluationCall, FeedbackEvaluator, FeedbackSession, SourceDirectProblemBundle } from '@csat/pipeline';
-import { ProblemFeedbackV4Controller, type FeedbackV4Record, type FeedbackV4View } from './problem-feedback-v4.js';
-import { appendFeedbackV4Record } from './session.js';
+import { ProblemFeedbackController, type FeedbackRecord, type FeedbackView } from './problem-feedback.js';
+import { appendFeedbackRecord } from './session.js';
 
 const source: SourceDirectProblemBundle = {
   schemaVersion: 'source-direct-problem-bundle-v2', questionId: 'Q', questionNumber: 1, passageId: 'P',
@@ -23,20 +23,20 @@ function unknown(s: FeedbackSession): FeedbackEvaluationCall {
     sourceEvidence: [], errors: [], errorHypothesis: null, selectionMismatchQuestion: null, coaching: '근거를 확인하기 어렵습니다. 원문의 중복 게시와 여론의 관계를 비교하세요.' } };
 }
 function setup(evaluator: FeedbackEvaluator = { async evaluate(s) { return unknown(s); } }) {
-  const records: FeedbackV4Record[] = [];
-  const controller = new ProblemFeedbackV4Controller({ evaluator, loadSource: () => source, save: r => { records.push(r); } });
+  const records: FeedbackRecord[] = [];
+  const controller = new ProblemFeedbackController({ evaluator, loadSource: () => source, save: r => { records.push(r); } });
   const view = controller.start('Q'); return { controller, view, records };
 }
 const select = { type: 'SELECT', choiceId: 'C1', rationale: { mode: 'PROVIDED', text: '모르겠어요' } } as const;
-const request = (v: FeedbackV4View, command: unknown = select, transitionId = 'T1') => ({ transitionId, expectedRevision: v.revision, command });
+const request = (v: FeedbackView, command: unknown = select, transitionId = 'T1') => ({ transitionId, expectedRevision: v.revision, command });
 
-async function submitSettled(c: ProblemFeedbackV4Controller, id: string, raw: unknown) {
+async function submitSettled(c: ProblemFeedbackController, id: string, raw: unknown) {
   const accepted = await c.submit(id, raw);
   if (accepted.phase === 'AWAITING_EVALUATION') expect(accepted.evaluationStatus).toBe('PROCESSING');
   return c.settled(id);
 }
 
-describe('v4 headless API controller', () => {
+describe('headless API controller', () => {
   it('saves accepted evidence before evaluation and terminal result once; duplicate requests have no side effects', async () => {
     const { controller: c, view: v, records } = setup();
     const req = request(v); const gate = await submitSettled(c, v.sessionId, req);
@@ -96,14 +96,27 @@ describe('v4 headless API controller', () => {
     expect(c.get(v.sessionId)).toEqual(v); expect(records).toHaveLength(1);
   });
   it('persists JSONL with version, raw evaluation, observations and results, isolated from old/student logs', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'feedback-v4-test-')); const file = join(dir, 'events.jsonl');
-    vi.stubEnv('CSAT_PROBLEM_FEEDBACK_V4_LOG', file);
+    const dir = mkdtempSync(join(tmpdir(), 'feedback-test-')); const file = join(dir, 'events.jsonl');
+    vi.stubEnv('CSAT_PROBLEM_FEEDBACK_LOG', file);
     try {
       const { controller: c, view: v, records } = setup(); const gate = await submitSettled(c, v.sessionId, request(v));
       await submitSettled(c, v.sessionId, request(gate, { type: 'END_START', accept: false }, 'decline'));
-      records.forEach(appendFeedbackV4Record);
+      records.forEach(appendFeedbackRecord);
       const restored = readFileSync(file, 'utf8').trim().split('\n').map(line => JSON.parse(line));
       expect(restored).toEqual(records); expect(restored.at(-1).session.result.answerRevealed).toBe(true);
+    } finally { vi.unstubAllEnvs(); rmSync(dir, { recursive: true }); }
+  });
+  it('still reads the old CSAT_PROBLEM_FEEDBACK_V4_LOG env name, new name first (D-0173)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'feedback-test-')); const oldFile = join(dir, 'old.jsonl'); const newFile = join(dir, 'new.jsonl');
+    try {
+      const { controller: c, view: v, records } = setup(); await submitSettled(c, v.sessionId, request(v));
+      vi.stubEnv('CSAT_PROBLEM_FEEDBACK_V4_LOG', oldFile);
+      appendFeedbackRecord(records[0]!);
+      expect(readFileSync(oldFile, 'utf8').trim().split('\n')).toHaveLength(1);
+      vi.stubEnv('CSAT_PROBLEM_FEEDBACK_LOG', newFile);
+      appendFeedbackRecord(records[0]!);
+      expect(readFileSync(newFile, 'utf8').trim().split('\n')).toHaveLength(1);
+      expect(readFileSync(oldFile, 'utf8').trim().split('\n')).toHaveLength(1);
     } finally { vi.unstubAllEnvs(); rmSync(dir, { recursive: true }); }
   });
   it('returned views cannot mutate authoritative state', () => {
@@ -113,7 +126,7 @@ describe('v4 headless API controller', () => {
 });
 
 
-describe('v5 controller continuation', () => {
+describe('controller continuation', () => {
   it('failed end explanation resumes only that call and preserves the committed assessment', async () => {
     const modes: unknown[] = []; let endCalls = 0;
     const { controller: c, view: v, records } = setup({ async evaluate(s) {
@@ -348,7 +361,7 @@ describe('instant acceptance contract', () => {
   });
   it('handles evaluation and failure-ledger rejection and permits RESUME', async () => {
     let fail = true;
-    const c = new ProblemFeedbackV4Controller({ loadSource: () => source,
+    const c = new ProblemFeedbackController({ loadSource: () => source,
       evaluator: { async evaluate(s) { if (fail) throw new Error('transport'); return unknown(s); } },
       save(record) { if (record.event === 'EVALUATION_FAILED') throw new Error('ledger'); },
     });

@@ -45,9 +45,9 @@ export * from './problem-solving/path-evaluator-runtime.js';
 // 학생용 문제 풀이 운영 경로. 정답·공식 해설을 포함한 원자료만 사용하고 문제 골드는 배제한다.
 export * from './problem-solving/source-direct-evaluator.js';
 export * from './problem-solving/source-direct-evaluator-runtime.js';
-export * from './problem-solving/feedback-v4.js';
-export * from './problem-solving/feedback-v4-evaluator.js';
-export { feedbackSectionLead, feedbackSectionClosing, stemVerdictWords } from './problem-solving/feedback-v5-end-explanation.js';
+export * from './problem-solving/feedback.js';
+export * from './problem-solving/feedback-evaluator.js';
+export { feedbackSectionLead, feedbackSectionClosing, stemVerdictWords } from './problem-solving/feedback-end-explanation.js';
 export * from './problem-solving/selected-option-gold-slice.js';
 export * from './problem-solving/selected-option-rationale-input.js';
 export * from './problem-solving/diagnostic-turn-v2.js';

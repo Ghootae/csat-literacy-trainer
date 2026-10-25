@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { readExaminerStrategyFile } from './session.js';
-import type { ExaminerStrategyView, FeedbackV4WorkbenchView } from '../shared/problem-feedback-v4.js';
+import type { ExaminerStrategyView, FeedbackWorkbenchView } from '../shared/problem-feedback.js';
 
 export type ExaminerStrategyMap = Map<string, { position: number; paragraphs: string[] }[]>;
 const DEFAULT_PATH = 'docs/experiments/examiner-strategy-2026-10-23/FINAL.json';
@@ -31,7 +31,7 @@ export function loadExaminerStrategies(path = process.env['EXAMINER_STRATEGY_PAT
 /** 발문 극성: '적절하지 않은 것'처럼 틀린 것을 고르면 SELECT_INCORRECT(run-choice-link.mjs의 stemPolarity와 같은 규칙). */
 export const stemPolarity = (stem: string): 'SELECT_INCORRECT' | 'SELECT_CORRECT' => /않은 것|않는 것/u.test(stem) ? 'SELECT_INCORRECT' : 'SELECT_CORRECT';
 
-export function strategyFor(view: FeedbackV4WorkbenchView, strategies: ExaminerStrategyMap): ExaminerStrategyView {
+export function strategyFor(view: FeedbackWorkbenchView, strategies: ExaminerStrategyMap): ExaminerStrategyView {
   const choices = view.phase === 'COMPLETED' ? strategies.get(view.question.questionId) : undefined;
   if (!choices?.length) return { available: false };
   const selectedId = view.result?.selectedChoiceId ?? view.selectedChoiceId;

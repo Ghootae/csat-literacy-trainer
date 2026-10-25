@@ -17,9 +17,9 @@
 - v5 구성: 해석본 없는 methods 조성. 기호 해석본 사용은 luna·sol 기호 오독 확인 전까지 보류([D-0114](./decisions/D-0114-v5-current-composition-methods-without-gloss.md)). 기호 해석본 파이프라인 v2는 완성돼 있으나 v5에 미포함([D-0093](./decisions/D-0093-v5-composition-auto-gloss-pipeline.md)).
 - 판정 모델: 선택 정오 라우팅, 정답 luna·오답 sol([D-0104](./decisions/D-0104-problem-evaluator-model-routing-by-choice.md)), 세션 안 배정([D-0107](./decisions/D-0107-session-model-routing-repair-reselect-coaching.md)). Gemini 가격 재확인([D-0129](./decisions/D-0129-keep-luna-sol-over-gemini-after-price-check.md))과 DeepSeek 1017 재시험([D-0165](./decisions/D-0165-keep-luna-sol-over-deepseek-1017.md)) 뒤에도 유지. DeepSeek 오답 자리는 미측정.
 - 교정·피드백 규칙: 교정은 국소 오류만 판정([D-0108](./decisions/D-0108-repair-judges-local-error-only.md)), 교정 질문은 선지 정오를 가르는 관계까지([D-0105](./decisions/D-0105-correction-question-covers-choice-deciding-relation.md)), 교정 뒤 "다시 선택"/"코칭 보기" 버튼([D-0106](./decisions/D-0106-post-repair-choice-reselect-or-coaching.md)), 학생용 문장 반말([D-0116](./decisions/D-0116-student-facing-tone-banmal.md)), 선택 충돌 인용은 충분성 인용 가능([D-0164](./decisions/D-0164-selection-mismatch-quote-allowed-as-sufficiency.md)), "원문에 없음" 근거는 반박 여부로 판정([D-0166](./decisions/D-0166-absence-rationale-by-refutation.md)).
-- 개발자 경로 `/problem/dev/v4`에 v5·라우팅·교정 후 버튼·별도 종료 설명이 연결돼 있다([D-0112](./decisions/D-0112-v5-developer-path-connection-end-states.md)). 최신 48세션 회귀(2026-10-22, [판정 기록](../docs/experiments/v5-diverse-48-regression-2026-10-22/REVIEW.md))는 D-0156·D-0157·D-0159·D-0161·D-0164 반영 뒤 역할별 최종 결과가 10-12와 같다. 가상 답변이라 실제 학생 검증이 아니다.
+- 개발자 경로 `/problem/lab`(옛 `/problem/dev/v4`는 넘김, 코드 이름에 버전 없음 [D-0173](./decisions/D-0173-problem-lab-version-free-code-names.md), 작동 순서 [문서](../docs/PROBLEM-LAB-FLOW-2026-10-24.md))에 v5·라우팅·교정 후 버튼·별도 종료 설명이 연결돼 있다([D-0112](./decisions/D-0112-v5-developer-path-connection-end-states.md)). 최신 48세션 회귀(2026-10-22, [판정 기록](../docs/experiments/v5-diverse-48-regression-2026-10-22/REVIEW.md))는 D-0156·D-0157·D-0159·D-0161·D-0164 반영 뒤 역할별 최종 결과가 10-12와 같다. 가상 답변이라 실제 학생 검증이 아니다.
 - 다음 할 일: UI 메모장 30번 논의(16번 정답 피드백 규칙). 리마인드: luna 자신의 기호 오독(S2-r3) 해결 방식(Q-0030).
-- 선택형 출제자 전략 피드백([D-0170](./decisions/D-0170-optional-examiner-strategy-feedback.md)): 동결본 truth FALSE 선지 57편을 sol·지시문 v4로 생성하고 코드 에이전트 검토(골드 수정 4, 재생성 통과)까지 마쳤다([FINAL.json](../docs/experiments/examiner-strategy-2026-10-23/FINAL.json)). 개발자 화면 연결 [인계](../docs/handoffs/2026-10-24-examiner-strategy-ui.md) 작성(2026-10-24). 사용자 표본 이해 용이성 판정은 남아 있다.
+- 선택형 출제자 전략 피드백([D-0170](./decisions/D-0170-optional-examiner-strategy-feedback.md)): 동결본 truth FALSE 선지 57편을 sol·지시문 v4로 생성하고 코드 에이전트 검토(골드 수정 4, 재생성 통과)까지 마쳤다([FINAL.json](../docs/experiments/examiner-strategy-2026-10-23/FINAL.json)). 개발자 문제 화면에 연결했다(세션 종료 뒤 말풍선·[다음], 커밋 `dc6c295`). 같은 커밋에서 선지를 가운데 문제 칸에서 직접 누르도록 바꿨다([D-0172](./decisions/D-0172-problem-ui-choice-direct-select.md)). 다음: 사용자 직접 사용 메모 반영, 주 버튼 자리([다시 풀기]를 주 버튼 왼쪽에 둘지) 답 대기([체크포인트](./checkpoints/2026-10-24-examiner-strategy-ui-direct-choice.md)). 문제 세트 흐름([다음 문제로]·[다음 지문으로])은 별도 과제다.
 - 마지막 설명에 선지 연결 좌표를 넣는 안은 차이가 없어 운영 미반영 확정([D-0167](./decisions/D-0167-choice-link-end-explanation-comparison.md)).
 - 구조화 문제 골드는 학생용 런타임 입력과 실행 조건으로 쓰지 않는다. 모든 런타임 단계는 완전한 원문·문항·선지·정답·공식 해설·원자료 이미지를 직접 쓴다.
 - 명시적 오류는 교정하고, 불충분하거나 모호한 근거는 진단한다.
@@ -58,7 +58,7 @@
 ## 웹 흐름·서버
 
 - 학생용 `/dialogue`는 연결 가능한 6개 지문을 제공한다. 웹 루트 `/`는 `/dialogue`로 간다. 이전 문단 훈련 UI는 `/legacy`에 보존한다.
-- 개발자 화면: `/dialogue/dev`(문단), `/problem/dev/v4`(문제, v4 API는 5175 분리 실행). 앞으로 URL은 개발자 화면만 안내하며 학생용 UI는 개발자 UI 확정 전 수정하지 않는다([D-0031](./decisions/D-0031-developer-ui-url-only.md)).
+- 개발자 화면: `/dialogue/dev`(문단), `/problem/lab`(문제, API는 5175 분리 실행 `problem-feedback-entry.js`). 앞으로 URL은 개발자 화면만 안내하며 학생용 UI는 개발자 UI 확정 전 수정하지 않는다([D-0031](./decisions/D-0031-developer-ui-url-only.md)).
 - Cloudflare Named Tunnel `csat-dialogue` → `https://dialogue.cogaxis.net`. 상시 서버는 보류. 로컬 ingress 파일이 없어 `--url http://127.0.0.1:5173`이 필요하고, 자동 시작 미등록이라 프로세스가 살아 있어야 한다. 인증 없는 골드·내부 판정 공개는 기존 사용자 승인 범위다. 인증·서버 재시작 복원은 미완료.
 - 2026-09-12 사용자가 학생 역할로 6지문·30문단·연결 문항 6개를 직접 수행했다(문단 최종 PASS 30/30, 문제 최종 정답 6/6). UI 실사용 자료이지 외부 학생 효과 자료가 아니다.
 
@@ -73,7 +73,7 @@
 
 1. 실제 학생 사용성·학습 흐름 확인과 지문·문항 세트 확장. 반복되거나 학습을 방해하는 실패만 일반화된 수정으로 연결한다.
 2. 문단: 단순 형식 v4 사용자 직접 사용(근본 검토).
-3. 문제: 개발자 경로 메모장 논의, 출제자 전략 화면 연결.
+3. 문제: 개발자 경로 메모장 논의, 출제자 전략·선지 직접 누르기 화면의 사용 메모 반영.
 4. 학생 상태 모델: 남은 승인 항목(위 절).
 
 ## 금지선

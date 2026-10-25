@@ -134,7 +134,7 @@ export async function main({ mode = 'prepare', model, dir = DEFAULT_DIR, transpo
   const distDir = 'packages/pipeline/dist/problem-solving';
   const filePaths = [oldCasesPath, oldFrozenPath, oldSourcesPath, catalogPath, ...productPaths, v5Path, v4Path,
     'scripts/lib/v5-marker-judgment.mjs',
-    ...readdirSync(distDir).filter(p => /^(feedback-v4.*|source-direct-evaluator)\.js$/u.test(p)).sort().map(p => `${distDir}/${p}`)];
+    ...readdirSync(distDir).filter(p => /^(feedback(-evaluator)?|source-direct-evaluator)\.js$/u.test(p)).sort().map(p => `${distDir}/${p}`)];
   const frozen = {
     fileHashes: Object.fromEntries(filePaths.map(p => [p, hash(readFileSync(p))])), runnerHash: hash(readFileSync(new URL(import.meta.url))),
     blocks: { CLAIM_BLOCK: hash(CLAIM_BLOCK), QUOTE_BLOCK: hash(QUOTE_BLOCK) },

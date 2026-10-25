@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import OpenAI from 'openai';
-import { ProblemFeedbackV4Controller } from '../packages/app/dist/server/problem-feedback-v4.js';
+import { ProblemFeedbackController } from '../packages/app/dist/server/problem-feedback.js';
 import { OpenAIFeedbackEvaluator, validateFeedbackCoaching } from '../packages/pipeline/dist/index.js';
 
 export const DIR = 'docs/experiments/v5-live-connection-2026-10-10';
@@ -60,7 +60,7 @@ function initialCommand(data, id) {
 export async function validateInputs(data) {
   for (const id of Object.keys(data.recordings)) {
     const c = data.cases.find(c => c.id === id), source = data.sources[c.questionId];
-    const controller = new ProblemFeedbackV4Controller({ loadSource: () => source, save() {},
+    const controller = new ProblemFeedbackController({ loadSource: () => source, save() {},
       evaluator: { async evaluate() { return replayCall(data.recordings[id]); } } });
     let view = controller.start(c.questionId);
     // Historical evidence references o1; replay must preserve this observation ID.
@@ -170,7 +170,7 @@ export async function executeCell(cell, replicate, data, ledger, { recordsPath }
     catch (error) { entry.outcome = 'ERROR'; entry.error = String(error); throw error; }
     finally { entry.durationMs = performance.now() - started; }
   } } });
-  const controller = new ProblemFeedbackV4Controller({ loadSource: () => source,
+  const controller = new ProblemFeedbackController({ loadSource: () => source,
     save(record) { records.push(record); if (recordsPath) appendFileSync(recordsPath, JSON.stringify(record) + '\n'); },
     evaluator: { async evaluate(session) {
       const replay = first && cell.replay; first = false; currentKind = session.evaluationMode;
@@ -239,7 +239,7 @@ function frozenInputs(data) {
   const paths = [VARIANTS, `${BASE}/cases.json`, `${BASE}/sources.json`, ...Object.values(data.recordings).map(r => r.path),
     'scripts/test-v5-live-connection.mjs', 'scripts/test-v5-live-connection.test.mjs',
     'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md',
-    'packages/app/src/server/problem-feedback-v4.ts', 'packages/app/dist/server/problem-feedback-v4.js',
+    'packages/app/src/server/problem-feedback.ts', 'packages/app/dist/server/problem-feedback.js',
     ...['src', 'dist'].flatMap(tree => readdirSync(`packages/pipeline/${tree}/problem-solving`).filter(f => /^feedback-v[45].*\.(?:ts|js)$/u.test(f) && !f.includes('.test.') && !f.endsWith('.d.ts')).sort().map(f => `packages/pipeline/${tree}/problem-solving/${f}`))];
   return { fileHashes: Object.fromEntries(paths.map(p => [p, hash(readFileSync(p))])), cells: CELLS, repetitions: 2, limits: LIMITS };
 }

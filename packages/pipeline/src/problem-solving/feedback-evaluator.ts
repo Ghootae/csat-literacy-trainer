@@ -3,13 +3,13 @@ import { resolve } from 'node:path';
 import OpenAI from 'openai';
 import { z } from 'zod/v4';
 import { assertNoStructuredProblemGold, SOURCE_TEXT_ANNOTATION_GUIDE } from './source-direct-evaluator.js';
-import { extendedSelectionSchema, validateClaims } from './feedback-v5-claims.js';
-import { feedbackEndExplanationContent, CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS } from './feedback-v5-end-explanation.js';
+import { extendedSelectionSchema, validateClaims } from './feedback-claims.js';
+import { feedbackEndExplanationContent, CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS } from './feedback-end-explanation.js';
 import {
-  FeedbackRepairAssessmentSchema, FeedbackSelectionAssessmentSchema, PROBLEM_FEEDBACK_V4,
+  FeedbackRepairAssessmentSchema, FeedbackSelectionAssessmentSchema, PROBLEM_FEEDBACK_SESSION_VERSION,
   applyFeedbackAssessment, applyFeedbackEndExplanation, FeedbackEndExplanationSchema, FeedbackCoachingError, feedbackObservationText,
   validateFeedbackAssessment, validateFeedbackCoaching, type FeedbackSession,
-} from './feedback-v4.js';
+} from './feedback.js';
 
 export interface FeedbackEvaluationCall {
   rawOutput: unknown;
@@ -31,7 +31,7 @@ export function feedbackEvaluationInput(s: FeedbackSession) {
   const source = structuredClone(s.source);
   const { stemPolarity: _stemPolarity, ...normalizedSource } = source;
   const input = {
-    version: PROBLEM_FEEDBACK_V4, mode: s.evaluationMode, source: normalizedSource,
+    version: PROBLEM_FEEDBACK_SESSION_VERSION, mode: s.evaluationMode, source: normalizedSource,
     targetVerdict: s.choiceImpliedVerdict,
     selection: s.evaluationMode === 'SELECTION' ? {
       choiceId: s.selections.at(-1)!.choiceId, choiceImpliedVerdict: s.choiceImpliedVerdict,
@@ -115,7 +115,7 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
       const response = await transport.create({
         model, store: false, reasoning: { effort: 'medium' }, max_output_tokens: this.options.maxOutputTokens ?? 8000,
         instructions, input: [{ role: 'user', content }] as never,
-        text: { format: { type: 'json_schema', name: 'problem_feedback_v4_' + kind.toLowerCase(),
+        text: { format: { type: 'json_schema', name: 'problem_feedback_' + kind.toLowerCase(),
           strict: true, schema: kind === 'ASSESSMENT' && s.evaluationMode === 'SELECTION' ? extendedSelectionSchema(z.toJSONSchema(schema)) : z.toJSONSchema(schema) } },
       }, { timeout: this.options.timeoutMs ?? 60_000, maxRetries: 0 });
       let raw: unknown = response.output_text;

@@ -60,8 +60,8 @@ const MODEL = 'gpt-5.6-terra', MAX_REQUESTS = 32, MAX_OUTPUT = 8000, CAP_USD = 2
 // Budget estimates reuse the documented prior pilot rates, not a newly verified pricing quote.
 const prices = { input: 2, cached: 0.2, output: 12 };
 const snapshotPaths = [candidatePath, baselinePath,
-  'packages/pipeline/src/problem-solving/feedback-v4.ts', 'packages/pipeline/src/problem-solving/feedback-v4-evaluator.ts',
-  'packages/pipeline/dist/problem-solving/feedback-v4.js', 'packages/pipeline/dist/problem-solving/feedback-v4-evaluator.js'];
+  'packages/pipeline/src/problem-solving/feedback.ts', 'packages/pipeline/src/problem-solving/feedback-evaluator.ts',
+  'packages/pipeline/dist/problem-solving/feedback.js', 'packages/pipeline/dist/problem-solving/feedback-evaluator.js'];
 const fileHashes = Object.fromEntries(snapshotPaths.map(p => [p, hash(readFileSync(p))]));
 const frozen = { fileHashes, runnerHash: hash(readFileSync(new URL(import.meta.url))),
   casesHash: hash(JSON.stringify({ cases, cycles })), sourcesHash: hash(JSON.stringify(sources)) };

@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import OpenAI from 'openai';
-import { ProblemFeedbackV4Controller } from '../packages/app/dist/server/problem-feedback-v4.js';
+import { ProblemFeedbackController } from '../packages/app/dist/server/problem-feedback.js';
 import { loadProblemSolvingBundle } from '../packages/app/dist/server/content.js';
 import { OpenAIFeedbackEvaluator, FeedbackEvaluationError } from '../packages/pipeline/dist/index.js';
 import { createLedger, explanationChecks } from './test-v5-live-connection.mjs';
@@ -15,12 +15,12 @@ const hash = x => createHash('sha256').update(x).digest('hex');
 const put = (p,x) => {writeFileSync(p+'.tmp',JSON.stringify(x,null,2)+'\n');renameSync(p+'.tmp',p);};
 export const LIMITS = {'gpt-6.1-sol':{requests:160,usd:8,input:2,output:10},'gpt-6-luna':{requests:240,usd:1,input:.10,output:.50}};
 const runtimePaths = [
-  'packages/app/src/server/problem-feedback-v4.ts','packages/app/dist/server/problem-feedback-v4.js',
+  'packages/app/src/server/problem-feedback.ts','packages/app/dist/server/problem-feedback.js',
   'packages/app/src/server/content.ts','packages/app/dist/server/content.js',
-  'packages/pipeline/src/problem-solving/feedback-v4.ts','packages/pipeline/dist/problem-solving/feedback-v4.js',
-  'packages/pipeline/src/problem-solving/feedback-v4-evaluator.ts','packages/pipeline/dist/problem-solving/feedback-v4-evaluator.js',
-  'packages/pipeline/src/problem-solving/feedback-v5-end-explanation.ts','packages/pipeline/dist/problem-solving/feedback-v5-end-explanation.js',
-  'packages/pipeline/src/problem-solving/feedback-v5-claims.ts','packages/pipeline/dist/problem-solving/feedback-v5-claims.js',
+  'packages/pipeline/src/problem-solving/feedback.ts','packages/pipeline/dist/problem-solving/feedback.js',
+  'packages/pipeline/src/problem-solving/feedback-evaluator.ts','packages/pipeline/dist/problem-solving/feedback-evaluator.js',
+  'packages/pipeline/src/problem-solving/feedback-end-explanation.ts','packages/pipeline/dist/problem-solving/feedback-end-explanation.js',
+  'packages/pipeline/src/problem-solving/feedback-claims.ts','packages/pipeline/dist/problem-solving/feedback-claims.js',
   'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md',
   'packages/pipeline/fixtures/experiments/problem-solving/source-direct-runtime-v1.json',
   ...specs.map(s=>`packages/pipeline/fixtures/experiments/problem-solving/public/${s.questionId}.json`),
@@ -31,7 +31,7 @@ function verifyFrozen(){assert.deepEqual(read(`${DIR}/FROZEN.json`).content,froz
 export function semanticView(v){const {sessionId,...rest}=v;return rest;}
 export async function restoreController(state,source,live,onRecord,onCall){
   let replay = true, queue=[];
-  const controller = new ProblemFeedbackV4Controller({loadSource:()=>source,
+  const controller = new ProblemFeedbackController({loadSource:()=>source,
     save:r=>{if(!replay)onRecord(r);}, evaluator:{async evaluate(session){
       if(replay){const c=queue.shift();assert.ok(c,'Replay evaluation missing');if(c.status==='ERROR')throw new FeedbackEvaluationError(c.error,c.call);return structuredClone(c.call);}
       try{const call=await live.evaluate(session);onCall({status:'SUCCESS',kind:session.evaluationMode,call});return call;}

@@ -1,8 +1,9 @@
 import { z } from 'zod/v4';
-import { overlaps } from './feedback-v5-claims.js';
+import { overlaps } from './feedback-claims.js';
 import { SourceDirectProblemBundleSchema, type SourceDirectProblemBundle } from './source-direct-evaluator.js';
 
-export const PROBLEM_FEEDBACK_V4 = 'problem-feedback-v4' as const;
+// 저장 자료 호환을 위해 값 유지(D-0173)
+export const PROBLEM_FEEDBACK_SESSION_VERSION = 'problem-feedback-v4' as const;
 const Text = z.string().trim().min(1);
 export const FeedbackRationaleSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('PROVIDED'), text: Text }).strict(),
@@ -107,7 +108,7 @@ export interface FeedbackResult {
   answer: { choiceId: string; position: number; text: string } | null;
 }
 export interface FeedbackSession {
-  version: typeof PROBLEM_FEEDBACK_V4;
+  version: typeof PROBLEM_FEEDBACK_SESSION_VERSION;
   sessionId: string;
   revision: number;
   // Only public views leave the server; this authoritative record contains the key.
@@ -143,7 +144,7 @@ export function createFeedbackSession(sessionId: string, source: SourceDirectPro
   const parsed = SourceDirectProblemBundleSchema.parse(source);
   if (!sessionId.trim() || [parsed.passage, parsed.stem, parsed.officialExplanation, ...parsed.choices.map(c => c.text)].some(t => !t.trim())) throw new Error('세션 ID 또는 원자료가 누락됐습니다. 학생 오류로 처리하지 않습니다.');
   return {
-    version: PROBLEM_FEEDBACK_V4, sessionId, revision: 0, source: parsed,
+    version: PROBLEM_FEEDBACK_SESSION_VERSION, sessionId, revision: 0, source: parsed,
     choiceImpliedVerdict: normalizeFeedbackPolarity(parsed.stemPolarity),
     phase: 'AWAITING_SELECTION', evaluationMode: null, pendingEnd: null, endExplanation: null, observations: [], assessments: [],
     selections: [], selectionComparisons: [], errors: [], additionalErrors: [], activeErrorId: null, correctionSucceeded: false,

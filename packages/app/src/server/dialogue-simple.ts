@@ -243,7 +243,7 @@ export class SimpleDialogueController {
         stage: p.state.stage, highlights, highlightKind,
         canRespond: !p.state.done && p.status !== 'PROCESSING', evaluationStatus: p.status,
         evaluationError: p.status === 'RETRYABLE_ERROR' ? '피드백을 만들지 못했어. 쓴 내용은 저장돼 있으니 다시 시도해 줘.' : null },
-      allDone, problemUrl: allDone && r.passage.problemQuestionId ? `/problem/dev/v4?questionId=${encodeURIComponent(r.passage.problemQuestionId)}` : null,
+      allDone, problemUrl: allDone && r.passage.problemQuestionId ? `/problem/lab?questionId=${encodeURIComponent(r.passage.problemQuestionId)}` : null,
       problemQuestionId: r.passage.problemQuestionId ?? null,
     });
   }

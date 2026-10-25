@@ -9,7 +9,7 @@ export function parseInitialParagraph(search: string): { sessionId: string | nul
 }
 
 export function problemLink(questionId: string, sessionId: string): string {
-  return '/problem/dev/v4?' + new URLSearchParams({ questionId, returnTo: `${dialogueBase}?sessionId=${sessionId}` });
+  return '/problem/lab?' + new URLSearchParams({ questionId, returnTo: `${dialogueBase}?sessionId=${sessionId}` });
 }
 
 const returnPattern = /^\/dialogue\/dev(?:\?sessionId=[a-zA-Z0-9-]+|\/simple\?sessionId=[a-zA-Z0-9-]+)?$/;

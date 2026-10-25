@@ -1,8 +1,8 @@
 import { circled } from './examiner-strategy-state.js';
-import type { FeedbackV4Message, FeedbackV4Request, FeedbackV4WorkbenchView } from '../shared/problem-feedback-v4.js';
+import type { FeedbackMessage, FeedbackRequest, FeedbackWorkbenchView } from '../shared/problem-feedback.js';
 
 export type WaitingKind = 'ANSWER' | 'CORRECTION' | 'EXPLANATION' | 'UNKNOWN';
-export function waitingKind(command: FeedbackV4Request['command'], previous: WaitingKind = 'UNKNOWN'): WaitingKind {
+export function waitingKind(command: FeedbackRequest['command'], previous: WaitingKind = 'UNKNOWN'): WaitingKind {
   switch (command.type) {
     case 'SELECT': case 'RATIONALE': return 'ANSWER';
     case 'CORRECT': return 'CORRECTION';
@@ -22,13 +22,13 @@ export function waitingText(kind: WaitingKind, elapsedMs: number): string {
 export type ButtonId = 'SUBMIT' | 'RESELECT' | 'REQUEST_EXPLANATION' | 'FINISH' | 'RESUME' | 'RETRY' | 'RESTART' | 'END_YES' | 'END_NO' | 'UNDERSTOOD_YES' | 'UNDERSTOOD_NO' | 'NEXT' | 'STRATEGY_OPEN' | 'STRATEGY_NEXT';
 export interface ComposerLocal {
   choice: string | null; draft: string; omit: boolean; waiting: boolean; pending: boolean; error: string;
-  previousView?: FeedbackV4WorkbenchView | null;
+  previousView?: FeedbackWorkbenchView | null;
   sequence?: { complete: boolean; needsNext: boolean };
   previousButtons?: { id: ButtonId; label: string; disabled: boolean }[];
   /** 출제자 전략이 있는 COMPLETED 문항에서만 준다. position은 지금 읽는 선지 번호. */
   strategy?: { stage: 'INTRO' | 'READING' | 'ENDED'; position: number | null } | undefined;
 }
-export function composerState(view: FeedbackV4WorkbenchView, local: ComposerLocal) {
+export function composerState(view: FeedbackWorkbenchView, local: ComposerLocal) {
   const base = (local.waiting || local.pending) && view.phase === 'AWAITING_EVALUATION' ? local.previousView ?? view : view;
   const selection = base.phase === 'AWAITING_SELECTION' || base.phase === 'AWAITING_RESELECTION';
   const rationale = base.phase === 'AWAITING_RATIONALE';
@@ -70,7 +70,7 @@ export function composerState(view: FeedbackV4WorkbenchView, local: ComposerLoca
 }
 
 /** Restored entries start at messages.length; only newly received entries are paced. */
-export function sequenceState(messages: FeedbackV4Message[], revealed: number, reducedMotion = false, released = false) {
+export function sequenceState(messages: FeedbackMessage[], revealed: number, reducedMotion = false, released = false) {
   let visibleCount = Math.min(revealed, messages.length);
   const needsNextAt = (index: number) => messages[index - 1]?.sequence === 'SECTION' && messages[index]?.sequence === 'CONNECTOR';
   while (visibleCount < messages.length) {

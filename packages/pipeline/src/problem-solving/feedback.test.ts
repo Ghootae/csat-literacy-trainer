@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { extendedSelectionSchema, validateClaims } from './feedback-v5-claims.js';
-import { CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, feedbackEndExplanationContent, feedbackSectionClosing, feedbackSectionLead, stemVerdictWords } from './feedback-v5-end-explanation.js';
+import { extendedSelectionSchema, validateClaims } from './feedback-claims.js';
+import { CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, feedbackEndExplanationContent, feedbackSectionClosing, feedbackSectionLead, stemVerdictWords } from './feedback-end-explanation.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import {
@@ -9,8 +9,8 @@ import {
   normalizeFeedbackPolarity, submitFeedbackCommand as submit, validateFeedbackAssessment, FeedbackSelectionAssessmentSchema, FeedbackRepairAssessmentSchema,
   recoverFeedbackSourceQuote, validateFeedbackCoaching, applyFeedbackEndExplanation, feedbackObservationText,
   type FeedbackSession, type FeedbackSelectionAssessment, type FeedbackRepairAssessment,
-} from './feedback-v4.js';
-import { feedbackEvaluationInput, feedbackRequestContent, OpenAIFeedbackEvaluator } from './feedback-v4-evaluator.js';
+} from './feedback.js';
+import { feedbackEvaluationInput, feedbackRequestContent, OpenAIFeedbackEvaluator } from './feedback-evaluator.js';
 import type { SourceDirectProblemBundle } from './source-direct-evaluator.js';
 // Correct SUPPORTED needs >= 2 elements with non-overlapping quotes; a single quote is split in two halves.
 function coverageOf(refs: any[]) {
@@ -29,7 +29,7 @@ function withClaims(raw: any) {
 const sections = (s: FeedbackSession, firstChoice = '원문을 바탕으로 판단 관계를 다시 확인해 봐.') => ({ firstChoice, reselection: s.selections.length === 2 ? '다시 고른 답을 원문과 비교해 봐.' : null, answer: '정답은 원문의 판단 관계로 설명할 수 있어.' });
 const acceptEnd = (s: FeedbackSession) => s.phase === 'AWAITING_END_START' ? submit(s, { type: 'END_START', accept: true }, 'end-start') : s;
 const explain = (s: FeedbackSession) => submit(applyFeedbackEndExplanation(acceptEnd(s), sections(s)), { type: 'UNDERSTOOD', answer: true }, 'understood');
-describe('v4 hardening regressions', () => {
+describe('hardening regressions', () => {
   // Stored outputs predate errorType; they were all content errors.
   const stored = (path: string) => JSON.parse(readFileSync(
     'docs/experiments/problem-feedback-v4-synthetic-2026-10-01/' + path, 'utf8'), (_k, v) => {
@@ -208,7 +208,7 @@ function repair(s: FeedbackSession, changes: Partial<FeedbackRepairAssessment> =
 }
 function finalReady() { const s = reply(questioned()); return submit(assess(s, repair(s)), { type: 'RESELECT' }, 'reselect'); }
 
-describe('v4 polarity and provenance', () => {
+describe('polarity and provenance', () => {
   it('Q13 negative polarity retains content error, never execution error', () => {
     const s = selection(); const next = assess(s, output(s));
     expect(next.errors.map(e => e.kind)).toEqual(['CONTENT']);
@@ -262,7 +262,7 @@ describe('v4 polarity and provenance', () => {
   });
 });
 
-describe('v4 initial and final selection matrix', () => {
+describe('initial and final selection matrix', () => {
   for (const final of [false, true]) for (const correct of [false, true]) for (const kind of ['omitted', 'supported', 'insufficient', 'unknown', 'unknown-local-error', 'error', 'mismatch'] as const) {
     it(`${final ? 'final' : 'initial'} ${correct ? 'correct' : 'wrong'} ${kind}`, () => {
       const start = final ? finalReady() : fresh();
@@ -316,7 +316,7 @@ describe('v4 initial and final selection matrix', () => {
   });
 });
 
-describe('v4 correction queue and cumulative completion', () => {
+describe('correction queue and cumulative completion', () => {
   for (const status of ['REMAINING', 'UNCONFIRMED'] as const) it(`intermediate ${status} continues; later repair can resolve first error`, () => {
     let s = reply(questioned('C4', 2)); let a = repair(s);
     a.repairs.forEach(r => { r.status = status; }); a.verificationComplete = false;
@@ -382,7 +382,7 @@ describe('v4 correction queue and cumulative completion', () => {
   });
 });
 
-describe('v4 source boundaries, privacy and transport', () => {
+describe('source boundaries, privacy and transport', () => {
   for (const boundary of ['MISSING_SOURCE', 'KEY_CONFLICT'] as const) it(`boundary ${boundary} neither student failure nor answer reveal`, () => {
     const s = selection(); const next = assess(s, output(s, { boundary }));
     expect(next.phase).toBe('ITEM_REVIEW'); expect(next.result).toBeNull();
@@ -441,7 +441,7 @@ describe('v4 source boundaries, privacy and transport', () => {
 });
 
 
-describe('v5 target errors', () => {
+describe('target errors', () => {
   const obs = [{ observationId: 'o1', text: '학생 발화 가나다 라마바' }];
   const claim = (quote: string, sourceCheck: string) => ({ observationId: 'o1', quote, claimAsStated: quote, sourceCheck, sourceBasis: '대조' });
   const err = (errorType: string, quote: string, errorId = 'E1') => ({ errorId, errorType, studentEvidence: [{ observationId: 'o1', quote }] });
@@ -554,7 +554,7 @@ describe('v5 target errors', () => {
   });
 });
 
-describe('v5 developer connection contracts', () => {
+describe('developer connection contracts', () => {
   const response = (raw: unknown) => ({ status: 'completed', output_text: JSON.stringify(raw) });
   const endText = '**판단 관계**를 원문에서 다시 확인해 보세요.';
   function pending(correct = false, reason: 'REPAIR_FAILED' | 'COACHING_REQUESTED' = 'REPAIR_FAILED', sufficient = true) {
@@ -1047,7 +1047,7 @@ describe('public correction highlights', () => {
   });
 });
 
-describe('v5 section closing is chosen by what the section covered', () => {
+describe('section closing is chosen by what the section covered', () => {
   const assessed = (changes: Partial<FeedbackSelectionAssessment>, s = selection()) => assess(s, output(s, changes));
   const wrongThought = '네가 어디에서 잘못 생각했었는지 이해됐으면, 이번엔 정답에 대한 설명으로 넘어가 보자.';
   const noErrors = { contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK', errors: [] } as const;
@@ -1101,7 +1101,7 @@ describe('stemVerdictWords', () => {
   });
 });
 
-describe('v5 section lead sentence is fixed by code', () => {
+describe('section lead sentence is fixed by code', () => {
   const assessed = (changes: Partial<FeedbackSelectionAssessment>, s = selection()) => assess(s, output(s, changes));
   const reselectedWrong = (changes: Partial<FeedbackSelectionAssessment>) => {
     const wide = createFeedbackSession('S', { ...source, choices: [...source.choices, { choiceId: 'C3', position: 3, text: '세 번째 선지.' }] });
@@ -1171,7 +1171,7 @@ describe('answer-leak guard after the answer is chosen', () => {
 });
 
 
-describe('v5 insufficiencyKind', () => {
+describe('insufficiencyKind', () => {
   const insufficient = (s: FeedbackSession, insufficiencyKind: FeedbackSelectionAssessment['insufficiencyKind']) =>
     output(s, { errors: [], contentAssessment: 'INSUFFICIENT', insufficiencyKind });
   it('requires a kind for INSUFFICIENT and forbids it otherwise', () => {

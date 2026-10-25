@@ -11,7 +11,7 @@ const children = [
   }),
 ];
 if (process.env.CSAT_DEVELOPER_MODE === '1') {
-  children.push(spawn(process.execPath, ['packages/app/dist/server/problem-feedback-v4-entry.js'], { stdio: 'inherit', env: process.env }));
+  children.push(spawn(process.execPath, ['packages/app/dist/server/problem-feedback-entry.js'], { stdio: 'inherit', env: process.env }));
 }
 
 let closing = false;

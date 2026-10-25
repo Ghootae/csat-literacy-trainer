@@ -3,6 +3,8 @@ import { defineConfig } from 'vite';
 
 // 클라이언트는 서버를 통해서만 채점에 접근한다 (계획서 D4 — 프로세스 경계).
 // 개발 중에도 같은 경계를 유지하려고 /api를 프록시한다.
+const problemApi = `http://127.0.0.1:${process.env['CSAT_PROBLEM_LAB_API_PORT'] ?? process.env['CSAT_PROBLEM_V4_API_PORT'] ?? process.env['CSAT_API_PORT'] ?? 5175}`;
+
 export default defineConfig({
   root: __dirname,
   plugins: [react()],
@@ -15,7 +17,8 @@ export default defineConfig({
     // 이중 스택(tcp46) 리스너를 상대로 멈춰서 /api 요청이 응답 없이 매달린다.
     proxy: {
       // Keep paragraph/student sessions alive when the developer problem API is restarted.
-      '/api/developer/problem-feedback-v4': `http://127.0.0.1:${process.env['CSAT_PROBLEM_V4_API_PORT'] ?? process.env['CSAT_API_PORT'] ?? 5175}`,
+      '/api/developer/problem-lab': problemApi,
+      '/api/developer/problem-feedback-v4': problemApi, // 옛 API 접두 호환(D-0173)
       '/api': `http://127.0.0.1:${process.env['CSAT_API_PORT'] ?? 5174}`,
     },
   },

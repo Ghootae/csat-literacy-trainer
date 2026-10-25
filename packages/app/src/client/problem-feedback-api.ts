@@ -1,6 +1,6 @@
-import type { ExaminerStrategyView, FeedbackV4Inspection, FeedbackV4Request, FeedbackV4WorkbenchView } from '../shared/problem-feedback-v4.js';
+import type { ExaminerStrategyView, FeedbackInspection, FeedbackRequest, FeedbackWorkbenchView } from '../shared/problem-feedback.js';
 
-const root = '/api/developer/problem-feedback-v4/session';
+const root = '/api/developer/problem-lab/session';
 async function request<T>(url: string, body?: unknown): Promise<T> {
   const response = await fetch(url, body === undefined ? undefined : {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
@@ -11,9 +11,9 @@ async function request<T>(url: string, body?: unknown): Promise<T> {
   }
   return response.json() as Promise<T>;
 }
-export const startFeedbackV4 = (questionId: string) => request<FeedbackV4WorkbenchView>(root, { questionId });
-export const getFeedbackV4 = (id: string) => request<FeedbackV4WorkbenchView>(`${root}/${encodeURIComponent(id)}`);
-export const submitFeedbackV4 = (id: string, body: FeedbackV4Request) => request<FeedbackV4WorkbenchView>(`${root}/${encodeURIComponent(id)}`, body);
-export const inspectFeedbackV4 = (id: string) => request<FeedbackV4Inspection>(`${root}/${encodeURIComponent(id)}/inspect`);
+export const startFeedback = (questionId: string) => request<FeedbackWorkbenchView>(root, { questionId });
+export const getFeedback = (id: string) => request<FeedbackWorkbenchView>(`${root}/${encodeURIComponent(id)}`);
+export const submitFeedback = (id: string, body: FeedbackRequest) => request<FeedbackWorkbenchView>(`${root}/${encodeURIComponent(id)}`, body);
+export const inspectFeedback = (id: string) => request<FeedbackInspection>(`${root}/${encodeURIComponent(id)}/inspect`);
 export const getExaminerStrategy = (id: string) => request<ExaminerStrategyView>(`${root}/${encodeURIComponent(id)}/examiner-strategy`);
 export const markExaminerStrategyView = (id: string, position: number) => request<{ ok: true }>(`${root}/${encodeURIComponent(id)}/examiner-strategy/view`, { position });

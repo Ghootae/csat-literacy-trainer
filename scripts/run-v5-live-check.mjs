@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import OpenAI from 'openai';
-import { ProblemFeedbackV4Controller } from '../packages/app/dist/server/problem-feedback-v4.js';
+import { ProblemFeedbackController } from '../packages/app/dist/server/problem-feedback.js';
 import { loadProblemSolvingBundle } from '../packages/app/dist/server/content.js';
 import { OpenAIFeedbackEvaluator, FeedbackEvaluationError } from '../packages/pipeline/dist/index.js';
 import { createLedger } from './test-v5-live-connection.mjs';
@@ -33,11 +33,11 @@ const hash = x => createHash('sha256').update(x).digest('hex');
 const put = (p, x) => { writeFileSync(p + '.tmp', JSON.stringify(x, null, 2) + '\n'); renameSync(p + '.tmp', p); };
 const questionIds = [...new Set(cases.map(c => c.questionId))];
 const runtimePaths = [
-  'packages/app/src/server/problem-feedback-v4.ts', 'packages/app/dist/server/problem-feedback-v4.js',
-  'packages/pipeline/src/problem-solving/feedback-v4.ts', 'packages/pipeline/dist/problem-solving/feedback-v4.js',
-  'packages/pipeline/src/problem-solving/feedback-v4-evaluator.ts', 'packages/pipeline/dist/problem-solving/feedback-v4-evaluator.js',
-  'packages/pipeline/src/problem-solving/feedback-v5-end-explanation.ts', 'packages/pipeline/dist/problem-solving/feedback-v5-end-explanation.js',
-  'packages/pipeline/src/problem-solving/feedback-v5-claims.ts', 'packages/pipeline/dist/problem-solving/feedback-v5-claims.js',
+  'packages/app/src/server/problem-feedback.ts', 'packages/app/dist/server/problem-feedback.js',
+  'packages/pipeline/src/problem-solving/feedback.ts', 'packages/pipeline/dist/problem-solving/feedback.js',
+  'packages/pipeline/src/problem-solving/feedback-evaluator.ts', 'packages/pipeline/dist/problem-solving/feedback-evaluator.js',
+  'packages/pipeline/src/problem-solving/feedback-end-explanation.ts', 'packages/pipeline/dist/problem-solving/feedback-end-explanation.js',
+  'packages/pipeline/src/problem-solving/feedback-claims.ts', 'packages/pipeline/dist/problem-solving/feedback-claims.js',
   'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md',
   ...questionIds.map(q => `packages/pipeline/fixtures/experiments/problem-solving/public/${q}.json`),
   'scripts/run-v5-live-check.mjs', `scripts/${casesModule.replace(/^\.\//, '')}`, 'scripts/v5-diverse-48-cases.mjs', 'scripts/test-v5-live-connection.mjs',
@@ -80,7 +80,7 @@ async function step(controller, ev, view, transitionId, command) {
 }
 async function restore(state, source) {
   const ev = makeEvaluator();
-  const controller = new ProblemFeedbackV4Controller({ loadSource: () => source, save: r => ev.onRecord?.(r), evaluator: ev.evaluator });
+  const controller = new ProblemFeedbackController({ loadSource: () => source, save: r => ev.onRecord?.(r), evaluator: ev.evaluator });
   let view = controller.start(state.case.questionId);
   for (const s of state.steps) {
     ev.queue = structuredClone(s.evaluations);
@@ -209,7 +209,7 @@ function caseChecks(state) {
     const active = s.view.activeErrorId, q = s.view.question;
     // Search every assessment: an A3 follow-up error comes from the SELECTION assessment, not the latest REPAIR.
     const err = s.inspection.assessments.flatMap(a => [...(a.raw?.errors ?? []), ...(a.raw?.repairs ?? []).flatMap(r => r.newErrors ?? [])]).findLast(e => e.errorId === active);
-    // selection-mismatch carries the SELECTION assessment's own sourceEvidence (feedback-v4.ts applyFeedbackAssessment).
+    // selection-mismatch carries the SELECTION assessment's own sourceEvidence (feedback.ts applyFeedbackAssessment).
     const evidence = active === 'selection-mismatch' ? s.inspection.assessments.findLast(a => a.mode === 'SELECTION')?.raw?.sourceEvidence : err?.sourceEvidence;
     const quotes = (evidence ?? []).filter(e => ['PASSAGE', 'SCENARIO'].includes(e.location) && e.quote && !e.mediaId && !e.visualObservation);
     // D-0130: a target error whose evidence is only the option text has nothing to highlight (user 2026-10-14: no change needed).

@@ -48,7 +48,7 @@ test('prepare replays 16 sessions, freezes required inputs, rejects errorId mism
   assert.deepEqual(await main({ dir, transport }), first);
   const frozen = read(`${dir}/FROZEN.json`);
   assert.ok(frozen.fileHashes['scripts/test-v5-repair.mjs']);
-  assert.ok(frozen.fileHashes['packages/pipeline/dist/problem-solving/feedback-v4.js']);
+  assert.ok(frozen.fileHashes['packages/pipeline/dist/problem-solving/feedback.js']);
   assert.equal(frozen.coachingInstructionsHash.length, 64);
   const suite = structuredClone(loadInputs().suite); suite.variants[0].answers.wrongId = '없어요.';
   assert.throws(() => loadInputs(suite), /errorId mismatch/);

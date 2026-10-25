@@ -14,7 +14,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, write
 import { dirname, resolve } from 'node:path';
 
 import type { RegionRecord } from './view.js';
-import type { FeedbackV4Record } from './problem-feedback-v4.js';
+import type { FeedbackRecord } from './problem-feedback.js';
 import type {
   CompletedProblemSessionRecord,
   ProblemSessionLogger,
@@ -32,9 +32,10 @@ export class JsonlProblemSessionLogger implements ProblemSessionLogger {
   }
 }
 
-/** v4 headless audit is separate from operational/student evidence records. */
-export function appendFeedbackV4Record(record: FeedbackV4Record): void {
-  const file = resolve(process.env['CSAT_PROBLEM_FEEDBACK_V4_LOG'] ?? '.omc/logs/problem-feedback-v4/events.jsonl');
+/** Problem lab headless audit is separate from operational/student evidence records. */
+export function appendFeedbackRecord(record: FeedbackRecord): void {
+  // 저장 자료 호환을 위해 로그 경로 값 유지(D-0173)
+  const file = resolve(process.env['CSAT_PROBLEM_FEEDBACK_LOG'] ?? process.env['CSAT_PROBLEM_FEEDBACK_V4_LOG'] ?? '.omc/logs/problem-feedback-v4/events.jsonl');
   mkdirSync(dirname(file), { recursive: true });
   appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');
 }
@@ -44,8 +45,9 @@ export function readExaminerStrategyFile(path: string): string {
   return readFileSync(path, 'utf8');
 }
 
-/** 출제자 전략 보기 사용 기록. v4 이벤트 기록(events.jsonl)은 세션 전체 스냅샷 형식이라 따로 둔다. */
+/** 출제자 전략 보기 사용 기록. 문제 풀이 이벤트 기록(events.jsonl)은 세션 전체 스냅샷 형식이라 따로 둔다. */
 export function appendExaminerStrategyLog(record: object): void {
+  // 저장 자료 호환을 위해 로그 경로 값 유지(D-0173)
   const file = resolve(process.env['CSAT_EXAMINER_STRATEGY_LOG'] ?? '.omc/logs/problem-feedback-v4/examiner-strategy.jsonl');
   mkdirSync(dirname(file), { recursive: true });
   appendFileSync(file, JSON.stringify(record) + '\n', 'utf8');

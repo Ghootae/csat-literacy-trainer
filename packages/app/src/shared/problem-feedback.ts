@@ -1,6 +1,6 @@
 import type { ProblemChoiceView } from './contract.js';
 
-export interface FeedbackV4MediaView {
+export interface FeedbackMediaView {
   mediaId: string; url: string; mimeType: string; width: number; height: number;
   contentHash?: string | undefined;
   placement: { scope: 'PASSAGE'; elementIndex?: number | undefined }
@@ -8,33 +8,34 @@ export interface FeedbackV4MediaView {
     | { scope: 'CHOICE'; choiceId: string; elementIndex?: number | undefined };
 }
 
-export interface FeedbackV4TextAnnotationView {
+export interface FeedbackTextAnnotationView {
   location: 'PASSAGE' | 'SCENARIO'; marker: string; style: 'underline' | 'box' | 'label';
   /** UTF-16 offsets into passageText or scenarioText, end exclusive. */
   start: number; end: number; text: string;
 }
 
 // No evaluator/pipeline imports: client-safe contracts.
-export type FeedbackV4Rationale = { mode: 'PROVIDED'; text: string } | { mode: 'OMITTED' };
-export interface FeedbackV4Request {
+export type FeedbackRationale = { mode: 'PROVIDED'; text: string } | { mode: 'OMITTED' };
+export interface FeedbackRequest {
   transitionId: string;
   expectedRevision: number;
-  command: { type: 'SELECT'; choiceId: string; rationale: FeedbackV4Rationale }
-    | { type: 'RATIONALE'; rationale: FeedbackV4Rationale }
+  command: { type: 'SELECT'; choiceId: string; rationale: FeedbackRationale }
+    | { type: 'RATIONALE'; rationale: FeedbackRationale }
     | { type: 'CORRECT'; errorId: string; text: string }
     | { type: 'RESELECT' } | { type: 'REQUEST_EXPLANATION' } | { type: 'FINISH' }
     | { type: 'END_START'; accept: boolean } | { type: 'UNDERSTOOD'; answer: boolean }
     | { type: 'RESUME' };
 }
-export interface FeedbackV4View {
+export interface FeedbackView {
+  // 저장 자료 호환을 위해 값 유지(D-0173)
   version: 'problem-feedback-v4';
   sessionId: string;
   revision: number;
   phase: 'AWAITING_SELECTION' | 'AWAITING_RATIONALE' | 'AWAITING_EVALUATION'
     | 'AWAITING_END_START' | 'AWAITING_UNDERSTANDING' | 'AWAITING_CORRECTION' | 'AWAITING_POST_REPAIR_CHOICE' | 'AWAITING_RESELECTION' | 'ITEM_REVIEW' | 'COMPLETED';
   question: { questionId: string; passageText: string; stem: string; scenarioText: string;
-    choices: ProblemChoiceView[]; media: FeedbackV4MediaView[];
-    textAnnotations: FeedbackV4TextAnnotationView[] };
+    choices: ProblemChoiceView[]; media: FeedbackMediaView[];
+    textAnnotations: FeedbackTextAnnotationView[] };
   message: string;
   correctionHighlights: { location: 'PASSAGE' | 'SCENARIO'; start: number; end: number; text: string }[];
   activeErrorId: string | null;
@@ -61,16 +62,16 @@ export interface FeedbackV4View {
   } | null;
 }
 
-export interface FeedbackV4Message {
+export interface FeedbackMessage {
   sequence?: 'INSTANT' | 'GATE' | 'CONNECTOR' | 'SECTION' | 'QUESTION' | 'CLOSING';
-  id: string; role: 'STUDENT' | 'COACH'; text: string; phase: FeedbackV4View['phase'];
+  id: string; role: 'STUDENT' | 'COACH'; text: string; phase: FeedbackView['phase'];
 }
-export interface FeedbackV4WorkbenchView extends FeedbackV4View {
+export interface FeedbackWorkbenchView extends FeedbackView {
   title: string; exam: string; questionNumber: number;
   selectedChoiceId: string | null;
-  transcript: FeedbackV4Message[];
+  transcript: FeedbackMessage[];
 }
-export interface FeedbackV4Inspection {
+export interface FeedbackInspection {
   revision: number;
   choiceImpliedVerdict: 'VALID' | 'INVALID';
   comparisons: { observationId: string; choiceImpliedVerdict: string; rationaleImpliedVerdict: string; selectionRationaleConsistency: string }[];

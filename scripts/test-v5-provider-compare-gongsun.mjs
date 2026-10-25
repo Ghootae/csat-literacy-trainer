@@ -89,7 +89,7 @@ export async function main({ mode = 'prepare', config: configName,
   const filePaths = [v5Path, v4Path, productPath, basePath, answerPath, responsesPath, casesPath,
     'scripts/lib/provider-adapter.mjs', 'scripts/lib/v5-marker-judgment.mjs', 'scripts/lib/v5-substitution-check.mjs',
     'scripts/lib/marker-gloss-validation.mjs',
-    ...readdirSync(distDir).filter(p => /^feedback-v4.*\.js$/u.test(p)).sort().map(p => `${distDir}/${p}`)];
+    ...readdirSync(distDir).filter(p => /^feedback(-evaluator)?\.js$/u.test(p)).sort().map(p => `${distDir}/${p}`)];
   const frozen = {
     fileHashes: Object.fromEntries(filePaths.map(p => [p, hash(readFileSync(p))])), runnerHash: hash(readFileSync(new URL(import.meta.url))),
     blocks: { CLAIM_BLOCK: hash(CLAIM_BLOCK), QUOTE_BLOCK: hash(QUOTE_BLOCK) },

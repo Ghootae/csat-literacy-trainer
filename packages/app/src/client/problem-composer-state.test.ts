@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { FeedbackV4WorkbenchView } from '../shared/problem-feedback-v4.js';
-import { composerState, sequenceState, instantWaitingDelay, waitingKind, waitingText, type ComposerLocal, type WaitingKind } from './v4-composer-state.js';
-const view = (phase: FeedbackV4WorkbenchView['phase']): FeedbackV4WorkbenchView => ({
+import type { FeedbackWorkbenchView } from '../shared/problem-feedback.js';
+import { composerState, sequenceState, instantWaitingDelay, waitingKind, waitingText, type ComposerLocal, type WaitingKind } from './problem-composer-state.js';
+const view = (phase: FeedbackWorkbenchView['phase']): FeedbackWorkbenchView => ({
   phase, evaluationStatus: 'IDLE', evaluationError: null, selectedChoiceId: 'C1',
   postRepairOptions: ['RESELECT', 'REQUEST_EXPLANATION'],
   question: { choices: [1, 2, 3, 4, 5].map(position => ({ choiceId: `C${position}`, position, text: '' })) },
-} as FeedbackV4WorkbenchView);
+} as FeedbackWorkbenchView);
 const local: ComposerLocal = { choice: 'C2', draft: '근거', omit: false, waiting: false, pending: false, error: '' };
 describe('composerState', () => {
   it.each([
@@ -77,7 +77,7 @@ describe('composerState', () => {
     expect(composerState(view('AWAITING_CORRECTION'), { ...local, draft: '', omit: true }).actions.buttons[0]?.disabled).toBe(true);
   });
   it('puts the strategy open/next button in the primary slot and keeps restart fixed, without number or return buttons', () => {
-    const labels = (strategy?: ComposerLocal['strategy'], phase: FeedbackV4WorkbenchView['phase'] = 'COMPLETED') => composerState(view(phase), { ...local, strategy }).actions.buttons.map(b => b.label);
+    const labels = (strategy?: ComposerLocal['strategy'], phase: FeedbackWorkbenchView['phase'] = 'COMPLETED') => composerState(view(phase), { ...local, strategy }).actions.buttons.map(b => b.label);
     expect(labels()).toEqual(['다시 풀기']);
     expect(labels({ stage: 'INTRO', position: null })).toEqual(['전략 보기', '다시 풀기']);
     expect(labels({ stage: 'READING', position: 2 })).toEqual(['다음', '다시 풀기']);

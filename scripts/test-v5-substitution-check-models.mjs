@@ -82,7 +82,7 @@ export async function main({ mode = 'prepare', model, dir = `docs/experiments/v5
   const MODEL = model, MAX_OUTPUT = 8000, MAX_REQUESTS = 120, CAP_USD = existsSync(capAmendmentPath) ? read(capAmendmentPath).estimatedUsdCap : 2.5;
   const prices = { input: 2, cached: 0.2, output: 12 };
   const distDir = 'packages/pipeline/dist/problem-solving';
-  const filePaths = [v5Path, v4Path, ...readdirSync(distDir).filter(p => /^feedback-v4.*\.js$/u.test(p)).sort().map(p => `${distDir}/${p}`),
+  const filePaths = [v5Path, v4Path, ...readdirSync(distDir).filter(p => /^feedback(-evaluator)?\.js$/u.test(p)).sort().map(p => `${distDir}/${p}`),
     'scripts/lib/v5-marker-judgment.mjs', 'scripts/lib/v5-substitution-check.mjs', 'scripts/lib/marker-gloss-validation.mjs',
     productPath, basePath, answerPath, responsesPath];
   const frozen = {

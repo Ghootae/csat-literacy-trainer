@@ -66,7 +66,7 @@ function frozenInputs(data) {
   const paths = [VARIANTS_PATH, ...['cases', 'sources', 'prompts', 'FROZEN'].map(n => `${BASE_DIR}/${n}.json`),
     ...Object.entries(data.suite.sessions).map(([id, s]) => `${BASE_DIR}/${s.firstJudgeModel}/${id}-r1.json`),
     BASELINE, 'scripts/lib/v5-marker-judgment.mjs',
-    ...readdirSync(dist).filter(p => /^feedback-v4.*\.js$/u.test(p)).sort().map(p => `${dist}/${p}`),
+    ...readdirSync(dist).filter(p => /^feedback(-evaluator)?\.js$/u.test(p)).sort().map(p => `${dist}/${p}`),
     'scripts/test-v5-repair.mjs'];
   return { fileHashes: Object.fromEntries(paths.map(p => [p, hash(readFileSync(p))])),
     coachingInstructionsHash: hash(COACHING_INSTRUCTIONS), roles: ROLES, repetitions: 3,

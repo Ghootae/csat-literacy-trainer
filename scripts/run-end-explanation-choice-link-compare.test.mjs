@@ -7,7 +7,7 @@ import {
   CASE_IDS, REGRESSION_DIR, B3_RECHECK_DIR, CHOICE_LINK_DIR, TARGETS_PATH, LINK_APPENDIX, LINK_APPENDIX_CORRECT, KINDS, SOL, LUNA, RATES_BY_MODEL, reserveUsdFor, kindOfInstructions, USER_CASES, LIMITS, MAX_SUPPORT, TWIST_NAMES, MAP_ID_PATTERN,
   findEndRequest, choiceLinkOf, buildChoiceLinks, makeLinkRequest, assignBlind, limitCheck, sessionChoices, prepareCases, main,
 } from './run-end-explanation-choice-link-compare.mjs';
-import { INCORRECT_END_INSTRUCTIONS, CORRECT_END_INSTRUCTIONS } from '../packages/pipeline/dist/problem-solving/feedback-v5-end-explanation.js';
+import { INCORRECT_END_INSTRUCTIONS, CORRECT_END_INSTRUCTIONS } from '../packages/pipeline/dist/problem-solving/feedback-end-explanation.js';
 import { TWIST_KO, FIXED_PATH } from './run-choice-link.mjs';
 
 const readJson = p => JSON.parse(readFileSync(p, 'utf8'));

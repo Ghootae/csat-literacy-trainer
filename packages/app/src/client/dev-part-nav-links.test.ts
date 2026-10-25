@@ -11,7 +11,7 @@ describe('dev part nav links', () => {
   });
   it('builds the problem link with a session returnTo', () => {
     const url = new URL(problemLink('q-1', 's-1'), 'http://x');
-    expect(url.pathname).toBe('/problem/dev/v4');
+    expect(url.pathname).toBe('/problem/lab');
     expect(url.searchParams.get('questionId')).toBe('q-1');
     expect(url.searchParams.get('returnTo')).toBe('/dialogue/dev/simple?sessionId=s-1');
   });

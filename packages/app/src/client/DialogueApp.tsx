@@ -164,7 +164,7 @@ export function DialogueApp(): React.JSX.Element {
   async function problem() {
     if (!session) return;
     if (developer && session.nextProblemQuestionId) {
-      window.location.assign(`/problem/dev/v4?questionId=${encodeURIComponent(session.nextProblemQuestionId)}&returnTo=${encodeURIComponent(`${base}?sessionId=${session.sessionId}`)}`);
+      window.location.assign(`/problem/lab?questionId=${encodeURIComponent(session.nextProblemQuestionId)}&returnTo=${encodeURIComponent(`${base}?sessionId=${session.sessionId}`)}`);
       return;
     }
     await run(async () => {
@@ -194,7 +194,7 @@ export function DialogueApp(): React.JSX.Element {
           onClick={() => void open(p.passageId, index)}><span>문단 {paragraph.position}</span><small>{outcomeLabel[progress[index]?.outcome ?? 'UNSTARTED']}</small></button></li>)}</ul>
         <div className="map-problems"><strong>연결 문항</strong>{p.questionIds.map((q) => <a key={q}
           aria-disabled={busy} onClick={(e) => { if (busy) e.preventDefault(); }}
-          href={`/problem/dev/v4?questionId=${encodeURIComponent(q)}&returnTo=${encodeURIComponent(session ? `${base}?sessionId=${session.sessionId}` : base)}`}>{number(q)}번 문제 ↗</a>)}
+          href={`/problem/lab?questionId=${encodeURIComponent(q)}&returnTo=${encodeURIComponent(session ? `${base}?sessionId=${session.sessionId}` : base)}`}>{number(q)}번 문제 ↗</a>)}
           <small>지문 단위 연결 · 문단별 연결은 미정의</small></div>
       </section>;
     })}

@@ -65,7 +65,7 @@ test('prepare validates replay and answer IDs, freezes inputs, and makes zero tr
   const prepared = await main({ dir, transport: { create() { assert.fail('prepare transport called'); } } });
   assert.equal(prepared.externalRequests, 0); assert.equal(prepared.cells, 17);
   const frozen = JSON.parse(readFileSync(`${dir}/FROZEN.json`, 'utf8'));
-  assert.ok(frozen.fileHashes['packages/pipeline/src/problem-solving/feedback-v5-end-explanation.ts']);
+  assert.ok(frozen.fileHashes['packages/pipeline/src/problem-solving/feedback-end-explanation.ts']);
   assert.deepEqual(await main({ dir }), prepared);
   frozen.repetitions = 3; writeFileSync(`${dir}/FROZEN.json`, JSON.stringify(frozen));
   await assert.rejects(main({ dir }), /FROZEN mismatch/);

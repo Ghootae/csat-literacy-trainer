@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { DialogueApp } from './DialogueApp.js';
 import { ProblemApp } from './ProblemApp.js';
-import { ProblemFeedbackV4App } from './ProblemFeedbackV4App.js';
+import { ProblemLabApp } from './ProblemLabApp.js';
 import { SimpleDialogueApp } from './SimpleDialogueApp.js';
 import { StudentFeedbackApp } from './StudentFeedbackApp.js';
 import './styles.css';
@@ -19,12 +19,17 @@ if (window.location.pathname === '/') {
   window.history.replaceState(null, '', `/dialogue${window.location.search}${window.location.hash}`);
 }
 
+// 옛 개발자 문제 풀이 주소(D-0173): 쿼리·해시를 유지한 채 새 주소로 바꾼다.
+if (window.location.pathname === '/problem/dev/v4') {
+  window.history.replaceState(null, '', `/problem/lab${window.location.search}${window.location.hash}`);
+}
+
 createRoot(el).render(
   <StrictMode>
     {window.location.pathname.startsWith('/progress')
       ? <StudentFeedbackApp />
-      : window.location.pathname === '/problem/dev/v4'
-      ? <ProblemFeedbackV4App />
+      : window.location.pathname === '/problem/lab'
+      ? <ProblemLabApp />
       : window.location.pathname.startsWith('/problem')
       ? <ProblemApp />
       : window.location.pathname === '/dialogue/dev/simple'

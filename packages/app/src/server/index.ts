@@ -47,7 +47,7 @@ import { DialogueController } from './dialogue.js';
 import { ProblemSolvingController } from './problem-solving.js';
 import { SimpleDialogueController } from './dialogue-simple.js';
 import { loadExaminerStrategies, strategyFor } from './examiner-strategy.js';
-import { ProblemFeedbackV4Controller, type FeedbackV4Record } from './problem-feedback-v4.js';
+import { ProblemFeedbackController, type FeedbackRecord } from './problem-feedback.js';
 import {
   findPassageManifestForParagraph,
   listPassages,
@@ -118,7 +118,7 @@ type ResponseEvaluator = (
 
 export interface LearningServerOptions {
   readonly developerMode?: boolean;
-  readonly problemFeedbackV4Public?: boolean;
+  readonly problemFeedbackPublic?: boolean;
   readonly port?: number;
   readonly budget?: number;
   /** E2E가 실제 API 대신 결정론적 결과를 주입하는 유일한 경계다. */
@@ -129,8 +129,8 @@ export interface LearningServerOptions {
   readonly dialoguePassageRoot?: string;
   readonly dialogueLogDirectory?: string;
   readonly problemPathEvaluator?: SourceDirectProblemEvaluator;
-  readonly problemFeedbackV4Evaluator?: FeedbackEvaluator;
-  readonly problemFeedbackV4Save?: (record: FeedbackV4Record) => void;
+  readonly problemFeedbackEvaluator?: FeedbackEvaluator;
+  readonly problemFeedbackSave?: (record: FeedbackRecord) => void;
   readonly examinerStrategyPath?: string;
   readonly examinerStrategyLog?: (record: { savedAt: string; sessionId: string; questionId: string; position: number; first: boolean }) => void;
   readonly dialogueSimpleEvaluator?: SimpleEvaluator;
@@ -147,7 +147,7 @@ export interface LearningServerOptions {
 export function createLearningServer(options: LearningServerOptions = {}): ReturnType<typeof createServer> {
   const port = options.port ?? Number(process.env['PORT'] ?? 5174);
   const developerMode = options.developerMode ?? process.env['CSAT_DEVELOPER_MODE'] === '1';
-  const problemFeedbackV4Public = options.problemFeedbackV4Public ?? process.env['CSAT_PROBLEM_V4_PUBLIC'] === '1';
+  const problemFeedbackPublic = options.problemFeedbackPublic ?? (process.env['CSAT_PROBLEM_LAB_PUBLIC'] ?? process.env['CSAT_PROBLEM_V4_PUBLIC']) === '1';
   const studentFeedbackEnabled = options.studentFeedbackEnabled ?? process.env['CSAT_STUDENT_FEEDBACK_ENABLED'] === '1';
   const studentFeedbackPublic = options.studentFeedbackPublic ?? process.env['CSAT_STUDENT_FEEDBACK_PUBLIC'] === '1';
   // 인증 없는 터널 노출 시 API 비용을 직접 제한한다. 캐시 히트는 호출하지 않으므로 세지 않는다.
@@ -173,9 +173,9 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
     evidenceSink: studentEvidence,
     studentId: OWNER,
   });
-  const problemFeedbackV4 = new ProblemFeedbackV4Controller({
-    ...(options.problemFeedbackV4Evaluator === undefined ? {} : { evaluator: options.problemFeedbackV4Evaluator }),
-    ...(options.problemFeedbackV4Save === undefined ? {} : { save: options.problemFeedbackV4Save }),
+  const problemFeedback = new ProblemFeedbackController({
+    ...(options.problemFeedbackEvaluator === undefined ? {} : { evaluator: options.problemFeedbackEvaluator }),
+    ...(options.problemFeedbackSave === undefined ? {} : { save: options.problemFeedbackSave }),
   });
   const examinerStrategies = loadExaminerStrategies(options.examinerStrategyPath);
   const strategyViews = new Map<string, Set<number>>();
@@ -214,22 +214,26 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
       return json(res, 200, studentEvidence.report(OWNER, new Date().toISOString(), 'STUDENT', windowDays));
     }
 
+    // 옛 API 접두 호환(D-0173): 새 접두로 정규화해 같은 처리로 보낸다.
+    const legacyApiPrefix = '/api/developer/problem-feedback-v4/';
+    if (url.pathname.startsWith(legacyApiPrefix)) url.pathname = `/api/developer/problem-lab/${url.pathname.slice(legacyApiPrefix.length)}`;
+
     if (url.pathname.startsWith('/api/developer/')) {
       if (!developerMode) return json(res, 403, { error: '개발자 API가 비활성화돼 있습니다. 개인 테스트 서버에서 CSAT_DEVELOPER_MODE=1로 실행하세요.' });
-      if (url.pathname.startsWith('/api/developer/problem-feedback-v4/')) {
+      if (url.pathname.startsWith('/api/developer/problem-lab/')) {
         // Existing public developer tunnels must not automatically expose a new paid evaluator.
-        if (!loopbackRequest && !(problemFeedbackV4Public && hostname === 'dialogue.cogaxis.net')) return json(res, 404, { error: '문제 피드백 API가 이 주소에 공개되지 않았습니다.' });
-        if (req.method === 'POST' && url.pathname === '/api/developer/problem-feedback-v4/session') {
+        if (!loopbackRequest && !(problemFeedbackPublic && hostname === 'dialogue.cogaxis.net')) return json(res, 404, { error: '문제 피드백 API가 이 주소에 공개되지 않았습니다.' });
+        if (req.method === 'POST' && url.pathname === '/api/developer/problem-lab/session') {
           const body = await readBody(req) as { questionId?: unknown };
           if (typeof body.questionId !== 'string' || !body.questionId.trim()) return json(res, 400, { error: 'questionId가 필요합니다.' });
-          return json(res, 200, problemFeedbackV4.start(body.questionId));
+          return json(res, 200, problemFeedback.start(body.questionId));
         }
-        const match = /^\/api\/developer\/problem-feedback-v4\/session\/([^/]+)$/u.exec(url.pathname);
-        const inspection = /^\/api\/developer\/problem-feedback-v4\/session\/([^/]+)\/inspect$/u.exec(url.pathname);
-        const strategy = /^\/api\/developer\/problem-feedback-v4\/session\/([^/]+)\/examiner-strategy(\/view)?$/u.exec(url.pathname);
-        if (strategy && req.method === 'GET' && !strategy[2]) return json(res, 200, strategyFor(problemFeedbackV4.get(strategy[1]!), examinerStrategies));
+        const match = /^\/api\/developer\/problem-lab\/session\/([^/]+)$/u.exec(url.pathname);
+        const inspection = /^\/api\/developer\/problem-lab\/session\/([^/]+)\/inspect$/u.exec(url.pathname);
+        const strategy = /^\/api\/developer\/problem-lab\/session\/([^/]+)\/examiner-strategy(\/view)?$/u.exec(url.pathname);
+        if (strategy && req.method === 'GET' && !strategy[2]) return json(res, 200, strategyFor(problemFeedback.get(strategy[1]!), examinerStrategies));
         if (strategy && req.method === 'POST' && strategy[2]) {
-          const view = problemFeedbackV4.get(strategy[1]!);
+          const view = problemFeedback.get(strategy[1]!);
           const { position } = await readBody(req) as { position?: unknown };
           const available = strategyFor(view, examinerStrategies);
           if (!available.available || typeof position !== 'number' || !available.choices.some(c => c.position === position)) return json(res, 400, { error: '볼 수 있는 출제자 전략이 없습니다.' });
@@ -239,16 +243,16 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
           seen.add(position);
           return json(res, 200, { ok: true });
         }
-        if (inspection && req.method === 'GET') return json(res, 200, problemFeedbackV4.inspect(inspection[1]!));
+        if (inspection && req.method === 'GET') return json(res, 200, problemFeedback.inspect(inspection[1]!));
         if (match) {
-          if (req.method === 'GET') return json(res, 200, problemFeedbackV4.get(match[1]!));
-          if (req.method === 'POST') return json(res, 200, await problemFeedbackV4.submit(match[1]!, await readBody(req)));
+          if (req.method === 'GET') return json(res, 200, problemFeedback.get(match[1]!));
+          if (req.method === 'POST') return json(res, 200, await problemFeedback.submit(match[1]!, await readBody(req)));
         }
         return json(res, 404, { error: '등록되지 않은 문제 피드백 API입니다.' });
       }
       if (url.pathname.startsWith('/api/developer/dialogue-simple/')) {
-        // 유료 평가기를 새로 노출하므로 문제 피드백 v4와 같은 접근 규칙을 쓴다.
-        if (!loopbackRequest && !(problemFeedbackV4Public && hostname === 'dialogue.cogaxis.net')) return json(res, 404, { error: '단순 형식 문단 API가 이 주소에 공개되지 않았습니다.' });
+        // 유료 평가기를 새로 노출하므로 문제 풀이 개발자 화면과 같은 접근 규칙을 쓴다.
+        if (!loopbackRequest && !(problemFeedbackPublic && hostname === 'dialogue.cogaxis.net')) return json(res, 404, { error: '단순 형식 문단 API가 이 주소에 공개되지 않았습니다.' });
         if (req.method === 'POST' && url.pathname === '/api/developer/dialogue-simple/session') {
           const body = await readBody(req) as { passageId?: unknown };
           if (typeof body.passageId !== 'string' || !body.passageId.trim()) return json(res, 400, { error: 'passageId가 필요합니다.' });
