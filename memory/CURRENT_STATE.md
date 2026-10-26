@@ -17,6 +17,7 @@
 - v5 구성: 해석본 없는 methods 조성. 기호 해석본 사용은 luna·sol 기호 오독 확인 전까지 보류([D-0114](./decisions/D-0114-v5-current-composition-methods-without-gloss.md)). 기호 해석본 파이프라인 v2는 완성돼 있으나 v5에 미포함([D-0093](./decisions/D-0093-v5-composition-auto-gloss-pipeline.md)).
 - 판정 모델: 선택 정오 라우팅, 정답 luna·오답 sol([D-0104](./decisions/D-0104-problem-evaluator-model-routing-by-choice.md)), 세션 안 배정([D-0107](./decisions/D-0107-session-model-routing-repair-reselect-coaching.md)). Gemini 가격 재확인([D-0129](./decisions/D-0129-keep-luna-sol-over-gemini-after-price-check.md))과 DeepSeek 1017 재시험([D-0165](./decisions/D-0165-keep-luna-sol-over-deepseek-1017.md)) 뒤에도 유지. DeepSeek 오답 자리는 미측정.
 - 교정·피드백 규칙: 교정은 국소 오류만 판정([D-0108](./decisions/D-0108-repair-judges-local-error-only.md)), 교정 질문은 선지 정오를 가르는 관계까지([D-0105](./decisions/D-0105-correction-question-covers-choice-deciding-relation.md)), 교정 뒤 "다시 선택"/"코칭 보기" 버튼([D-0106](./decisions/D-0106-post-repair-choice-reselect-or-coaching.md)), 학생용 문장 반말([D-0116](./decisions/D-0116-student-facing-tone-banmal.md)), 선택 충돌 인용은 충분성 인용 가능([D-0164](./decisions/D-0164-selection-mismatch-quote-allowed-as-sufficiency.md)), "원문에 없음" 근거는 반박 여부로 판정([D-0166](./decisions/D-0166-absence-rationale-by-refutation.md)).
+- 판정 지시문은 `source-direct-problem-feedback-v5.1.md`(`promptVersion: problem-feedback-v5.1`, 판정 출력에 `coaching` 없음, [D-0177](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md)). 2026-10-26 18세션 회귀(10-22 사례 중 역할 균형 18개)에서 역할별 최종 결과 유지.
 - 개발자 경로 `/problem/lab`(옛 `/problem/dev/v4`는 넘김, 코드 이름에 버전 없음 [D-0173](./decisions/D-0173-problem-lab-version-free-code-names.md), 작동 순서 [문서](../docs/PROBLEM-LAB-FLOW-2026-10-24.md))에 v5·라우팅·교정 후 버튼·별도 종료 설명이 연결돼 있다([D-0112](./decisions/D-0112-v5-developer-path-connection-end-states.md)). 최신 48세션 회귀(2026-10-22, [판정 기록](../docs/experiments/v5-diverse-48-regression-2026-10-22/REVIEW.md))는 D-0156·D-0157·D-0159·D-0161·D-0164 반영 뒤 역할별 최종 결과가 10-12와 같다. 가상 답변이라 실제 학생 검증이 아니다.
 - 다음 할 일: UI 메모장 30번 논의(16번 정답 피드백 규칙). 리마인드: luna 자신의 기호 오독(S2-r3) 해결 방식(Q-0030).
 - 선택형 출제자 전략 피드백([D-0170](./decisions/D-0170-optional-examiner-strategy-feedback.md)): 동결본 truth FALSE 선지 57편을 sol·지시문 v4로 생성하고 코드 에이전트 검토(골드 수정 4, 재생성 통과)까지 마쳤다([FINAL.json](../docs/experiments/examiner-strategy-2026-10-23/FINAL.json)). 개발자 문제 화면에 연결했다(세션 종료 뒤 말풍선·[다음], 커밋 `dc6c295`). 같은 커밋에서 선지를 가운데 문제 칸에서 직접 누르도록 바꿨다([D-0172](./decisions/D-0172-problem-ui-choice-direct-select.md)). 다음: 사용자 직접 사용 메모 반영, 주 버튼 자리([다시 풀기]를 주 버튼 왼쪽에 둘지) 답 대기([체크포인트](./checkpoints/2026-10-24-examiner-strategy-ui-direct-choice.md)). 문제 세트 흐름([다음 문제로]·[다음 지문으로])은 별도 과제다.
@@ -71,9 +72,11 @@
 
 ## 현재 우선순위
 
-1. 실제 학생 사용성·학습 흐름 확인과 지문·문항 세트 확장. 반복되거나 학습을 방해하는 실패만 일반화된 수정으로 연결한다.
-2. 문단: 학생용 전환 결정. 작동 순서 문서의 확인 필요 11건은 처리했다(2026-10-25, 문서 6절, 남김 1건: 골드 없는 지문 추가 때 목록 필터).
-3. 문제: 개발자 경로 메모장 논의, 출제자 전략·선지 직접 누르기 화면의 사용 메모 반영. 작동 순서 문서 6절의 남김 과제: 판정 출력의 쓰이지 않는 `coaching` 필드와 지시문 제목·종료 코칭 문단 정리(지시문·스키마 변경이라 48세션 회귀 필요).
+학생용 전환 순서는 [D-0176](./decisions/D-0176-student-switch-roadmap-pilot-before-expansion.md): 1′ 6지문으로 개발자 경로 알려진 문제 0건 → 얇은 학생판 준비 → 방식과 무관한 원자료 확대만 먼저 → (섭외 뒤) 실제 학생 확인 → 운영 방식 확정 → 부가 자산 확대 → 정식 전환. 실제 학생 섭외처는 아직 없다(2026-10-25).
+
+1. 1′ 첫 과제 완료(커밋 대기): 문제 판정 v5.1 — 쓰이지 않는 `coaching` 필드·M5 재요청 제거([D-0177](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md)). 18세션 회귀로 결과 유지 확인. 공손룡 sol 결론 문장 계약 위반 재시도 3건(경로 영향 없음)은 다음 회귀에서 다시 센다.
+2. 1′ 나머지: 문제 개발자 경로 메모장 30번 논의, 출제자 전략·선지 직접 누르기 화면 사용 메모 반영. 문단 작동 순서 문서 남김 1건(골드 없는 지문 추가 때 목록 필터).
+3. 얇은 학생판 범위 설계(내부 정보 숨김, 로그 저장, 최소 인증, 서버 상시 실행).
 4. 학생 상태 모델: 남은 승인 항목(위 절).
 
 ## 금지선

@@ -31,9 +31,11 @@ const acceptEnd = (s: FeedbackSession) => s.phase === 'AWAITING_END_START' ? sub
 const explain = (s: FeedbackSession) => submit(applyFeedbackEndExplanation(acceptEnd(s), sections(s)), { type: 'UNDERSTOOD', answer: true }, 'understood');
 describe('hardening regressions', () => {
   // Stored outputs predate errorType; they were all content errors.
-  const stored = (path: string) => JSON.parse(readFileSync(
-    'docs/experiments/problem-feedback-v4-synthetic-2026-10-01/' + path, 'utf8'), (_k, v) => {
+  const storedRaw = (path: string) => readFileSync('docs/experiments/problem-feedback-v4-synthetic-2026-10-01/' + path, 'utf8');
+  // Old records carry a `coaching` key the strict assessment schema no longer accepts; it is dropped on load.
+  const stored = (path: string) => JSON.parse(storedRaw(path), (_k, v) => {
     if (!v || typeof v !== 'object') return v;
+    if ((v.mode === 'SELECTION' || v.mode === 'REPAIR') && 'coaching' in v) { const { coaching: _coaching, ...rest } = v; v = rest; }
     if ('errorId' in v && 'description' in v && 'studentEvidence' in v && !('errorType' in v)) v = { ...v, errorType: 'CONTENT' };
     if ('errorId' in v && 'question' in v && 'sourceEvidence' in v && !('basis' in v)) v = { ...v, basis: 'STATED' };
     if (v.mode === 'SELECTION' && 'errors' in v && !('errorHypothesis' in v)) v = { ...v, errorHypothesis: null };
@@ -92,31 +94,20 @@ describe('hardening regressions', () => {
   });
   for (const id of ['C4-r1', 'C6-r1', 'D5-r1']) it(id + ' stored corrupt coaching cannot be published', () => {
     const r = stored('initial/' + id + '.json'); const s = restoreInput(r); const before = structuredClone(s);
+    const coaching: string = JSON.parse(storedRaw('initial/' + id + '.json')).call.rawOutput.coaching;
     const next = assess(s, r.call.rawOutput);
     expect(next.phase).toBe('AWAITING_END_START');
-    expect(() => applyFeedbackEndExplanation(next, sections(next, r.call.rawOutput.coaching))).toThrow(/코칭/);
+    expect(() => applyFeedbackEndExplanation(next, sections(next, coaching))).toThrow(/코칭/);
     expect(s).toEqual(before);
   });
-  it('coaching-only regeneration preserves the assessment and records the original corruption', async () => {
-    const s = selection(); const a = output(s, { reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN',
-      contentAssessment: 'UNKNOWN', errors: [], coaching: '/', reconstructedPath: [] });
-    const coaching = '제출한 근거만으로 판단 관계는 확인하기 어렵습니다. 반복 게시가 다수 의견으로 오인되는 관계를 살펴보세요.';
-    const requests: unknown[] = [];
-    const evaluator = new OpenAIFeedbackEvaluator({ transport: { async create(r) {
-      requests.push(r); return response(requests.length === 1 ? a : { coaching });
-    } } });
-    const call = await evaluator.evaluate(s);
-    expect(call.rawOutput).toEqual({ ...a, coaching });
-    expect(call.metadata.attempts?.[0]?.rawOutput).toEqual(withClaims(a));
-    expect(call.metadata.attempts?.map(a => a.kind)).toEqual(['ASSESSMENT', 'COACHING']);
-    expect(explain(assess(s, call.rawOutput)).result?.outcome).toBe('COACHING_TERMINATED');
-    expect(s.phase).toBe('AWAITING_EVALUATION');
-  });
-  it('unused coaching is not a failure; scientific symbols and Latin terms remain valid', async () => {
-    const s = selection(); const a = output(s, { coaching: '/' });
-    const evaluator = new OpenAIFeedbackEvaluator({ transport: { async create() { return response(a); } } });
-    expect((await evaluator.evaluate(s)).metadata.attempts).toHaveLength(1);
+  it('scientific symbols and Latin terms remain valid in public text', () => {
     expect(validateFeedbackCoaching('Oh, γ, ρ, R 및 ΔP = 2γ/R의 관계를 원문과 비교하세요.')).toContain('Oh');
+  });
+  it('restoring an old record with coaching leaves none in the end-explanation input', () => {
+    const r = stored('initial/C4-r1.json'); const s = restoreInput(r);
+    expect(JSON.parse(storedRaw('initial/C4-r1.json')).call.rawOutput).toHaveProperty('coaching');
+    const payload = JSON.parse(feedbackEndExplanationContent(acceptEnd(assess(s, r.call.rawOutput)))[0]!.text as string);
+    expect(payload.lastRepairAssessment === null || !('coaching' in payload.lastRepairAssessment)).toBe(true);
   });
   it('only unique whitespace/quote differences can be restored, including astral offsets', () => {
     const text = "앞😀 시민의 '진정한 의견'으로 오인될 수 있다.";
@@ -149,15 +140,6 @@ describe('hardening regressions', () => {
     expect(requests[1]).not.toEqual(requests[0]);
     expect(call.metadata.attempts?.[0]?.rawOutput).toEqual(withClaims(bad));
   });
-  it('persistent corruption stops after shared retry without revealing or consuming a selection', async () => {
-    const s = selection(); let calls = 0;
-    const a = output(s, { reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', errors: [], coaching: '/' });
-    const evaluator = new OpenAIFeedbackEvaluator({ transport: { async create() {
-      return response(++calls === 1 ? a : { coaching: '/' });
-    } } });
-    await expect(evaluator.evaluate(s)).rejects.toMatchObject({ message: expect.stringContaining('코칭') });
-    expect(calls).toBe(2); expect(s.result).toBeNull(); expect(s.selections).toHaveLength(1);
-  });
 });
 
 const source: SourceDirectProblemBundle = {
@@ -187,7 +169,7 @@ function output(s: FeedbackSession, changes: Partial<FeedbackSelectionAssessment
     errors: [{ errorId: 'E1', errorType: 'CONTENT', description: '여론 왜곡의 결과를 우려 약화로 해석함', studentEvidence: ev,
       sourceEvidence: src, basis: 'STATED', question: '서로 다른 이름의 반복 게시가 실제 시민의 의견과 같을까요?' }],
     errorHypothesis: null, selectionMismatchQuestion: '근거에서 내린 판단과 선택 목표가 일치하나요?',
-    coaching: '동일인의 여러 이름이 독립된 다수 의견으로 오인될 수 있다는 관계를 비교하세요.', ...changes,
+    ...changes,
   };
 }
 function questioned(choiceId = 'C4', count = 1) {
@@ -203,7 +185,7 @@ function repair(s: FeedbackSession, changes: Partial<FeedbackRepairAssessment> =
   return { mode: 'REPAIR', boundary: 'NONE', reason: '누적 답변에서 수정 확인',
     reviewedResponse: { observationId: o.observationId, quote: o.command.type === 'CORRECT' ? o.command.text : '' },
     repairs: [...s.errors, ...s.additionalErrors].map(e => ({ errorId: e.errorId, status: 'REPAIRED', studentEvidence: [{ observationId: o.observationId, quote: o.command.type === 'CORRECT' ? o.command.text : '' }] })),
-    newErrors: [], verificationComplete: true, rationaleSufficient: true, sufficiencyEvidence: [], coaching: '수정이 확인되지 않은 관계를 원문과 비교하세요.', ...changes,
+    newErrors: [], verificationComplete: true, rationaleSufficient: true, sufficiencyEvidence: [], ...changes,
     ...('sufficiencyEvidence' in changes || changes.rationaleSufficient === false ? {} : { sufficiencyEvidence: [{ observationId: o.observationId, quote: o.command.type === 'CORRECT' ? o.command.text : '' }] }) };
 }
 function finalReady() { const s = reply(questioned()); return submit(assess(s, repair(s)), { type: 'RESELECT' }, 'reselect'); }
@@ -696,23 +678,53 @@ describe('developer connection contracts', () => {
       expect(requests.map(r => r.model)).toEqual([model, model]);
       expect(requests.every(r => r.reasoning.effort === 'medium')).toBe(true);
       expect(requests[0].text.format.schema.required).toContain('studentClaims');
-      expect(requests[0].instructions).toBe(readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md', 'utf8'));
-      expect(call.metadata.promptVersion).toBe('problem-feedback-v5');
+      expect(requests[0].instructions).toBe(readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.1.md', 'utf8'));
+      expect(call.metadata.promptVersion).toBe('problem-feedback-v5.1');
       expect(call.metadata.attempts?.map(a => a.model)).toEqual([model, model]);
       expect(call.rawOutput).toEqual(a); expect(call.metadata.attempts?.[0]?.rawOutput).toEqual(withClaims(a));
       expect(assess(s, call.rawOutput).version).toBe('problem-feedback-v4');
     } finally { vi.unstubAllEnvs(); }
   });
-  for (const correct of [false, true]) it(`repair and coaching-only retry use luna: ${correct}`, async () => {
+  for (const correct of [false, true]) it(`repair uses luna: ${correct}`, async () => {
     const s = reply(questioned(correct ? 'C5' : 'C4'));
-    const a = repair(s, { coaching: '/' }); a.repairs[0]!.status = 'REMAINING';
+    const a = repair(s); a.repairs[0]!.status = 'REMAINING';
     const requests: any[] = [];
     const call = await new OpenAIFeedbackEvaluator({ transport: { async create(r) {
-      requests.push(r); return response(requests.length === 1 ? a : { coaching: endText });
+      requests.push(r); return response(a);
     } } }).evaluate(s);
-    expect(requests.map(r => r.model)).toEqual(['gpt-6-luna', 'gpt-6-luna']);
+    expect(requests.map(r => r.model)).toEqual(['gpt-6-luna']);
     expect(requests[0].text.format.schema.properties).not.toHaveProperty('studentClaims');
-    expect(call.metadata.attempts?.map(a => a.kind)).toEqual(['ASSESSMENT', 'COACHING']);
+    expect(call.metadata.attempts?.map(a => a.kind)).toEqual(['ASSESSMENT']);
+  });
+  describe('no judge coaching field', () => {
+    it('request schemas for SELECTION and REPAIR omit coaching', async () => {
+      for (const s of [selection(), reply(questioned())]) {
+        const requests: any[] = [];
+        await new OpenAIFeedbackEvaluator({ transport: { async create(r) {
+          requests.push(r); return response(s.evaluationMode === 'REPAIR' ? repair(s) : withClaims(output(s)));
+        } } }).evaluate(s);
+        expect(requests[0].text.format.schema.properties).not.toHaveProperty('coaching');
+      }
+    });
+    it('SELECTION judgment reaching pendingEnd passes in one call without coaching', async () => {
+      const s = selection(); const a = output(s, { reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN',
+        contentAssessment: 'UNKNOWN', errors: [], reconstructedPath: [] });
+      const call = await new OpenAIFeedbackEvaluator({ transport: { async create() { return response(withClaims(a)); } } }).evaluate(s);
+      expect(call.metadata.attempts?.map(x => x.kind)).toEqual(['ASSESSMENT']);
+      expect(assess(s, call.rawOutput).pendingEnd).not.toBeNull();
+    });
+    it('REPAIR judgment reaching pendingEnd passes in one call without coaching', async () => {
+      const s = reply(questioned()); const a = repair(s); a.repairs[0]!.status = 'REMAINING';
+      const call = await new OpenAIFeedbackEvaluator({ transport: { async create() { return response(withClaims(a)); } } }).evaluate(s);
+      expect(call.metadata.attempts?.map(x => x.kind)).toEqual(['ASSESSMENT']);
+      expect(assess(s, call.rawOutput).pendingEnd).not.toBeNull();
+    });
+    it('a coaching key is a schema violation (strict)', () => {
+      const s = selection();
+      expect(() => assess(s, { ...output(s), coaching: '설명' })).toThrow();
+      const r = reply(questioned());
+      expect(() => assess(r, { ...repair(r), coaching: '설명' })).toThrow();
+    });
   });
   for (const mode of ['SELECTION', 'REPAIR', 'END_EXPLANATION'] as const) it(`explicit model override applies to ${mode} and retries`, async () => {
     const s = mode === 'SELECTION' ? selection() : mode === 'REPAIR' ? reply(questioned()) : pending();

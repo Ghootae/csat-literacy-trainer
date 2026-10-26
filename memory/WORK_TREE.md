@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-10-25
+갱신: 2026-10-26
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -17,7 +17,7 @@
 ├─ 문단 요약 응답 판정 — 학생 기본값 V4, 운영 후보 단순 형식 v4.7(luna)       D-0013·D-0174
 │  ├─✓ 근본 검토 — 단순 형식 v4.7로 확정, 개발자 주소 /dialogue/lab        D-0138~D-0149·D-0174
 │  │     작동 순서 문서 확인 필요 11건 처리, 교정 질문 힌트 기록      D-0175
-│  │     다음: 학생용 전환 결정
+│  │     다음: 학생용 전환 — 순서 확정(1′ 정리 → 학생 확인 → 확대), 섭외 대기  D-0176
 │  ├─✓ 전체 판정(H0) 그림자 실험 — 판정기는 V4 유지, 경계 규칙 (나″)        D-0132·D-0133
 │  ├─○ 보여 주기 개발자 모드(축 기반) — 단순 형식 채택으로 보류               D-0134~D-0137·D-0174
 │  └─○ 축 하나에 한 내용 — 보류, 폐기 여부는 학생용 전환 때                  Q-0036·D-0174
@@ -33,11 +33,11 @@
 │  ├─✓ 피드백·코칭: 해요체·마크다운 렌더링, 교정 뒤 [다시 선택]/[코칭 보기]  D-0110·D-0106
 │  ├─● 개발자 경로 연결 — 구현·실모델 확인·48가상 세션 기록 완료             D-0112·CP-D·D-0150·D-0152~0154
 │  │     경로 `/problem/lab`·코드 이름 버전 제거, 작동 순서 문서 작성       D-0173
-│  │     작동 순서 확인 필요 9건 처리, 남김: 판정 `coaching` 필드 정리(회귀 필요)
+│  │     작동 순서 확인 필요 9건 처리, `coaching` 필드 정리 완료(v5.1, 18세션 회귀 통과)    D-0177
 │  │     메모장 23·24·25·29 반영 D-0156·D-0157·D-0159·D-0161, 48세션 회귀 통과(B3 수정 D-0164), "없음" 근거 판정 D-0166
 │  │     다음: UI 메모장 30번 논의(16번 정답 피드백 규칙), 이어받기 CP-2026-10-23
 │  │     리마인드: luna 자신의 기호 오독(S2-r3) 해결 — 질문 자동 검사 vs 교정 단계 sol   Q-0030
-│  ├─○ 학생용 전환 — 개발자 경로 확인 뒤 운영 반영 승인 필요                 CP-B
+│  ├─○ 학생용 전환 — 순서 D-0176(실제 학생 확인 뒤 확대·전환)              CP-B·D-0176
 │  └─? 경계 응답 판정 기준(짧지만 충분 vs 대상만 언급)                       Q-0032
 │
 ├─ 학습자 생각 진단 — 큰 논의는 문단·문제 안정화 뒤 재개                     Q-0034
@@ -66,6 +66,8 @@
 | D-0013 | [문단 선택적 보완 V4](./decisions/D-0013-paragraph-optional-revision-v4.md) |
 | D-0138 | [문단 요약 근본 검토](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md), [질문 비교 묶음](../docs/experiments/question-quality-h0-vs-v4-2026-10-15/README.md), [D-0139 질문 규칙](./decisions/D-0139-paragraph-simple-format-question-rules.md), [D-0140 개발자 모드](./decisions/D-0140-paragraph-simple-holistic-dev-mode.md) |
 | D-0090 | [v5 명칭](./decisions/D-0090-problem-evaluator-v5-naming.md) |
+| D-0177 | [문제 판정 v5.1 coaching 제거](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md), [회귀 보고](../docs/experiments/v5-diverse-48-regression-2026-10-26/REPORT-human.md) |
+| D-0176 | [학생용 전환 순서](./decisions/D-0176-student-switch-roadmap-pilot-before-expansion.md), [coaching 정리 인계](../docs/handoffs/2026-10-26-problem-feedback-coaching-field-cleanup.md) |
 | D-0175 | [문단 교정 질문 중 근거 문장 힌트](./decisions/D-0175-paragraph-simple-correction-hint-during-question.md) |
 | D-0174 | [문단 운영 후보 단순 형식 v4.7](./decisions/D-0174-paragraph-simple-v47-operating-candidate.md), [작동 순서](../docs/PARAGRAPH-LAB-FLOW-2026-10-25.md) |
 | D-0173 | [개발자 문제 경로 이름 정리](./decisions/D-0173-problem-lab-version-free-code-names.md), [작동 순서](../docs/PROBLEM-LAB-FLOW-2026-10-24.md) |

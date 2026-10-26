@@ -55,7 +55,6 @@ export const FeedbackSelectionAssessmentSchema = z.object({
   errors: z.array(ErrorSchema),
   errorHypothesis: Text.nullable(),
   selectionMismatchQuestion: Text.nullable(),
-  coaching: Text,
 }).strict();
 export const FeedbackRepairAssessmentSchema = z.object({
   mode: z.literal('REPAIR'),
@@ -79,7 +78,6 @@ export const FeedbackRepairAssessmentSchema = z.object({
   verificationComplete: z.boolean(),
   rationaleSufficient: z.boolean(),
   sufficiencyEvidence: z.array(StudentEvidence),
-  coaching: Text,
 }).strict();
 export type FeedbackSelectionAssessment = z.infer<typeof FeedbackSelectionAssessmentSchema>;
 export type FeedbackRepairAssessment = z.infer<typeof FeedbackRepairAssessmentSchema>;

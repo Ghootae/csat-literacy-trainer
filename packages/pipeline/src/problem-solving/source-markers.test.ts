@@ -87,7 +87,7 @@ describe('원자료 기호 범위', () => {
       reconstructability: 'RECONSTRUCTABLE', reconstructedPath: ['잘못된 대응'], rationaleImpliedVerdict: 'INVALID',
       contentAssessment: 'ERROR', insufficiencyKind: 'NONE', studentEvidence, sourceEvidence,
       errors: [{ errorId: 'E1', errorType: 'CONTENT', description: '대응 관계 오류', studentEvidence, sourceEvidence, basis: 'STATED', question: 'd의 표현 범위를 확인해 보세요.' }],
-      errorHypothesis: null, selectionMismatchQuestion: null, coaching: '표현의 범위를 다시 확인합니다.' });
+      errorHypothesis: null, selectionMismatchQuestion: null });
     const reply = submitFeedbackCommand(questioned, { type: 'CORRECT', errorId: 'E1', text: '색을 한정하지 않은 옷이네요.' }, 'o2');
     const payload = decode(feedbackRequestContent(reply));
     expect(payload.mode).toBe('REPAIR');

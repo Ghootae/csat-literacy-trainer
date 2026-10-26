@@ -129,29 +129,26 @@ export class ProblemFeedbackController {
   private async evaluate(r: Runtime, transitionId: string): Promise<FeedbackView> {
     if (r.session.phase !== 'AWAITING_EVALUATION') return this.view(r);
     r.evaluationStatus = 'PROCESSING';
-    for (let evaluation = 0; evaluation < 2 && r.session.phase === 'AWAITING_EVALUATION'; evaluation++) {
-      if (r.session.evaluationMode === 'END_EXPLANATION') {
-        const success = await this.generateEnd(r, transitionId);
-        r.evaluationStatus = success ? 'IDLE' : 'RETRYABLE_ERROR';
-        break;
-      }
-      let call: FeedbackEvaluationCall | null = null;
-      try {
-        // Isolated snapshot protects authoritative state from transports and test doubles.
-        call = await this.evaluator.evaluate(structuredClone(r.session));
-        const next = applyFeedbackAssessment(r.session, call.rawOutput);
-        const evaluated = { ...r, session: next, transcript: [...r.transcript] };
-        this.appendCoach(evaluated);
-        this.save(evaluated, 'EVALUATED', transitionId, call, null);
-        r.transcript = evaluated.transcript;
-        r.session = next; r.evaluationStatus = next.phase === 'AWAITING_EVALUATION' ? 'PROCESSING' : 'IDLE';
-        if (next.phase === 'AWAITING_END_START') { this.generateEnd(r, transitionId); break; }
-      } catch (error) {
-        r.evaluationStatus = 'RETRYABLE_ERROR';
-        if (error instanceof FeedbackEvaluationError) call = error.call;
-        this.save(r, 'EVALUATION_FAILED', transitionId, call, error instanceof Error ? error.message : String(error));
-        break;
-      }
+    if (r.session.evaluationMode === 'END_EXPLANATION') {
+      const success = await this.generateEnd(r, transitionId);
+      r.evaluationStatus = success ? 'IDLE' : 'RETRYABLE_ERROR';
+      return this.view(r);
+    }
+    let call: FeedbackEvaluationCall | null = null;
+    try {
+      // Isolated snapshot protects authoritative state from transports and test doubles.
+      call = await this.evaluator.evaluate(structuredClone(r.session));
+      const next = applyFeedbackAssessment(r.session, call.rawOutput);
+      const evaluated = { ...r, session: next, transcript: [...r.transcript] };
+      this.appendCoach(evaluated);
+      this.save(evaluated, 'EVALUATED', transitionId, call, null);
+      r.transcript = evaluated.transcript;
+      r.session = next; r.evaluationStatus = next.phase === 'AWAITING_EVALUATION' ? 'PROCESSING' : 'IDLE';
+      if (next.phase === 'AWAITING_END_START') this.generateEnd(r, transitionId);
+    } catch (error) {
+      r.evaluationStatus = 'RETRYABLE_ERROR';
+      if (error instanceof FeedbackEvaluationError) call = error.call;
+      this.save(r, 'EVALUATION_FAILED', transitionId, call, error instanceof Error ? error.message : String(error));
     }
     return this.view(r);
   }

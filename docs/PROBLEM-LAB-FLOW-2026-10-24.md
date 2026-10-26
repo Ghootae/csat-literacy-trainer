@@ -34,7 +34,7 @@
 
 ### 1.3 버전 표기 원칙
 
-- 코드 이름(파일·타입·함수·API·환경변수)에는 버전을 두지 않는다. 버전은 프롬프트 파일 이름 `source-direct-problem-feedback-v5.md`와 기록되는 `promptVersion`에만 둔다 (D-0173 결정 3번째 항목). 코드에서 `promptVersion`은 `'problem-feedback-v5'`이다 (`PP/feedback-evaluator.ts:106`).
+- 코드 이름(파일·타입·함수·API·환경변수)에는 버전을 두지 않는다. 버전은 프롬프트 파일 이름 `source-direct-problem-feedback-v5.1.md`와 기록되는 `promptVersion`에만 둔다 (D-0173 결정 3번째 항목). 코드에서 `promptVersion`은 `'problem-feedback-v5.1'`이다 (`PP/feedback-evaluator.ts:104`). v5.1은 v5에서 `coaching` 필드 관련 문단과 제목만 바꾼 판이다(D-0177).
 - 저장 호환 때문에 옛 값을 유지하는 목록:
 
 | 값 | 근거 |
@@ -46,7 +46,7 @@
 | 옛 API 접두, 옛 화면 주소 | 1.1, 1.2 |
 
 - 브라우저 `sessionStorage` 키는 `csat.problem.lab.*`로 바뀌었다 (`PA/client/ProblemLabApp.tsx:26`, `:53`, `:74`, `:76`). 옛 키 `csat.problem.v4.*`를 읽는 코드는 찾지 못했다(미확인이 아니라 이 파일에는 없다).
-- 프롬프트 파일 제목은 아직 "v3 기반 v4 연결 후보"이다 (`packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md:1`).
+- 프롬프트 파일 제목은 "문제 풀이 판정 v5.1"이다 (`packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.1.md:1`). 옛 `…-v5.md`(제목 "v3 기반 v4 연결 후보")는 지난 실험 재현용으로 남아 있다.
 
 ## 2. 전체 흐름도
 
@@ -61,7 +61,7 @@
 
 ### 2.2 흐름도 (텍스트)
 
-괄호 안 `[모델:…]`은 모델 호출 단계다. 단계 번호(M1~M5)는 3절 표와 같다.
+괄호 안 `[모델:…]`은 모델 호출 단계다. 단계 번호(M1~M4)는 3절 표와 같다.
 
 ```
 [시작] POST session ─ createFeedbackSession ─> phase=AWAITING_SELECTION            (problem-feedback.ts:50-58, feedback.ts:143-153)
@@ -140,7 +140,7 @@
 
 ### 3.1 모델 호출 단계 한눈에
 
-모델 호출은 `OpenAIFeedbackEvaluator.evaluate` 한 함수가 `kind`로 구분한다. `kind`는 `ASSESSMENT`, `CONCLUSION_AUDIT`, `COACHING`, `END_EXPLANATION` 네 가지다 (`PP/feedback-evaluator.ts:18`, `:112`). `ASSESSMENT`가 `SELECTION`·`REPAIR` 두 mode를 가지므로 이 문서는 모델 호출 5단계(M1~M5)로 나누고, 모델을 쓰지 않는 단계(N1 코드 전이, N2 출제자 전략)를 따로 둔다.
+모델 호출은 `OpenAIFeedbackEvaluator.evaluate` 한 함수가 `kind`로 구분한다. `kind`는 `ASSESSMENT`, `CONCLUSION_AUDIT`, `END_EXPLANATION` 세 가지다 (`PP/feedback-evaluator.ts:18`, `:110`). 2026-10-26 v5.1 정리(D-0177)로 `COACHING` kind(옛 M5)는 없어졌고, 이 절 아래의 `PP/feedback-evaluator.ts` 행 번호는 정리 전 기준이라 몇 줄 어긋날 수 있다. `ASSESSMENT`가 `SELECTION`·`REPAIR` 두 mode를 가지므로 이 문서는 모델 호출 4단계(M1~M4)로 나누고, 모델을 쓰지 않는 단계(N1 코드 전이, N2 출제자 전략)를 따로 둔다.
 
 | 단계 | kind / mode | 호출 시점 |
 |---|---|---|
@@ -148,7 +148,6 @@
 | M2 | `CONCLUSION_AUDIT` | M1 통과 뒤 결론이 선택 목표와 다를 때만 |
 | M3 | `ASSESSMENT` / `REPAIR` | 교정 질문에 학생이 답한 뒤 |
 | M4 | `END_EXPLANATION` | 종료 설명이 필요한 경우 |
-| M5 | `COACHING` | M1·M3 코칭 문장 검증이 실패해 재시도할 때만 |
 | N1 | (모델 없음) | 근거 미제출·버튼 명령 등 코드만의 전이 |
 | N2 | (모델 없음) | 종료 뒤 출제자 전략 읽기 |
 
@@ -165,14 +164,14 @@
 | 항목 | 내용 |
 |---|---|
 | 언제 | `evaluate(s,'SELECTION')`로 들어간 `AWAITING_EVALUATION` 상태: 근거를 적은 SELECT (`PP/feedback.ts:261`), 근거 보완 RATIONALE (`:267`). |
-| 프롬프트 | 파일 `packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md` 전체를 `instructions`로 쓴다. 호출 때마다 디스크에서 읽는다 (`PP/feedback-evaluator.ts:152`). 구성: 자료 경계(`:9`), SELECTION(`:42`), 오류 가설(`:72`), 내용 오류와 충분성(`:103`), REPAIR(`:151`, M3 전용), 질문 규칙(`:211`), 자료 경계와 종료 코칭(`:244`), 근거 기록(`:258`), 학생 주장 분리 기록(`:280`), 학생 판단 서술 형식(`:296`). 별도 인라인 지시문은 없다. |
+| 프롬프트 | 파일 `packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.1.md` 전체를 `instructions`로 쓴다. 호출 때마다 디스크에서 읽는다 (`PP/feedback-evaluator.ts:152`). 구성: 자료 경계(`:9`), SELECTION(`:42`), 오류 가설(`:72`), 내용 오류와 충분성(`:103`), REPAIR(`:151`, M3 전용), 질문 규칙(`:211`), 자료 경계(`:244`), 근거 기록(`:251`), 학생 주장 분리 기록(`:273`), 학생 판단 서술 형식(`:289`). 별도 인라인 지시문은 없다. |
 | 목적 | 학생 발화에서 판단을 재구성하고(`reconstructability`), 선지에 대한 결론(`rationaleImpliedVerdict`)·내용 평가(`contentAssessment`)·오류와 교정 질문을 만든다. 다음 행동은 서버가 정한다 (프롬프트 `:4`). 학생 주장 분리(`studentClaims`), 모순 기록(`claimConflicts`), 핵심 관계 덮기(`keyRelationCoverage`)를 판정 전에 기록하게 한다 (프롬프트 `:280-294`; D-0156, D-0161). |
 | 모델 | 마지막 선택이 정답이면 `gpt-6-luna`, 오답이면 `gpt-6.1-sol` (`PP/feedback-evaluator.ts:89`, `:100`). |
 | 입력 | `feedbackRequestContent` → `feedbackEvaluationInput` (`:29-69`). JSON 하나(`input_text`)와 원자료 이미지(`input_image`, `detail: 'high'`, 앞에 `[SOURCE_MEDIA id \| placement]` 표지). JSON 필드: `version`, `mode`, `source`(문항 번들), `targetVerdict`, `selection{choiceId, choiceImpliedVerdict, selectionNumber}`, `observations`, `initialErrors`(=[]), `additionalErrors`(=[]), `previousRepair`(=null), `currentStudentResponse`(=null) (`:33-52`). `source`는 번들에서 `stemPolarity`만 뺀 것이어서 지문(`passage`), 발문(`stem`), 보기(`scenario`), 표지 위치(`textAnnotations`), 선지(`choices`), 정답 선지 ID(`answerChoiceId`), 공식 해설(`officialExplanation`), 미디어 메타(URL 제거)를 포함한다 (`:31-32`, `:59-62`; 번들 필드는 `PP/source-direct-evaluator.ts:118-134`). 표지 위치가 있으면 `sourceTextAnnotationGuide`를 덧붙인다 (`:62`). `observations`는 이번 선택 번호의 학생 발화이며 `CORRECT`는 제외한다. 과거 선택의 근거를 빌려 오지 않는다 (`:40-43`). 구조화 문제 골드 키가 섞이면 예외를 던진다 (`:54`; 금지 키 목록 `PP/source-direct-evaluator.ts:396-408`). 프롬프트도 입력에 정답과 공식 해설이 있다고 밝힌다 (프롬프트 `:11`). `stemPolarity`는 넘기지 않고 서버가 정규화한 `targetVerdict`(VALID/INVALID)만 넘긴다. |
-| 출력 | 스키마 `FeedbackSelectionAssessmentSchema` (`PP/feedback.ts:43-59`): `mode`, `boundary`(NONE/MISSING_SOURCE/KEY_CONFLICT), `reason`, `reconstructability`, `reconstructedPath`, `rationaleImpliedVerdict`, `contentAssessment`, `insufficiencyKind`, `studentEvidence`, `sourceEvidence`, `errors[]`(errorId·errorType·description·studentEvidence·sourceEvidence·question·basis), `errorHypothesis`, `selectionMismatchQuestion`, `coaching`. 요청 스키마에는 `claimConflicts`, `keyRelationCoverage`, `studentClaims`를 앞쪽에 더한다 (`PP/feedback-claims.ts:3-23`; `PP/feedback-evaluator.ts:119`). |
+| 출력 | 스키마 `FeedbackSelectionAssessmentSchema` (`PP/feedback.ts:43-59`): `mode`, `boundary`(NONE/MISSING_SOURCE/KEY_CONFLICT), `reason`, `reconstructability`, `reconstructedPath`, `rationaleImpliedVerdict`, `contentAssessment`, `insufficiencyKind`, `studentEvidence`, `sourceEvidence`, `errors[]`(errorId·errorType·description·studentEvidence·sourceEvidence·question·basis), `errorHypothesis`, `selectionMismatchQuestion`. (`coaching`은 v5.1에서 없앴다, D-0177.) 요청 스키마에는 `claimConflicts`, `keyRelationCoverage`, `studentClaims`를 앞쪽에 더한다 (`PP/feedback-claims.ts:3-23`; `PP/feedback-evaluator.ts:119`). |
 | 코드 검증 순서 | (1) `validateClaims` (`PP/feedback-evaluator.ts:154-155`; `PP/feedback-claims.ts:27-85`): studentClaims 비어 있지 않음·구조·quote가 학생 발화에 실재, RECONSTRUCTABLE이면 CONTRADICTED↔CONTENT 오류, OFF_TARGET↔TARGET 오류 대응, 대상 오류 1개 이하, claimConflicts가 있으면 UNKNOWN이고 errors 없음, keyRelationCoverage 구조·인용 실재, 정답 선택의 SUPPORTED는 모든 조각 covered·조각 2개 이상·인용이 서로 겹치지 않음 (`:78-83`). (2) 검증용 필드 제거 (`:156-157`). (3) `validateFeedbackAssessment` (`:159`; `PP/feedback.ts:346-376`): 학생 인용이 해당 관찰의 실제 발화에 포함, 원문 인용이 해당 위치 원문에 포함(공백·따옴표만 다른 유일 일치는 복구 `PP/feedback.ts:311`, `:319-336`), 오류 ID 중복·예약 ID `selection-mismatch` 금지, 근거 부족 판정에는 `insufficiencyKind` 필요, 추정 오류 조건, UNKNOWN일 때 결론 UNKNOWN·SUPPORTED 금지, 재구성 가능 판정의 필수 필드, `ERROR`↔오류 목록 일치, 선택–근거 충돌 질문 누락, 1번째 선택의 질문에 정답 노출 금지(`validateQuestion`, `:337-345`). (4) M2 조건부 실행 (아래). (5) 전이 모의 실행 `applyFeedbackAssessment` 후 `pendingEnd`가 생기면 `validateFeedbackCoaching(coaching)` (`:181-182`; 검증 내용 `PP/feedback.ts:176-185`: 한글 4자 이상, 깨진 문자·제어 문구·허용 문자 밖 글자 없음). |
-| 실패 시 | 위 어느 단계든 예외가 나면 시도 오류로 기록하고 재시도한다 (3.2). `FeedbackCoachingError`면 다음 시도는 M5(코칭만 다시)로 간다 (`:198`, `:141`). 재시도를 소진하면 `RETRYABLE_ERROR`이고 학생은 [평가 다시 시도]로 같은 평가를 다시 부른다 (`PA/server/problem-feedback.ts:88-90`, `PA/client/problem-composer-state.ts:53`). |
-| 적용 | 서버가 `applyFeedbackAssessment`를 호출해 상태를 옮긴다 (`PA/server/problem-feedback.ts:142`; 분기는 2.2 흐름도). M1이 쓴 `coaching` 문자열은 대화에 노출되지 않는다 (6절 확인 필요 1). |
+| 실패 시 | 위 어느 단계든 예외가 나면 시도 오류로 기록하고 재시도한다 (3.2). 재시도를 소진하면 `RETRYABLE_ERROR`이고 학생은 [평가 다시 시도]로 같은 평가를 다시 부른다 (`PA/server/problem-feedback.ts:88-90`, `PA/client/problem-composer-state.ts:53`). |
+| 적용 | 서버가 `applyFeedbackAssessment`를 호출해 상태를 옮긴다 (`PA/server/problem-feedback.ts:142`; 분기는 2.2 흐름도). 판정 출력에는 학생용 설명 칸이 없다. 학생에게 보이는 종료 설명은 M4만 쓴다 (D-0177). |
 
 ### 3.4 M2 — CONCLUSION_AUDIT (독립 결론 검증)
 
@@ -196,7 +195,7 @@
 | 목적 | 누적 학생 발화로 기존 오류(`initialErrors`·`additionalErrors`)마다 REPAIRED/REMAINING/UNCONFIRMED를 판정하고, 새 오류는 기록만 하며, 근거 충분성(`rationaleSufficient`)과 `verificationComplete`를 따로 기록한다. 질문이 겨냥한 국소 오류만 본다 (프롬프트 `:164`; D-0108). 충분성 인용은 핵심 관계를 혼자 담은 학생 발화 하나 (프롬프트 `:201-207`; D-0157). |
 | 모델 | 항상 `gpt-6-luna` (`FEEDBACK_REPAIR_MODEL`, `PP/feedback-evaluator.ts:90`, `:100`; D-0107). 정답·오답 세션과 무관하다. |
 | 입력 | M1과 같은 JSON에서 `mode='REPAIR'`, `selection=null`, `observations`=모든 관찰(SELECT·RATIONALE·CORRECT), `initialErrors`=`s.errors`, `additionalErrors`, `previousRepair`(직전 REPAIR 판정 또는 null), `currentStudentResponse{role, observationId, text, inReplyTo(해당 오류의 질문)}` (`PP/feedback-evaluator.ts:33-52`). `source`는 M1과 같아 정답 선지 ID·공식 해설을 포함한다. 과거 선택을 REPAIR 일관성 검사의 피연산자로 쓰지 않는다 (함수 주석 `:28`). |
-| 출력 | 스키마 `FeedbackRepairAssessmentSchema` (`PP/feedback.ts:60-83`): `mode`, `boundary`, `reason`, `reviewedResponse{observationId, quote}`, `repairs[]{errorId, status, studentEvidence}`, `newErrors[]`, `verificationComplete`, `rationaleSufficient`, `sufficiencyEvidence[]`, `coaching`. 요청 스키마는 확장하지 않는다 (`PP/feedback-evaluator.ts:119`). `validateClaims`는 SELECTION에만 돈다 (`:153`). |
+| 출력 | 스키마 `FeedbackRepairAssessmentSchema` (`PP/feedback.ts:60-83`): `mode`, `boundary`, `reason`, `reviewedResponse{observationId, quote}`, `repairs[]{errorId, status, studentEvidence}`, `newErrors[]`, `verificationComplete`, `rationaleSufficient`, `sufficiencyEvidence[]`. 요청 스키마는 확장하지 않는다 (`PP/feedback-evaluator.ts:119`). `validateClaims`는 SELECTION에만 돈다 (`:153`). |
 | 코드 검증 | `validateFeedbackAssessment` REPAIR 분기 (`PP/feedback.ts:377-398`): 최신 `CORRECT` 관찰의 `reviewedResponse` ID 일치 (`:379-381`), `repairs`가 전체 오류를 정확히 한 번씩 포함 (`:382-383`), REPAIRED는 `CORRECT` 발화 인용이 필요하고 단순 동의 발화만으론 불가 (`:384-388`), 충분성 인용은 정확히 하나·충분하지 않으면 없음 (`:389-391`), 오류로 확정된 발화는 충분성 인용 금지(선택 충돌 항목은 제외, D-0164) (`:393-395`), 새 오류 ID 중복 금지·인용 검사 (`:396-397`). 이어 모의 적용과 코칭 문자열 검증 (`PP/feedback-evaluator.ts:181-182`). |
 | 적용 결과 | 오류 상태 누적 재계산, 새 오류는 `additionalErrors`에만 추가 (`PP/feedback.ts:449-451`), 이후 분기는 2.2. 성공이면 `AWAITING_POST_REPAIR_CHOICE`와 안내 문구(코드가 정함) (`:455-471`). |
 | 실패 시 | M1과 같다. |
@@ -209,24 +208,15 @@
 | 프롬프트 | 인라인: `PP/feedback-end-explanation.ts:16-28` `CORRECT_END_INSTRUCTIONS`(마지막 선택이 정답), `:3-14` `INCORRECT_END_INSTRUCTIONS`(오답). 선택은 `correct ? CORRECT : INCORRECT` (`PP/feedback-evaluator.ts:137`). 말투는 친근한 반말이다 (지시문 `:3`, `:16`; D-0116). |
 | 목적 | 판정은 바꾸지 않고 학생에게 보일 마지막 설명을 `firstChoice`·`reselection`·`answer` 세 칸으로 쓴다. 각 칸 앞뒤 안내 문장은 코드가 붙이고 모델은 되풀이하지 않는다 (지시문 `:4-5`). 정답 선택이지만 근거 미확인이면 학생 생각을 틀렸다고 단정하지 않는다 (`:22`; D-0159). 내부 용어('교정 질문' 등)·식별자 금지 (`:12-13`, `:25`, `:27`). |
 | 모델 | 마지막 선택이 정답이면 `gpt-6-luna`, 오답이면 `gpt-6.1-sol` (`PP/feedback-evaluator.ts:100`; D-0107). 선택 이력이 오답→정답이면 정답 세션(luna) (D-0112 3번 항목). |
-| 입력 | `feedbackEndExplanationContent` (`PP/feedback-end-explanation.ts:101-129`): `source`(`stemPolarity` 제외, 미디어 URL 제거; 정답·공식 해설 포함), `studentUtterances[]`(SELECT·RATIONALE·CORRECT 발화의 `observationId`, `text`, 교정이면 `question`·`errorId`, 선택이면 `selectedChoice` 위치 번호, `rationaleOmitted`), `finalSelectedChoice`(번호), `errors`(errorId·description·question·status·basis), `additionalErrors`, `insufficiencyKind`(CORRECT_UNVERIFIED일 때만), `lastRepairAssessment`(`coaching` 제외), `endReason`, `sectionLeads{firstChoice, reselection}`(코드가 만든 첫 문장; `feedbackSectionLead` `:46-67`). 이미지도 같이 보낸다 (`:124-127`). 버튼 명령은 학생 발화로 넣지 않는다 (`:108`). 이전 M1·M3의 `coaching`은 넣지 않는다 (`:119`). |
+| 입력 | `feedbackEndExplanationContent` (`PP/feedback-end-explanation.ts:101-129`): `source`(`stemPolarity` 제외, 미디어 URL 제거; 정답·공식 해설 포함), `studentUtterances[]`(SELECT·RATIONALE·CORRECT 발화의 `observationId`, `text`, 교정이면 `question`·`errorId`, 선택이면 `selectedChoice` 위치 번호, `rationaleOmitted`), `finalSelectedChoice`(번호), `errors`(errorId·description·question·status·basis), `additionalErrors`, `insufficiencyKind`(CORRECT_UNVERIFIED일 때만), `lastRepairAssessment`(`coaching` 제외), `endReason`, `sectionLeads{firstChoice, reselection}`(코드가 만든 첫 문장; `feedbackSectionLead` `:46-67`). 이미지도 같이 보낸다 (`:124-127`). 버튼 명령은 학생 발화로 넣지 않는다 (`:108`). M1·M3 판정 출력에는 `coaching`이 없다(v5.1, D-0177). |
 | 출력 | 스키마 `FeedbackEndExplanationSchema` (`PP/feedback.ts:207`): `{ firstChoice, reselection(nullable), answer }`. |
 | 코드 검증 | `applyFeedbackEndExplanation` (`PP/feedback.ts:208-216`): 스키마 파싱, `reselection` 유무와 선택 횟수(2회) 일치, 세 칸 모두 `validateFeedbackCoaching`, 내부 식별자 정규식(`C1`/`E1` 꼴) 금지, '교정 질문' 문구 금지. 평가기 안에서 한 번 시험 적용한다 (`PP/feedback-evaluator.ts:138`). 서버는 생성 때 스냅샷에도 한 번, 현재 세션에도 한 번 적용한다 (`PA/server/problem-feedback.ts:167`, `:171`). |
-| 실패 시 | 3.2의 재시도(검증 실패 문구가 `validationFeedback`으로 붙음, `PP/feedback-evaluator.ts:135`). 이 경로의 `FeedbackCoachingError`도 M5가 아니라 같은 M4를 다시 부른다(`end` 분기가 `coachingOnly`보다 앞이다, `:133`, `:141`). 소진되면 `EVALUATION_FAILED` 저장. 게이트 단계의 백그라운드 실패는 화면에 표시되지 않으며 학생이 [응]을 누를 때 다시 생성한다 (`PA/server/problem-feedback.ts:184-185`의 주석). [설명 보기] 경로의 실패는 `RETRYABLE_ERROR`이고 RESUME으로 재시도한다 (`:133-136`). |
+| 실패 시 | 3.2의 재시도(검증 실패 문구가 `validationFeedback`으로 붙음, `PP/feedback-evaluator.ts:135`). 이 경로의 `FeedbackCoachingError`도 같은 M4를 다시 부른다. 소진되면 `EVALUATION_FAILED` 저장. 게이트 단계의 백그라운드 실패는 화면에 표시되지 않으며 학생이 [응]을 누를 때 다시 생성한다 (`PA/server/problem-feedback.ts:184-185`의 주석). [설명 보기] 경로의 실패는 `RETRYABLE_ERROR`이고 RESUME으로 재시도한다 (`:133-136`). |
 | 화면 반영 | 설명이 들어오면 `AWAITING_UNDERSTANDING`에서 말풍선으로 풀어 보인다: 첫 칸 안내 → 첫 칸 본문(+고정 마무리 문장 `feedbackSectionClosing`, `PP/feedback-end-explanation.ts:70-89`) → (재선택이 있으면 같은 구조) → 정답 안내 → 정답 칸 → '이해됐어?' (`PA/server/problem-feedback.ts:229-238`). 구간 사이는 학생이 [다음으로 넘어가기]를 누른다 (`PA/client/problem-composer-state.ts:43-47`). D-0117. |
 
-### 3.7 M5 — COACHING (코칭만 다시 쓰기)
+### 3.7 (없앰) M5 — COACHING
 
-| 항목 | 내용 |
-|---|---|
-| 언제 | M1 또는 M3의 통과된 판정에서, 종료 경로(`next.pendingEnd`)에 쓸 `coaching`이 `validateFeedbackCoaching`에 걸려 `FeedbackCoachingError`가 났을 때 다음 시도로만 (`PP/feedback-evaluator.ts:182`, `:198`, `:141`). 평소에는 호출되지 않는다. |
-| 프롬프트 | 인라인: `PP/feedback-evaluator.ts:145`. 검증된 판정은 바꾸지 말고 `coaching`만 한국어 학생용 상세 설명으로 쓰며, 확인 불가를 학생 오류로 단정하지 않고 생성 제어 문구를 넣지 않는다. |
-| 목적 | 판정을 유지한 채 깨진 `coaching` 문자열만 다시 쓴다. |
-| 모델 | 같은 `evaluate` 호출의 `model` 변수 (`:100`, `:115`). |
-| 입력 | M1/M3의 `feedbackRequestContent`(3.3, 3.5와 같은 입력 JSON·이미지)에 `{ validatedAssessment: candidate, validationFeedback }`를 덧붙인다 (`:142-143`). |
-| 출력 | 스키마 `CoachingSchema = { coaching: string }` (`:81`). 결과를 기존 후보에 합친다 (`:146`). |
-| 코드 검증 | 합친 후보로 다시 모의 적용과 `validateFeedbackCoaching` (`:181-182`). `kind: 'COACHING'` 시도 기록이 남는다 (`:189`). |
-| 실패 시 | 같은 공유 재시도 한도(기본 2회 시도) 안이다. 별도 중첩 루프는 없다 (`:196`). |
+v5.1 정리(2026-10-26, D-0177)에서 없앴다. M1·M3 판정 출력에 `coaching` 칸이 없어 다시 쓸 문자열이 없다. 옛 동작은 이 문서의 2026-10-25 판(git 기록)에 있다.
 
 ### 3.8 N1 — 모델 없이 코드만으로 움직이는 전이
 
@@ -304,12 +294,12 @@
 
 | # | 내용 | 처리 | 근거·결과 |
 |---|---|---|---|
-| 1 | M1·M3의 `coaching` 필드는 만들어지지만 학생에게 보이지 않는다. 형식 검증 실패 시 COACHING 재요청이 일어나고, 한도를 넘으면 판정 전체가 실패한다. 프롬프트 251-254행("서버는 모든 정상 코칭 종료에 정답과 해설을 덧붙인다")은 현재 동작과 다르다. | **남김** | 필드를 없애면 v5 지시문·스키마가 바뀌어 실모델 회귀(외부 전송)가 필요하다. 6번과 함께 별도 과제로 한다. |
+| 1 | M1·M3의 `coaching` 필드는 만들어지지만 학생에게 보이지 않는다. 형식 검증 실패 시 COACHING 재요청이 일어나고, 한도를 넘으면 판정 전체가 실패한다. 프롬프트 251-254행("서버는 모든 정상 코칭 종료에 정답과 해설을 덧붙인다")은 현재 동작과 다르다. | **수정** | 2026-10-26 v5.1(D-0177): 스키마·지시문에서 `coaching` 제거, M5 없앰. 18세션 회귀로 역할별 최종 결과 유지 확인(`docs/experiments/v5-diverse-48-regression-2026-10-26/`). |
 | 2 | D-0107의 "COACHING 요청 종류 활용" | **해소** | D-0107은 "활용할 수 있음"이라는 선택지만 적었다. 실제 구현은 D-0112 2·4항과 D-0117이 정한 별도 종료 설명(`END_EXPLANATION`)이다. `COACHING` kind는 코칭 문자열 검증 실패 재시도용으로만 남아 있다. |
 | 3 | D-0112 5항(정답 줄 제거)과 게이트의 `정답은 N번이야.` | **해소** | D-0112 5항이 뺀 것은 종료 메시지(`finish()`)에 서버가 덧붙이던 줄이다(`PP/feedback.ts:164` 주석). 게이트 문장은 D-0117 3항·7항이 정한 시작 확인 문장("정답은 ⑤번이야. 네 답을 하나씩 같이 볼까?")이다. |
 | 4 | D-0112 4항의 파일 이름 `feedback-v5-end-explanation.ts` | **해소** | D-0173 이름 정리로 `PP/feedback-end-explanation.ts`가 됐다. 결정 기록은 당시 기록으로 둔다. |
 | 5 | D-0172·`CURRENT_STATE.md`의 `/problem/dev/v4` | **해소** | `CURRENT_STATE.md`는 D-0173 커밋에서 이미 `/problem/lab`(옛 주소 넘김)으로 고쳐졌다. D-0172는 당시 기록이다. |
-| 6 | 프롬프트 제목 "v3 기반 v4 연결 후보"와 `promptVersion: problem-feedback-v5` | **남김** | 지시문 본문이 바뀌는 일이라 1번과 함께 처리한다. |
-| 7 | 평가 루프의 두 번째 반복 | **사실 기록** | `applyFeedbackAssessment`(`PP/feedback.ts:413-472`)에는 `AWAITING_EVALUATION`을 돌려주는 경로가 없다. 이 단계를 만드는 `endExplanation(COACHING_REQUESTED)`(`:199`)는 학생 명령(`REQUEST_EXPLANATION`)에서만 불린다. 그래서 `for`의 두 번째 반복은 돌지 않는다. 동작에는 영향이 없고, 정리는 1번 과제 때 한다. |
+| 6 | 프롬프트 제목 "v3 기반 v4 연결 후보"와 `promptVersion: problem-feedback-v5` | **수정** | 새 파일 `source-direct-problem-feedback-v5.1.md`, 제목 "문제 풀이 판정 v5.1", `promptVersion: problem-feedback-v5.1`(D-0177). |
+| 7 | 평가 루프의 두 번째 반복 | **수정** | `applyFeedbackAssessment`(`PP/feedback.ts:413-472`)에는 `AWAITING_EVALUATION`을 돌려주는 경로가 없다. 이 단계를 만드는 `endExplanation(COACHING_REQUESTED)`(`:199`)는 학생 명령(`REQUEST_EXPLANATION`)에서만 불린다. 그래서 `for`의 두 번째 반복은 돌지 않는다. 동작에는 영향이 없고, 정리는 1번 과제 때 한다. 2026-10-26: 반복을 없애고 한 번 실행으로 정리(동작 동일, D-0177). |
 | 8 | 화면의 `선택 N / 2` 하드코딩 | **수정** | 화면이 `view.maxSelections`를 쓴다(`PA/client/ProblemLabApp.tsx`). |
 | 9 | 교정 질문·오류 목록의 숫자 상한 | **사실 기록** | 숫자 상한은 설계상 없다. 지시문이 "확인된 내용 오류를 모두 기록"하라고 하고(프롬프트 `:141`), CONTRADICTED 주장마다 오류를 하나씩, OFF_TARGET은 TARGET 오류 하나로 묶는다(`:292`). 질문 수는 첫 선택의 오류 수와 같다(2.4). |

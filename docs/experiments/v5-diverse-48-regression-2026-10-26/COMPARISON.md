@@ -1,0 +1,57 @@
+# COMPARISON
+
+세션 18개, changed 1개, 검증 재시도 합계 4
+
+## 역할별 outcome (10-12 / 이번)
+
+| 역할 | 10-12 | 이번 |
+|---|---|---|
+| A1 | COACHING_TERMINATED 2 | COACHING_TERMINATED 2 |
+| B3 | COACHING_TERMINATED 2 | COACHING_TERMINATED 2 |
+| CT | UNVERIFIED_CORRECT 3 | UNVERIFIED_CORRECT 3 |
+| A3 | COACHING_TERMINATED 2 | COACHING_TERMINATED 2 |
+| B1 | COACHING_TERMINATED 2 | COACHING_TERMINATED 2 |
+| CP | UNVERIFIED_CORRECT 2 | UNVERIFIED_CORRECT 2 |
+| A2 | VERIFIED_CORRECT 3 | VERIFIED_CORRECT 3 |
+| B2 | COACHING_TERMINATED 2 | COACHING_TERMINATED 2 |
+
+## changed 세션 (1)
+
+G-B3
+
+## claimConflicts가 비어 있지 않은 세션
+
+-
+
+## 정답 선택 SELECTION에서 SUPPORTED가 아닌 세션
+
+| 세션 | 판정 | 평가 | 부족 종류 | 빈 조각 |
+|---|---|---|---|---|
+| C-CT | first | UNKNOWN | NONE | 주식회사의 법인격은 구성원 단체에 부여된다. / 자산 운용 권한은 정관이나 법령에 따라 권한을 부여받은 사람에게 주어진다. / 갑의 자산 운용 권한이 개인 재산 출연이나 주주들의 법인격 부여에서 비롯된다는 연결은 성립하지 않는다. |
+| D-CP | first | INSUFFICIENT | MISSING_LINK | 카르비도파는 혈액-뇌 장벽을 통과하지 못하고 말초 조직에서만 작용한다. / 말초에서의 효소 억제는 흑질에서 이미 합성된 도파민의 작용 기간을 연장하지 않으므로 ②의 설명은 적절하지 않다. |
+| I-CT | first | UNKNOWN | NONE | 헌법 재판소 다수 의견은 실명 확인 조치를 하지 않은 인터넷 언론사를 제재하는 법률 규정이 위헌이라고 결정했다. / 그 결론에 따르면 실명 확인 절차를 거치지 않은 플랫폼을 해당 규정에 따라 법적으로 제재한다는 판단은 성립하지 않는다. |
+| M-CP | first | INSUFFICIENT | MISSING_LINK | ⑤가 덧붙인 ‘pH 상승으로 이온화 지질의 소수성이 약해진다’는 관계 / ⑤가 덧붙인 ‘소수성 분자 간 인력이 감소해 더 미세한 복합체가 형성된다’는 관계가 지문·보기에서 뒷받침되지 않는다는 점 |
+| S-CT | first | INSUFFICIENT | JUDGMENT_METHOD | 원문은 오네소르게 수가 표면 장력·밀도·노즐 지름의 곱이 클수록 작아진다고 설명한다. / 보기의 밀도 두 배와 노즐 지름 절반은 해당 곱을 그대로 유지한다. / 점도와 표면 장력이 유지되는 조건에서 곱이 그대로이면 오네소르게 수도 변하지 않는다. |
+
+## 세션별
+
+| 세션 | changed | outcome 10-12 -> 이번 | 종료 이유 10-12 -> 이번 | 선택 | 질문 | 첫 판정 이번 | 재선택 판정 이번 | 재시도 |
+|---|---|---|---|---|---|---|---|---|
+| C-A1 |  | COACHING_TERMINATED -> COACHING_TERMINATED | RATIONALE_UNVERIFIABLE -> RATIONALE_UNVERIFIABLE | 1 -> 1 | 0 -> 0 | C1 UNKNOWN/UNKNOWN/오류0/NONE/조각3(빈3) | - | 0 |
+| C-B3 |  | COACHING_TERMINATED -> COACHING_TERMINATED | RESELECTION_WRONG -> RESELECTION_WRONG | 2 -> 2 | 1 -> 1 | C5 RECONSTRUCTABLE/SUPPORTED/오류0/NONE | C1 RECONSTRUCTABLE/ERROR/오류1/NONE/조각2(빈2) | 0 |
+| C-CT |  | UNVERIFIED_CORRECT -> UNVERIFIED_CORRECT | CORRECT_UNVERIFIED -> CORRECT_UNVERIFIED | 1 -> 1 | 0 -> 0 | C2 UNKNOWN/UNKNOWN/오류0/NONE/조각3(빈3) | - | 1 |
+| D-A3 |  | COACHING_TERMINATED -> COACHING_TERMINATED | REPAIR_FAILED -> REPAIR_FAILED | 1 -> 1 | 2 -> 2 | C1 RECONSTRUCTABLE/ERROR/오류2/NONE/조각3(빈3) | - | 0 |
+| D-B1 |  | COACHING_TERMINATED -> COACHING_TERMINATED | RATIONALE_UNVERIFIABLE -> RATIONALE_UNVERIFIABLE | 1 -> 1 | 0 -> 0 | - | - | 0 |
+| D-CP |  | UNVERIFIED_CORRECT -> UNVERIFIED_CORRECT | CORRECT_UNVERIFIED -> CORRECT_UNVERIFIED | 1 -> 1 | 0 -> 0 | C2 RECONSTRUCTABLE/INSUFFICIENT/오류0/MISSING_LINK/조각2(빈2) | - | 0 |
+| G-A2 |  | VERIFIED_CORRECT -> VERIFIED_CORRECT | phase:COMPLETED -> phase:COMPLETED | 2 -> 2 | 1 -> 1 | C2 RECONSTRUCTABLE/ERROR/오류1/NONE/조각3(빈3) | C4 RECONSTRUCTABLE/SUPPORTED/오류0/NONE/조각2(빈0) | 1 |
+| G-B2 |  | COACHING_TERMINATED -> COACHING_TERMINATED | COACHING_REQUESTED -> COACHING_REQUESTED | 1 -> 1 | 1 -> 1 | C3 RECONSTRUCTABLE/ERROR/오류1/NONE/조각3(빈2) | - | 1 |
+| G-B3 | Y | COACHING_TERMINATED -> COACHING_TERMINATED | REPAIR_FAILED -> RESELECTION_WRONG | 1 -> 2 | 1 -> 1 | C3 RECONSTRUCTABLE/SUPPORTED/오류0/NONE | C2 RECONSTRUCTABLE/ERROR/오류1/NONE/조각3(빈3) | 1 |
+| I-A2 |  | VERIFIED_CORRECT -> VERIFIED_CORRECT | phase:COMPLETED -> phase:COMPLETED | 2 -> 2 | 1 -> 1 | C1 RECONSTRUCTABLE/ERROR/오류1/NONE/조각2(빈2) | C5 RECONSTRUCTABLE/SUPPORTED/오류0/NONE/조각2(빈0) | 0 |
+| I-A3 |  | COACHING_TERMINATED -> COACHING_TERMINATED | COACHING_REQUESTED -> COACHING_REQUESTED | 1 -> 1 | 1 -> 1 | C1 RECONSTRUCTABLE/ERROR/오류1/NONE/조각2(빈2) | - | 0 |
+| I-CT |  | UNVERIFIED_CORRECT -> UNVERIFIED_CORRECT | CORRECT_UNVERIFIED -> CORRECT_UNVERIFIED | 1 -> 1 | 0 -> 0 | C5 UNKNOWN/UNKNOWN/오류0/NONE/조각2(빈2) | - | 0 |
+| M-A2 |  | VERIFIED_CORRECT -> VERIFIED_CORRECT | phase:COMPLETED -> phase:COMPLETED | 2 -> 2 | 1 -> 1 | C3 RECONSTRUCTABLE/ERROR/오류1/NONE/조각3(빈3) | C5 RECONSTRUCTABLE/SUPPORTED/오류0/NONE/조각2(빈0) | 0 |
+| M-B1 |  | COACHING_TERMINATED -> COACHING_TERMINATED | RATIONALE_UNVERIFIABLE -> RATIONALE_UNVERIFIABLE | 1 -> 1 | 0 -> 0 | - | - | 0 |
+| M-CP |  | UNVERIFIED_CORRECT -> UNVERIFIED_CORRECT | CORRECT_UNVERIFIED -> CORRECT_UNVERIFIED | 1 -> 1 | 0 -> 0 | C5 RECONSTRUCTABLE/INSUFFICIENT/오류0/MISSING_LINK/조각2(빈2) | - | 0 |
+| S-A1 |  | COACHING_TERMINATED -> COACHING_TERMINATED | REPAIR_FAILED -> REPAIR_FAILED | 1 -> 1 | 1 -> 1 | C2 RECONSTRUCTABLE/ERROR/오류1/NONE/조각2(빈2) | - | 0 |
+| S-B2 |  | COACHING_TERMINATED -> COACHING_TERMINATED | COACHING_REQUESTED -> COACHING_REQUESTED | 1 -> 1 | 1 -> 1 | C5 RECONSTRUCTABLE/ERROR/오류1/NONE/조각3(빈2) | - | 0 |
+| S-CT |  | UNVERIFIED_CORRECT -> UNVERIFIED_CORRECT | CORRECT_UNVERIFIED -> CORRECT_UNVERIFIED | 1 -> 1 | 0 -> 0 | C3 RECONSTRUCTABLE/INSUFFICIENT/오류0/JUDGMENT_METHOD/조각3(빈3) | - | 0 |

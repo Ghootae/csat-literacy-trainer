@@ -38,7 +38,7 @@ const runtimePaths = [
   'packages/pipeline/src/problem-solving/feedback-evaluator.ts', 'packages/pipeline/dist/problem-solving/feedback-evaluator.js',
   'packages/pipeline/src/problem-solving/feedback-end-explanation.ts', 'packages/pipeline/dist/problem-solving/feedback-end-explanation.js',
   'packages/pipeline/src/problem-solving/feedback-claims.ts', 'packages/pipeline/dist/problem-solving/feedback-claims.js',
-  'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.md',
+  'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.1.md',
   ...questionIds.map(q => `packages/pipeline/fixtures/experiments/problem-solving/public/${q}.json`),
   'scripts/run-v5-live-check.mjs', `scripts/${casesModule.replace(/^\.\//, '')}`, 'scripts/v5-diverse-48-cases.mjs', 'scripts/test-v5-live-connection.mjs',
 ];

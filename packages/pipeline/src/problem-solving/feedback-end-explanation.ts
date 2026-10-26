@@ -116,7 +116,7 @@ export function feedbackEndExplanationContent(s: FeedbackSession): Array<Record<
     errors: s.errors.map(({ errorId, description, question, status, basis }) => ({ errorId, description, question, status, basis })),
     additionalErrors: s.additionalErrors,
     insufficiencyKind: s.pendingEnd.endReason === 'CORRECT_UNVERIFIED' ? lastSelectionInsufficiencyKind(s) : null,
-    lastRepairAssessment: last ? (({ coaching: _coaching, ...rest }) => rest)(last) : null,
+    lastRepairAssessment: last ?? null,
     endReason: s.pendingEnd.endReason,
     sectionLeads: { firstChoice: feedbackSectionLead(s, 1), reselection: s.selections.length === 2 ? feedbackSectionLead(s, 2) : null },
   };
