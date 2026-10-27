@@ -237,3 +237,4 @@
 | [`D-0175`](./decisions/D-0175-paragraph-simple-correction-hint-during-question.md) | accepted | 문단 교정 질문 중 근거 문장 힌트 | 교정 질문 대기 중에만 그 오류의 근거 문장 하나를 미색 힌트로 표시, 빈 곳 질문 중에는 표시 안 함, 베끼기 허용. D-0140·D-0144의 "질문 중 표시 안 함·보류"를 교정 질문에 한해 대체(2026-10-22 사용자 결정을 기록으로 올림) |
 | [`D-0176`](./decisions/D-0176-student-switch-roadmap-pilot-before-expansion.md) | accepted | 학생용 전환 순서 | 6지문으로 개발자 경로 알려진 문제 0건 → 얇은 학생판 준비 → 방식 무관 원자료 확대만 먼저 → 실제 학생 확인 → 운영 방식 확정 → 부가 자산 확대 → 정식 전환. 섭외처 없음, 대리 테스터 병행 |
 | [`D-0177`](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md) | accepted | 문제 판정 v5.1: 쓰이지 않는 `coaching` 제거 | M1·M3 스키마·지시문에서 `coaching`, M5 재요청 제거, 지시문 v5.1, 서버 평가 루프 단일 실행. 18세션 회귀로 결과 유지 확인 |
+| [`D-0179`](./decisions/D-0179-explain-abbreviations-on-first-use.md) | accepted | 보고 속 약어는 첫 사용에 설명 | 한 보고 안에서 약어(P4, K4, 결정 번호 등)를 처음 쓸 때만 괄호로 짧은 설명, 이후는 약어만 |

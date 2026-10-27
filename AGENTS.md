@@ -87,6 +87,8 @@ This repository keeps durable project memory in `memory/`. Chat history and
 3. 파일은 실험이면 그 실험 폴더에, 아니면 `docs/reports/`에 둔다. 본보기:
    `docs/experiments/choice-link-2026-10-22/REPORT-v2-run-human.md`, `REPORT-v2-run-desktop.md`.
 
+보고 속 약어(변경 단위 P4, 사례 K4, 결정 번호 등)는 한 보고 안에서 처음 쓸 때만 짧은 설명을 괄호로 붙인다(예: "P4(틀린 지점은 선지 문장에 쓰인 주장만)"). 근거: `memory/decisions/D-0179-explain-abbreviations-on-first-use.md`.
+
 ## 비교 실험 전 기존 자료 재활용 검토
 
 근거: `memory/decisions/D-0168-reuse-existing-data-in-comparison-experiments.md`.

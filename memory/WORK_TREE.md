@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-10-26
+갱신: 2026-10-27
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -35,7 +35,8 @@
 │  │     경로 `/problem/lab`·코드 이름 버전 제거, 작동 순서 문서 작성       D-0173
 │  │     작동 순서 확인 필요 9건 처리, `coaching` 필드 정리 완료(v5.1, 18세션 회귀 통과)    D-0177
 │  │     메모장 23·24·25·29 반영 D-0156·D-0157·D-0159·D-0161, 48세션 회귀 통과(B3 수정 D-0164), "없음" 근거 판정 D-0166
-│  │     다음: UI 메모장 30번 논의(16번 정답 피드백 규칙), 이어받기 CP-2026-10-23
+│  │     K4(회사법 13번 ②) 판정 재검토: 재구성 세 칸·합당 기준·READING 오류 합의  CP-F
+│  │     다음: K4 판정 재설계 설계안 작성(v5.1 기준, v5.2 보관분 일부 가져옴)
 │  │     리마인드: luna 자신의 기호 오독(S2-r3) 해결 — 질문 자동 검사 vs 교정 단계 sol   Q-0030
 │  ├─○ 학생용 전환 — 순서 D-0176(실제 학생 확인 뒤 확대·전환)              CP-B·D-0176
 │  └─? 경계 응답 판정 기준(짧지만 충분 vs 대상만 언급)                       Q-0032
@@ -89,6 +90,7 @@
 | CP-B | [종료 코칭 수정 확인 시험](./checkpoints/2026-10-10-v5-coaching-fix-test.md) |
 | CP-C | [`WORKSTREAM-STATE.md` 문제 골드 절](../docs/WORKSTREAM-STATE.md) (2026-09-08 결정, 역사 자료) |
 | CP-E | [보여 주기 개발자 모드 첫 사용](./checkpoints/2026-10-15-boundary-show-dev-mode-first-use.md) |
+| CP-F | [K4 판정 재설계 논의](./checkpoints/2026-10-27-k4-judgment-redesign-discussion.md), [논의 메모](../docs/reports/REPORT-k4-v51-judgment-review-human.md) |
 | CP-D | [실모델 확인](./checkpoints/2026-10-11-v5-live-connection-test.md), [48개 세션 기록](./checkpoints/2026-10-12-v5-diverse-48-recorded.md) |
 
 ## 갱신 규칙
