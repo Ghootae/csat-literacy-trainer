@@ -43,6 +43,7 @@
 │  └─? 경계 응답 판정 기준(짧지만 충분 vs 대상만 언급)                       Q-0032
 │
 ├─ 학습자 생각 진단 — 큰 논의는 문단·문제 안정화 뒤 재개                     Q-0034
+│  │  문제 쪽 오류 분류: 지금은 세 목록 대응표, 재검증 때 내용·과정 두 축    D-0181
 │  ├─✗ 함정 강도·선택률 예측 — LLM·JEV 모두 실패, 목표 재정의                D-0109
 │  ├─● 문단 분석 지도(지문을 명제→묶음→요지로 쌓은 동결 지도에 학생 요약을 대어 무엇을 잡고 놓쳤는지 기록)
 │  │     공손룡 기준선(r3·입장·판정 v3·오류 집계), 도파민 일반화 기준 ①②③ 통과 D-0143·D-0146
@@ -91,6 +92,7 @@
 | D-0146~D-0172(분석 지도) | [D-0146 도파민 일반화](./decisions/D-0146-analysis-map-dopamine-generalization.md), [D-0147 관계 유형 목록](./decisions/D-0147-relation-vocabulary-sampling.md), [D-0151 분석 골드 절차](./decisions/D-0151-analysis-gold-standard-procedure.md), [D-0155 점검표 v2](./decisions/D-0155-analysis-gold-checklist-v2-and-prompt-v2.md), [D-0158 코드 에이전트 검토 운용](./decisions/D-0158-analysis-gold-claude-review-without-further-calibration.md), [D-0160 학생 이해 지문 집계](./decisions/D-0160-student-fingerprint-aggregation.md), [D-0162 선지 연결 층](./decisions/D-0162-choice-link-layer-direction.md), [D-0167 마지막 설명 좌표 비교](./decisions/D-0167-choice-link-end-explanation-comparison.md), [D-0170 출제자 전략 피드백](./decisions/D-0170-optional-examiner-strategy-feedback.md), [D-0172 선지 직접 누르기](./decisions/D-0172-problem-ui-choice-direct-select.md) |
 | D-0115 | [사고 진단 주기 실행·sol 고정](./decisions/D-0115-thought-diagnosis-periodic-sol.md) |
 | D-0119·D-0121~D-0124 | [요구 요소·깊이](./decisions/D-0119-answer-path-elements-and-depth.md), [층·실패 종류](./decisions/D-0121-answer-path-layers-and-failed-operation.md), [깊이=노드 수](./decisions/D-0122-answer-path-depth-node-count.md), [오진술 우선](./decisions/D-0123-answer-path-explicit-misstatement-priority.md), [요소 덮어쓰기](./decisions/D-0124-answer-path-element-override-on-evidence.md), [sol 종단 검증](./checkpoints/2026-10-14-answer-path-sol-e2e-results.md), [정의 문서](../docs/review/answer-path-element-vocabulary-v0-2026-10-13.md) |
+| D-0181 | [오류 분류 두 축](./decisions/D-0181-problem-error-taxonomy-two-axes-later.md), [대응표](../docs/review/problem-error-taxonomy-crosswalk-2026-10-27.md) |
 | D-0112 | [v5 개발자 경로 종료 상태](./decisions/D-0112-v5-developer-path-connection-end-states.md), [연결 기록](./checkpoints/2026-10-10-v5-developer-path-connected.md) |
 | Q-0032·Q-0033·Q-0034·Q-0036 | [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md) |
 | D-0132·D-0133 | [판정기 V4 유지](./decisions/D-0132-paragraph-judge-keep-v4.md), [경계 규칙 (나″)](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md) |

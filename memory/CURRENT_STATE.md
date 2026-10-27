@@ -44,6 +44,7 @@
 - 선지 연결 층([D-0162](./decisions/D-0162-choice-link-layer-direction.md)): 오프라인 진단용 먼저(D-0002 유지). 비틂 목록 확정, UI 6지문 동결 완료(120선지, [기록](./checkpoints/2026-10-22-choice-link-ui-freeze.md)).
 - 사고 진단 v0.1(풀이 이유 문장으로 무너진 단계·걸린 함정 판정, [D-0111](./decisions/D-0111-thought-diagnosis-v0-experiment.md)): 학생이 쓴 선택 이유로 다섯 단계(발문·선지 해석·근거 위치·근거 해석·대조) 중 처음 실패한 단계와 함정 유형 12종을 판정하고, 근거가 없으면 판단 불가로 둔다. 가상 풀이 36/36·과잉 분류 0. 실시간 아닌 주기 실행·모델 sol 고정([D-0115](./decisions/D-0115-thought-diagnosis-periodic-sol.md)). 다음: 처음 보는 사례·실제 학생 풀이로 검증. 함정 강도·선택률 예측은 LLM·JEV 모두 실패해 목표를 재정의했다([D-0109](./decisions/D-0109-trap-map-v0-external-rate-experiment.md)). 큰 논의는 문단·문제 안정화 뒤 재개(Q-0034).
 - 정답 경로 분석(문항마다 정답에 이르는 노드 지도를 만들고, 학생이 어느 노드·요소에서 틀렸는지 기록, [D-0119](./decisions/D-0119-answer-path-elements-and-depth.md)·[D-0121~D-0124](./decisions/D-0124-answer-path-element-override-on-evidence.md)): sol이 문항 지도(READ·LINK·APPLY 노드, 요소 E1~E10)를 1회 생성·동결하고, 정답은 경로 전체 성공, 오답은 실패 노드·요소로 채점한다(추가 질문 없음). 깊이는 노드 수. sol 종단 검증 대체로 양호(실패 종류 17/20, 3회 일관성 33/35, [기록](./checkpoints/2026-10-14-answer-path-sol-e2e-results.md)). 다음: 실제 학생 풀이, 여러 문항에서 노드 분할 일관성.
+- 문제 쪽 오류 분류([D-0181](./decisions/D-0181-problem-error-taxonomy-two-axes-later.md)): 함정 태그 12종·요구 요소 E1~E10·비틂 14종을 지금은 [대응표](../docs/review/problem-error-taxonomy-crosswalk-2026-10-27.md)로 묶는다. 실제 학생 풀이로 재검증할 때 내용 축(비틂 14종)·과정 축(읽기 과정 7가지)으로 재구성한다.
 
 ## 학생 상태 모델
 

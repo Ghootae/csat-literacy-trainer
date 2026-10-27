@@ -240,3 +240,4 @@
 | [`D-0178`](./decisions/D-0178-partial-refutation-v52-parked.md) | rejected | 부분 반박 근거 판정 (v5.2) 보관·미채택 | `wip/partial-refutation-v52` 운영 미반영, P4(선지에 쓰인 주장만) 폐기. E1·E3·E4·E5는 새 설계 v5.3이 가져감, `point` 칸은 안 가져감 |
 | [`D-0179`](./decisions/D-0179-explain-abbreviations-on-first-use.md) | accepted | 보고 속 약어는 첫 사용에 설명 | 한 보고 안에서 약어(P4, K4, 결정 번호 등)를 처음 쓸 때만 괄호로 짧은 설명, 이후는 약어만 |
 | [`D-0180`](./decisions/D-0180-student-state-model-v1-discarded.md) | accepted | 학생 상태 모델 V1 폐기 | D-0048 대체. V1을 폐기하고 사고 패턴 분석 논의에서 제외. Q-0027 닫음, Q-0037은 분석 자료 결합 문제로만 남김. 구현 코드는 그대로 둠 |
+| [`D-0181`](./decisions/D-0181-problem-error-taxonomy-two-axes-later.md) | accepted | 문제 풀이 오류 분류 대응표·두 축 | 함정 태그·요구 요소·비틂 14종을 지금은 대응표로 묶고, 실제 학생 풀이 재검증 때 내용 축(비틂 14종)·과정 축(읽기 과정 7가지) 두 축으로 재구성 |
