@@ -211,7 +211,10 @@ export class ProblemFeedbackController {
           ? '네가 쓴 근거만으로는 어떻게 판단했는지 다 알기 어려웠어. 그래서 네 생각을 짐작하지 않고 선지 내용 위주로 볼게.'
           : '근거를 적지 않아서 어떻게 판단했는지는 알 수 없었어. 선지 내용 위주로 볼게.'
         : reason === 'CORRECT_UNVERIFIED'
-          ? '네 근거만으로는 이 답에 어떻게 이르렀는지 다 보이지는 않았어. 빠진 연결을 같이 채워 볼게.'
+          // A reconstructable but insufficient rationale was read; only an unreadable one is "not fully visible".
+          ? s.assessments.findLast(a => a.mode === 'SELECTION')?.reconstructability === 'RECONSTRUCTABLE'
+            ? '네 근거에서 맞는 부분은 살리고, 더 이어야 할 연결을 같이 채워 볼게.'
+            : '네 근거만으로는 이 답에 어떻게 이르렀는지 다 보이지는 않았어. 빠진 연결을 같이 채워 볼게.'
           // UI backlog 28: a failed correction answer or a wrong reselection gets feedback before the answer is revealed.
           : reason === 'REPAIR_FAILED'
             ? correct

@@ -38,7 +38,7 @@ const runtimePaths = [
   'packages/pipeline/src/problem-solving/feedback-evaluator.ts', 'packages/pipeline/dist/problem-solving/feedback-evaluator.js',
   'packages/pipeline/src/problem-solving/feedback-end-explanation.ts', 'packages/pipeline/dist/problem-solving/feedback-end-explanation.js',
   'packages/pipeline/src/problem-solving/feedback-claims.ts', 'packages/pipeline/dist/problem-solving/feedback-claims.js',
-  'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.1.md',
+  'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.3.md',
   ...questionIds.map(q => `packages/pipeline/fixtures/experiments/problem-solving/public/${q}.json`),
   'scripts/run-v5-live-check.mjs', `scripts/${casesModule.replace(/^\.\//, '')}`, 'scripts/v5-diverse-48-cases.mjs', 'scripts/test-v5-live-connection.mjs',
 ];
@@ -212,8 +212,8 @@ function caseChecks(state) {
     // selection-mismatch carries the SELECTION assessment's own sourceEvidence (feedback.ts applyFeedbackAssessment).
     const evidence = active === 'selection-mismatch' ? s.inspection.assessments.findLast(a => a.mode === 'SELECTION')?.raw?.sourceEvidence : err?.sourceEvidence;
     const quotes = (evidence ?? []).filter(e => ['PASSAGE', 'SCENARIO'].includes(e.location) && e.quote && !e.mediaId && !e.visualObservation);
-    // D-0130: a target error whose evidence is only the option text has nothing to highlight (user 2026-10-14: no change needed).
-    if (!s.view.correctionHighlights.length && !(err?.errorType === 'TARGET' && !quotes.length)) violations.push({ check: 'NO_HIGHLIGHT', step: s.transitionId, question: s.view.message });
+    // D-0130: a target or reading error whose evidence is only the option text has nothing to highlight (user 2026-10-14: no change needed).
+    if (!s.view.correctionHighlights.length && !(['TARGET', 'READING'].includes(err?.errorType) && !quotes.length)) violations.push({ check: 'NO_HIGHLIGHT', step: s.transitionId, question: s.view.message });
     for (const e of quotes) if (!(e.location === 'PASSAGE' ? q.passageText : q.scenarioText ?? '').includes(e.quote)) violations.push({ check: 'HIGHLIGHT_NOT_IN_SOURCE', step: s.transitionId, location: e.location, quote: e.quote });
     for (const h of s.view.correctionHighlights) if (!quotes.some(e => e.location === h.location && e.quote === h.text)) violations.push({ check: 'HIGHLIGHT_NOT_EVIDENCE', step: s.transitionId, text: h.text });
   }

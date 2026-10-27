@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import OpenAI from 'openai';
 import { z } from 'zod/v4';
 import { assertNoStructuredProblemGold, SOURCE_TEXT_ANNOTATION_GUIDE } from './source-direct-evaluator.js';
-import { extendedSelectionSchema, validateClaims } from './feedback-claims.js';
+import { extendedSelectionSchema, readingSummary, validateClaims } from './feedback-claims.js';
 import { feedbackEndExplanationContent, CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS } from './feedback-end-explanation.js';
 import {
   FeedbackRepairAssessmentSchema, FeedbackSelectionAssessmentSchema, PROBLEM_FEEDBACK_SESSION_VERSION,
@@ -101,7 +101,7 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
     let validationFeedback: string | null = null;
     const aggregate = (): FeedbackEvaluationCall => ({
       rawOutput: candidate,
-      metadata: { provider: 'openai', model, promptVersion: 'problem-feedback-v5.1',
+      metadata: { provider: 'openai', model, promptVersion: 'problem-feedback-v5.3',
         durationMs: Math.round(performance.now() - started), attempts,
         inputTokens: attempts.reduce((n, a) => n + a.inputTokens, 0),
         outputTokens: attempts.reduce((n, a) => n + a.outputTokens, 0),
@@ -140,12 +140,13 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
         if (validationFeedback) content.push({ type: 'input_text', text: JSON.stringify({ validationFeedback }) });
         candidate = await request('ASSESSMENT',
           s.evaluationMode === 'REPAIR' ? FeedbackRepairAssessmentSchema : FeedbackSelectionAssessmentSchema,
-          readFileSync(resolve(process.cwd(), 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.1.md'), 'utf8'), content);
+          readFileSync(resolve(process.cwd(), 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.3.md'), 'utf8'), content);
         if (s.evaluationMode === 'SELECTION') {
-          validateClaims(candidate, feedbackEvaluationInput(s).observations.map(o => ({ observationId: o.observationId, text: feedbackObservationText(o) })),
-            { correctChoice: s.selections.at(-1)?.choiceId === s.source.answerChoiceId });
-          const { studentClaims: _claims, claimConflicts: _conflicts, keyRelationCoverage: _coverage, ...assessment } = candidate as Record<string, unknown>;
-          candidate = assessment;
+          const choice = s.source.choices.find(c => c.choiceId === s.selections.at(-1)?.choiceId)!;
+          const options = { correctChoice: choice.choiceId === s.source.answerChoiceId, targetVerdict: s.choiceImpliedVerdict, choiceText: choice.text };
+          validateClaims(candidate, feedbackEvaluationInput(s).observations.map(o => ({ observationId: o.observationId, text: feedbackObservationText(o) })), options);
+          const { studentClaims: _claims, claimConflicts: _conflicts, choiceReading: _reading, ground: _ground, judgment: _judgment, ...assessment } = candidate as Record<string, unknown>;
+          candidate = { ...assessment, readingSummary: readingSummary(candidate, options) };
         }
         const assessment = validateFeedbackAssessment(s, candidate);
         // No objective key, target polarity or prior model conclusion is given to this independent reader.

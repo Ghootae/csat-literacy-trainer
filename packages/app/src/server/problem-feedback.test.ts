@@ -271,6 +271,17 @@ describe('background end explanation and transcript sequencing', () => {
 });
 
 describe('unverifiable rationale connector', () => {
+  it('a reconstructable but insufficient correct rationale is not called unreadable', async () => {
+    const { controller: c, view: v } = setup({ async evaluate(s) {
+      const call = unknown(s);
+      if (s.evaluationMode !== 'SELECTION') return call;
+      return { ...call, rawOutput: { ...(call.rawOutput as Record<string, unknown>), reconstructability: 'RECONSTRUCTABLE', rationaleImpliedVerdict: 'INVALID',
+        reconstructedPath: ['학생은 같은 시민의 글일 수 있다고 봤다.', '그래서 선지를 적절하지 않다고 판단했다.'], contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK',
+        sourceEvidence: [{ location: 'PASSAGE', quote: '중복 게시로 여론이 왜곡될 수 있다.', mediaId: null, visualObservation: null }] } };
+    } });
+    const next = await submitSettled(c, v.sessionId, request(v, { type: 'SELECT', choiceId: 'C2', rationale: { mode: 'PROVIDED', text: '같은 시민의 글일 수 있음' } }));
+    expect(next.transcript.filter(m => m.sequence === 'GATE')[0]?.text).toBe('네 근거에서 맞는 부분은 살리고, 더 이어야 할 연결을 같이 채워 볼게.');
+  });
   it.each([
     ['provided', 'C1', 'PROVIDED', '네가 쓴 근거만으로는 어떻게 판단했는지 다 알기 어려웠어. 그래서 네 생각을 짐작하지 않고 선지 내용 위주로 볼게.'],
     ['omitted', 'C1', 'OMITTED', '근거를 적지 않아서 어떻게 판단했는지는 알 수 없었어. 선지 내용 위주로 볼게.'],

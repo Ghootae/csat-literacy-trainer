@@ -32,7 +32,7 @@ const SourceEvidence = z.object({
 }).strict();
 const ErrorSchema = z.object({
   errorId: Text,
-  errorType: z.enum(['TARGET', 'CONTENT']),
+  errorType: z.enum(['TARGET', 'READING', 'CONTENT']),
   description: Text,
   studentEvidence: z.array(StudentEvidence).min(1),
   sourceEvidence: z.array(SourceEvidence).min(1),
@@ -55,6 +55,11 @@ export const FeedbackSelectionAssessmentSchema = z.object({
   errors: z.array(ErrorSchema),
   errorHypothesis: Text.nullable(),
   selectionMismatchQuestion: Text.nullable(),
+  // Server-written digest of the three cells for the end explanation. Absent in records that predate it.
+  readingSummary: z.object({
+    insufficiencyCase: z.string().nullable(),
+    readings: z.array(z.object({ choiceText: z.string(), studentReading: z.string(), relation: z.string() }).strict()),
+  }).strict().optional(),
 }).strict();
 export const FeedbackRepairAssessmentSchema = z.object({
   mode: z.literal('REPAIR'),
@@ -70,7 +75,7 @@ export const FeedbackRepairAssessmentSchema = z.object({
   // Includes newly introduced errors; these NEVER expand the question queue.
   newErrors: z.array(z.object({
     errorId: Text,
-    errorType: z.enum(['TARGET', 'CONTENT']),
+    errorType: z.enum(['TARGET', 'READING', 'CONTENT']),
     description: Text,
     studentEvidence: z.array(StudentEvidence).min(1),
     sourceEvidence: z.array(SourceEvidence).min(1),
@@ -206,6 +211,10 @@ export const FeedbackEndExplanationSchema = z.object({ firstChoice: Text, resele
 export function applyFeedbackEndExplanation(session: FeedbackSession, raw: unknown): FeedbackSession {
   const explanation = FeedbackEndExplanationSchema.parse(raw);
   if ((session.selections.length === 2) !== (explanation.reselection !== null)) throw new Error('종료 설명의 재선택 칸이 선택 기록과 일치하지 않습니다.');
+  // The code prepends each choice section's lead sentence ("②를 고른 건 맞아."); the model must not repeat it.
+  for (const text of [explanation.firstChoice, explanation.reselection]) {
+    if (text !== null && /^\s*[①②③④⑤][을를] 고른 건 맞아/u.test(text)) throw new Error('종료 설명 칸이 화면에 이미 붙는 첫 문장을 되풀이합니다. 그 다음 문장부터 쓰세요.');
+  }
   for (const text of [explanation.firstChoice, explanation.reselection, explanation.answer]) {
     if (text === null) continue;
     validateFeedbackCoaching(text);
@@ -364,8 +373,9 @@ export function validateFeedbackAssessment(s: FeedbackSession, raw: unknown): Fe
     }
     if (a.rationaleImpliedVerdict === 'UNKNOWN' || !a.reconstructedPath.length || !a.studentEvidence.length || !a.sourceEvidence.length) throw new Error('재구성 가능한 판정의 근거가 부족합니다.');
     if ((a.contentAssessment === 'ERROR') !== (a.errors.length > 0)) throw new Error('내용 오류 판정과 오류 목록이 불일치합니다.');
-    // A target error means the conclusion was reached on another target, so the selection comparison is skipped.
-    const mismatch = feedbackConsistency(s.choiceImpliedVerdict, a.rationaleImpliedVerdict) === 'MISMATCH' && !a.errors.some(e => e.errorType === 'TARGET');
+    if (a.errors.some(e => e.errorType === 'READING') && selected(s).choiceId === s.source.answerChoiceId) throw new Error('선지 읽기 오류는 오답 선택에서만 만들 수 있습니다.');
+    // A target or reading error means the conclusion was reached on another target or another reading, so the selection comparison is skipped.
+    const mismatch = feedbackConsistency(s.choiceImpliedVerdict, a.rationaleImpliedVerdict) === 'MISMATCH' && !a.errors.some(e => e.errorType === 'TARGET' || e.errorType === 'READING');
     if (mismatch && s.selections.length === 1 && !a.selectionMismatchQuestion) throw new Error('선택–근거 충돌 질문이 누락됐습니다.');
     // Only questions that can actually be shown are checked; final selections never ask.
     if (s.selections.length === 1) {
@@ -430,8 +440,8 @@ export function applyFeedbackAssessment(session: FeedbackSession, raw: unknown):
     }
     if (!correct && s.selections.length === 2) return endExplanation(s, 'RESELECTION_WRONG', 'COACHING_TERMINATED');
     const mapped: FeedbackError[] = a.errors.map(e => ({ ...e, kind: 'CONTENT', asked: false, skipped: false, status: 'REMAINING' }));
-    const errors = [...mapped.filter(e => e.errorType === 'TARGET'), ...mapped.filter(e => e.errorType !== 'TARGET')];
-    if (consistency === 'MISMATCH' && !errors.some(e => e.errorType === 'TARGET')) errors.push({
+    const errors = [...mapped.filter(e => e.errorType === 'TARGET'), ...mapped.filter(e => e.errorType === 'READING'), ...mapped.filter(e => e.errorType === 'CONTENT')];
+    if (consistency === 'MISMATCH' && !errors.some(e => e.errorType === 'TARGET' || e.errorType === 'READING')) errors.push({
       errorId: 'selection-mismatch', errorType: 'CONTENT', description: '선택이 뜻하는 판정과 근거에서 도출되는 판정이 다릅니다.',
       kind: 'SELECTION_EXECUTION', basis: 'STATED', question: a.selectionMismatchQuestion!,
       studentEvidence: a.studentEvidence, sourceEvidence: a.sourceEvidence, asked: false, skipped: false, status: 'REMAINING',
