@@ -54,7 +54,7 @@
 | [`D-0045`](./decisions/D-0045-conditional-meta-natural-eight-experiment.md) | accepted | 실제8응답 조건부 메타 판정 시험 | L1 각3회 후 SERIOUS 축만 L2; 기존 공동생성6문단 재사용·미보유2문단 생성. D-0040 정책·운영 미변경 |
 | [`D-0046`](./decisions/D-0046-conditional-meta-results-accepted.md) | accepted | 조건부 메타8 결과 수용 | OK무보완통과·관대한 결과 수용. 사전 경로차이9회를 실패로 간주하지 않음; 원자료·집계 보존·운영미승격 |
 | [`D-0047`](./decisions/D-0047-conditional-meta-developer-mode.md) | accepted | 조건부 메타 개발자 연결 | 6지문30문단 축준비·개발자 실험모드 연결 승인 및 구현. L1 SERIOUS만 L2, 원판정/정책 분리·학생 기본 V4 유지 |
-| [`D-0048`](./decisions/D-0048-student-state-model-next-goal.md) | accepted | 학생 상태·정기 피드백 | 현재 문단·문제 기록 기반의 증거·불확실성 보존 다차원 상태 모델을 다음 개발 목표로 설정; 난이도 보정 전 단일 능력 점수·적응형 제시 미승인 |
+| [`D-0048`](./decisions/D-0048-student-state-model-next-goal.md) | superseded | 학생 상태·정기 피드백 | 현재 문단·문제 기록 기반의 증거·불확실성 보존 다차원 상태 모델을 다음 개발 목표로 설정; 난이도 보정 전 단일 능력 점수·적응형 제시 미승인 |
 | [`D-0049`](./decisions/D-0049-stem-polarity-normalization-deferred.md) | accepted | 문제 풀이 선택 의미 | 발문 극성을 한 번 정규화하고 선택 의미·학생 추론·파생 결론·내용 정확성을 분리하는 설계 승인; 다른 수정 사안과 함께 구현할 때까지 현행 v3 유지 |
 | [`D-0050`](./decisions/D-0050-reasoning-reconstructability-gate-deferred.md) | accepted | 문제 풀이 추론 재구성 | 근거 제출과 추론 가능성을 구분하고 파편·모순·과소결정 발화의 선지 결론을 보류하는 게이트를 후속 구현 후보로 채택; D-0049와 함께 구현 대기 |
 | [`D-0051`](./decisions/D-0051-bounded-problem-feedback-flow-deferred.md) | accepted | 문제 풀이 개입·종료 후보 | 근거 기본·답만 제출 선택, 교정 1회·성공 시 재선택 1회, 추론 불가능·교정 실패·최종 오답은 코칭 종료; 후보 기록만 승인·개발 실제 차감 없음·운영 미변경 |
@@ -239,3 +239,4 @@
 | [`D-0177`](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md) | accepted | 문제 판정 v5.1: 쓰이지 않는 `coaching` 제거 | M1·M3 스키마·지시문에서 `coaching`, M5 재요청 제거, 지시문 v5.1, 서버 평가 루프 단일 실행. 18세션 회귀로 결과 유지 확인 |
 | [`D-0178`](./decisions/D-0178-partial-refutation-v52-parked.md) | rejected | 부분 반박 근거 판정 (v5.2) 보관·미채택 | `wip/partial-refutation-v52` 운영 미반영, P4(선지에 쓰인 주장만) 폐기. E1·E3·E4·E5는 새 설계 v5.3이 가져감, `point` 칸은 안 가져감 |
 | [`D-0179`](./decisions/D-0179-explain-abbreviations-on-first-use.md) | accepted | 보고 속 약어는 첫 사용에 설명 | 한 보고 안에서 약어(P4, K4, 결정 번호 등)를 처음 쓸 때만 괄호로 짧은 설명, 이후는 약어만 |
+| [`D-0180`](./decisions/D-0180-student-state-model-v1-discarded.md) | accepted | 학생 상태 모델 V1 폐기 | D-0048 대체. V1을 폐기하고 사고 패턴 분석 논의에서 제외. Q-0027 닫음, Q-0037은 분석 자료 결합 문제로만 남김. 구현 코드는 그대로 둠 |

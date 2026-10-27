@@ -1,12 +1,14 @@
 ---
 id: D-0048
-status: accepted
+status: superseded
 date: 2026-10-01
 scope: student-state-model-and-periodic-feedback
 supersedes: none
 ---
 
 # 학생 상태 모델과 정기 피드백을 다음 개발 목표로 설정
+
+> 폐기(2026-10-27): [D-0180](./D-0180-student-state-model-v1-discarded.md)으로 대체. 논의에서 제외한다.
 
 사용자는 핵심 기능을 개발자 단계에서 캘리브레이션하는 동안 부가 기능축을 논의한 뒤,
 학생 상태 모델과 정기 피드백을 다음 개발 목표로 설정했다.
