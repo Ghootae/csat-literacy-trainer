@@ -1,9 +1,10 @@
 ---
 id: D-0161
-status: accepted
+status: superseded
 date: 2026-10-21
 scope: problem-feedback-judgment
 supersedes: none
+superseded_by: D-0182
 ---
 
 # 정답 선택의 "근거 충분"은 핵심 관계의 모든 조각을 학생이 말했을 때만 (`keyRelationCoverage`)

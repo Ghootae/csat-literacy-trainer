@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import OpenAI from 'openai';
 import { z } from 'zod/v4';
 import { assertNoStructuredProblemGold, SOURCE_TEXT_ANNOTATION_GUIDE } from './source-direct-evaluator.js';
-import { extendedSelectionSchema, readingSummary, validateClaims } from './feedback-claims.js';
+import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, validateClaims } from './feedback-claims.js';
 import { feedbackEndExplanationContent, CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS } from './feedback-end-explanation.js';
 import {
   FeedbackRepairAssessmentSchema, FeedbackSelectionAssessmentSchema, PROBLEM_FEEDBACK_SESSION_VERSION,
@@ -16,6 +16,8 @@ export interface FeedbackEvaluationCall {
   metadata: { provider: 'openai' | 'mock'; model: string; promptVersion: string; durationMs: number;
     inputTokens: number; outputTokens: number; cachedTokens: number;
     attempts?: { kind?: 'ASSESSMENT' | 'CONCLUSION_AUDIT' | 'END_EXPLANATION'; model: string; outcome: 'SUCCESS' | 'ERROR'; rawOutput: unknown; error: string | null;
+      // Changes the server made to the three cells before validation (SELECTION assessments only).
+      normalized?: string[];
       inputTokens: number; outputTokens: number; cachedTokens: number }[] };
 }
 export interface FeedbackEvaluator {
@@ -144,9 +146,14 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
         if (s.evaluationMode === 'SELECTION') {
           const choice = s.source.choices.find(c => c.choiceId === s.selections.at(-1)?.choiceId)!;
           const options = { correctChoice: choice.choiceId === s.source.answerChoiceId, targetVerdict: s.choiceImpliedVerdict, choiceText: choice.text };
-          validateClaims(candidate, feedbackEvaluationInput(s).observations.map(o => ({ observationId: o.observationId, text: feedbackObservationText(o) })), options);
-          const { studentClaims: _claims, claimConflicts: _conflicts, choiceReading: _reading, ground: _ground, judgment: _judgment, ...assessment } = candidate as Record<string, unknown>;
-          candidate = { ...assessment, readingSummary: readingSummary(candidate, options) };
+          const observations = feedbackEvaluationInput(s).observations.map(o => ({ observationId: o.observationId, text: feedbackObservationText(o) }));
+          const normalized = normalizeCells(candidate, options);
+          const attempt = attempts.at(-1)!; attempt.normalized = normalized.notes;
+          const settled = settleConclusion(normalized.assessment, observations, options);
+          attempt.normalized = [...normalized.notes, ...settled.notes];
+          validateClaims(settled.assessment, observations, options);
+          const { studentClaims: _claims, claimConflicts: _conflicts, choiceReading: _reading, ground: _ground, judgment: _judgment, ...assessment } = settled.assessment as Record<string, unknown>;
+          candidate = { ...assessment, readingSummary: readingSummary(settled.assessment, options) };
         }
         const assessment = validateFeedbackAssessment(s, candidate);
         // No objective key, target polarity or prior model conclusion is given to this independent reader.

@@ -105,7 +105,6 @@ export function validateClaims(assessment: any, observations: { observationId: s
   return claims;
 }
 
-type Ref = { observationId: string; quote: string };
 const AMBIGUOUS_MIN = 2;
 const distinctCandidates = (blank: any) => new Set(blank.candidates.map(normalize)).size;
 function validateCells(assessment: any, observations: { observationId: string; text: string }[], options: ClaimsOptions, fail: (reason: string) => never) {
@@ -159,6 +158,71 @@ function validateCells(assessment: any, observations: { observationId: string; t
   return { touched };
 }
 
+/** Cleans mechanical slips in the three cells before validation. Returns a copy and one note per change; the input is untouched. */
+export function normalizeCells(assessment: any, options: ClaimsOptions): { assessment: any; notes: string[] } {
+  const notes: string[] = [];
+  if (!assessment || typeof assessment !== 'object') return { assessment, notes };
+  const a = structuredClone(assessment);
+  const claims = a.choiceReading?.claims;
+  if (Array.isArray(claims)) for (const c of claims) {
+    if (c?.relation !== 'UNTOUCHED') continue;
+    if ((typeof c.studentReading === 'string' && c.studentReading !== '') || (c.readingQuote ?? null) !== null || (Array.isArray(c.blanks) && c.blanks.length)) {
+      c.studentReading = ''; c.readingQuote = null; c.blanks = []; notes.push(`cleared reading fields of UNTOUCHED claim ${c.claimId}`);
+    }
+  }
+  const j = a.judgment;
+  if (j && typeof j === 'object' && Array.isArray(j.targetClaimIds) && Array.isArray(claims)) {
+    const touched = new Set(claims.filter((c: any) => c && c.relation !== 'UNTOUCHED').map((c: any) => c.claimId));
+    const kept = [...new Set(j.targetClaimIds)].filter(id => touched.has(id));
+    if (kept.length !== j.targetClaimIds.length) { notes.push('dropped duplicate, UNTOUCHED or unknown judgment targets'); j.targetClaimIds = kept; }
+    if (j.verdict === 'NONE') {
+      if (j.targetClaimIds.length || j.contradiction !== '') { j.targetClaimIds = []; j.contradiction = ''; notes.push('cleared targets and contradiction of verdict NONE'); }
+    } else if (!j.targetClaimIds.length) {
+      j.verdict = 'NONE'; j.contradiction = ''; j.holds = false; notes.push('judgment verdict set to NONE: no touched target left');
+    }
+  }
+  const g = a.ground;
+  if (g?.kind === 'NONE' && (g.observationId !== '' || g.quote !== '')) { g.observationId = ''; g.quote = ''; notes.push('cleared observationId and quote of ground NONE'); }
+  if (options.correctChoice && Array.isArray(a.errors) && a.errors.some((e: any) => e?.errorType === 'READING')) {
+    a.errors = a.errors.filter((e: any) => e?.errorType !== 'READING'); notes.push('removed READING error from a correct choice');
+  }
+  return { assessment: a, notes };
+}
+
+/** The server, not the model, decides reconstructability and, for a correct choice, sufficiency from the three cells. Run after normalizeCells, before validateClaims. */
+export function settleConclusion(assessment: any, observations: { observationId: string; text: string }[], options: ClaimsOptions): { assessment: any; notes: string[] } {
+  const notes: string[] = [];
+  if (!Array.isArray(assessment?.claimConflicts) || assessment.claimConflicts.length || (assessment.boundary ?? 'NONE') !== 'NONE') return { assessment, notes };
+  let touched: any[];
+  // A malformed structure is left for validateClaims to report.
+  try { touched = validateCells(assessment, observations, options, (reason: string): never => { throw new Error(reason); }).touched; } catch { return { assessment, notes }; }
+  const a = structuredClone(assessment);
+  const derived = touched.length >= 1 && a.ground.kind !== 'NONE' && a.judgment.verdict !== 'NONE';
+  const modelOk = a.reconstructability === 'RECONSTRUCTABLE';
+  const noErrors = Array.isArray(a.errors) && !a.errors.length;
+  if (derived && modelOk) {
+    if (a.rationaleImpliedVerdict !== a.judgment.verdict) { a.rationaleImpliedVerdict = a.judgment.verdict; notes.push('rationaleImpliedVerdict set from judgment.verdict'); }
+  } else if (!derived && modelOk && noErrors) {
+    Object.assign(a, { reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE', errorHypothesis: null, selectionMismatchQuestion: null });
+    notes.push('reconstructability set to UNKNOWN: the three cells are not all filled');
+  } else if (!derived && !modelOk && noErrors && (a.rationaleImpliedVerdict !== 'UNKNOWN' || a.contentAssessment !== 'UNKNOWN' || a.insufficiencyKind !== 'NONE')) {
+    Object.assign(a, { rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE' });
+    notes.push('UNKNOWN reconstructability keeps no conclusion or sufficiency');
+  } else if (derived && !modelOk && options.correctChoice) {
+    if (!Array.isArray(a.sourceEvidence) || !a.sourceEvidence.length) throw new Error('CLAIMS_CONTRACT: sourceEvidence is required to reconstruct from the three cells');
+    a.reconstructability = 'RECONSTRUCTABLE'; a.rationaleImpliedVerdict = a.judgment.verdict;
+    if (!Array.isArray(a.reconstructedPath) || !a.reconstructedPath.length) a.reconstructedPath = [a.judgment.contradiction];
+    if (!Array.isArray(a.studentEvidence) || !a.studentEvidence.length) a.studentEvidence = [{ observationId: a.ground.observationId, quote: a.ground.quote }];
+    notes.push('reconstructability set to RECONSTRUCTABLE from the three cells');
+  }
+  if (options.correctChoice && derived && a.reconstructability === 'RECONSTRUCTABLE' && a.judgment.verdict === options.targetVerdict && noErrors) {
+    const judged = readingJudgment({ ...a, contentAssessment: 'UNKNOWN' }, options)!;
+    const [content, kind] = judged.supported ? ['SUPPORTED', 'NONE'] : ['INSUFFICIENT', judged.insufficiencyKind];
+    if (a.contentAssessment !== content || a.insufficiencyKind !== kind) { a.contentAssessment = content; a.insufficiencyKind = kind; notes.push(`contentAssessment set to ${content} from the three cells`); }
+  }
+  return { assessment: a, notes };
+}
+
 /** Sufficiency of a correct choice from the three cells; null when it does not apply (wrong choice, UNKNOWN, other verdict direction). */
 function readingJudgment(assessment: any, options: ClaimsOptions) {
   if (!options.correctChoice || assessment.reconstructability !== 'RECONSTRUCTABLE' || assessment.contentAssessment === 'ERROR') return null;
@@ -167,14 +231,11 @@ function readingJudgment(assessment: any, options: ClaimsOptions) {
   const negative = options.targetVerdict === 'INVALID';
   const relationOk = (c: any) => (negative ? ['EXACT', 'BLANK_FILLED', 'WEAKER'] : ['EXACT', 'BLANK_FILLED', 'STRONGER', 'ADDED']).includes(c.relation);
   const blankOk = (c: any) => { const ambiguous = c.blanks.filter((b: any) => distinctCandidates(b) >= AMBIGUOUS_MIN); return ambiguous.length <= 1 && ambiguous.every((b: any) => b.cue !== null); };
-  // An ambiguous blank's cue stands in for the reading quote; otherwise the reading quote itself must be apart from the ground.
-  const separated = (c: any) => { const cues = c.blanks.filter((b: any) => distinctCandidates(b) >= AMBIGUOUS_MIN && b.cue !== null);
-    return cues.length ? cues.every((b: any) => !overlaps(b.cue as Ref, ground)) : !overlaps(c.readingQuote as Ref, ground); };
   const fits = (c: any) => relationOk(c) && blankOk(c);
   const touched = claims.filter((c: any) => c.relation !== 'UNTOUCHED');
   const targets = touched.filter((c: any) => judgment.targetClaimIds.includes(c.claimId));
   const groundClaims = (assessment.studentClaims as any[]).filter(c => overlaps(c, ground));
-  const claimsOk = negative ? targets.some((c: any) => fits(c) && separated(c)) : touched.length === claims.length && touched.every((c: any) => fits(c) && separated(c));
+  const claimsOk = negative ? targets.some(fits) : touched.length === claims.length && touched.every(fits);
   const supported = ground.kind === 'FACT' && groundClaims.length > 0 && groundClaims.every(c => c.sourceCheck === 'CONSISTENT') && claimsOk && judgment.holds;
   const fitsAny = negative ? targets.some(fits) : false;
   const insufficiencyCase = supported ? null

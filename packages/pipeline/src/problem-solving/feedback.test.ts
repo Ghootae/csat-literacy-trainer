@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { extendedSelectionSchema, readingSummary, validateClaims, type ClaimsOptions } from './feedback-claims.js';
+import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, validateClaims, type ClaimsOptions } from './feedback-claims.js';
 import { CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, feedbackEndExplanationContent, feedbackSectionClosing, feedbackSectionLead, stemVerdictWords } from './feedback-end-explanation.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -803,16 +803,17 @@ describe('developer connection contracts', () => {
     expect(call.metadata.attempts?.[0]?.rawOutput).toEqual(bad);
     expect(call.rawOutput).not.toHaveProperty('studentClaims'); expect(assess(s, call.rawOutput).phase).toBe('AWAITING_CORRECTION');
   });
-  for (const correct of [false, true]) it(`passes the last choice correctness to the sufficiency check: correct=${correct}`, async () => {
+  for (const correct of [false, true]) it(`the server settles sufficiency from the cells instead of retrying: correct=${correct}`, async () => {
     const s = selection(correct ? 'C5' : 'C4');
     const unsupported = withClaims(output(s, { errors: [], contentAssessment: 'SUPPORTED' }), s); unsupported.judgment.holds = false;
-    const good = withClaims(output(s, { errors: [], contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' }), s);
     const requests: any[] = [];
-    const call = await new OpenAIFeedbackEvaluator({ transport: { async create(r) {
-      requests.push(r); return response(requests.length === 1 ? unsupported : good);
-    } } }).evaluate(s);
-    expect(requests).toHaveLength(correct ? 2 : 1);
-    if (correct) expect(JSON.stringify(requests[1])).toContain('SUPPORTED requires the three cells to meet the sufficiency criteria');
+    const call = await new OpenAIFeedbackEvaluator({ transport: { async create(r) { requests.push(r); return response(unsupported); } } }).evaluate(s);
+    expect(requests).toHaveLength(1);
+    if (correct) {
+      expect(call.rawOutput).toMatchObject({ contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' });
+      expect(call.metadata.attempts?.[0]?.normalized).toEqual([expect.stringContaining('contentAssessment set to INSUFFICIENT')]);
+      expect(call.metadata.attempts?.[0]?.rawOutput).toMatchObject({ contentAssessment: 'SUPPORTED' });
+    } else expect(call.metadata.attempts?.[0]?.normalized).toEqual([]);
     for (const cell of ['choiceReading', 'ground', 'judgment', 'keyRelationCoverage']) expect(call.rawOutput).not.toHaveProperty(cell);
     expect(call.rawOutput).toHaveProperty('readingSummary');
   });
@@ -1375,35 +1376,35 @@ describe('three-cell judgment (v5.3)', () => {
     it('positive stem: every claim of the choice must be touched, otherwise PARTIAL_SUPPORT', () => {
       const rest = reading('c2', '라마바', 'UNTOUCHED', '');
       expect(judge(one('EXACT', 'VALID', [rest], insufficient), c, { targetVerdict: 'VALID' })).toBe('PARTIAL_SUPPORT');
-      expect(judge(one('EXACT', 'VALID', [reading('c2', '라마바', 'EXACT', '라마바')], { ground: ground('FACT', '가나다 라마바'), studentClaims: [studentClaim('가나다 라마바')], ...insufficient }), c, { targetVerdict: 'VALID' }))
-        .toBe('MISSING_LINK');
+      expect(judge(one('EXACT', 'VALID', [reading('c2', '라마바', 'EXACT', '라마바')], { ground: ground('FACT', '가나다 라마바'), studentClaims: [studentClaim('가나다 라마바')],
+        judgment: judgment('VALID', ['c1'], false), ...insufficient }), c, { targetVerdict: 'VALID' })).toBe('MISSING_LINK');
     });
     it('the verdict direction other than the target skips the sufficiency check', () => {
       expect(judge(one('EXACT', 'VALID'), c, { targetVerdict: 'INVALID' })).toBeNull();
     });
   });
 
-  describe('quote separation', () => {
+  describe('no quote separation (D-0161 inheritance removed)', () => {
     const c = cell([{ observationId: 'o1', text: '가나다 라마바 사마아' }], '선지 가나다 라마바 사마아');
-    it('an EXACT reading that shares its quote with the ground is not SUPPORTED', () => {
+    it('an EXACT reading that shares its quote with the ground is SUPPORTED', () => {
       const shared = base({ choiceReading: { claims: [reading('c1', '가나다', 'EXACT', '가나다 라마바')] }, ground: ground('FACT', '라마바'), judgment: judgment('INVALID'),
         studentClaims: [studentClaim('라마바')] });
-      expect(() => judge(shared, c, {})).toThrow(/SUPPORTED requires the three cells/);
-      expect(judge({ ...shared, contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' }, c, {})).toBe('MISSING_LINK');
+      expect(judge(shared, c, {})).toBeNull();
+      expect(() => judge({ ...shared, contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' }, c, {})).toThrow(/must be SUPPORTED/);
     });
-    it('a BLANK_FILLED reading is separated by its cue instead of its reading quote', () => {
+    it('a BLANK_FILLED reading is SUPPORTED whether or not its cue overlaps the ground', () => {
       const blank = [{ slot: '자리', candidates: ['가나다', '라마바'], chosen: '가나다', cue: { observationId: 'o1', quote: '사마아' } }];
       const filled = base({ choiceReading: { claims: [reading('c1', '가나다', 'BLANK_FILLED', '가나다 라마바', { blanks: blank })] }, ground: ground('FACT', '라마바'),
         judgment: judgment('INVALID'), studentClaims: [studentClaim('라마바')] });
       expect(judge(filled, c, {})).toBeNull();
       const overlapping = structuredClone(filled); overlapping.choiceReading.claims[0].blanks[0].cue.quote = '라마바';
-      expect(() => judge(overlapping, c, {})).toThrow(/SUPPORTED requires the three cells/);
+      expect(judge(overlapping, c, {})).toBeNull();
     });
-    it('a BLANK_FILLED reading with only an unambiguous blank is separated by its reading quote', () => {
+    it('a BLANK_FILLED reading with only an unambiguous blank is SUPPORTED when its reading quote overlaps the ground', () => {
       const blank = [{ slot: '자리', candidates: ['가나다'], chosen: '가나다', cue: null }];
       const shared = base({ choiceReading: { claims: [reading('c1', '가나다', 'BLANK_FILLED', '가나다 라마바', { blanks: blank })] }, ground: ground('FACT', '라마바'),
         judgment: judgment('INVALID'), studentClaims: [studentClaim('라마바')] });
-      expect(() => judge(shared, c, {})).toThrow(/SUPPORTED requires the three cells/);
+      expect(judge(shared, c, {})).toBeNull();
     });
   });
   it('a FACT ground with no matching student claim is not SUPPORTED', () => {
@@ -1484,5 +1485,152 @@ describe('READING errors and the three cells in the session (v5.3)', () => {
     const s = acceptEnd(assess(selection('C5'), output(selection('C5'), { errors: [], contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' })));
     expect(() => applyFeedbackEndExplanation(s, sections(s, '⑤를 고른 건 맞아. 원문에서 판단 관계를 이어 볼게.'))).toThrow('첫 문장을 되풀이');
     expect(applyFeedbackEndExplanation(s, sections(s, '원문에서 판단 관계를 이어 볼게.')).endExplanation?.firstChoice).toBe('원문에서 판단 관계를 이어 볼게.');
+  });
+});
+
+// Fixtures are trimmed copies of saved raw outputs under docs/experiments/v53-three-cell-check-2026-10-27/cases and v5-diverse-48-regression-2026-10-27-v53/cases.
+describe('server settles the conclusion from the three cells (v5.3 stage 3)', () => {
+  const C2 = '갑에게 자산 운용의 권한이 주어진 것은 A를 설립할 당시 개인의 재산을 출연하여 주주들에 의해 법인격이 부여되었기 때문이겠군.';
+  const ref = (observationId: string, quote: string) => ({ observationId, quote });
+  const cl = (claimId: string, choiceText: string, relation: string, studentReading: string, readingQuote: any) => ({ claimId, choiceText, studentReading, relation, readingQuote, blanks: [] as any[] });
+  const sc = (observationId: string, quote: string, sourceCheck: string) => ({ observationId, quote, claimAsStated: quote, sourceBasis: '대조', sourceCheck });
+  const source1 = [{ location: 'PASSAGE', quote: '원문', mediaId: null, visualObservation: null }];
+  const run = (raw: any, obs: { observationId: string; text: string }[], options: ClaimsOptions) => {
+    const n = normalizeCells(raw, options); const st = settleConclusion(n.assessment, obs, options);
+    validateClaims(st.assessment, obs, options);
+    return { a: st.assessment, notes: [...n.notes, ...st.notes], insufficiencyCase: readingSummary(st.assessment, options).insufficiencyCase };
+  };
+  const cct = { claimConflicts: [], boundary: 'NONE', reconstructability: 'RECONSTRUCTABLE', rationaleImpliedVerdict: 'INVALID', contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'JUDGMENT_METHOD',
+    errors: [], errorHypothesis: null, selectionMismatchQuestion: null, reconstructedPath: ['a'], studentEvidence: [ref('C-CT-s1', '②가 답 같아요.')], sourceEvidence: source1,
+    ground: { kind: 'JUDGMENT_METHOD', ...ref('C-CT-s1', '법인격에 관한 내용이어서요.') },
+    studentClaims: [sc('C-CT-s1', '②가 답 같아요.', 'CHOICE_READING'), sc('C-CT-s1', '법인격에 관한 내용이어서요.', 'CHOICE_READING')] };
+  const cctObs = [{ observationId: 'C-CT-s1', text: '②가 답 같아요. 법인격에 관한 내용이어서요.' }];
+  const correctNeg: ClaimsOptions = { correctChoice: true, targetVerdict: 'INVALID', choiceText: C2 };
+
+  it('model UNKNOWN with a leftover sufficiency (K4-r2, KF-r2) is cleared to UNKNOWN', () => {
+    const raw = { ...cct, reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK',
+      choiceReading: { claims: [cl('C2-1', C2, 'UNTOUCHED', '', null)] }, judgment: { verdict: 'NONE', targetClaimIds: [], contradiction: '', holds: false } };
+    const r = run(raw, cctObs, correctNeg);
+    expect(r.a).toMatchObject({ reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE' });
+    expect(r.notes).toContain('UNKNOWN reconstructability keeps no conclusion or sufficiency');
+  });
+  it('1. C-CT first attempt: an UNTOUCHED claim with reading text is cleared, and with no touched target the result is UNKNOWN', () => {
+    const raw = { ...cct,
+      choiceReading: { claims: [cl('C2-1', C2, 'UNTOUCHED', '학생은 이 선지가 법인격에 관한 내용이라고만 짚음', ref('C-CT-s1', '법인격에 관한 내용이어서요.'))] },
+      judgment: { verdict: 'INVALID', targetClaimIds: ['C2-1'], contradiction: '주제만으로는 판별할 수 없다.', holds: false } };
+    const before = structuredClone(raw);
+    const r = run(raw, cctObs, correctNeg);
+    expect(raw).toEqual(before);
+    expect(r.notes).toEqual(expect.arrayContaining([expect.stringContaining('UNTOUCHED claim C2-1')]));
+    expect(r.a.choiceReading.claims[0]).toMatchObject({ studentReading: '', readingQuote: null, blanks: [] });
+    expect(r.a).toMatchObject({ reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE', judgment: { verdict: 'NONE', targetClaimIds: [], contradiction: '' } });
+  });
+  it('2. C-CT second attempt: targets that are only UNTOUCHED make verdict NONE and UNKNOWN', () => {
+    const raw = { ...cct,
+      choiceReading: { claims: [cl('C2-1', '갑에게 자산 운용의 권한이 주어진 것은 A를 설립할 당시 개인의 재산을 출연하여', 'UNTOUCHED', '', null), cl('C2-2', '주주들에 의해 법인격이 부여되었기 때문이겠군.', 'UNTOUCHED', '', null)] },
+      judgment: { verdict: 'INVALID', targetClaimIds: ['C2-1', 'C2-2'], contradiction: '대조하지 않았다.', holds: false } };
+    const r = run(raw, cctObs, correctNeg);
+    expect(r.notes).toEqual(expect.arrayContaining([expect.stringContaining('dropped duplicate, UNTOUCHED or unknown'), expect.stringContaining('verdict set to NONE'), expect.stringContaining('set to UNKNOWN')]));
+    expect(r.a).toMatchObject({ reconstructability: 'UNKNOWN', judgment: { verdict: 'NONE', targetClaimIds: [], holds: false } });
+  });
+
+  const qfQuote = '오네소르게 수는 표면 장력, 밀도, 노즐 지름의 곱이 클수록 작아지는데, 밀도를 두 배로 하고 지름을 반으로 하면 곱이 그대로라서 점도랑 표면 장력이 같으면 오네소르게 수도 그대로야.';
+  const qfChoice = '파란색 잉크의 점도와 표면 장력은 유지한 채, 밀도를 두 배로 높이고 노즐의 지름을 반으로 줄인다면 파란색 잉크의 오네소르게 수는 변함이 없겠군.';
+  const qfObs = [{ observationId: 'QF-r2-s1', text: `${qfQuote} 그래서 ③이 맞아.` }];
+  const qf = { claimConflicts: [], boundary: 'NONE', reconstructability: 'RECONSTRUCTABLE', rationaleImpliedVerdict: 'VALID', contentAssessment: 'SUPPORTED', insufficiencyKind: 'NONE',
+    errors: [], errorHypothesis: null, selectionMismatchQuestion: null, reconstructedPath: ['a'], studentEvidence: [ref('QF-r2-s1', qfQuote)], sourceEvidence: source1,
+    choiceReading: { claims: [cl('C3-1', qfChoice, 'EXACT', '변하지 않는다는 뜻으로 읽었다.', ref('QF-r2-s1', '밀도를 두 배로 하고 지름을 반으로 하면 곱이 그대로라서 점도랑 표면 장력이 같으면 오네소르게 수도 그대로야.'))] },
+    ground: { kind: 'FACT', ...ref('QF-r2-s1', qfQuote) },
+    judgment: { verdict: 'VALID', targetClaimIds: ['C3-1'], contradiction: '변하지 않는다는 판단이 선지와 일치한다.', holds: true },
+    studentClaims: [sc('QF-r2-s1', '오네소르게 수는 표면 장력, 밀도, 노즐 지름의 곱이 클수록 작아지는데', 'CONSISTENT'), sc('QF-r2-s1', '밀도를 두 배로 하고 지름을 반으로 하면 곱이 그대로라서', 'CONSISTENT'),
+      sc('QF-r2-s1', '점도랑 표면 장력이 같으면 오네소르게 수도 그대로야.', 'CONSISTENT'), sc('QF-r2-s1', '그래서 ③이 맞아.', 'CONSISTENT')] };
+  const correctPos: ClaimsOptions = { correctChoice: true, targetVerdict: 'VALID', choiceText: qfChoice };
+  it('3. QF-r2 first attempt: a one-sentence ground whose quote overlaps the reading quote is SUPPORTED', () => {
+    const r = run(qf, qfObs, correctPos);
+    expect(r.a).toMatchObject({ contentAssessment: 'SUPPORTED', insufficiencyKind: 'NONE' }); expect(r.notes).toEqual([]); expect(r.insufficiencyCase).toBeNull();
+  });
+  it('3b. the server overrides the model on sufficiency, rationaleImpliedVerdict and an ERROR label without errors', () => {
+    const r = run({ ...qf, contentAssessment: 'ERROR', rationaleImpliedVerdict: 'INVALID', insufficiencyKind: 'MISSING_LINK' }, qfObs, correctPos);
+    expect(r.a).toMatchObject({ contentAssessment: 'SUPPORTED', insufficiencyKind: 'NONE', rationaleImpliedVerdict: 'VALID' });
+    expect(r.notes).toEqual(expect.arrayContaining([expect.stringContaining('rationaleImpliedVerdict set from judgment.verdict'), expect.stringContaining('contentAssessment set to SUPPORTED')]));
+    const weak = run({ ...qf, judgment: { ...qf.judgment, holds: false } }, qfObs, correctPos);
+    expect(weak.a).toMatchObject({ contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' });
+  });
+  it('3c. a model UNKNOWN on a correct choice with all three cells filled is reconstructed by the server', () => {
+    const unknown = { ...qf, reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', reconstructedPath: [], studentEvidence: [] };
+    const r = run(unknown, qfObs, correctPos);
+    expect(r.a).toMatchObject({ reconstructability: 'RECONSTRUCTABLE', rationaleImpliedVerdict: 'VALID', contentAssessment: 'SUPPORTED', reconstructedPath: [qf.judgment.contradiction], studentEvidence: [ref('QF-r2-s1', qfQuote)] });
+    expect(() => run({ ...unknown, sourceEvidence: [] }, qfObs, correctPos)).toThrow(/sourceEvidence is required/);
+  });
+
+  const daQuote = '카르비도파가 막는 건 레보도파를 도파민으로 만드는 효소지 도파민을 분해하는 효소가 아니니까';
+  const daFull = `${daQuote}, 이미 만들어진 도파민의 작용 기간을 늘린다고 볼 수 없음.`;
+  const daChoice = '(나)는 효소의 작용을 억제하여 흑질에서 합성된 도파민의 작용 기간을 연장할 수 있겠군.';
+  it('4. DA-r2 first attempt: a reading quote that contains the ground is SUPPORTED', () => {
+    const raw = { ...qf, rationaleImpliedVerdict: 'INVALID', studentEvidence: [ref('DA-r2-s1', daQuote)],
+      choiceReading: { claims: [cl('C2-1', daChoice, 'EXACT', '연장한다는 주장으로 읽음', ref('DA-r2-s1', `${daFull}`))] }, ground: { kind: 'FACT', ...ref('DA-r2-s1', daQuote) },
+      judgment: { verdict: 'INVALID', targetClaimIds: ['C2-1'], contradiction: '이미 합성된 도파민의 작용 기간을 연장한다는 주장을 뒷받침하지 않는다.', holds: true },
+      studentClaims: [sc('DA-r2-s1', daQuote, 'CONSISTENT'), sc('DA-r2-s1', '이미 만들어진 도파민의 작용 기간을 늘린다고 볼 수 없음.', 'CONSISTENT'), sc('DA-r2-s1', '그래서 2번이 적절하지 않음.', 'CONSISTENT')] };
+    const r = run(raw, [{ observationId: 'DA-r2-s1', text: `${daFull} 그래서 2번이 적절하지 않음.` }], { correctChoice: true, targetVerdict: 'INVALID', choiceText: daChoice });
+    expect(r.a).toMatchObject({ contentAssessment: 'SUPPORTED', insufficiencyKind: 'NONE' }); expect(r.insufficiencyCase).toBeNull();
+  });
+
+  it('5. XA-r1 second attempt: a READING error on a correct choice is removed and ADDED gives INSUFFICIENT (READING_GAP)', () => {
+    const text = '②는 갑이 출연한 부동산이 아직 갑 개인 것이라서 권한이 생겼다는 말인데, 법인의 자산은 개인이 출자했어도 법인 소유라고 했으니까 틀렸어.';
+    const readingText = '②는 갑이 출연한 부동산이 아직 갑 개인 것이라서 권한이 생겼다는 말';
+    const raw = { ...cct, rationaleImpliedVerdict: 'INVALID', contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK',
+      choiceReading: { claims: [cl('C2-1', '갑에게 자산 운용의 권한이 주어진 것은 A를 설립할 당시 개인의 재산을 출연하여 주주들에 의해 법인격이 부여되었기 때문', 'ADDED', '갑 개인 것이라서 권한이 생겼다는 뜻으로 읽음.', ref('XA-r1-s1', readingText)),
+        cl('C2-2', '주주들에 의해 법인격이 부여', 'UNTOUCHED', '언급하지 않음', null)] },
+      ground: { kind: 'FACT', ...ref('XA-r1-s1', '법인의 자산은 개인이 출자했어도 법인 소유라고 했으니까') },
+      judgment: { verdict: 'INVALID', targetClaimIds: ['C2-1'], contradiction: '법인 소유 사실만으로 권한 부여 이유가 반박되지는 않는다.', holds: false },
+      errors: [{ errorId: 'E1', errorType: 'READING', basis: 'STATED', studentEvidence: [ref('XA-r1-s1', readingText)] }],
+      studentClaims: [sc('XA-r1-s1', readingText, 'CHOICE_READING'), sc('XA-r1-s1', '법인의 자산은 개인이 출자했어도 법인 소유라고 했으니까', 'CONSISTENT')] };
+    expect(() => validateClaims(raw, [{ observationId: 'XA-r1-s1', text }], correctNeg)).toThrow(/READING error is only for a wrong choice/);
+    const r = run(raw, [{ observationId: 'XA-r1-s1', text }], correctNeg);
+    expect(r.a.errors).toEqual([]);
+    expect(r.notes).toEqual(expect.arrayContaining(['removed READING error from a correct choice', expect.stringContaining('UNTOUCHED claim C2-2')]));
+    expect(r.a).toMatchObject({ contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' }); expect(r.insufficiencyCase).toBe('READING_GAP');
+  });
+
+  it('6. KC-r1: restating the conclusion stays INSUFFICIENT (CONCLUSION_ONLY, JUDGMENT_METHOD)', () => {
+    const text = '출연했다고 권한이 생기는 건 아님.';
+    const raw = { ...cct, studentEvidence: [ref('KC-r1-s1', text)], ground: { kind: 'CONCLUSION_RESTATED', ...ref('KC-r1-s1', text) },
+      choiceReading: { claims: [cl('C2-1', '갑에게 자산 운용의 권한이 주어진 것은 A를 설립할 당시 개인의 재산을 출연하여', 'EXACT', '인과를 부정함.', ref('KC-r1-s1', text)),
+        cl('C2-2', '주주들에 의해 법인격이 부여되었기 때문이겠군.', 'UNTOUCHED', '', null)] },
+      judgment: { verdict: 'INVALID', targetClaimIds: ['C2-1'], contradiction: '인과를 부정한다.', holds: true }, studentClaims: [sc('KC-r1-s1', text, 'CONSISTENT')] };
+    const r = run(raw, [{ observationId: 'KC-r1-s1', text }], correctNeg);
+    expect(r.a).toMatchObject({ contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'JUDGMENT_METHOD' }); expect(r.notes).toEqual([]); expect(r.insufficiencyCase).toBe('CONCLUSION_ONLY');
+  });
+
+  describe('7. a wrong choice stays strict', () => {
+    const choice = '가나다 라마바';
+    const obs = [{ observationId: 'o1', text: '가나다 라마바' }];
+    const wrong: ClaimsOptions = { correctChoice: false, targetVerdict: 'INVALID', choiceText: choice };
+    const wrongBase = { claimConflicts: [], boundary: 'NONE', rationaleImpliedVerdict: 'INVALID', errors: [] as any[], errorHypothesis: null, selectionMismatchQuestion: null,
+      reconstructedPath: ['a'], studentEvidence: [ref('o1', '가나다')], sourceEvidence: source1, studentClaims: [sc('o1', '가나다', 'CONTRADICTED')] };
+    it('the model says RECONSTRUCTABLE with errors but the cells are not all filled: still fails', () => {
+      const raw = { ...wrongBase, reconstructability: 'RECONSTRUCTABLE', contentAssessment: 'ERROR', insufficiencyKind: 'NONE',
+        errors: [{ errorId: 'E1', errorType: 'CONTENT', basis: 'STATED', studentEvidence: [ref('o1', '가나다')] }],
+        choiceReading: { claims: [cl('c1', '가나다', 'UNTOUCHED', '', null)] }, ground: { kind: 'FACT', ...ref('o1', '가나다') },
+        judgment: { verdict: 'NONE', targetClaimIds: [], contradiction: '', holds: false } };
+      expect(() => run(raw, obs, wrong)).toThrow(/reconstructability must follow the three cells/);
+    });
+    it('the cells are filled but the model says UNKNOWN: the server cannot decide the error, so it fails', () => {
+      const raw = { ...wrongBase, reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE',
+        choiceReading: { claims: [cl('c1', '가나다', 'EXACT', '읽음', ref('o1', '가나다'))] }, ground: { kind: 'FACT', ...ref('o1', '가나다') },
+        judgment: { verdict: 'INVALID', targetClaimIds: ['c1'], contradiction: '모순', holds: true } };
+      expect(() => run(raw, obs, wrong)).toThrow(/reconstructability must follow the three cells/);
+    });
+  });
+
+  it('the evaluator records what it normalized and stores the settled values', async () => {
+    const s = selection('C5');
+    const raw = withClaims(output(s, { errors: [], contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' }), s);
+    raw.choiceReading.claims[0] = { ...raw.choiceReading.claims[0], relation: 'UNTOUCHED', readingQuote: null, studentReading: '설명 글' };
+    const call = await new OpenAIFeedbackEvaluator({ transport: { async create() { return { status: 'completed', output_text: JSON.stringify(raw), usage: { input_tokens: 1, output_tokens: 1 } }; } } }).evaluate(s);
+    expect(call.metadata.attempts).toHaveLength(1);
+    expect(call.metadata.attempts![0]!.normalized).toEqual(expect.arrayContaining([expect.stringContaining('UNTOUCHED claim c1'), expect.stringContaining('set to UNKNOWN')]));
+    expect(call.metadata.attempts![0]!.rawOutput).toMatchObject({ reconstructability: 'RECONSTRUCTABLE' });
+    expect(call.rawOutput).toMatchObject({ reconstructability: 'UNKNOWN', contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE', readingSummary: { insufficiencyCase: null, readings: [] } });
   });
 });

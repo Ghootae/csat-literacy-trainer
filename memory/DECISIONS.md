@@ -220,7 +220,7 @@
 | [`D-0158`](./decisions/D-0158-analysis-gold-claude-review-without-further-calibration.md) | accepted | 분석 골드 맞춰 보기 종료 | 둘째 묶음 동결 통과·입장 1건 불일치(관형절 전제 경계). 학생 대화 자료가 아니므로 더 맞추지 않고 동결·입장 모두 Claude 검토로 운용. 입장 점검표에 "예를 들어" 예시·표지 없는 문장 규칙 추가 |
 | [`D-0159`](./decisions/D-0159-correct-unverified-judgment-method-note.md) | accepted | 정답·근거 미확인의 판단 방식 | 판정에 `insufficiencyKind`(판단 방식/연결 빠짐)를 두고, 판단 방식이면 마지막 설명이 그 방식을 인정하지 않고 까닭을 말한다(UI 메모장 25번) |
 | [`D-0160`](./decisions/D-0160-student-fingerprint-aggregation.md) | accepted | 학생 이해 지문 집계 방식 | 층·갈래·유형 칸에 포착률·정밀도·오류율을 따로(오류율 우선), 세션 묶음, 첫 라운드 기본, 문단 넘는 관계 제외, 관계는 자체 오류만(끝 노드 ✕는 물려받은 오류로 따로), N<10 표본 적음 |
-| [`D-0161`](./decisions/D-0161-supported-needs-key-relation-coverage.md) | accepted | 정답 선택 근거 충분 기준 | 핵심 관계를 조각으로 나눠 조각마다 학생 인용(`keyRelationCoverage`). 정답 SUPPORTED는 모든 조각·2개 이상·겹치지 않는 인용일 때만(UI 메모장 29번) |
+| [`D-0161`](./decisions/D-0161-supported-needs-key-relation-coverage.md) | superseded | 정답 선택 근거 충분 기준 | 핵심 관계를 조각으로 나눠 조각마다 학생 인용(`keyRelationCoverage`). 정답 SUPPORTED는 모든 조각·2개 이상·겹치지 않는 인용일 때만(UI 메모장 29번) |
 | [`D-0162`](./decisions/D-0162-choice-link-layer-direction.md) | accepted | 선지 연결 층 방향 | 선지마다 정오·지도 단위·비틂. 오프라인 진단용 먼저, 피드백 런타임 미사용(D-0002 유지). 비틂 목록은 UI 6지문 문항으로 만들고 맞춰 보기 6지도로 검증. UI 4지문 분석 골드 완료 |
 | [`D-0163`](./decisions/D-0163-two-format-task-reports.md) | accepted | 과제 결과 보고 두 형식 | 실험·생성 결과 해석, 설계 판단 필요, 큰 작업 단위 종료 때만 Desktop용(정확·빠짐없음)과 인간용(개요: 목적·결과·다음 스텝 + 사례 본문, 해결/미해결/판단 필요 표시) 두 파일로 남기고 채팅엔 인간용 출력. 작은 작업은 채팅에 짧게. AGENTS.md "결과 보고 형식" 절 |
 | [`D-0164`](./decisions/D-0164-selection-mismatch-quote-allowed-as-sufficiency.md) | accepted | 선택 충돌 인용은 충분성 인용 가능 | D-0157 오류 인용 금지에서 선택 충돌 항목(`SELECTION_EXECUTION`) 인용을 뺀다. 내용 오류 인용 금지는 그대로. 48세션 회귀 B3 막힘·G-B3 잘못된 교정 실패 해소 |
@@ -241,3 +241,4 @@
 | [`D-0179`](./decisions/D-0179-explain-abbreviations-on-first-use.md) | accepted | 보고 속 약어는 첫 사용에 설명 | 한 보고 안에서 약어(P4, K4, 결정 번호 등)를 처음 쓸 때만 괄호로 짧은 설명, 이후는 약어만 |
 | [`D-0180`](./decisions/D-0180-student-state-model-v1-discarded.md) | accepted | 학생 상태 모델 V1 폐기 | D-0048 대체. V1을 폐기하고 사고 패턴 분석 논의에서 제외. Q-0027 닫음, Q-0037은 분석 자료 결합 문제로만 남김. 구현 코드는 그대로 둠 |
 | [`D-0181`](./decisions/D-0181-problem-error-taxonomy-two-axes-later.md) | accepted | 문제 풀이 오류 분류 대응표·두 축 | 함정 태그·요구 요소·비틂 14종을 지금은 대응표로 묶고, 실제 학생 풀이 재검증 때 내용 축(비틂 14종)·과정 축(읽기 과정 7가지) 두 축으로 재구성 |
+| [`D-0182`](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) | accepted | 문제 판정 운영 후보 v5.3 보강판(재구성 세 칸) | D-0161 대체. 지시문 v5.3, 세 칸(선지 이해·근거·판단)에서 서버가 결론 확정, 인용 분리 제거, 오답 READING 오류. K4는 현재 동작(근거 미확인) 수용, 확인 단계 (나) 미연결 |

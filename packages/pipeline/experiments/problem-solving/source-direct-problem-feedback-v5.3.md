@@ -156,6 +156,7 @@ VALID다. 내용이 틀렸다는 이유로 학생 결론을 INVALID로 바꾸지
 통하므로 인정하고, STRONGER·ADDED는 반박이 선지에 통하지 않으므로 인정하지 않는다. 참인 선지를 지지할 때는 거꾸로 STRONGER·ADDED는
 인정하고 WEAKER는 인정하지 않는다. 2) 근거가 원문과 맞는가: 학생이 원문이나 <보기>의 사실을 말했고(ground.kind=FACT) 그 사실이
 원문과 맞아야 한다. 결론을 바꿔 말한 것(CONCLUSION_RESTATED)이나 판단 방식(JUDGMENT_METHOD)은 근거 칸은 채우지만 충족이 아니다.
+학생 말이 선지 주장을 부정하거나 되풀이할 뿐 원문이나 <보기>의 다른 사실을 담지 않으면 ground.kind는 FACT가 아니라 CONCLUSION_RESTATED다.
 3) 근거가 반박 대상의 한 지점과 모순되는가(지지면 대상 전체가 따라 나오는가): judgment.contradiction에 그 지점을 좁혀 적고
 holds에 성립 여부를 적는다. 거짓 선지는 틀린 지점 하나를 반박하면 충분하다. 참인 선지는 선지의 모든 주장이 지지되어야 한다.
 세 단계를 모두 통과하면 SUPPORTED, 하나라도 통과하지 못하면 INSUFFICIENT다. 평가자가 원문에서 올바른 관계를 찾아낼 수

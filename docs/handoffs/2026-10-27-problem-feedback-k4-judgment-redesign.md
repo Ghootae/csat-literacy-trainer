@@ -323,7 +323,7 @@ studentEvidence는 읽기가 드러난 학생 말(readingQuote), sourceEvidence�
 2. **D-0161(`keyRelationCoverage`) 대체**: 세 칸이 같은 일을 한다(원문 사실 인용 필수 = ground FACT, 결론 반복 불인정, 인용 분리 = ground/readingQuote 분리,
    긍정 전체 지지 = UNTOUCHED 없음). 대체한다. 남기면 같은 판단을 두 칸이 따로 내려 서로 어긋날 수 있다.
 3. **READING이 있을 때 선택 충돌 질문 생략**: 대상 오류와 같은 이유(학생 결론은 다른 읽기를 두고 낸 것). 생략한다.
-4. **결정 기록 번호**(코드 에이전트가 기록): D-0178은 보관된 v5.2 「부분 반박 근거 판정 (v5.2)」에 남기고(미채택·보관으로 기록), 이 설계는 2단계 뒤 새 번호(D-0180)로.
+4. **결정 기록 번호**(코드 에이전트가 기록): D-0178은 보관된 v5.2 「부분 반박 근거 판정 (v5.2)」에 남기고(미채택·보관으로 기록), 이 설계는 2단계 뒤 새 번호(D-0180)로. (실제 번호는 D-0182: D-0180·D-0181을 다른 기록이 먼저 씀.)
    지시문 버전은 v5.2가 보관분에 쓰였으므로 v5.3.
 
 ## 결과 보고 (실행 후 작성)
@@ -362,3 +362,102 @@ studentEvidence는 읽기가 드러난 학생 말(readingQuote), sourceEvidence�
 - 유지: 항목 4(스키마에서 studentClaims가 판정 칸 뒤)는 v5.1부터의 어긋남이라 그대로 둔다. 항목 5의 나머지(방향이 다른 judgment는 충족 검사 생략 → 선택 충돌 흐름, READING은 STATED만, insufficiencyKind는 ground에서 계산, 긍정 발문은 모든 주장 합당)는 설계와 맞다.
 - 시험 2개 추가(유일 빈자리의 분리, 근거와 겹치는 주장 없음). `feedback.test.ts` 230 통과, 전체 1417 중 1415 통과, 실패 2건은 기존(`boundary.test.ts` node:fs, `axis-architecture-experiment.test.ts` `.omc` 파일).
 - 사용자 판정 필요: 마지막 설명의 새 경우별 문단(CONCLUSION_ONLY·PARTIAL_SUPPORT·BLANK_UNSUPPORTED, 오답 쪽 READING·긍정 발문 문장) 표현은 실행자가 썼다. 2단계 실측 원문으로 이해 용이성을 판정받는다.
+
+## 3단계: 서버 결론 확정과 형식 정규화 (v5.3 보강, 2026-10-27)
+
+- 근거: 2단계 실측 [보고](../experiments/v53-three-cell-check-2026-10-27/REPORT-human.md)(형식 실패 사례 14/45·회귀 7/16). 사용자 결정 2026-10-27:
+  "권고대로 (가)로 진행해줘"(서버가 결론 확정), "권고대로 ①로 진행해줘"(인용 분리 규칙 제거).
+- 실행: executor 하위 에이전트(sonnet). 외부 API 호출·커밋·`git stash` 금지. 재실행(63세션)은 코드 에이전트가 사용자 승인 뒤.
+- 지시문 파일 이름·`promptVersion`은 v5.3 그대로 둔다(아직 운영 전, 실패 실행의 지시문은 커밋 `0348d5e`에 남아 있음).
+
+### S1. 정규화 `normalizeCells(assessment, options)` (`PP/feedback-claims.ts`, 새 export)
+
+`validateClaims` 전에 SELECTION 출력에 적용한다. 원본을 바꾸지 않고 새 객체를 돌려주며, 바꾼 항목을 짧은 영어 문장 목록(`notes`)으로 함께 돌려준다.
+
+1. `relation=UNTOUCHED` 주장: `studentReading=""`, `readingQuote=null`, `blanks=[]`로 비운다.
+2. `judgment.targetClaimIds`: 중복을 없애고 UNTOUCHED이거나 없는 claimId를 뺀다. `verdict≠NONE`인데 남은 대상이 없으면
+   `verdict=NONE`, `contradiction=""`, `holds=false`. `verdict=NONE`이면 `targetClaimIds=[]`, `contradiction=""`.
+3. `ground.kind=NONE`: `observationId=""`, `quote=""`.
+4. 정답 선택(`options.correctChoice`): `errors`에서 `errorType=READING`을 지운다(읽기는 choiceReading에 남아 충족 판단에 쓰인다).
+
+### S2. 서버 결론 확정 (claimConflicts가 비고 `boundary=NONE`일 때, 정규화 뒤)
+
+`derived = (UNTOUCHED가 아닌 주장 ≥ 1) ∧ ground.kind≠NONE ∧ judgment.verdict≠NONE`.
+
+| 경우 | 처리 |
+|---|---|
+| derived 참, 모델 RECONSTRUCTABLE | `rationaleImpliedVerdict = judgment.verdict`로 덮어쓴다(지금은 다르면 fail). |
+| derived 거짓, 모델 RECONSTRUCTABLE, `errors` 비어 있음 | `reconstructability=UNKNOWN`, `rationaleImpliedVerdict=UNKNOWN`, `contentAssessment=UNKNOWN`, `insufficiencyKind=NONE`, `errorHypothesis=null`, `selectionMismatchQuestion=null` |
+| derived 거짓, 모델 RECONSTRUCTABLE, `errors` 있음 | fail(지금처럼 재요청) |
+| derived 참, 모델 UNKNOWN, 정답 선택 | `reconstructability=RECONSTRUCTABLE`, `rationaleImpliedVerdict=judgment.verdict`. `contentAssessment`는 아래 줄로 정한다. `reconstructedPath`가 비면 `[judgment.contradiction]`으로 채운다. `studentEvidence`가 비면 `[ground의 {observationId, quote}]`. `sourceEvidence`가 비면 fail |
+| derived 참, 모델 UNKNOWN, 오답 선택 | fail(지금처럼). 오류 내용을 서버가 정할 수 없다. |
+| 정답 선택, RECONSTRUCTABLE, `judgment.verdict = targetVerdict`, `errors` 비어 있음 | `readingJudgment` 결과로 `contentAssessment`(SUPPORTED/INSUFFICIENT)와 `insufficiencyKind`(SUPPORTED면 NONE)를 덮어쓴다. 모델이 ERROR라고 했어도 errors가 비면 같다. |
+
+- 지금 fail하는 다음 검사는 위 덮어쓰기로 바뀐다: `reconstructability must follow the three cells`(UNKNOWN↔RECONSTRUCTABLE 중 위 표가 처리하는 경우),
+  `rationaleImpliedVerdict must equal judgment.verdict`, `SUPPORTED requires…`/`three cells support…`, `insufficiencyKind must be …`.
+  그 밖의 구조 검사(인용이 발화에 없음, choiceText가 선지에 없음, 빈자리 구조, READING 오류 대응, CONTRADICTED·OFF_TARGET 대응 등)는 그대로 fail.
+- 순서: 정규화 → 확정 → `validateClaims`(남은 구조 검사) → 기존 `validateFeedbackAssessment`. 확정 결과가 `validateFeedbackAssessment`에서 걸리면
+  고치지 말고 멈추고 보고한다.
+
+### S3. 인용 분리 규칙 제거 (D-0161 계승분 폐기)
+
+- `readingJudgment`에서 `separated`(readingQuote·cue와 ground 인용의 겹침 검사)를 뺀다. 충족 = ground FACT ∧ ground와 겹치는 studentClaims ≥ 1이고 모두 CONSISTENT ∧ 대상 주장 합당(relation·빈자리 규칙) ∧ `holds`.
+- 결론 반복을 막는 일은 `ground.kind`가 맡는다. 지시문 v5.3 158행 문장 뒤에 한 문장을 더한다:
+  "학생 말이 선지 주장을 부정하거나 되풀이할 뿐 원문이나 <보기>의 다른 사실을 담지 않으면 ground.kind는 FACT가 아니라 CONCLUSION_RESTATED다."
+- `insufficiencyCase` 계산은 그대로(분리 실패를 원인으로 하는 경우는 원래 없음).
+
+### S4. 기록
+
+- 평가기(`PP/feedback-evaluator.ts`)는 정규화·확정으로 바뀐 항목(`notes`)을 그 시도 기록에 `normalized: string[]`로 남긴다(`attempts[]` 항목 타입에 선택 필드 추가). 바뀐 것이 없으면 빈 배열.
+- 저장되는 판정(`readingSummary` 포함)은 확정 뒤 값으로 만든다.
+
+### S5. 시험 (`PP/feedback.test.ts`)
+
+- 2단계 실측의 실패 출력을 픽스처로 옮긴다(응답 원문은 `docs/experiments/v53-three-cell-check-2026-10-27/cases/*.json`의 `attempts[].rawOutput`, 회귀는 `../v5-diverse-48-regression-2026-10-27-v53/`). 최소:
+  1. UNTOUCHED에 설명 글(회귀 C-CT 1차) → 비워지고 통과, notes 기록.
+  2. 대상이 UNTOUCHED뿐(C-CT 2차) → verdict NONE·UNKNOWN으로 확정, 통과.
+  3. QF-r2 1차(한 문장 근거, 인용 겹침) → SUPPORTED.
+  4. DA-r2 1차 → SUPPORTED.
+  5. XA-r1(정답 선택의 READING 오류, ADDED) → READING 지워지고 INSUFFICIENT·READING_GAP.
+  6. KC-r1(CONCLUSION_RESTATED) → INSUFFICIENT·CONCLUSION_ONLY 유지.
+  7. 오답 선택에서 derived와 모델 재구성이 다르고 errors 있음 → 여전히 fail.
+- 1단계의 인용 분리 시험(4절 4번, 분리 관련 두 개)은 새 규칙에 맞게 기대값을 바꾼다. 그 밖의 기존 시험 기대값을 바꿔야 하면 멈추고 보고.
+
+### 완료 조건
+
+- [ ] `npm run build` 통과, `npm test` 실패가 기존 2건(`boundary.test.ts` node:fs, `axis-architecture-experiment.test.ts` `.omc` 파일)뿐.
+- [ ] S5 시험 통과. `git diff --stat`이 `PP/feedback-claims.ts`·`PP/feedback-evaluator.ts`·지시문 v5.3·`PP/feedback.test.ts`(필요하면 `PP/feedback.ts` 타입)뿐.
+- [ ] 외부 API 호출·커밋·`git stash` 없음.
+- 결과 보고는 아래 "3단계 결과 보고" 절에 적는다(변경 파일, 시험 결과, 임의로 정한 것).
+
+## 3단계 결과 보고 (실행 후 작성)
+
+- 변경 파일:
+  - `packages/pipeline/src/problem-solving/feedback-claims.ts`: `normalizeCells`(S1), `settleConclusion`(S2) 새 export, `readingJudgment`에서 인용 분리(`separated`, `Ref`) 제거(S3).
+  - `packages/pipeline/src/problem-solving/feedback-evaluator.ts`: 정규화 → 확정 → `validateClaims` → 떼어 내기 순서로 연결, 시도 항목에 선택 필드 `normalized?: string[]`(S4). 저장 판정과 `readingSummary`는 확정 뒤 값.
+  - `packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.3.md`: 2) 근거 문단 끝에 CONCLUSION_RESTATED 문장 한 줄 추가(S3).
+  - `packages/pipeline/src/problem-solving/feedback.test.ts`: S5 시험과 기대값 조정. `feedback.ts`는 수정하지 않음(시도 타입은 평가기 파일에 있음).
+- 시험 결과: `npm run build` 통과. `npm test` 1428개 중 1426 통과, 2 실패(기존 2건만).
+  - `packages/app/src/boundary.test.ts` 「다른 서버 파일은 node:fs를 import 하지 않는다」: `expected [ 'server/student-state.ts' ] to deeply equal []`
+  - `packages/pipeline/src/cli/axis-architecture-experiment.test.ts` 「reuses the analysis stage but not prior axes or roles」: `ENOENT ... .omc/adhoc/paragraph-analysis-v3-1-six-3x-2026-08-26/run-1/hegel-aesthetics-absolute-spirit-p1.json`
+  - `feedback.test.ts` 241개 모두 통과(1단계 후 230 → 241).
+- S5 시험: 항목 1~7 모두 추가(`describe('server settles the conclusion from the three cells (v5.3 stage 3)')`). 픽스처는 저장 원문에서 필요한 칸만 줄여 시험 파일에 넣었다(docs를 읽지 않음). 추가로 서버 덮어쓰기(3b: 모델 SUPPORTED·ERROR·verdict 어긋남), 모델 UNKNOWN 재구성(3c), 평가기가 `normalized`를 기록하는지(평가기 통합) 시험.
+- 임의로 정하거나 문서와 달랐던 것(검토 요망):
+  1. **S5 허용 밖 기존 시험 기대값 변경 2건**(S2/S3의 직접 결과라 최소로만 바꿨다. 되돌리길 원하면 알려 달라).
+     - `passes the last choice correctness to the sufficiency check: correct=true`(모델이 SUPPORTED + `holds=false`를 내면 재요청 2회를 기대): S2로 서버가 INSUFFICIENT로 덮어쓰므로 요청 1회 + `normalized` 기록 + 확정 값 확인으로 바꾸고 이름을 「the server settles sufficiency from the cells instead of retrying」로 고쳤다.
+     - 「positive stem: every claim … PARTIAL_SUPPORT」의 두 번째 단언: 기대값 `MISSING_LINK`은 그대로 두고, 이전에 인용 분리 실패로 만들던 MISSING_LINK을 `holds=false`로 만들도록 픽스처만 바꿨다.
+  2. 인용 분리 시험 세 개(`quote separation`)는 S3대로 「분리 없이 SUPPORTED」로 기대값을 바꿨다(이름도 변경).
+  3. S5 5번의 XA-r1은 1차 시도 원문이 `ground.quote` 끝에 마침표가 붙어 발화에 없는 인용이라(구조 검사에서 걸림) **2차 시도 원문**을 줄여 썼다. 2차에는 UNTOUCHED 주장에 "언급하지 않음"이 있어 S1 1·4가 함께 시험된다. S5 1번은 C-CT 1차, 2번은 C-CT 2차 시도.
+  4. S1·S2를 `normalizeCells`와 별도 export `settleConclusion(assessment, observations, options)`로 나눴다(S2가 구조 검사를 거친 뒤에만 동작해야 해서 observations를 받는다). 구조가 어긋난 출력(예: 후보가 선지 밖, 오답 선택의 모호한 빈자리)은 S2가 건드리지 않고 `validateClaims`가 기존 메시지로 fail시킨다.
+  5. S2에서 문서가 정하지 않은 경우: (가) 정답 선택·모델 UNKNOWN·derived 참이지만 `judgment.verdict ≠ targetVerdict`이거나 `errors`가 비어 있지 않으면 `contentAssessment`는 모델 값 그대로 둔다(→ 이어지는 `validateFeedbackAssessment`가 어긋나면 재요청). (나) derived 참 + 모델 RECONSTRUCTABLE이면 `rationaleImpliedVerdict`만 덮어쓰고 나머지는 4번째 줄 규칙이 맞을 때만 덮어쓴다. (다) UNKNOWN으로 내릴 때 `reconstructedPath`·`studentEvidence`는 비우지 않는다. (라) `holds`는 verdict가 NONE이 될 때만 `false`로 바꾼다.
+  6. `validateClaims`의 `reconstructability must follow the three cells`·`rationaleImpliedVerdict must equal …`·`SUPPORTED requires …`·`insufficiencyKind must be …` 검사는 그대로 두었다. 확정 뒤에는 위 표가 처리하지 않는 경우(오답 선택의 불일치 등)에서만 걸린다.
+  7. `validateFeedbackAssessment`에서 확정 결과가 걸린 경우는 시험에서 만나지 않았다(멈춤 조건에 해당하는 충돌 없음).
+- 지시문 v5.3: 3단계 한 문장 외 변경 없음. 외부 API 호출·커밋·`git stash` 없음.
+
+## 3단계 코드 에이전트 diff 검토 (2026-10-27)
+
+- S1~S4는 설계와 맞다. 실행자가 바꾼 기존 시험 2건(정답 선택의 SUPPORTED+holds=false가 재요청 대신 INSUFFICIENT로 덮어써짐, PARTIAL_SUPPORT 픽스처의 실패 원인 교체)은 (가)에서 바로 따라 나오는 결과라 수용했다.
+- 추가 1: 모델이 UNKNOWN이고 세 칸도 비었는데 결론·부족 종류를 남긴 출력(2단계 K4-r2·KF-r2·KF-r3)이 정리되지 않아 `validateFeedbackAssessment`에서 실패했다. `settleConclusion`에서 `rationaleImpliedVerdict=UNKNOWN`·`contentAssessment=UNKNOWN`·`insufficiencyKind=NONE`으로 정리하고 시험 1개를 더했다.
+- 오프라인 재생(외부 호출 없음): 2단계에 저장된 판정 시도 93건을 새 검사에 통과시켰다. 예전 실패 52건 중 46건이 통과했고, 남은 6건은 실제 구조 위반이다(인용이 발화에 없음, choiceText가 선지에 없음, CONTRADICTED 대응 누락, 재구성 불일치에 오류 동반). `validateFeedbackAssessment`·결론 감사는 재생하지 않아, 이 수치는 상한이다.
+- 재생 결론: QF·DA·K1은 SUPPORTED, XA·XS·KF는 INSUFFICIENT, K4는 SUPPORTED 없음(빈자리 미사용 그대로), KC-r3 1차는 ground를 FACT로 잘못 분류해 SUPPORTED(①의 예상 위험).
+- 시험: `feedback.test.ts` 242 통과. 전체 1429 중 1427 통과, 실패 2건은 기존(`boundary.test.ts` node:fs, `axis-architecture-experiment.test.ts` `.omc` 파일).

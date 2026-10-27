@@ -37,7 +37,12 @@
 │  │     메모장 23·24·25·29 반영 D-0156·D-0157·D-0159·D-0161, 48세션 회귀 통과(B3 수정 D-0164), "없음" 근거 판정 D-0166
 │  │     K4(회사법 13번 ②) 판정 재검토: 재구성 세 칸·합당 기준·READING 오류 합의  CP-F
 │  │     K4 재설계: 재구성 세 칸 판정 v5.3 1단계 구현·시험 통과, v5.2 미채택   D-0178
-│  │     다음: v5.3 2단계 실측(실제 문항 사례·18세션 회귀, 승인 필요)
+│  │     v5.3 2단계 실측: 형식 실패 다수로 중단(K4 0/3, 오답 READING 6/6)    CP-G
+│  │     v5.3 보강((가) 서버 결론 확정·① 인용 분리 제거) 재실행: 형식 실패 0, 회귀 유지, K4 0/3  CP-H
+│  │     v5.3 보강판 운영 후보 채택(재구성 세 칸·서버 결론 확정)            D-0182
+│  │     K4 (나) 확인 단계 실험: K4 1/3, 대조 잘못 수용 0, ② 읽기 차이가 원인   CP-I
+│  │     K4는 현재 동작 수용(읽기 차이), (나) 미연결                            D-0182
+│  │     다음: 마지막 설명 판정(사용자)·정확성 2건 보강·G-B3 재확인·서버 재빌드
 │  │     리마인드: luna 자신의 기호 오독(S2-r3) 해결 — 질문 자동 검사 vs 교정 단계 sol   Q-0030
 │  ├─○ 학생용 전환 — 순서 D-0176(실제 학생 확인 뒤 확대·전환)              CP-B·D-0176
 │  └─? 경계 응답 판정 기준(짧지만 충분 vs 대상만 언급)                       Q-0032
@@ -75,6 +80,10 @@
 | D-0013 | [문단 선택적 보완 V4](./decisions/D-0013-paragraph-optional-revision-v4.md) |
 | D-0138 | [문단 요약 근본 검토](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md), [질문 비교 묶음](../docs/experiments/question-quality-h0-vs-v4-2026-10-15/README.md), [D-0139 질문 규칙](./decisions/D-0139-paragraph-simple-format-question-rules.md), [D-0140 개발자 모드](./decisions/D-0140-paragraph-simple-holistic-dev-mode.md) |
 | D-0090 | [v5 명칭](./decisions/D-0090-problem-evaluator-v5-naming.md) |
+| CP-I | [K4 확인 단계 실험](./checkpoints/2026-10-27-k4-blank-probe.md), [보고](../docs/experiments/k4-blank-probe-2026-10-27/REPORT-human.md) |
+| D-0182 | [v5.3 보강판 채택](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) |
+| CP-H | [v5.3 보강 재실행](./checkpoints/2026-10-27-k4-v53-stage3-rerun.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27-b/REPORT-human.md) |
+| CP-G | [v5.3 실측 중단](./checkpoints/2026-10-27-k4-v53-stage2-live.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27/REPORT-human.md) |
 | D-0177 | [문제 판정 v5.1 coaching 제거](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md), [회귀 보고](../docs/experiments/v5-diverse-48-regression-2026-10-26/REPORT-human.md) |
 | D-0176 | [학생용 전환 순서](./decisions/D-0176-student-switch-roadmap-pilot-before-expansion.md), [coaching 정리 인계](../docs/handoffs/2026-10-26-problem-feedback-coaching-field-cleanup.md) |
 | D-0175 | [문단 교정 질문 중 근거 문장 힌트](./decisions/D-0175-paragraph-simple-correction-hint-during-question.md) |
