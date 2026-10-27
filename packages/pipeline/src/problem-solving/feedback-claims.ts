@@ -253,6 +253,8 @@ function readingJudgment(assessment: any, options: ClaimsOptions) {
 export function readingSummary(assessment: any, options: ClaimsOptions) {
   return {
     insufficiencyCase: readingJudgment(assessment, options)?.insufficiencyCase ?? null,
+    conclusionOnly: assessment.ground?.kind === 'CONCLUSION_RESTATED',
+    judgmentNote: assessment.judgment?.contradiction || null,
     readings: assessment.choiceReading.claims.filter((c: any) => c.relation !== 'UNTOUCHED')
       .map((c: any) => ({ choiceText: c.choiceText, studentReading: c.studentReading, relation: c.relation })),
   };

@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-10-27
+갱신: 2026-10-28
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -42,7 +42,8 @@
 │  │     v5.3 보강판 운영 후보 채택(재구성 세 칸·서버 결론 확정)            D-0182
 │  │     K4 (나) 확인 단계 실험: K4 1/3, 대조 잘못 수용 0, ② 읽기 차이가 원인   CP-I
 │  │     K4는 현재 동작 수용(읽기 차이), (나) 미연결                            D-0182
-│  │     다음: 마지막 설명 판정(사용자)·정확성 2건 보강·G-B3 재확인·서버 재빌드
+│  │     마지막 설명 칸 유형 레이아웃 v1 채택(진단 글 + 유형별 순서), 판정 11/12  D-0184
+│  │     다음: D1 판정 선지 읽기 관계 보강(XS)·XS·G-B3 재확인·서버 재빌드
 │  │     리마인드: luna 자신의 기호 오독(S2-r3) 해결 — 질문 자동 검사 vs 교정 단계 sol   Q-0030
 │  ├─○ 학생용 전환 — 순서 D-0176(실제 학생 확인 뒤 확대·전환)              CP-B·D-0176
 │  └─? 경계 응답 판정 기준(짧지만 충분 vs 대상만 언급)                       Q-0032
@@ -84,6 +85,7 @@
 | D-0090 | [v5 명칭](./decisions/D-0090-problem-evaluator-v5-naming.md) |
 | CP-I | [K4 확인 단계 실험](./checkpoints/2026-10-27-k4-blank-probe.md), [보고](../docs/experiments/k4-blank-probe-2026-10-27/REPORT-human.md) |
 | D-0182 | [v5.3 보강판 채택](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) |
+| D-0184 | [마지막 설명 레이아웃 v1](./decisions/D-0184-end-explanation-layout-v1-adopted.md), [보고](../docs/experiments/end-explanation-layout-2026-10-28/REPORT-human.md) |
 | CP-H | [v5.3 보강 재실행](./checkpoints/2026-10-27-k4-v53-stage3-rerun.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27-b/REPORT-human.md) |
 | CP-G | [v5.3 실측 중단](./checkpoints/2026-10-27-k4-v53-stage2-live.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27/REPORT-human.md) |
 | D-0177 | [문제 판정 v5.1 coaching 제거](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md), [회귀 보고](../docs/experiments/v5-diverse-48-regression-2026-10-26/REPORT-human.md) |

@@ -243,3 +243,4 @@
 | [`D-0181`](./decisions/D-0181-problem-error-taxonomy-two-axes-later.md) | accepted | 문제 풀이 오류 분류 대응표·두 축 | 함정 태그·요구 요소·비틂 14종을 지금은 대응표로 묶고, 실제 학생 풀이 재검증 때 내용 축(비틂 14종)·과정 축(읽기 과정 7가지) 두 축으로 재구성 |
 | [`D-0182`](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) | accepted | 문제 판정 운영 후보 v5.3 보강판(재구성 세 칸) | D-0161 대체. 지시문 v5.3, 세 칸(선지 이해·근거·판단)에서 서버가 결론 확정, 인용 분리 제거, 오답 READING 오류. K4는 현재 동작(근거 미확인) 수용, 확인 단계 (나) 미연결 |
 | [`D-0183`](./decisions/D-0183-paragraph-analysis-ui-tree-and-relation-graphs.md) | accepted | 문단 분석 화면: 수형도(보상)·관계 유형 그래프(진단) | 수형도는 마지막 차례·밝기 3단계·CROSS/TOP 계산값·완료 테두리, 그래프는 첫 차례·갈래 개수 막대·오류율 추이·틀린 관계. 1단계 개발자 화면 `/dialogue/lab/analysis`, 2단계 요약 직후 판정은 시간·비용 승인 뒤 |
+| [`D-0184`](./decisions/D-0184-end-explanation-layout-v1-adopted.md) | accepted | 마지막 설명(M4) 칸 유형 레이아웃 v1 | 판정기 진단 글(reason·judgment.contradiction)과 서버가 정한 칸 유형(ERROR·GAP·UNVERIFIABLE)을 넘기고, 지시문은 정답·오답 공통 한 벌(유형별 순서·풀어 쓰기·학생 말 풀어 말하기). 근거 부족 여섯 경우 문단 제거, v5.3 지시문은 재현용 |

@@ -58,6 +58,9 @@ export const FeedbackSelectionAssessmentSchema = z.object({
   // Server-written digest of the three cells for the end explanation. Absent in records that predate it.
   readingSummary: z.object({
     insufficiencyCase: z.string().nullable(),
+    // Added with the end-explanation layout; absent in older records.
+    conclusionOnly: z.boolean().optional(),
+    judgmentNote: z.string().nullable().optional(),
     readings: z.array(z.object({ choiceText: z.string(), studentReading: z.string(), relation: z.string() }).strict()),
   }).strict().optional(),
 }).strict();

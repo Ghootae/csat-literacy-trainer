@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import { z } from 'zod/v4';
 import { assertNoStructuredProblemGold, SOURCE_TEXT_ANNOTATION_GUIDE } from './source-direct-evaluator.js';
 import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, validateClaims } from './feedback-claims.js';
-import { feedbackEndExplanationContent, CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS } from './feedback-end-explanation.js';
+import { feedbackEndExplanationContent, CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS, type EndExplanationLayout } from './feedback-end-explanation.js';
 import {
   FeedbackRepairAssessmentSchema, FeedbackSelectionAssessmentSchema, PROBLEM_FEEDBACK_SESSION_VERSION,
   applyFeedbackAssessment, applyFeedbackEndExplanation, FeedbackEndExplanationSchema, feedbackObservationText,
@@ -92,7 +92,7 @@ export const FEEDBACK_REPAIR_MODEL = 'gpt-6-luna';
 
 export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
   private client: OpenAI | undefined;
-  constructor(private readonly options: { model?: string; timeoutMs?: number; maxOutputTokens?: number; maxRetries?: number; transport?: FeedbackTransport } = {}) {}
+  constructor(private readonly options: { model?: string; timeoutMs?: number; maxOutputTokens?: number; maxRetries?: number; transport?: FeedbackTransport; endLayout?: EndExplanationLayout } = {}) {}
   async evaluate(s: FeedbackSession): Promise<FeedbackEvaluationCall> {
     const started = performance.now();
     const attempts: NonNullable<FeedbackEvaluationCall['metadata']['attempts']> = [];
@@ -131,10 +131,12 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
       const attemptStart = attempts.length;
       try {
         if (end) {
-          const content = feedbackEndExplanationContent(s);
+          // Layout v1 is the default end explanation (D-0184); 'v5.3' reproduces the earlier per-case instructions.
+          const layout = this.options.endLayout ?? 'layout-v1';
+          const content = feedbackEndExplanationContent(s, { layout });
           if (validationFeedback) content.push({ type: 'input_text', text: JSON.stringify({ validationFeedback }) });
           candidate = await request('END_EXPLANATION', FeedbackEndExplanationSchema,
-            correct ? CORRECT_END_INSTRUCTIONS : INCORRECT_END_INSTRUCTIONS, content);
+            layout === 'layout-v1' ? END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS : correct ? CORRECT_END_INSTRUCTIONS : INCORRECT_END_INSTRUCTIONS, content);
           applyFeedbackEndExplanation(s, candidate);
           return aggregate();
         }

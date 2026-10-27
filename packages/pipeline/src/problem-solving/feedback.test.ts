@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, validateClaims, type ClaimsOptions } from './feedback-claims.js';
-import { CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, feedbackEndExplanationContent, feedbackSectionClosing, feedbackSectionLead, stemVerdictWords } from './feedback-end-explanation.js';
+import { CORRECT_END_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, feedbackEndExplanationContent, feedbackSectionClosing, feedbackSectionLead, stemVerdictWords } from './feedback-end-explanation.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import {
@@ -664,7 +664,7 @@ describe('developer connection contracts', () => {
       const requests: any[] = [];
       const call = await new OpenAIFeedbackEvaluator({ transport: { async create(r) {
         requests.push(r); return response(sections(next, '원문에서 판단 관계를 이어 볼게.'));
-      } } }).evaluate(acceptEnd(next));
+      } }, endLayout: 'v5.3' }).evaluate(acceptEnd(next));
       expect(requests).toHaveLength(1);
       expect(requests[0].model).toBe('gpt-6-luna');
       expect(requests[0].instructions).toBe(CORRECT_END_INSTRUCTIONS);
@@ -824,7 +824,7 @@ describe('developer connection contracts', () => {
       expect(s.pendingEnd).toEqual({ endReason: reason, outcome });
       expect(s.evaluationMode).toBe('END_EXPLANATION'); expect(s.result).toBeNull();
       const requests: any[] = [];
-      const call = await new OpenAIFeedbackEvaluator({ transport: { async create(r) { requests.push(r); return response(sections(s, endText)); } } }).evaluate(s);
+      const call = await new OpenAIFeedbackEvaluator({ transport: { async create(r) { requests.push(r); return response(sections(s, endText)); } }, endLayout: 'v5.3' }).evaluate(s);
       expect(requests).toHaveLength(1); expect(requests[0].model).toBe(correct ? 'gpt-6-luna' : 'gpt-6.1-sol');
       expect(requests[0].instructions).toBe(correct ? CORRECT_END_INSTRUCTIONS : INCORRECT_END_INSTRUCTIONS);
       expect(call.metadata.attempts?.[0]?.kind).toBe('END_EXPLANATION');
@@ -1311,6 +1311,17 @@ describe('three-cell judgment (v5.3)', () => {
       expect(judge(a, kc, {})).toBe('CONCLUSION_ONLY');
       expect(() => judge({ ...a, insufficiencyKind: 'MISSING_LINK' }, kc, {})).toThrow(/insufficiencyKind must be JUDGMENT_METHOD/);
     });
+    it('readingSummary keeps conclusionOnly and judgmentNote, also for a wrong choice where readingJudgment is null', () => {
+      const kc = cell([{ observationId: 'o1', text: '출연했다고 권한이 생기는 건 아님' }], '이사의 권한은 출연 때문이 아니다. 출연했다고 권한이 생긴다.');
+      const a = base({ choiceReading: { claims: [reading('c1', '출연했다고 권한이 생긴다', 'EXACT', '출연했다고 권한이 생기는 건 아님')] },
+        ground: ground('CONCLUSION_RESTATED', '출연했다고 권한이 생기는 건 아님'), judgment: judgment('INVALID'), studentClaims: [studentClaim('출연했다고 권한이 생기는 건 아님')],
+        contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'JUDGMENT_METHOD' });
+      const o: ClaimsOptions = { correctChoice: true, targetVerdict: 'INVALID', choiceText: kc.choiceText };
+      validateClaims(a, kc.obs, o);
+      expect(readingSummary(a, o)).toMatchObject({ insufficiencyCase: 'CONCLUSION_ONLY', conclusionOnly: true, judgmentNote: '모순 지점' });
+      expect(readingSummary(a, { ...o, correctChoice: false })).toMatchObject({ insufficiencyCase: null, conclusionOnly: true, judgmentNote: '모순 지점' });
+      expect(readingSummary({ ...a, ground: ground('FACT', '출연했다고 권한이 생기는 건 아님'), judgment: judgment('NONE') }, o)).toMatchObject({ conclusionOnly: false, judgmentNote: null });
+    });
     it('an error case: a wrong choice with a CONTRADICTED ground is ERROR and has no insufficiency case', () => {
       const e = cell([{ observationId: 'o1', text: '장학재단이므로 갑 개인에게 권한 못 줌' }], '갑 개인에게 권한을 줄 수 있다.');
       const a = base({ choiceReading: { claims: [reading('c1', '갑 개인에게 권한을 줄 수 있다', 'EXACT', '갑 개인에게 권한 못 줌')] }, ground: ground('FACT', '장학재단이므로'),
@@ -1632,5 +1643,66 @@ describe('server settles the conclusion from the three cells (v5.3 stage 3)', ()
     expect(call.metadata.attempts![0]!.normalized).toEqual(expect.arrayContaining([expect.stringContaining('UNTOUCHED claim c1'), expect.stringContaining('set to UNKNOWN')]));
     expect(call.metadata.attempts![0]!.rawOutput).toMatchObject({ reconstructability: 'RECONSTRUCTABLE' });
     expect(call.rawOutput).toMatchObject({ reconstructability: 'UNKNOWN', contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE', readingSummary: { insufficiencyCase: null, readings: [] } });
+  });
+});
+
+describe('end explanation layout v1', () => {
+  const layout = (s: FeedbackSession) => JSON.parse(feedbackEndExplanationContent(acceptEnd(s), { layout: 'layout-v1' })[0]!.text as string);
+  const summary = (over: Record<string, unknown> = {}) => ({ insufficiencyCase: null, readings: [], ...over });
+  const noCase = (p: Record<string, unknown>) => { expect(p).not.toHaveProperty('insufficiencyKind'); expect(p).not.toHaveProperty('insufficiencyCase'); };
+  it('the default layout payload is unchanged and has no sections', () => {
+    const s = selection('C5');
+    const next = acceptEnd(assess(s, output(s, { errors: [], contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' })));
+    const base = feedbackEndExplanationContent(next); const explicit = feedbackEndExplanationContent(next, { layout: 'v5.3' });
+    expect(explicit).toEqual(base);
+    const p = JSON.parse(base[0]!.text as string);
+    expect(p).not.toHaveProperty('sections'); expect(p).toHaveProperty('insufficiencyKind'); expect(p).toHaveProperty('insufficiencyCase');
+  });
+  it('GAP: correct, insufficient, conclusion restated', () => {
+    const s = selection('C5');
+    const a = output(s, { errors: [], contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'JUDGMENT_METHOD',
+      readingSummary: summary({ insufficiencyCase: 'CONCLUSION_ONLY', conclusionOnly: true, judgmentNote: '결론만 되풀이함' }) });
+    const p = layout(assess(s, a));
+    noCase(p);
+    expect(p.sections).toEqual({ firstChoice: { type: 'GAP', correctChoice: true, conclusionOnly: true, repair: 'NOT_ASKED', diagnosis: a.reason, judgmentNote: '결론만 되풀이함' }, reselection: null });
+  });
+  it('UNVERIFIABLE: correct choice whose rationale is not reconstructable; old records without the new fields give false and null', () => {
+    const s = selection('C5');
+    const p = layout(assess(s, output(s, { errors: [], reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', reconstructedPath: [] })));
+    expect(p.sections.firstChoice).toMatchObject({ type: 'UNVERIFIABLE', correctChoice: true, conclusionOnly: false, repair: 'NOT_ASKED', judgmentNote: null });
+  });
+  it('ERROR with REPAIRED', () => {
+    const s0 = reply(questioned());
+    const gate = submit(assess(s0, repair(s0)), { type: 'REQUEST_EXPLANATION' }, 'explanation');
+    const p = layout(gate); noCase(p);
+    expect(p.sections.firstChoice).toMatchObject({ type: 'ERROR', correctChoice: false, repair: 'REPAIRED' });
+    expect(p.sections.reselection).toBeNull();
+  });
+  it('ERROR with NOT_REPAIRED', () => {
+    const s0 = reply(questioned()); const a = repair(s0); a.repairs[0]!.status = 'REMAINING';
+    const p = layout(assess(s0, a));
+    expect(p.sections.firstChoice).toMatchObject({ type: 'ERROR', repair: 'NOT_REPAIRED' });
+  });
+  it('two selections: the reselection section is filled from the second assessment', () => {
+    const s = selection('C4', finalReady());
+    const p = layout(assess(s, output(s, { errors: [{ ...output(s).errors[0]!, errorId: 'R2' }] })));
+    expect(p.sections.firstChoice).toMatchObject({ type: 'ERROR', repair: 'REPAIRED' });
+    expect(p.sections.reselection).toMatchObject({ type: 'ERROR', correctChoice: false, repair: 'NOT_ASKED' });
+    noCase(p);
+  });
+  it('the layout instructions equal the code block of the design draft', () => {
+    const draft = readFileSync(new URL('../../../../docs/experiments/end-explanation-layout-2026-10-28/PROMPT-DRAFT.md', import.meta.url), 'utf8');
+    const block = /## 2\. [^\n]*\n\n```\n([\s\S]*?)\n```\n/u.exec(draft)![1];
+    expect(END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS).toBe(block);
+  });
+  it('the evaluator sends the layout instructions by default and the v5.3 instructions only when asked (D-0184)', async () => {
+    const s = selection('C5');
+    const gate = acceptEnd(assess(s, output(s, { errors: [], reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', reconstructedPath: [] })));
+    for (const endLayout of [undefined, 'layout-v1' as const, 'v5.3' as const]) {
+      const create = vi.fn(async () => ({ status: 'completed', output_text: JSON.stringify(sections(gate)), usage: { input_tokens: 1, output_tokens: 1 } }));
+      await new OpenAIFeedbackEvaluator({ transport: { create } as never, ...(endLayout ? { endLayout } : {}) }).evaluate(gate);
+      const sent = (create.mock.calls[0] as unknown as [{ instructions: string }])[0].instructions;
+      expect(sent === END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS).toBe(endLayout !== 'v5.3');
+    }
   });
 });
