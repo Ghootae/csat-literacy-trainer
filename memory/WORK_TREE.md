@@ -43,17 +43,23 @@
 │
 ├─ 학습자 생각 진단 — 큰 논의는 문단·문제 안정화 뒤 재개                     Q-0034
 │  ├─✗ 함정 강도·선택률 예측 — LLM·JEV 모두 실패, 목표 재정의                D-0109
-│  ├─● 문단 분석 지도 — 방향 합의, 공손룡 1지문 실험 중                    D-0141·D-0143·D-0146
-│  │     공손룡 기준선(r3·입장·판정 v3·오류 집계), 도파민 일반화 기준 ①②③ 통과 D-0146
-│  │     관계 유형 18유형 검증 완료(블라인드 85%), v3 새 지문 4개 기타 0  D-0147
-│  │     분석 골드 절차: 맞춰 보기 종료, 동결·입장 Claude 검토 운용     D-0151·D-0155·D-0158
-│  │     선지 연결: 비교 실험 차이 없음(D-0167) → 선택형 출제자 전략 피드백 확정, 지시문 v4·sol D-0170
-│  │       57편 생성·검토 → 화면 연결·선지 직접 누르기(D-0172) 완료 → 다음: 사용 메모 반영
-│  │     선지 연결 v4 맞춰 보기 검증 통과(기타 0·일치 96%·정답 91%), 다음 정의 확정→v5 D-0162
-│  │     다음: 1차 관계 목록 → 검증 6지문, 그 뒤 선지 연결
-│  └─● 사고 진단 v0.1 — 가상 풀이 36/36, 과잉 분류 0                         D-0111
-│        운영 방향: 실시간 아닌 주기 실행, 모델 sol 고정(주기 기준 미정)       D-0115
-│        다음: 처음 보는 사례·실제 학생 풀이로 검증
+│  ├─● 문단 분석 지도(지문을 명제→묶음→요지로 쌓은 동결 지도에 학생 요약을 대어 무엇을 잡고 놓쳤는지 기록)
+│  │     공손룡 기준선(r3·입장·판정 v3·오류 집계), 도파민 일반화 기준 ①②③ 통과 D-0143·D-0146
+│  │     관계 유형 4갈래 18유형 검증 완료(블라인드 85%), v3 새 지문 4개 기타 0  D-0147
+│  │     분석 골드 절차: 맞춰 보기 종료, 동결·입장 코드 에이전트 검토 운용, 동결 지도 6장 D-0151·D-0155·D-0158
+│  │     학생 이해 지문 집계 스크립트 완성, 학생별 18유형 칸은 표본 부족     D-0160
+│  │     선지 연결: v5 UI 6지문 120선지 동결 완료, 마지막 설명 좌표는 차이 없어 미반영 D-0162·D-0167
+│  │     선택형 출제자 전략 피드백: 57편 생성·검토 → 화면 연결·선지 직접 누르기 완료 D-0170·D-0172
+│  │     다음: 출제자 전략 화면 사용 메모 반영(주 버튼 자리 답 대기)
+│  │     미착수: 다리 층, 말 안 함/모름 구별(시점 미정)
+│  ├─● 사고 진단 v0.1(풀이 이유 문장으로 무너진 단계·걸린 함정 판정)
+│  │     가상 풀이 36/36, 과잉 분류 0                                         D-0111
+│  │     운영 방향: 실시간 아닌 주기 실행, 모델 sol 고정(주기 기준 미정)       D-0115
+│  │     다음: 처음 보는 사례·실제 학생 풀이로 검증
+│  └─○ 정답 경로 분석(문항마다 정답에 이르는 노드 지도를 만들고, 학생이 어느 노드·요소에서 틀렸는지 기록)
+│        READ·LINK·APPLY 노드, 요소 E1~E10, 깊이=노드 수, 오답=실패 노드·요소   D-0119·D-0121~D-0124
+│        sol 종단 검증 대체로 양호(실패 종류 17/20, 3회 일관성 33/35)
+│        다음: 실제 학생 풀이, 여러 문항에서 노드 분할 일관성 확인
 │
 └─○ 문항 골드 — 오프라인 감사·회귀용으로만 보관                              CP-C
 
@@ -81,7 +87,9 @@
 | D-0109 | [함정 지도 v0](./decisions/D-0109-trap-map-v0-external-rate-experiment.md), [JEV 결과](./checkpoints/2026-10-10-trap-map-jev-choice-results.md) |
 | D-0111 | [사고 진단 v0](./decisions/D-0111-thought-diagnosis-v0-experiment.md), [v0.1 결과](./checkpoints/2026-10-10-thought-diagnosis-v01-results.md) |
 | D-0141·D-0143 | [문단 분석 지도 방향](./decisions/D-0141-paragraph-analysis-map-direction.md), [논의 기록](../docs/review/paragraph-analysis-map-brainstorm-2026-10-16.md), [공손룡 실험](./decisions/D-0143-analysis-map-gongsun-pilot.md), [1단계 인계](../docs/handoffs/2026-10-16-analysis-map-gongsun-stage1.md), [2단계 인계](../docs/handoffs/2026-10-16-analysis-map-gongsun-stage2.md) |
+| D-0146~D-0172(분석 지도) | [D-0146 도파민 일반화](./decisions/D-0146-analysis-map-dopamine-generalization.md), [D-0147 관계 유형 목록](./decisions/D-0147-relation-vocabulary-sampling.md), [D-0151 분석 골드 절차](./decisions/D-0151-analysis-gold-standard-procedure.md), [D-0155 점검표 v2](./decisions/D-0155-analysis-gold-checklist-v2-and-prompt-v2.md), [D-0158 코드 에이전트 검토 운용](./decisions/D-0158-analysis-gold-claude-review-without-further-calibration.md), [D-0160 학생 이해 지문 집계](./decisions/D-0160-student-fingerprint-aggregation.md), [D-0162 선지 연결 층](./decisions/D-0162-choice-link-layer-direction.md), [D-0167 마지막 설명 좌표 비교](./decisions/D-0167-choice-link-end-explanation-comparison.md), [D-0170 출제자 전략 피드백](./decisions/D-0170-optional-examiner-strategy-feedback.md), [D-0172 선지 직접 누르기](./decisions/D-0172-problem-ui-choice-direct-select.md) |
 | D-0115 | [사고 진단 주기 실행·sol 고정](./decisions/D-0115-thought-diagnosis-periodic-sol.md) |
+| D-0119·D-0121~D-0124 | [요구 요소·깊이](./decisions/D-0119-answer-path-elements-and-depth.md), [층·실패 종류](./decisions/D-0121-answer-path-layers-and-failed-operation.md), [깊이=노드 수](./decisions/D-0122-answer-path-depth-node-count.md), [오진술 우선](./decisions/D-0123-answer-path-explicit-misstatement-priority.md), [요소 덮어쓰기](./decisions/D-0124-answer-path-element-override-on-evidence.md), [sol 종단 검증](./checkpoints/2026-10-14-answer-path-sol-e2e-results.md), [정의 문서](../docs/review/answer-path-element-vocabulary-v0-2026-10-13.md) |
 | D-0112 | [v5 개발자 경로 종료 상태](./decisions/D-0112-v5-developer-path-connection-end-states.md), [연결 기록](./checkpoints/2026-10-10-v5-developer-path-connected.md) |
 | Q-0032·Q-0033·Q-0034·Q-0036 | [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md) |
 | D-0132·D-0133 | [판정기 V4 유지](./decisions/D-0132-paragraph-judge-keep-v4.md), [경계 규칙 (나″)](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md) |
