@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import { AnalysisViewApp } from './AnalysisViewApp.js';
 import { App } from './App.js';
 import { DialogueApp } from './DialogueApp.js';
 import { ProblemApp } from './ProblemApp.js';
@@ -38,6 +39,8 @@ createRoot(el).render(
       ? <ProblemApp />
       : window.location.pathname === '/dialogue/lab'
       ? <SimpleDialogueApp />
+      : window.location.pathname === '/dialogue/lab/analysis'
+      ? <AnalysisViewApp />
       : window.location.pathname.startsWith('/dialogue')
         ? <DialogueApp />
         : window.location.pathname.startsWith('/legacy')

@@ -28,7 +28,7 @@ function imports(text: string): string[] {
 
 describe('D4 규칙 1 — 파일시스템 접근은 리포지토리 구현체 안에만', () => {
   // 웹으로 옮길 때 저장소만 교체하면 되도록. 이 둘이 리포지토리다.
-  const REPOSITORIES = ['server/content.ts', 'server/session.ts'];
+  const REPOSITORIES = ['server/content.ts', 'server/session.ts', 'server/analysis-view.ts'];
 
   it('다른 서버 파일은 node:fs를 import 하지 않는다', () => {
     const offenders = sources('server')

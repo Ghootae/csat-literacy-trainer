@@ -242,3 +242,4 @@
 | [`D-0180`](./decisions/D-0180-student-state-model-v1-discarded.md) | accepted | 학생 상태 모델 V1 폐기 | D-0048 대체. V1을 폐기하고 사고 패턴 분석 논의에서 제외. Q-0027 닫음, Q-0037은 분석 자료 결합 문제로만 남김. 구현 코드는 그대로 둠 |
 | [`D-0181`](./decisions/D-0181-problem-error-taxonomy-two-axes-later.md) | accepted | 문제 풀이 오류 분류 대응표·두 축 | 함정 태그·요구 요소·비틂 14종을 지금은 대응표로 묶고, 실제 학생 풀이 재검증 때 내용 축(비틂 14종)·과정 축(읽기 과정 7가지) 두 축으로 재구성 |
 | [`D-0182`](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) | accepted | 문제 판정 운영 후보 v5.3 보강판(재구성 세 칸) | D-0161 대체. 지시문 v5.3, 세 칸(선지 이해·근거·판단)에서 서버가 결론 확정, 인용 분리 제거, 오답 READING 오류. K4는 현재 동작(근거 미확인) 수용, 확인 단계 (나) 미연결 |
+| [`D-0183`](./decisions/D-0183-paragraph-analysis-ui-tree-and-relation-graphs.md) | accepted | 문단 분석 화면: 수형도(보상)·관계 유형 그래프(진단) | 수형도는 마지막 차례·밝기 3단계·CROSS/TOP 계산값·완료 테두리, 그래프는 첫 차례·갈래 개수 막대·오류율 추이·틀린 관계. 1단계 개발자 화면 `/dialogue/lab/analysis`, 2단계 요약 직후 판정은 시간·비용 승인 뒤 |

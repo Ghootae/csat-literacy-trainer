@@ -58,6 +58,8 @@
 │  │     선지 연결: v5 UI 6지문 120선지 동결 완료, 마지막 설명 좌표는 차이 없어 미반영 D-0162·D-0167
 │  │     선택형 출제자 전략 피드백: 57편 생성·검토 → 화면 연결·선지 직접 누르기 완료 D-0170·D-0172
 │  │     다음: 출제자 전략 화면 메모 반영(38 결정·구현 대기, 40·41·43 논의 대기)
+│  │     화면 사용: 수형도(보상)+관계 유형 그래프, 1단계 `/dialogue/lab/analysis` 구현  D-0183
+│  │     다음: 사용자 화면 확인 → 2단계(요약 직후 판정, 시간·비용 승인)
 │  │     미착수: 다리 층, 말 안 함/모름 구별(시점 미정)
 │  ├─● 사고 진단 v0.1(풀이 이유 문장으로 무너진 단계·걸린 함정 판정)
 │  │     가상 풀이 36/36, 과잉 분류 0                                         D-0111
@@ -101,6 +103,7 @@
 | D-0146~D-0172(분석 지도) | [D-0146 도파민 일반화](./decisions/D-0146-analysis-map-dopamine-generalization.md), [D-0147 관계 유형 목록](./decisions/D-0147-relation-vocabulary-sampling.md), [D-0151 분석 골드 절차](./decisions/D-0151-analysis-gold-standard-procedure.md), [D-0155 점검표 v2](./decisions/D-0155-analysis-gold-checklist-v2-and-prompt-v2.md), [D-0158 코드 에이전트 검토 운용](./decisions/D-0158-analysis-gold-claude-review-without-further-calibration.md), [D-0160 학생 이해 지문 집계](./decisions/D-0160-student-fingerprint-aggregation.md), [D-0162 선지 연결 층](./decisions/D-0162-choice-link-layer-direction.md), [D-0167 마지막 설명 좌표 비교](./decisions/D-0167-choice-link-end-explanation-comparison.md), [D-0170 출제자 전략 피드백](./decisions/D-0170-optional-examiner-strategy-feedback.md), [D-0172 선지 직접 누르기](./decisions/D-0172-problem-ui-choice-direct-select.md) |
 | D-0115 | [사고 진단 주기 실행·sol 고정](./decisions/D-0115-thought-diagnosis-periodic-sol.md) |
 | D-0119·D-0121~D-0124 | [요구 요소·깊이](./decisions/D-0119-answer-path-elements-and-depth.md), [층·실패 종류](./decisions/D-0121-answer-path-layers-and-failed-operation.md), [깊이=노드 수](./decisions/D-0122-answer-path-depth-node-count.md), [오진술 우선](./decisions/D-0123-answer-path-explicit-misstatement-priority.md), [요소 덮어쓰기](./decisions/D-0124-answer-path-element-override-on-evidence.md), [sol 종단 검증](./checkpoints/2026-10-14-answer-path-sol-e2e-results.md), [정의 문서](../docs/review/answer-path-element-vocabulary-v0-2026-10-13.md) |
+| D-0183 | [문단 분석 화면 사용](./decisions/D-0183-paragraph-analysis-ui-tree-and-relation-graphs.md), [1단계 인계](../docs/handoffs/2026-10-27-paragraph-analysis-view-stage1.md), [1단계 체크포인트](./checkpoints/2026-10-27-paragraph-analysis-view-stage1.md) |
 | D-0181 | [오류 분류 두 축](./decisions/D-0181-problem-error-taxonomy-two-axes-later.md), [대응표](../docs/review/problem-error-taxonomy-crosswalk-2026-10-27.md) |
 | D-0112 | [v5 개발자 경로 종료 상태](./decisions/D-0112-v5-developer-path-connection-end-states.md), [연결 기록](./checkpoints/2026-10-10-v5-developer-path-connected.md) |
 | Q-0032·Q-0033·Q-0034·Q-0036 | [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md) |

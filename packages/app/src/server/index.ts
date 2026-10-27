@@ -43,6 +43,7 @@ import type {
   TitleRequest,
   TitleResponse,
 } from '../shared/contract.js';
+import { readAnalysisViewData } from './analysis-view.js';
 import { DialogueController } from './dialogue.js';
 import { ProblemSolvingController } from './problem-solving.js';
 import { SimpleDialogueController } from './dialogue-simple.js';
@@ -274,6 +275,14 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
           if (req.method === 'POST' && action === 'memo') return json(res, 200, dialogueSimple.saveMemo(id!, await readBody(req)));
         }
         return json(res, 404, { error: '등록되지 않은 단순 형식 문단 API입니다.' });
+      }
+      if (url.pathname === '/api/developer/dialogue-analysis/view') {
+        // 문단 분석 화면 자료(D-0183): 미리 계산된 JSON을 그대로 준다. 개발자 모드에 더해 loopback 요청만 허용한다.
+        if (req.method !== 'GET' || !loopbackRequest) return json(res, 404, { error: '등록되지 않은 개발자 API입니다.' });
+        const data = readAnalysisViewData();
+        if (data === null) return json(res, 404, { error: '분석 화면 자료가 없습니다. scripts/build-analysis-view.mjs를 먼저 실행하세요.' });
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*' });
+        return res.end(data);
       }
       if (req.method === 'GET' && url.pathname === '/api/developer/map') return json(res, 200, dialogue.developerMap());
       if (req.method === 'GET' && url.pathname === '/api/developer/problem-inspect') return json(res, 200, problemSolving.inspect(url.searchParams.get('sessionId') ?? ''));
