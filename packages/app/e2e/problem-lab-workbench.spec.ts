@@ -39,14 +39,14 @@ const evaluator: FeedbackEvaluator = { async evaluate(s) {
     const noRepair = text.includes('모르겠어요');
     return { metadata, rawOutput: { mode: 'REPAIR', boundary: 'NONE', reason: noRepair ? '수정 확인 불가' : '수정한 관계 확인', reviewedResponse: studentEvidence[0],
       repairs: s.errors.map((e, i) => ({ errorId: e.errorId, status: !noRepair && i < corrections.length ? 'REPAIRED' : 'REMAINING', studentEvidence })),
-      newErrors: [], verificationComplete: true, rationaleSufficient: !noRepair, sufficiencyEvidence: noRepair ? [] : studentEvidence, coaching: '동일인의 반복 게시가 여론을 왜곡할 수 있다는 점을 원문과 비교해 보세요.' } };
+      newErrors: [], verificationComplete: true, rationaleSufficient: !noRepair, sufficiencyEvidence: noRepair ? [] : studentEvidence, } };
   }
   const unknown = text.includes('모호');
   const correct = s.selections.at(-1)?.choiceId === s.source.answerChoiceId;
   return { metadata, rawOutput: { mode: 'SELECTION', boundary: text.includes('자료 경계') ? 'MISSING_SOURCE' : 'NONE', reason: unknown ? '근거의 판단 연결을 확인할 수 없습니다.' : '선택 근거를 원문과 비교했습니다.',
     reconstructability: unknown ? 'UNKNOWN' : 'RECONSTRUCTABLE', reconstructedPath: unknown ? [] : [text, '따라서 선택한 선지는 거짓이라고 판단한다.'], rationaleImpliedVerdict: unknown ? 'UNKNOWN' : 'INVALID', contentAssessment: unknown ? 'UNKNOWN' : correct ? 'SUPPORTED' : 'ERROR', insufficiencyKind: 'NONE', studentEvidence, sourceEvidence,
     errors: correct || unknown ? [] : Array.from({ length: text.includes('두 가지') ? 2 : 1 }, (_, i) => ({ errorId: `E${i + 1}`, errorType: 'CONTENT', description: `${i + 1}번째 관계 오류`, studentEvidence, sourceEvidence, basis: 'STATED', question: `${i + 1}번째 관계를 원문과 비교하면 어떻게 달라지나요?` })),
-    errorHypothesis: null, selectionMismatchQuestion: null, coaching: '동일인의 반복 게시가 여러 시민의 의견으로 오인되면 여론 왜곡의 우려를 뒷받침합니다.' } };
+    errorHypothesis: null, selectionMismatchQuestion: null } };
 } };
 
 test.beforeAll(async () => {
@@ -239,6 +239,7 @@ test('composer keeps three rows and identical height through correction, post re
 
 
 test('wrong reselection gates and reveals each section through understanding NO with a fixed composer', async ({ page }) => {
+  test.setTimeout(75000); // 9s mock END_EXPLANATION plus gate bubbles spaced >=1.2s each
   await page.setViewportSize({ width: 1600, height: 1000 }); await open(page);
   const heights: number[] = [];
   async function measure() {
@@ -256,7 +257,7 @@ test('wrong reselection gates and reveals each section through understanding NO 
   await expect(page.getByLabel('대화 기록')).toContainText('정답은 ⑤번이야.');
   await expect(page.getByLabel('대화 기록')).toContainText('다시 고른 답도 정답이 아니야. 더 묻지 않고 정답을 먼저 알려 줄게.');
   await page.getByRole('button', { name: '응', exact: true }).click();
-  await expect(page.locator('.lab-waiting')).toContainText('설명을 정리하고 있어'); await measure();
+  await expect(page.locator('.lab-waiting')).toContainText(/설명을 정리하고 있어|어떻게 설명할지 정리하고 있어|설명할 내용을 하나씩 모으고 있어/); await measure();
   await expect(page.getByLabel('대화 기록')).toContainText('처음에 고른 ①번부터 볼게.', { timeout: 15000 });
   await expect(page.getByRole('button', { name: '다음으로 넘어가기', exact: true })).toBeEnabled(); await measure();
   await expect(page.getByLabel('대화 기록')).not.toContainText('다음은 다시 고른 ③번이야.');
@@ -308,7 +309,7 @@ test('reduced motion retains both next boundaries in a fresh reselection sequenc
   await expect(page.getByRole('button', { name: '다음으로 넘어가기', exact: true })).toBeEnabled();
   await expect(page.getByLabel('대화 기록')).not.toContainText('이해됐어?');
   await page.getByRole('button', { name: '다음으로 넘어가기', exact: true }).click();
-  await expect(page.getByRole('button', { name: '응', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '응', exact: true })).toBeEnabled({ timeout: 15000 });
   await expect(page.getByLabel('대화 기록')).toContainText('이해됐어?');
   await expect(page.locator('.lab-sequence-waiting')).toHaveCount(0);
 });
@@ -335,7 +336,7 @@ test('instant verdict precedes waiting; processing reload preserves pending and 
   await select(page, 1, '느린 판정 모호');
   await expect(page.getByLabel('대화 기록')).toContainText('정답이 아니야. 어디서 생각이 달라졌는지 살펴볼게.');
   await expect(page.locator('.lab-waiting')).toHaveCount(0);
-  await expect(page.locator('.lab-waiting')).toContainText('네 근거를 읽고 있어');
+  await expect(page.locator('.lab-waiting')).toContainText(/네 근거를 읽고 있어|네가 쓴 이유를 차근차근 읽고 있어|네 생각을 따라가 보고 있어/);
   await page.reload();
   await expect(page.locator('#lab-response')).toHaveValue('느린 판정 모호');
   await expect(page.locator('.chat-message.student')).toHaveCount(1);
@@ -390,7 +391,7 @@ for (const size of [{ width: 1600, height: 1000 }, { width: 1280, height: 720 }]
     await expect(page.locator('.chat-message').last()).toBeInViewport();
     await page.getByRole('button', { name: '다시 선택', exact: true }).click();
     await select(page, 3, '다시 고른 답도 맞다고 생각해.');
-    await expect(page.getByRole('button', { name: '응', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: '응', exact: true })).toBeEnabled({ timeout: 15000 });
     await expect(page.locator('.chat-message').last()).toBeInViewport();
     await page.getByRole('button', { name: '응', exact: true }).click();
     await expect(page.locator('.chat-message').last()).toBeInViewport();

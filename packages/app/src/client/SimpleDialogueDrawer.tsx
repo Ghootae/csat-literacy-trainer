@@ -14,7 +14,7 @@ const AUTOSAVE_MS = 1000;
 export function SimpleBubble({ message: m }: { message: SimpleMessageView }) {
   return <div className={`chat-message ${m.role}${m.kind === 'WAIT_DONE' ? ' simple-wait-done' : ''}`}><small className="simple-label">{m.label}</small>
     {m.quote && <blockquote className="simple-bubble-quote">“{m.quote}”</blockquote>}
-    <p>{m.text}</p>{m.items && <ol className="simple-bubble-items">{m.items.map((q, i) => <li key={i}>{q}</li>)}</ol>}{m.parts && <div className="simple-bubble-box"><ol>{m.parts.map((q, i) => <li key={i}>{q}</li>)}</ol></div>}</div>;
+    <p>{m.text}</p>{m.items && <ol className="simple-bubble-items">{m.items.map((q, i) => <li key={i}>{q}</li>)}</ol>}{m.parts && <div className="simple-bubble-box">{m.partsTitle && <small className="simple-box-title">{m.partsTitle}</small>}{m.partTags?.length ? <ol className="tagged">{m.parts.map((q, i) => <li key={i}><span className="simple-part-text">{q}</span><span className="simple-part-tag">{m.partTags![i]}</span></li>)}</ol> : <ol>{m.parts.map((q, i) => <li key={i}>{q}</li>)}</ol>}</div>}</div>;
 }
 
 /** 입력이 멈춘 뒤 1초 또는 포커스를 잃을 때 자동 저장한다. */

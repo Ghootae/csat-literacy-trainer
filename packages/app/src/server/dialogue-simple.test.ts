@@ -367,12 +367,12 @@ describe('v2: 라벨·재구성 요약', () => {
   it('v4.6: 질문 뒤 PRAISE는 피드백+부분 상자 한 말풍선, INITIAL PRAISE는 상자 없는 하나', async () => {
     const a = setup(out({ category: 'GAP', gaps: [gap], action: 'GAP_QUESTION' }), out({ ...after, targetGapReadings: ['읽기'], targetGapsFilled: [true], message: '잘 채웠어' }));
     const v = await say(a.controller, await say(a.controller, a.view, 'a'), 'b');
-    expect(v.current.messages.slice(-1)).toEqual([{ role: 'tutor', text: praise, parts: sums, label: '피드백' }]);
+    expect(v.current.messages.slice(-1)).toEqual([{ role: 'tutor', text: praise, parts: sums, partsTitle: '내가 파악한 문단의 핵심 내용', partTags: ['(바로 캐치)', '(질문 후 캐치)'], label: '피드백' }]);
     const b = setup(out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' }), out({ targetErrorResolved: true, ...after, message: '고쳤네' }));
     const w = await say(b.controller, await say(b.controller, b.view, quoted), '고침');
-    expect(w.current.messages.slice(-1)).toEqual([{ role: 'tutor', text: praise, parts: sums, label: '피드백' }]);
+    expect(w.current.messages.slice(-1)).toEqual([{ role: 'tutor', text: praise, parts: sums, partsTitle: '내가 파악한 문단의 핵심 내용', partTags: ['(질문 후 캐치)', '(바로 캐치)'], label: '피드백' }]);
     const c = setup(out({}));
-    expect((await say(c.controller, c.view, 'x')).current.messages.filter(notDone).slice(1)).toEqual([{ role: 'tutor', text: praise, parts: ['에너지 전환', '산소 발생'], label: '피드백' }]);
+    expect((await say(c.controller, c.view, 'x')).current.messages.filter(notDone).slice(1)).toEqual([{ role: 'tutor', text: praise, parts: ['에너지 전환', '산소 발생'], partsTitle: '내가 파악한 문단의 핵심 내용', partTags: ['(바로 캐치)', '(바로 캐치)'], label: '피드백' }]);
   });
   it('v4.6: CLOSE_GAP은 빠진 내용+부분 상자 한 말풍선이고 못 채운 빈 곳의 근거 문장만 표시한다', async () => {
     const { controller: c, view } = setup(out({ category: 'GAP', gaps: [gap, gap2], action: 'GAP_QUESTION' }),
@@ -438,6 +438,26 @@ describe('말풍선 운영 규칙: 마무리 말풍선·칭찬 문장', () => {
     expect(v.current.messages.at(-1)!.parts).toEqual(sums);
     const b = setup(out({}));
     expect((await say(b.controller, b.view, 'x')).current.messages.at(-1)!.parts).toEqual(['에너지 전환', '산소 발생']);
+  });
+});
+
+describe('PRAISE 꼬리표: 바로/질문 후 캐치', () => {
+  const tagsOf = (v: SimpleDialogueView) => v.current.messages.at(-1)!.partTags;
+  it('INITIAL 전부 통과는 모두 바로 캐치, RETRY 뒤 통과도 바로 캐치', async () => {
+    const a = setup(out({}));
+    expect(tagsOf(await say(a.controller, a.view, 'x'))).toEqual(['(바로 캐치)', '(바로 캐치)']);
+    const b = setup(out({ category: 'IRRELEVANT', action: 'RETRY_PROMPT', message: '다시' }), out({}));
+    expect(tagsOf(await say(b.controller, await say(b.controller, b.view, 'x'), 'y'))).toEqual(['(바로 캐치)', '(바로 캐치)']);
+  });
+  it('일부만 덮고 질문 뒤 나머지를 덮으면 섞여 나오고, 모든 CLOSE_*에는 제목·꼬리표가 없다', async () => {
+    const a = setup(out({ category: 'GAP', gaps: [gap], action: 'GAP_QUESTION' }), out({ ...after, targetGapReadings: ['읽기'], targetGapsFilled: [true] }));
+    expect(tagsOf(await say(a.controller, await say(a.controller, a.view, 'a'), 'b'))).toEqual(['(바로 캐치)', '(질문 후 캐치)']);
+    const b = setup(out({ category: 'GAP', gaps: [gap], action: 'GAP_QUESTION' }), out({ category: 'GAP', ...after, targetGapReadings: ['읽기'], targetGapsFilled: [false], action: 'CLOSE_GAP', message: '빠짐' }));
+    const closed = (await say(b.controller, await say(b.controller, b.view, 'a'), 'b')).current.messages.at(-1)!;
+    expect(closed.partsTitle).toBeUndefined(); expect(closed.partTags).toBeUndefined();
+    const c = setup(out({ category: 'COPY', action: 'RETRY_PROMPT' }), out({ category: 'COPY', action: 'CLOSE_NO_RESPONSE', corePartSummaries: sums, coreSourceQuote: '산소가 나온다', message: '정리' }));
+    const noResp = (await say(c.controller, await say(c.controller, c.view, 'a'), 'b')).current.messages.at(-1)!;
+    expect(noResp.partsTitle).toBeUndefined(); expect(noResp.partTags).toBeUndefined();
   });
 });
 

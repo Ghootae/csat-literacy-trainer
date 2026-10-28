@@ -53,6 +53,15 @@ interface Runtime {
 const DEFAULT_LOG_DIRECTORY = '.omc/logs/dialogue-experiment/simple-holistic';
 
 /** 개발자 전용 컨트롤러. 학생 상태 원장에 쓰지 않고, 골드(goldPath)를 읽지 않는다. */
+/** 핵심 부분마다 처음 덮인 단계를 보고 꼬리표를 정한다. 어느 단계에서도 덮이지 않은 부분이 있으면 비운다. */
+function catchTags(steps: Step[], count: number): string[] {
+  const tags = Array.from({ length: count }, (_, i) => {
+    const first = steps.find(s => (s.output as SimpleOutput).corePartsCovered[i] === true);
+    return first ? first.stage === 'INITIAL' || first.stage === 'RETRY' ? '(바로 캐치)' : '(질문 후 캐치)' : '';
+  });
+  return tags.every(t => t) ? tags : [];
+}
+
 export class SimpleDialogueController {
   private readonly sessions = new Map<string, Runtime>();
   private readonly evaluator: SimpleEvaluator;
@@ -165,7 +174,7 @@ export class SimpleDialogueController {
       if (result.output.category === 'COPY') p.transcript.at(-1)!.copied = true;
       // 마무리 말풍선은 화면용이다. 모델 입력(dialogue)에서는 거른다.
       p.transcript.push({ role: 'tutor', label: '피드백', text: pickLine(bubbleLines.done, transitionId), kind: 'WAIT_DONE' },
-        ...this.tutorMessages(result.output, stage, transitionId, p.state.coreParts.map(c => c.description)));
+        ...this.tutorMessages(result.output, stage, transitionId, p.state.coreParts.map(c => c.description), p.steps));
       this.log(r, index, p, 'STEP', null, result.validationFailures);
     } catch (error) {
       p.status = 'RETRYABLE_ERROR';
@@ -175,11 +184,11 @@ export class SimpleDialogueController {
     return this.view(r);
   }
   /** GAP_QUESTION: 리액션+번호 질문 한 말풍선. 질문 뒤 PRAISE·CLOSE_GAP·CLOSE_NO_RESPONSE: 전체 피드백 + 부분별 핵심 상자 한 말풍선. CLOSE_ERRORS: 도입 -> 오류마다 -> 마무리 피드백 + 부분별 핵심 상자. */
-  private tutorMessages(o: SimpleOutput, stage: SimpleParagraphState['stage'], key: string, coreDescriptions: string[]): SimpleMessageView[] {
+  private tutorMessages(o: SimpleOutput, stage: SimpleParagraphState['stage'], key: string, coreDescriptions: string[], steps: Step[]): SimpleMessageView[] {
     const tutor = (m: Omit<SimpleMessageView, 'role'>): SimpleMessageView => ({ role: 'tutor', ...m });
     if (o.action === 'GAP_QUESTION') return [tutor({ text: o.message, items: o.gaps.map(g => g.question), label: '생각해 보기' })];
     // 칭찬 문장은 코드가 고른다(o.message는 기록·서랍에만 남는다). 질문 뒤에는 부분별 요약, 첫 요약·다시 쓴 요약에는 기준 핵심 부분 설명을 상자에 둔다.
-    if (o.action === 'PRAISE') return [tutor({ text: pickLine(bubbleLines.praise, key), parts: stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP' ? o.corePartSummaries : coreDescriptions, label: '피드백' })];
+    if (o.action === 'PRAISE') return [tutor({ text: pickLine(bubbleLines.praise, key), parts: stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP' ? o.corePartSummaries : coreDescriptions, partsTitle: '내가 파악한 문단의 핵심 내용', partTags: catchTags(steps, o.corePartsCovered.length), label: '피드백' })];
     if (o.action === 'CLOSE_GAP') return [tutor({ text: o.message, parts: o.corePartSummaries, label: '빠진 내용' })];
     if (o.action === 'CLOSE_ERRORS') return [tutor({ text: o.message, label: '바로잡기' }),
       ...o.errors.map(e => tutor({ text: e.feedback, quote: e.studentQuote, label: '바로잡기' })),

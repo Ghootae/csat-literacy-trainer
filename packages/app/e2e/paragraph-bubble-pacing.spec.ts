@@ -67,7 +67,8 @@ for (const reduced of [false, true]) {
     expect(doneLines).toContain(await page.locator('.simple-wait-done p').textContent());
     const bubble = page.locator('.chat-message.tutor', { hasText: '잘했어~' });
     expect(praiseLines).toContain(await bubble.locator('p').textContent());
-    await expect(bubble.locator('.simple-bubble-box li')).toHaveText(['문단의 핵심 내용']);
+    await expect(bubble.locator('.simple-bubble-box li')).toHaveText(['문단의 핵심 내용(바로 캐치)']);
+    await expect(bubble.locator('.simple-box-title')).toHaveText('내가 파악한 문단의 핵심 내용');
     await expect(page.getByLabel('대화 기록')).not.toContainText('모델이 쓴 칭찬');
     if (reduced) await expect(page.locator('.simple-sequence-waiting')).toHaveCount(0);
     if (!reduced) await page.screenshot({ path: '/Users/mac/Projects/csat-literacy-problem-solving-mvp/docs/handoffs/2026-10-28-bubble-pacing-paragraph.png' });
