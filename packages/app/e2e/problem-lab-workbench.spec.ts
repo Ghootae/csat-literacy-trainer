@@ -454,23 +454,42 @@ test('direct choice flow on the negative-stem question: only the answer has a st
   await expect(composer.getByRole('button', { name: /번 선택/ })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /학습 맵으로 돌아가기/ })).toHaveCount(0);
   const main = composer.locator('.lab-primary-actions button').last();
-  await expect(main).toHaveText('전략 보기');
+  await expect(main).toHaveText('다음');
+  await expect(main).toBeDisabled();
+  await expect(composer.getByRole('button', { name: '전략 보기' })).toHaveCount(0);
+  await expect(composer.locator('.lab-primary-actions button')).toHaveText(['다시 풀기', '다음']);
   await expect(composer.getByRole('button', { name: '다시 풀기', exact: true })).toBeVisible();
+  await expect(page.locator('.source-pane .lab-highlight')).toHaveCount(0);
   const boxes = [(await main.boundingBox())!];
   await page.screenshot({ path: `${shots}-after-2.png`, animations: 'disabled' });
+  await page.screenshot({ path: '/Users/mac/Projects/csat-literacy-problem-solving-mvp/docs/handoffs/2026-10-28-strategy-entry-before-choice.png', animations: 'disabled' });
   await radio(page, 5).click();
   await expect(chat.locator('small', { hasText: '출제자 전략 · ⑤' })).toHaveCount(1);
   await expect(main).toHaveText('다음');
+  await expect(main).toBeEnabled();
+  // 첫 문단의 인용은 모두 <보기>에 있으므로 지문에는 칠한 곳이 없다.
+  await expect(page.locator('.source-pane .lab-highlight')).toHaveCount(0);
   await expect(page.locator('.lab-choice-hint')).toHaveText('');
   await expect(radio(page, 5)).toHaveAttribute('data-selected', 'true');
   await expect(radio(page, 5)).toContainText('전략 보는 중');
   await expect(page.locator('.lab-composer-notice')).toContainText('⑤ 전략');
   boxes.push((await main.boundingBox())!);
   await page.screenshot({ path: `${shots}-after-3.png`, animations: 'disabled' });
-  while (await main.innerText() === '다음') await main.click();
+  // 셋째 문단 말풍선: 지문에 한 번 나오는 인용이 지문 칸에서 칠해진다.
+  await main.click(); await main.click();
+  await expect(chat).toContainText('눈이 머물면');
+  const marked = page.locator('.source-pane .lab-highlight');
+  await expect(marked).toHaveCount(1);
+  expect((await marked.innerText()).replace(/\s+/g, ' ')).toBe('실명 확인 조치를 하지 않은 인터넷 언론사를 제재하는 법률 규정');
+  expect(await chat.innerText()).toContain((await marked.innerText()).replace(/\s+/g, ' '));
+  await page.screenshot({ path: '/Users/mac/Projects/csat-literacy-problem-solving-mvp/docs/handoffs/2026-10-28-strategy-highlight.png', animations: 'disabled' });
+  // 인용이 없는 마지막 문단에서는 칠한 곳이 지워진다.
+  await main.click();
   await expect(chat).toContainText('⑤번 전략은 여기까지야.');
+  await expect(marked).toHaveCount(0);
   await expect(chat).not.toContainText('다른 선지의 함정도 볼 수 있어.');
-  await expect(main).toHaveText('전략 보기');
+  await expect(main).toHaveText('다음');
+  await expect(main).toBeDisabled();
   await expect(page.locator('.lab-choice-hint')).toHaveText('본 선지도 다시 누를 수 있어');
   await expect(radio(page, 5)).toContainText('봤음');
   await expect(radio(page, 5)).toHaveAttribute('aria-disabled', 'false');
@@ -483,7 +502,8 @@ test('direct choice flow on the negative-stem question: only the answer has a st
   await expect(chat.locator('small', { hasText: '출제자 전략 · ⑤' })).not.toHaveCount(1);
   await page.reload();
   await expect(chat).toContainText('선지를 누르면 출제자가 어떤 전략으로 정답 선지에 함정을 만들었는지 검토할 수 있어.');
-  await expect(main).toHaveText('전략 보기');
+  await expect(main).toHaveText('다음');
+  await expect(main).toBeDisabled();
   await expect(chat.locator('small', { hasText: '출제자 전략' })).toHaveCount(0);
 });
 

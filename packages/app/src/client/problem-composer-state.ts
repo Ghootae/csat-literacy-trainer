@@ -23,7 +23,7 @@ export function waitingText(kind: WaitingKind, elapsedMs: number, key: string): 
   if (kind === 'EXPLANATION') return pickLine(set.explanation, key);
   return pickLine(set.unknown, key);
 }
-export type ButtonId = 'SUBMIT' | 'RESELECT' | 'REQUEST_EXPLANATION' | 'FINISH' | 'RESUME' | 'RETRY' | 'RESTART' | 'END_YES' | 'END_NO' | 'UNDERSTOOD_YES' | 'UNDERSTOOD_NO' | 'NEXT' | 'STRATEGY_OPEN' | 'STRATEGY_NEXT';
+export type ButtonId = 'SUBMIT' | 'RESELECT' | 'REQUEST_EXPLANATION' | 'FINISH' | 'RESUME' | 'RETRY' | 'RESTART' | 'END_YES' | 'END_NO' | 'UNDERSTOOD_YES' | 'UNDERSTOOD_NO' | 'NEXT' | 'STRATEGY_NEXT';
 export interface ComposerLocal {
   choice: string | null; draft: string; omit: boolean; waiting: boolean; pending: boolean; error: string;
   previousView?: FeedbackWorkbenchView | null;
@@ -51,8 +51,7 @@ export function composerState(view: FeedbackWorkbenchView, local: ComposerLocal)
   }
   const strategy = base.phase === 'COMPLETED' ? local.strategy : undefined;
   if (base.phase === 'COMPLETED') buttons.push({ id: 'RESTART', label: '다시 풀기', disabled: locked });
-  if (strategy && strategy.stage !== 'READING') buttons.push({ id: 'STRATEGY_OPEN', label: '전략 보기', disabled: locked });
-  if (strategy?.stage === 'READING') buttons.push({ id: 'STRATEGY_NEXT', label: '다음', disabled: locked });
+  if (strategy) buttons.push({ id: 'STRATEGY_NEXT', label: '다음', disabled: locked || strategy.stage !== 'READING' });
   if (local.pending && !local.waiting) buttons.splice(0, buttons.length, { id: 'RETRY', label: '같은 제출 다시 보내기', disabled: false });
   else if (view.evaluationStatus === 'RETRYABLE_ERROR' && !local.pending) buttons.splice(0, buttons.length, { id: 'RESUME', label: '평가 다시 시도', disabled: local.waiting });
   const error = local.error || view.evaluationError;

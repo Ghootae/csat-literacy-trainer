@@ -78,12 +78,17 @@ describe('composerState', () => {
     expect(state.input.disabled).toBe(true); expect(state.actions.buttons[0]?.disabled).toBe(false);
     expect(composerState(view('AWAITING_CORRECTION'), { ...local, draft: '', omit: true }).actions.buttons[0]?.disabled).toBe(true);
   });
-  it('puts restart before the strategy open/next primary button, which stays rightmost, without number or return buttons', () => {
+  it('puts restart before the single strategy next button, which stays rightmost and is enabled only while reading', () => {
     const labels = (strategy?: ComposerLocal['strategy'], phase: FeedbackWorkbenchView['phase'] = 'COMPLETED') => composerState(view(phase), { ...local, strategy }).actions.buttons.map(b => b.label);
     expect(labels()).toEqual(['다시 풀기']);
-    expect(labels({ stage: 'INTRO', position: null })).toEqual(['다시 풀기', '전략 보기']);
+    expect(labels({ stage: 'INTRO', position: null })).toEqual(['다시 풀기', '다음']);
     expect(labels({ stage: 'READING', position: 2 })).toEqual(['다시 풀기', '다음']);
-    expect(labels({ stage: 'ENDED', position: 2 })).toEqual(['다시 풀기', '전략 보기']);
+    expect(labels({ stage: 'ENDED', position: 2 })).toEqual(['다시 풀기', '다음']);
+    const next = (stage: 'INTRO' | 'READING' | 'ENDED') => composerState(view('COMPLETED'), { ...local, strategy: { stage, position: stage === 'INTRO' ? null : 2 } }).actions.buttons.map(b => [b.id, b.disabled]);
+    expect(next('INTRO')).toEqual([['RESTART', false], ['STRATEGY_NEXT', true]]);
+    expect(next('READING')).toEqual([['RESTART', false], ['STRATEGY_NEXT', false]]);
+    expect(next('ENDED')).toEqual([['RESTART', false], ['STRATEGY_NEXT', true]]);
+    expect(labels({ stage: 'READING', position: 2 })).not.toContain('전략 보기');
     expect(labels({ stage: 'INTRO', position: null }, 'AWAITING_SELECTION')).toEqual(['제출']);
     expect(composerState(view('COMPLETED'), local).actions).not.toHaveProperty('strategyChoices');
   });

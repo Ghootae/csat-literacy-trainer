@@ -1,5 +1,7 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { choiceHintText, defaultStrategyPosition, seenStrategyPositions, currentStrategyPosition, initialStrategyState, strategyLeadText, nextStrategyParagraph, openStrategy, remainingStrategyPositions, strategyBubbles, strategyEndText, strategyStage } from './examiner-strategy-state.js';
+import { choiceHintText, seenStrategyPositions, currentStrategyPosition, initialStrategyState, strategyLeadText, nextStrategyParagraph, openStrategy, remainingStrategyPositions, strategyBubbles, strategyEndText, strategyHighlights, strategyStage } from './examiner-strategy-state.js';
 
 const choices = [{ position: 2, paragraphs: ['a', 'b'] }, { position: 4, paragraphs: ['c'] }];
 describe('examiner strategy state', () => {
@@ -45,17 +47,6 @@ describe('examiner strategy state', () => {
     expect(seenStrategyPositions(nextStrategyParagraph(reading, choices), 'ENDED')).toEqual([2, 4]);
     expect(seenStrategyPositions(initialStrategyState, 'INTRO')).toEqual([]);
   });
-  it('default choice: last selection if unseen, else lowest unseen, else the first', () => {
-    const three = [{ position: 1, paragraphs: ['x'] }, { position: 3, paragraphs: ['y'] }, { position: 4, paragraphs: ['z'] }];
-    expect(defaultStrategyPosition(initialStrategyState, three, 4)).toBe(4);
-    expect(defaultStrategyPosition(initialStrategyState, three, 2)).toBe(1);
-    expect(defaultStrategyPosition(initialStrategyState, three, null)).toBe(1);
-    const seenOne = openStrategy(initialStrategyState, 4, three);
-    expect(defaultStrategyPosition(seenOne, three, 4)).toBe(1);
-    const all = openStrategy(openStrategy(seenOne, 1, three), 3, three);
-    expect(defaultStrategyPosition(all, three, 4)).toBe(1);
-    expect(defaultStrategyPosition(initialStrategyState, [], 2)).toBeNull();
-  });
   it('lists only choices not yet opened and ignores positions without text', () => {
     expect(remainingStrategyPositions(openStrategy(initialStrategyState, 2, choices), choices)).toEqual([4]);
     expect(openStrategy(initialStrategyState, 5, choices)).toBe(initialStrategyState);
@@ -77,5 +68,43 @@ describe('choiceHintText', () => {
     expect(choiceHintText(false, 'READING', 1)).toBe('');
     expect(choiceHintText(false, 'ENDED')).toBe('본 선지도 다시 누를 수 있어');
     expect(choiceHintText(false, null)).toBe('');
+  });
+});
+
+describe('strategy highlights', () => {
+  const passage = '가나다  라마\n바사. 아자차 가나다 카타.';
+  it('matches quotes after whitespace normalization and trailing punctuation, with original positions', () => {
+    const [h] = strategyHighlights('봐: ‘라마 바사.’ 이다', passage);
+    expect(h).toEqual({ location: 'PASSAGE', start: 5, end: 10, text: '라마\n바사' });
+    expect(passage.slice(h!.start, h!.end)).toBe(h!.text);
+    expect(strategyHighlights('‘아자차,’', passage).map(x => x.text)).toEqual(['아자차']);
+    expect(strategyHighlights('‘라마   바사’', passage).map(x => x.text)).toEqual(['라마\n바사']);
+  });
+  it('skips quotes found twice or not at all', () => {
+    expect(strategyHighlights('‘가나다’ ‘없는 말’ ‘.’', passage)).toEqual([]);
+  });
+  it('highlights only the unique quote among several', () => {
+    expect(strategyHighlights('‘가나다’와 ‘카타’', passage).map(x => x.text)).toEqual(['카타']);
+  });
+  it('FINAL.json: 239 passage quotes, 198 of them highlighted (41 repeat in the passage)', () => {
+    const root = resolve(__dirname, '../../../..');
+    const final = JSON.parse(readFileSync(resolve(root, 'docs/experiments/examiner-strategy-2026-10-23/FINAL.json'), 'utf8')) as { items: { passageId: string; question: number; choice: number; text: string }[] };
+    const dir = resolve(root, 'docs/experiments/examiner-strategy-2026-10-23/full-v4/requests');
+    const files = readdirSync(dir);
+    const norm = (v: string) => v.replace(/\s+/gu, ' ');
+    let inPassage = 0; let painted = 0;
+    for (const item of final.items) {
+      const file = files.find(f => f.startsWith(`${item.passageId}-q${item.question}-c${item.choice}__`));
+      expect(file, `${item.passageId}-q${item.question}-c${item.choice}`).toBeTruthy();
+      const request = JSON.parse(readFileSync(resolve(dir, file!), 'utf8')) as { input: { content: { text: string }[] }[] };
+      const passageText = (JSON.parse(request.input[0]!.content[0]!.text) as { passage: string }).passage;
+      for (const m of item.text.matchAll(/‘([^’]+)’/gu)) {
+        const q = norm(m[1]!).trim().replace(/[.,]+$/u, '').trim();
+        if (q && norm(passageText).includes(q)) inPassage++;
+      }
+      for (const para of item.text.split(/\n{2,}/u)) painted += strategyHighlights(para, passageText).length;
+    }
+    expect(inPassage).toBe(239);
+    expect(painted).toBe(198);
   });
 });

@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ExaminerStrategyView, FeedbackMediaView, FeedbackRequest, FeedbackWorkbenchView } from '../shared/problem-feedback.js';
 import { getExaminerStrategy, getFeedback, markExaminerStrategyView, startFeedback, submitFeedback } from './problem-feedback-api.js';
 import { FeedbackDrawer } from './FeedbackDrawer.js';
 import './problem-feedback-workbench.css';
 import { Markdown } from './markdown.js';
 import { composerState, sequenceState, waitingKind, waitingText, type WaitingKind, type ButtonId } from './problem-composer-state.js';
-import { choiceHintText, circled, currentStrategyPosition, defaultStrategyPosition, initialStrategyState, strategyLeadText, nextStrategyParagraph, openStrategy, seenStrategyPositions, strategyBubbles, strategyStage } from './examiner-strategy-state.js';
+import { choiceHintText, circled, currentStrategyPosition, initialStrategyState, strategyLeadText, nextStrategyParagraph, openStrategy, seenStrategyPositions, strategyBubbles, strategyHighlights, strategyStage } from './examiner-strategy-state.js';
 import { bubbleDelayMs } from './bubble-pacing.js';
 import { AnnotatedText } from './annotated-text.js';
 import { DevPartNav } from './DevPartNav.js';
@@ -147,9 +147,9 @@ export function ProblemLabApp(): React.JSX.Element {
   }, [view?.sessionId, view?.evaluationStatus, busy]);
 
   const firstHighlight = view?.correctionHighlights[0];
-  function scrollToHighlight() {
-    if (!firstHighlight) return;
-    const selector = firstHighlight.location === 'PASSAGE' ? '.source-pane .lab-highlight' : '.question-pane .lab-highlight';
+  function scrollToHighlight(location = firstHighlight?.location) {
+    if (!location) return;
+    const selector = location === 'PASSAGE' ? '.source-pane .lab-highlight' : '.question-pane .lab-highlight';
     const target = sourcePanes.current?.querySelector<HTMLElement>(selector);
     if (!target) return;
     // Scroll only the region that holds the highlight; the page and the other panes stay put.
@@ -162,6 +162,10 @@ export function ProblemLabApp(): React.JSX.Element {
   }
   const correctionRevealed = !!view && sequence.visibleCount === view.transcript.length;
   useEffect(() => { if (correctionRevealed) scrollToHighlight(); }, [view?.sessionId, view?.revision, pane, reducedMotion, correctionRevealed]);
+  // 가장 최근에 나온 전략 말풍선의 지문 인용(지문에 한 번만 나오는 것)을 지문 칸에 칠하고 그곳으로 스크롤한다.
+  const strategyBubble = strategy.available && sequence.complete ? strategyBubbles(strategyState, strategy.choices).filter(b => !b.end).at(-1) : undefined;
+  const strategyMarks = useMemo(() => strategyBubble && view ? strategyHighlights(strategyBubble.text, view.question.passageText) : [], [strategyBubble?.key, strategyBubble?.text, view?.question.passageText]);
+  useEffect(() => { if (strategyMarks.length) scrollToHighlight('PASSAGE'); }, [strategyBubble?.key, strategyMarks]);
 
   const instant = view?.transcript.findLast(m => m.sequence === 'INSTANT' && !m.kind);
   const pendingInstant = pending?.command.type === 'SELECT' && pending.command.rationale.mode === 'PROVIDED';
@@ -259,7 +263,7 @@ export function ProblemLabApp(): React.JSX.Element {
     <nav className="workbench-tabs" aria-label="문제 화면 전환">{[['source', '지문'], ['problem', '문제'], ['chat', '대화']].map(([id, title]) => <button key={id} aria-pressed={pane === id} onClick={() => setPane(id!)}>{title}</button>)}</nav>
     <div className="workbench-columns" ref={sourcePanes}>
       <section className="workbench-pane source-pane" aria-label="전체 지문"><header className="pane-header source-head"><div className="source-title"><h1 title={view.title}>{view.title}</h1><small>{view.exam}</small></div>{navPassage && <DevPartNav currentParagraph={null} currentIsProblem problem={{ onSelect: () => {} }}
-            paragraphs={Array.from({ length: navPassage.paragraphCount }, (_, i) => ({ label: `문단 ${i + 1}`, onSelect: () => window.location.assign(paragraphLink(returnTo, navPassage.passageId, i)) }))} />}</header><div className="source-scroll"><AnnotatedText text={view.question.passageText} annotations={view.question.textAnnotations.filter(a => a.location === 'PASSAGE')} highlights={view.correctionHighlights.filter(a => a.location === 'PASSAGE')} /><Media items={view.question.media.filter(m => m.placement.scope === 'PASSAGE')} /></div></section>
+            paragraphs={Array.from({ length: navPassage.paragraphCount }, (_, i) => ({ label: `문단 ${i + 1}`, onSelect: () => window.location.assign(paragraphLink(returnTo, navPassage.passageId, i)) }))} />}</header><div className="source-scroll"><AnnotatedText text={view.question.passageText} annotations={view.question.textAnnotations.filter(a => a.location === 'PASSAGE')} highlights={strategyBubble ? strategyMarks : view.correctionHighlights.filter(a => a.location === 'PASSAGE')} /><Media items={view.question.media.filter(m => m.placement.scope === 'PASSAGE')} /></div></section>
       <section className="workbench-pane question-pane" aria-label="문제와 선지"><header className="pane-header question-head"><h2>문제 {view.questionNumber}</h2><h3>{view.question.stem}</h3></header><div className="lab-question-scroll"><p className="lab-choice-hint">{choiceHintText(solving, strategyStageNow, strategyChoices.length)}</p>{(view.question.scenarioText || view.question.media.some(m => m.placement.scope === 'SCENARIO')) && <section className="lab-scenario"><h4>보기</h4><AnnotatedText text={view.question.scenarioText} annotations={view.question.textAnnotations.filter(a => a.location === 'SCENARIO')} highlights={view.correctionHighlights.filter(a => a.location === 'SCENARIO')} /><Media items={view.question.media.filter(m => m.placement.scope === 'SCENARIO')} /></section>}
         <div className="lab-choices-scroll"><ol className="lab-choices" role="radiogroup" aria-label="선지">{options.map(o => <li key={o.choice.choiceId} role="radio" aria-checked={o.selected} aria-disabled={!o.enabled} aria-label={`${circled(o.choice.position)}번 선지`} aria-describedby={`lab-choice-text-${o.choice.position}`} tabIndex={o.choice.choiceId === focusTarget ? 0 : -1} data-selected={o.selected} data-dim={o.dim}
           onClick={() => { if (o.enabled) pickChoice(o.choice); }}
@@ -291,7 +295,6 @@ export function ProblemLabApp(): React.JSX.Element {
             else if (button.id === 'RETRY') void send();
             else if (button.id === 'RESTART') void restart(true);
             else if (button.id === 'NEXT') setReleased(true);
-            else if (button.id === 'STRATEGY_OPEN') { if (strategy.available) { const position = defaultStrategyPosition(strategyState, strategy.choices, view.question.choices.find(c => c.choiceId === view.selectedChoiceId)?.position ?? null); if (position !== null) openStrategyChoice(position); } }
             else if (button.id === 'STRATEGY_NEXT') { if (strategy.available) setStrategyState(nextStrategyParagraph(strategyState, strategy.choices)); }
             else if (button.id === 'END_YES' || button.id === 'END_NO') void send({ type: 'END_START', accept: button.id === 'END_YES' });
             else if (button.id === 'UNDERSTOOD_YES' || button.id === 'UNDERSTOOD_NO') void send({ type: 'UNDERSTOOD', answer: button.id === 'UNDERSTOOD_YES' });
