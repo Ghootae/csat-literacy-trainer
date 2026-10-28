@@ -186,6 +186,10 @@ export function normalizeCells(assessment: any, options: ClaimsOptions): { asses
   if (options.correctChoice && Array.isArray(a.errors) && a.errors.some((e: any) => e?.errorType === 'READING')) {
     a.errors = a.errors.filter((e: any) => e?.errorType !== 'READING'); notes.push('removed READING error from a correct choice');
   }
+  // A READING error on a wrong choice is a content error by the instructions' reading-error rule; the model sometimes leaves INSUFFICIENT beside it.
+  if (!options.correctChoice && a.reconstructability === 'RECONSTRUCTABLE' && Array.isArray(a.errors) && a.errors.some((e: any) => e?.errorType === 'READING') && a.contentAssessment !== 'ERROR') {
+    a.contentAssessment = 'ERROR'; a.insufficiencyKind = 'NONE'; notes.push('contentAssessment set to ERROR: READING error on a wrong choice');
+  }
   return { assessment: a, notes };
 }
 

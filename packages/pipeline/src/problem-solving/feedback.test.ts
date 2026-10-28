@@ -732,12 +732,37 @@ describe('developer connection contracts', () => {
       expect(requests.map(r => r.model)).toEqual([model, model]);
       expect(requests.every(r => r.reasoning.effort === 'medium')).toBe(true);
       expect(requests[0].text.format.schema.required).toContain('studentClaims');
-      expect(requests[0].instructions).toBe(readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.3.md', 'utf8'));
-      expect(call.metadata.promptVersion).toBe('problem-feedback-v5.3');
+      expect(requests[0].instructions).toBe(readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.6.md', 'utf8'));
+      expect(call.metadata.promptVersion).toBe('problem-feedback-v5.6');
       expect(call.metadata.attempts?.map(a => a.model)).toEqual([model, model]);
       expect(call.rawOutput).toEqual({ ...a, readingSummary: expect.any(Object) }); expect(call.metadata.attempts?.[0]?.rawOutput).toEqual(withClaims(a, s));
       expect(assess(s, call.rawOutput).version).toBe('problem-feedback-v4');
     } finally { vi.unstubAllEnvs(); }
+  });
+  it('v5.5 differs from v5.3 only by the two relation-paraphrase lines', () => {
+    const dir = 'packages/pipeline/experiments/problem-solving/';
+    const v53 = readFileSync(`${dir}source-direct-problem-feedback-v5.3.md`, 'utf8').split('\n');
+    const v55 = readFileSync(`${dir}source-direct-problem-feedback-v5.5.md`, 'utf8').split('\n');
+    const added = [
+      '학생 읽기가 선지 말을 같은 뜻의 다른 말로 풀어 쓴 것이거나 선지 말에서 곧바로 따라 나오는 결과를 말한 것이면 EXACT다.',
+      'relation은 학생 근거가 선지를 반박·지지하는지와 따로, 학생이 읽은 뜻이 선지 말과 같은지만으로 정한다. 근거가 선지에 닿지 않는 것은 judgment.holds와 contradiction에서 다룬다.',
+    ];
+    const at = v53.findIndex(l => l.endsWith('닿지 않음 UNTOUCHED.')) + 1;
+    expect(at).toBeGreaterThan(0);
+    expect(v55).toEqual([...v53.slice(0, at), ...added, ...v53.slice(at)]);
+  });
+  it('v5.6 differs from v5.5 by one replaced phrase on line 84 and two added lines', () => {
+    const dir = 'packages/pipeline/experiments/problem-solving/';
+    const v55 = readFileSync(`${dir}source-direct-problem-feedback-v5.5.md`, 'utf8').split('\n');
+    const v56 = readFileSync(`${dir}source-direct-problem-feedback-v5.6.md`, 'utf8').split('\n');
+    const added = [
+      'ADDED와 STRONGER가 함께 후보가 되면, 선지와 학생 이해의 차이가 선지에 없는 내용을 더한 데서 오는지, 같은 내용의 정도·범위·확실성이 세진 데서 오는지 판단한다. 둘 다 있으면 ADDED로 하고 studentReading에 학생이 더한 내용을 밝힌다.',
+      '같은 사태를 다른 말로 나타낸 것은 세진 것이 아니다. 선지가 이미 가리키는 대상을 다른 것으로 바꾼 것은 ADDED가 아니라 OTHER_TARGET이다.',
+    ];
+    const changed = v55.map((l, i) => i === 83 ? l.replace('선지에 없는 원인·조건을 보탬 ADDED', '선지에 없는 내용(원인·조건·방식 등)을 보탬 ADDED') : l);
+    expect(changed[83]).not.toBe(v55[83]);
+    expect(v55[85]).toMatch(/^relation은/);
+    expect(v56).toEqual([...changed.slice(0, 86), ...added, ...changed.slice(86)]);
   });
   for (const correct of [false, true]) it(`repair uses luna: ${correct}`, async () => {
     const s = reply(questioned(correct ? 'C5' : 'C4'));
@@ -1631,6 +1656,33 @@ describe('server settles the conclusion from the three cells (v5.3 stage 3)', ()
         choiceReading: { claims: [cl('c1', '가나다', 'EXACT', '읽음', ref('o1', '가나다'))] }, ground: { kind: 'FACT', ...ref('o1', '가나다') },
         judgment: { verdict: 'INVALID', targetClaimIds: ['c1'], contradiction: '모순', holds: true } };
       expect(() => run(raw, obs, wrong)).toThrow(/reconstructability must follow the three cells/);
+    });
+  });
+
+  describe('8. READING error on a wrong choice is a content error (4th)', () => {
+    const choice = '가나다 라마바';
+    const obs = [{ observationId: 'o1', text: '가나다 라마바' }];
+    const wrong: ClaimsOptions = { correctChoice: false, targetVerdict: 'INVALID', choiceText: choice };
+    const reading = [{ errorId: 'E1', errorType: 'READING', basis: 'STATED', studentEvidence: [ref('o1', '가나다')] }];
+    const base = { claimConflicts: [], boundary: 'NONE', reconstructability: 'RECONSTRUCTABLE', rationaleImpliedVerdict: 'INVALID', contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK',
+      errors: reading as any[], errorHypothesis: null, selectionMismatchQuestion: null, reconstructedPath: ['a'], studentEvidence: [ref('o1', '가나다')], sourceEvidence: source1,
+      studentClaims: [sc('o1', '가나다', 'CONSISTENT')], choiceReading: { claims: [cl('c1', '가나다', 'STRONGER', '읽음', ref('o1', '가나다'))] }, ground: { kind: 'FACT', ...ref('o1', '가나다') },
+      judgment: { verdict: 'INVALID', targetClaimIds: ['c1'], contradiction: '모순', holds: true } };
+    it('wrong choice + READING + INSUFFICIENT becomes ERROR with insufficiencyKind NONE', () => {
+      const r = run(base, obs, wrong);
+      expect(r.a).toMatchObject({ contentAssessment: 'ERROR', insufficiencyKind: 'NONE' });
+      expect(r.notes).toContain('contentAssessment set to ERROR: READING error on a wrong choice');
+    });
+    it('already ERROR adds no note', () => {
+      const r = run({ ...base, contentAssessment: 'ERROR', insufficiencyKind: 'NONE' }, obs, wrong);
+      expect(r.notes).not.toContain('contentAssessment set to ERROR: READING error on a wrong choice');
+    });
+    it('a correct choice, UNKNOWN reconstructability and no READING error are left as they are', () => {
+      expect(normalizeCells(base, { ...wrong, correctChoice: true }).assessment.errors).toEqual([]);
+      const unknown = { ...base, reconstructability: 'UNKNOWN', contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE' };
+      expect(normalizeCells(unknown, wrong).assessment).toMatchObject({ contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE' });
+      const content = { ...base, errors: [{ ...reading[0], errorType: 'CONTENT' }] };
+      expect(normalizeCells(content, wrong).assessment).toMatchObject({ contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' });
     });
   });
 

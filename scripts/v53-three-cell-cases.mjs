@@ -10,7 +10,7 @@ export const cases = [
   // I: negative stem, correct pick, expect INSUFFICIENT (KC CONCLUSION_ONLY, KF BLANK_UNSUPPORTED).
   C('KC', 'I', K, 'C2', 'I-restated-conclusion', '출연했다고 권한이 생기는 건 아님.'),
   C('KF', 'I', K, 'C2', 'I-blank-no-cue', '법인격은 단체에 부여됨.'),
-  // X: over-acceptance probes, negative stem, correct pick. XS STRONGER, XA ADDED -> INSUFFICIENT READING_GAP; XB boundary (two blanks, weak cue).
+  // X: over-acceptance probes, negative stem, correct pick. XS relation EXACT (paraphrase of the choice, user judgment 2026-10-28; was a STRONGER probe), XA ADDED -> INSUFFICIENT READING_GAP; XB boundary (two blanks, weak cue).
   C('XS', 'X', D, 'C2', 'X-stronger-never-broken-down', '②는 카르비도파 때문에 흑질 도파민이 분해되지 않고 계속 남는다는 말인데, 재흡수된 도파민은 분해 효소로 분해된다고 했으니 계속 남을 수는 없어. 그래서 ②가 적절하지 않아.'),
   C('XA', 'X', K, 'C2', 'X-added-still-personal-property', '②는 갑이 출연한 부동산이 아직 갑 개인 것이라서 권한이 생겼다는 말인데, 법인의 자산은 개인이 출자했어도 법인 소유라고 했으니까 틀렸어.'),
   C('XB', 'X', K, 'C2', 'X-two-blanks-weak-cue', '재산을 낸 사람한테 법인격이 생기는 게 아니라 단체에 생기는 거라서 ②는 틀림.'),

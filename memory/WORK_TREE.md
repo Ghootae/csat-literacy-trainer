@@ -43,7 +43,8 @@
 │  │     K4 (나) 확인 단계 실험: K4 1/3, 대조 잘못 수용 0, ② 읽기 차이가 원인   CP-I
 │  │     K4는 현재 동작 수용(읽기 차이), (나) 미연결                            D-0182
 │  │     마지막 설명 칸 유형 레이아웃 v1 채택(진단 글 + 유형별 순서), 판정 11/12  D-0184
-│  │     다음: D1 판정 선지 읽기 관계 보강(XS)·XS·G-B3 재확인·서버 재빌드
+│  │     판정 v5.6 채택(선지 읽기 덧붙임 대 세기, XS ADDED 5/5, 회귀 8/8 유지)    D-0185
+│  │     다음: 서버 재빌드, 관찰(형식 재시도 증가·근거 엄격도)
 │  │     리마인드: luna 자신의 기호 오독(S2-r3) 해결 — 질문 자동 검사 vs 교정 단계 sol   Q-0030
 │  ├─○ 학생용 전환 — 순서 D-0176(실제 학생 확인 뒤 확대·전환)              CP-B·D-0176
 │  └─? 경계 응답 판정 기준(짧지만 충분 vs 대상만 언급)                       Q-0032
@@ -85,6 +86,7 @@
 | D-0090 | [v5 명칭](./decisions/D-0090-problem-evaluator-v5-naming.md) |
 | CP-I | [K4 확인 단계 실험](./checkpoints/2026-10-27-k4-blank-probe.md), [보고](../docs/experiments/k4-blank-probe-2026-10-27/REPORT-human.md) |
 | D-0182 | [v5.3 보강판 채택](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) |
+| D-0185 | [판정 v5.6 선지 읽기 보강](./decisions/D-0185-judge-reading-added-vs-stronger-v56.md), [보고](../docs/experiments/judge-reading-paraphrase-d1-2026-10-28/REPORT-human.md) |
 | D-0184 | [마지막 설명 레이아웃 v1](./decisions/D-0184-end-explanation-layout-v1-adopted.md), [보고](../docs/experiments/end-explanation-layout-2026-10-28/REPORT-human.md) |
 | CP-H | [v5.3 보강 재실행](./checkpoints/2026-10-27-k4-v53-stage3-rerun.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27-b/REPORT-human.md) |
 | CP-G | [v5.3 실측 중단](./checkpoints/2026-10-27-k4-v53-stage2-live.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27/REPORT-human.md) |
