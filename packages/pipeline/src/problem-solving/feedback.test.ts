@@ -1742,6 +1742,14 @@ describe('end explanation layout v1', () => {
     expect(p.sections.reselection).toMatchObject({ type: 'ERROR', correctChoice: false, repair: 'NOT_ASKED' });
     noCase(p);
   });
+  it('layout-v1 input carries asked on each error; the v5.3 input does not', () => {
+    const s = selection('C4', finalReady());
+    const g = assess(s, output(s));
+    const errorsOf = (layoutName?: 'layout-v1') => JSON.parse(feedbackEndExplanationContent(acceptEnd(g), layoutName ? { layout: layoutName } : {})[0]!.text as string).errors as Array<Record<string, unknown>>;
+    expect(errorsOf('layout-v1').length).toBeGreaterThan(0);
+    for (const e of errorsOf('layout-v1')) expect(e).toHaveProperty('asked');
+    for (const e of errorsOf()) expect(e).not.toHaveProperty('asked');
+  });
   it('the layout instructions equal the code block of the design draft', () => {
     const draft = readFileSync(new URL('../../../../docs/experiments/end-explanation-layout-2026-10-28/PROMPT-DRAFT.md', import.meta.url), 'utf8');
     const block = /## 2\. [^\n]*\n\n```\n([\s\S]*?)\n```\n/u.exec(draft)![1];

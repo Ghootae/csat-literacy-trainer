@@ -10,6 +10,7 @@ import type {
   SimpleAttemptInspection, SimpleDialogueView, SimpleHighlightView, SimpleInspection, SimpleMemoRecord, SimpleMessageLabel, SimpleMessageView, SimpleStepInspection,
 } from '../shared/dialogue-simple.js';
 import { simpleStudentLabel } from '../shared/dialogue-simple.js';
+import { bubbleLines, pickLine } from '../shared/bubble-lines.js';
 import { problemLink } from '../shared/problem-link.js';
 
 export const SimpleRespondSchema = z.object({
@@ -97,7 +98,7 @@ export class SimpleDialogueController {
     p.transcript.push({ role: 'student', text: request.text, label: simpleStudentLabel[p.state.stage] });
     p.status = 'PROCESSING';
     r.currentIndex = request.paragraphIndex;
-    const promise = this.evaluate(r, request.paragraphIndex, p, request.text);
+    const promise = this.evaluate(r, request.paragraphIndex, p, request.text, request.transitionId);
     r.transitions.set(request.transitionId, { fingerprint, promise });
     return promise;
   }
@@ -146,12 +147,12 @@ export class SimpleDialogueController {
     return record;
   }
 
-  private async evaluate(r: Runtime, index: number, p: AttemptRuntime, studentText: string): Promise<SimpleDialogueView> {
+  private async evaluate(r: Runtime, index: number, p: AttemptRuntime, studentText: string, transitionId: string): Promise<SimpleDialogueView> {
     const paragraph = r.passage.paragraphs[index]!;
     const input: SimpleEvaluationInput = {
       passage: { title: r.passage.title, paragraphs: r.passage.paragraphs.map(({ paragraphId, text }) => ({ paragraphId, text })) },
       targetParagraph: { paragraphId: paragraph.paragraphId, text: paragraph.text },
-      stage: p.state.stage, dialogue: p.transcript.map(({ role, text, items, copied }) => ({ role, text: items ? `${text}\n${items.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : text, ...(copied ? { copied } : {}) })),
+      stage: p.state.stage, dialogue: p.transcript.filter(m => m.kind !== 'WAIT_DONE').map(({ role, text, items, copied }) => ({ role, text: items ? `${text}\n${items.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : text, ...(copied ? { copied } : {}) })),
       coreParts: p.state.stage === 'INITIAL' ? null : p.state.coreParts, targetError: p.state.stage === 'AFTER_CORRECTION' ? p.state.targetError : null, targetGaps: p.state.stage === 'AFTER_GAP' ? p.state.targetGaps : null,
     };
     try {
@@ -162,7 +163,9 @@ export class SimpleDialogueController {
       p.steps.push(step); p.state = next; p.status = 'IDLE';
       // 원문 옮겨 적기로 판정된 발화는 표시해 두고, 이후 판정 입력에서 학생 이해로 치지 않게 한다.
       if (result.output.category === 'COPY') p.transcript.at(-1)!.copied = true;
-      p.transcript.push(...this.tutorMessages(result.output, stage));
+      // 마무리 말풍선은 화면용이다. 모델 입력(dialogue)에서는 거른다.
+      p.transcript.push({ role: 'tutor', label: '피드백', text: pickLine(bubbleLines.done, transitionId), kind: 'WAIT_DONE' },
+        ...this.tutorMessages(result.output, stage, transitionId, p.state.coreParts.map(c => c.description)));
       this.log(r, index, p, 'STEP', null, result.validationFailures);
     } catch (error) {
       p.status = 'RETRYABLE_ERROR';
@@ -172,10 +175,11 @@ export class SimpleDialogueController {
     return this.view(r);
   }
   /** GAP_QUESTION: 리액션+번호 질문 한 말풍선. 질문 뒤 PRAISE·CLOSE_GAP·CLOSE_NO_RESPONSE: 전체 피드백 + 부분별 핵심 상자 한 말풍선. CLOSE_ERRORS: 도입 -> 오류마다 -> 마무리 피드백 + 부분별 핵심 상자. */
-  private tutorMessages(o: SimpleOutput, stage: SimpleParagraphState['stage']): SimpleMessageView[] {
+  private tutorMessages(o: SimpleOutput, stage: SimpleParagraphState['stage'], key: string, coreDescriptions: string[]): SimpleMessageView[] {
     const tutor = (m: Omit<SimpleMessageView, 'role'>): SimpleMessageView => ({ role: 'tutor', ...m });
     if (o.action === 'GAP_QUESTION') return [tutor({ text: o.message, items: o.gaps.map(g => g.question), label: '생각해 보기' })];
-    if (o.action === 'PRAISE' && (stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP')) return [tutor({ text: o.message, parts: o.corePartSummaries, label: '피드백' })];
+    // 칭찬 문장은 코드가 고른다(o.message는 기록·서랍에만 남는다). 질문 뒤에는 부분별 요약, 첫 요약·다시 쓴 요약에는 기준 핵심 부분 설명을 상자에 둔다.
+    if (o.action === 'PRAISE') return [tutor({ text: pickLine(bubbleLines.praise, key), parts: stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP' ? o.corePartSummaries : coreDescriptions, label: '피드백' })];
     if (o.action === 'CLOSE_GAP') return [tutor({ text: o.message, parts: o.corePartSummaries, label: '빠진 내용' })];
     if (o.action === 'CLOSE_ERRORS') return [tutor({ text: o.message, label: '바로잡기' }),
       ...o.errors.map(e => tutor({ text: e.feedback, quote: e.studentQuote, label: '바로잡기' })),

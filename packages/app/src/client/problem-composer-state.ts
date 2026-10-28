@@ -1,4 +1,6 @@
 import { circled } from './examiner-strategy-state.js';
+import { bubbleLines, pickLine } from '../shared/bubble-lines.js';
+import { bubbleDelayMs } from './bubble-pacing.js';
 import type { FeedbackMessage, FeedbackRequest, FeedbackWorkbenchView } from '../shared/problem-feedback.js';
 
 export type WaitingKind = 'ANSWER' | 'CORRECTION' | 'EXPLANATION' | 'UNKNOWN';
@@ -12,12 +14,14 @@ export function waitingKind(command: FeedbackRequest['command'], previous: Waiti
     default: return 'UNKNOWN';
   }
 }
-export function waitingText(kind: WaitingKind, elapsedMs: number): string {
-  if (elapsedMs >= 25000) return '조금 오래 걸리고 있어. 조금만 더 기다려 줘';
-  if (kind === 'ANSWER') return elapsedMs >= 15000 ? '어디서 판단이 갈렸는지 살펴보고 있어' : elapsedMs >= 6000 ? '원문이랑 하나씩 맞춰 보고 있어' : '네 근거를 읽고 있어';
-  if (kind === 'CORRECTION') return elapsedMs >= 6000 ? '아까 질문이랑 맞춰 보고 있어' : '네 답을 읽고 있어';
-  if (kind === 'EXPLANATION') return '설명을 정리하고 있어';
-  return '네 답을 살펴보고 있어';
+/** key(대기 중 제출의 transitionId)가 같으면 시간 단계가 바뀌어도 같은 번호의 문장을 고른다. */
+export function waitingText(kind: WaitingKind, elapsedMs: number, key: string): string {
+  const set = bubbleLines;
+  if (elapsedMs >= 25000) return pickLine(set.long, key);
+  if (kind === 'ANSWER') return pickLine(elapsedMs >= 15000 ? set.answerLate : elapsedMs >= 6000 ? set.answerMid : set.answerEarly, key);
+  if (kind === 'CORRECTION') return pickLine(elapsedMs >= 6000 ? set.correctionLate : set.correctionEarly, key);
+  if (kind === 'EXPLANATION') return pickLine(set.explanation, key);
+  return pickLine(set.unknown, key);
 }
 export type ButtonId = 'SUBMIT' | 'RESELECT' | 'REQUEST_EXPLANATION' | 'FINISH' | 'RESUME' | 'RETRY' | 'RESTART' | 'END_YES' | 'END_NO' | 'UNDERSTOOD_YES' | 'UNDERSTOOD_NO' | 'NEXT' | 'STRATEGY_OPEN' | 'STRATEGY_NEXT';
 export interface ComposerLocal {
@@ -46,9 +50,9 @@ export function composerState(view: FeedbackWorkbenchView, local: ComposerLocal)
     else buttons.push(...(local.previousButtons ?? [{ id: 'NEXT' as const, label: '다음으로 넘어가기', disabled: true }]).map(b => ({ ...b, disabled: true })));
   }
   const strategy = base.phase === 'COMPLETED' ? local.strategy : undefined;
+  if (base.phase === 'COMPLETED') buttons.push({ id: 'RESTART', label: '다시 풀기', disabled: locked });
   if (strategy && strategy.stage !== 'READING') buttons.push({ id: 'STRATEGY_OPEN', label: '전략 보기', disabled: locked });
   if (strategy?.stage === 'READING') buttons.push({ id: 'STRATEGY_NEXT', label: '다음', disabled: locked });
-  if (base.phase === 'COMPLETED') buttons.push({ id: 'RESTART', label: '다시 풀기', disabled: locked });
   if (local.pending && !local.waiting) buttons.splice(0, buttons.length, { id: 'RETRY', label: '같은 제출 다시 보내기', disabled: false });
   else if (view.evaluationStatus === 'RETRYABLE_ERROR' && !local.pending) buttons.splice(0, buttons.length, { id: 'RESUME', label: '평가 다시 시도', disabled: local.waiting });
   const error = local.error || view.evaluationError;
@@ -69,21 +73,17 @@ export function composerState(view: FeedbackWorkbenchView, local: ComposerLocal)
   };
 }
 
-/** Restored entries start at messages.length; only newly received entries are paced. */
+/** Restored entries start at messages.length; only newly received entries are paced. Pacing is the same under reduced motion; only the dots go away. */
 export function sequenceState(messages: FeedbackMessage[], revealed: number, reducedMotion = false, released = false) {
   let visibleCount = Math.min(revealed, messages.length);
   const needsNextAt = (index: number) => messages[index - 1]?.sequence === 'SECTION' && messages[index]?.sequence === 'CONNECTOR';
   while (visibleCount < messages.length) {
     const next = messages[visibleCount]!;
     if (!next.sequence || next.sequence === 'INSTANT' || next.sequence === 'CLOSING') { visibleCount++; continue; }
-    if (needsNextAt(visibleCount) && !released) break;
-    if (!reducedMotion) break;
-    visibleCount++; released = false;
+    break;
   }
   const complete = visibleCount === messages.length;
   const needsNext = !complete && needsNextAt(visibleCount) && !released;
-  return { visibleCount, complete, needsNext, delayMs: !complete && !needsNext ? (reducedMotion ? 0 : 800) : null,
+  return { visibleCount, complete, needsNext, delayMs: !complete && !needsNext ? bubbleDelayMs(messages[visibleCount - 1]?.text ?? '') : null,
     showDots: !reducedMotion && !complete && !needsNext };
 }
-
-export function instantWaitingDelay(reducedMotion: boolean): number { return reducedMotion ? 0 : 800; }

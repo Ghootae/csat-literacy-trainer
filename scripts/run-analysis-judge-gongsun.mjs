@@ -77,7 +77,7 @@ export function extractDialogues(v4Records, shRecords, passage) {
     groups.get(key).push(r);
   }
   for (const recs of groups.values()) {
-    const ts = recs.map(r => r.transcript.map(t => ({ role: t.role, text: t.text })));
+    const ts = recs.map(r => r.transcript.filter(t => !t.kind).map(t => ({ role: t.role, text: t.text })));
     let seq = 0;
     ts.forEach((t, i) => {
       const dominated = ts.some((o, j) => j !== i && isPrefix(t, o) && (o.length > t.length || j < i));

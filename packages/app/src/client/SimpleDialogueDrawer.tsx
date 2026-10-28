@@ -12,7 +12,7 @@ const AUTOSAVE_MS = 1000;
 
 /** 대화 말풍선. 학생 발화 인용(quote), 번호 목록(items), 부분별 문단 핵심 상자(parts)가 있으면 함께 그린다. */
 export function SimpleBubble({ message: m }: { message: SimpleMessageView }) {
-  return <div className={`chat-message ${m.role}`}><small className="simple-label">{m.label}</small>
+  return <div className={`chat-message ${m.role}${m.kind === 'WAIT_DONE' ? ' simple-wait-done' : ''}`}><small className="simple-label">{m.label}</small>
     {m.quote && <blockquote className="simple-bubble-quote">“{m.quote}”</blockquote>}
     <p>{m.text}</p>{m.items && <ol className="simple-bubble-items">{m.items.map((q, i) => <li key={i}>{q}</li>)}</ol>}{m.parts && <div className="simple-bubble-box"><ol>{m.parts.map((q, i) => <li key={i}>{q}</li>)}</ol></div>}</div>;
 }

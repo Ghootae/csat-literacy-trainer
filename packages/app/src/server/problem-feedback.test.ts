@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { FeedbackEvaluationCall, FeedbackEvaluator, FeedbackSession, SourceDirectProblemBundle } from '@csat/pipeline';
 import { ProblemFeedbackController, type FeedbackRecord, type FeedbackView } from './problem-feedback.js';
 import { appendFeedbackRecord } from './session.js';
+import { bubbleLines } from '../shared/bubble-lines.js';
 
 const source: SourceDirectProblemBundle = {
   schemaVersion: 'source-direct-problem-bundle-v2', questionId: 'Q', questionNumber: 1, passageId: 'P',
@@ -343,7 +344,7 @@ describe('instant acceptance contract', () => {
         errors: [{ errorId: 'E1', errorType: 'CONTENT', description: '내용 오류', studentEvidence, sourceEvidence, basis: 'STATED', question: '원문은 어떻게 말해?' }],
         errorHypothesis: null, selectionMismatchQuestion: null } };
     } });
-    const instants = () => c.get(v.sessionId).transcript.filter(m => m.sequence === 'INSTANT').map(m => m.text);
+    const instants = () => c.get(v.sessionId).transcript.filter(m => m.sequence === 'INSTANT' && !m.kind).map(m => m.text);
     const first = await c.submit(v.sessionId, request(v, { ...select, choiceId: 'C1' }));
     expect(first.evaluationStatus).toBe('PROCESSING');
     expect(first.transcript.at(-1)).toMatchObject({ sequence: 'INSTANT', text: '정답이 아니야. 어디서 생각이 달라졌는지 살펴볼게.' });
@@ -385,3 +386,57 @@ describe('instant acceptance contract', () => {
     expect((await c.settled(v.sessionId)).phase).toBe('AWAITING_END_START');
   });
 });
+
+describe('wait-done bubble', () => {
+  const doneOf = (v: FeedbackView) => v.transcript.filter(m => m.kind === 'WAIT_DONE');
+  it('a successful evaluation puts one WAIT_DONE bubble right before the coach bubbles; the same transition keeps the same line', async () => {
+    const { controller: c, view: v } = setup();
+    const gate = await submitSettled(c, v.sessionId, request(v, select, 'T-done'));
+    const done = doneOf(gate);
+    expect(done).toHaveLength(1);
+    expect(done[0]).toMatchObject({ id: 'done-T-done', role: 'COACH', sequence: 'INSTANT', kind: 'WAIT_DONE' });
+    expect(bubbleLines.done).toContain(done[0]!.text);
+    const index = gate.transcript.findIndex(m => m.kind === 'WAIT_DONE');
+    expect(gate.transcript[index - 1]).toMatchObject({ id: 'instant-T-done' });
+    expect(gate.transcript.slice(index + 1).every(m => m.sequence === 'GATE')).toBe(true);
+    const other = setup(); const gate2 = await submitSettled(other.controller, other.view.sessionId, request(other.view, select, 'T-done'));
+    expect(doneOf(gate2)[0]!.text).toBe(done[0]!.text);
+  });
+  it('a failed evaluation adds no WAIT_DONE bubble, and RESUME success adds exactly one', async () => {
+    let fail = true;
+    const { controller: c, view: v } = setup({ async evaluate(s) { if (fail) throw new Error('mock'); return unknown(s); } });
+    const failed = await submitSettled(c, v.sessionId, request(v, select, 'T-fail'));
+    expect(failed.evaluationStatus).toBe('RETRYABLE_ERROR'); expect(doneOf(failed)).toHaveLength(0);
+    fail = false;
+    const resumed = await submitSettled(c, v.sessionId, request(failed, { type: 'RESUME' }, 'T-resume'));
+    expect(doneOf(resumed).map(m => m.id)).toEqual(['done-T-resume']);
+  });
+  it('end explanation: WAIT_DONE only when the student actually waited for generation', async () => {
+    const waited = deferredEndController();
+    const gate = await submitSettled(waited.c, waited.v.sessionId, request(waited.v));
+    const pending = waited.c.submit(waited.v.sessionId, request(gate, { type: 'END_START', accept: true }, 'accept'));
+    await pending; waited.deferred.complete();
+    const shown = await waited.c.settled(waited.v.sessionId);
+    const dones = doneOf(shown).filter(m => m.id.startsWith('done-end-'));
+    expect(dones).toHaveLength(1);
+    const index = shown.transcript.indexOf(dones[0]!);
+    expect(shown.transcript[index + 1]).toMatchObject({ sequence: 'CONNECTOR' });
+    const early = deferredEndController();
+    const gate2 = await submitSettled(early.c, early.v.sessionId, request(early.v));
+    early.deferred.complete(); await vi.waitFor(() => expect(early.records.at(-1)?.session.endExplanation).not.toBeNull());
+    const shown2 = await submitSettled(early.c, early.v.sessionId, request(gate2, { type: 'END_START', accept: true }, 'accept'));
+    expect(shown2.phase).toBe('AWAITING_UNDERSTANDING');
+    expect(doneOf(shown2).filter(m => m.id.startsWith('done-end-'))).toHaveLength(0);
+  });
+});
+function deferredEndController() {
+  let resolve!: (call: FeedbackEvaluationCall) => void;
+  let snapshot!: FeedbackSession;
+  const deferred = { evaluate: async (s: FeedbackSession): Promise<FeedbackEvaluationCall> => {
+    if (s.evaluationMode !== 'END_EXPLANATION') return unknown(s);
+    snapshot = s;
+    return new Promise<FeedbackEvaluationCall>(yes => { resolve = yes; });
+  }, complete: () => resolve(unknown(snapshot)) };
+  const { controller: c, view: v, records } = setup(deferred);
+  return { c, v, records, deferred };
+}

@@ -5,6 +5,7 @@ import {
   applyFeedbackAssessment, applyFeedbackEndExplanation, createFeedbackSession, feedbackPublicView, feedbackSectionClosing, feedbackSectionLead, submitFeedbackCommand,
   type FeedbackEvaluationCall, type FeedbackEvaluator, type FeedbackSession, type SourceDirectProblemBundle,
 } from '@csat/pipeline';
+import { bubbleLines, pickLine } from '../shared/bubble-lines.js';
 import { loadProblemSolvingBundle } from './content.js';
 import { appendFeedbackRecord } from './session.js';
 import type { FeedbackView, FeedbackWorkbenchView, FeedbackMessage, FeedbackInspection } from '../shared/problem-feedback.js';
@@ -140,7 +141,7 @@ export class ProblemFeedbackController {
       call = await this.evaluator.evaluate(structuredClone(r.session));
       const next = applyFeedbackAssessment(r.session, call.rawOutput);
       const evaluated = { ...r, session: next, transcript: [...r.transcript] };
-      this.appendCoach(evaluated);
+      this.appendCoach(evaluated, `done-${transitionId}`, transitionId);
       this.save(evaluated, 'EVALUATED', transitionId, call, null);
       r.transcript = evaluated.transcript;
       r.session = next; r.evaluationStatus = next.phase === 'AWAITING_EVALUATION' ? 'PROCESSING' : 'IDLE';
@@ -167,7 +168,9 @@ export class ProblemFeedbackController {
         }
         const next = applyFeedbackEndExplanation(r.session, call.rawOutput);
         const evaluated = { ...r, session: next, transcript: [...r.transcript] };
-        this.appendCoach(evaluated);
+        // 학생이 [응]을 누르고 실제로 기다린 경우(평가 대기 상태)에만 마무리 말풍선을 남긴다.
+        if (r.session.phase === 'AWAITING_EVALUATION') this.appendCoach(evaluated, `done-end-${transitionId}`, transitionId);
+        else this.appendCoach(evaluated);
         this.save(evaluated, 'EVALUATED', transitionId, call, null);
         r.session = next; r.transcript = evaluated.transcript;
         if (next.phase === 'AWAITING_UNDERSTANDING') r.evaluationStatus = 'IDLE';
@@ -191,7 +194,15 @@ export class ProblemFeedbackController {
   private require(id: string) {
     const r = this.sessions.get(id); if (!r) throw new Error('문제 풀이 세션을 찾을 수 없습니다.'); return r;
   }
-  private appendCoach(r: Runtime): void {
+  /** doneId가 있으면 코치 말풍선이 실제로 붙을 때 그 앞에 마무리 말풍선(WAIT_DONE) 한 줄을 붙인다. */
+  private appendCoach(r: Runtime, doneId?: string, doneKey?: string): void {
+    const before = r.transcript.length;
+    this.appendCoachMessages(r);
+    if (doneId && r.transcript.length > before && !r.transcript.some(m => m.id === doneId)) {
+      r.transcript.splice(before, 0, { id: doneId, role: 'COACH', phase: r.session.phase, sequence: 'INSTANT', kind: 'WAIT_DONE', text: pickLine(bubbleLines.done, doneKey ?? doneId) });
+    }
+  }
+  private appendCoachMessages(r: Runtime): void {
     if (r.session.phase === 'AWAITING_EVALUATION' || r.session.phase === 'AWAITING_RESELECTION') return;
     const s = r.session;
     const id = `coach-${s.revision}`;

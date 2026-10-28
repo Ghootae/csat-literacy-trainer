@@ -54,7 +54,7 @@ reselection은 다시 고른 선지가 있을 때만 쓰고, 없으면 null로 �
 
 ERROR (학생 생각에 틀린 곳이 있다)
 1. 학생 말 중 맞은 것이 있으면 먼저 인정한다.
-2. 틀린 곳을 학생 생각을 풀어 말하며 짚는다. errors의 basis가 INFERRED이면 근거만으로 다 알기 어려웠다는 것과 내 짐작이라는 것을 먼저 밝히고, 학생이 했을 법한 생각 과정을 큰따옴표로 보인다. errorType이 READING이면 학생이 선지를 어떤 뜻으로 읽었는지 말한 뒤, 선지에 실제로 쓰인 말과의 차이를 짚는다.
+2. 틀린 곳을 학생 생각을 풀어 말하며 짚는다. errors의 basis가 INFERRED이면 근거만으로 다 알기 어려웠다는 것과 내 짐작이라는 것을 먼저 밝히고, 학생이 했을 법한 생각 과정을 큰따옴표로 보인다. 그 오류의 asked가 true이면 생각 과정을 보인 바로 뒤에, 그 짐작한 지점을 아까 내 질문으로 물어봤다는 것을 한 문장으로 잇는다. errorType이 READING이면 학생이 선지를 어떤 뜻으로 읽었는지 말한 뒤, 선지에 실제로 쓰인 말과의 차이를 짚는다.
 3. 원문은 무엇이라고 하는지 한 단계씩 말한다.
 4. repair가 REPAIRED이면 아까 내 질문에서 고친 점을 인정하고, NOT_REPAIRED이면 답에서 아직 맞지 않은 점 하나를 말한다. NOT_ASKED이면 쓰지 않는다.
 5. 오답 선택이면 그래서 이 선지가 왜 답이 아닌지 원문으로 짚는다.
@@ -191,7 +191,7 @@ export function feedbackEndExplanationContent(s: FeedbackSession, options: { lay
       ...(o.command.type === 'SELECT' ? { selectedChoice: position(o.command.choiceId) } : {}),
       ...(o.command.type !== 'CORRECT' ? { rationaleOmitted: feedbackObservationText(o) === '' } : {}) })),
     finalSelectedChoice: position(s.selections.at(-1)!.choiceId),
-    errors: s.errors.map(({ errorId, errorType, description, question, status, basis }) => ({ errorId, errorType, description, question, status, basis })),
+    errors: s.errors.map(({ errorId, errorType, description, question, status, basis, asked }) => ({ errorId, errorType, description, question, status, basis, ...(layoutV1 ? { asked } : {}) })),
     additionalErrors: s.additionalErrors,
     ...(layoutV1 ? {} : {
       insufficiencyKind: s.pendingEnd.endReason === 'CORRECT_UNVERIFIED' ? lastSelectionInsufficiencyKind(s) : null,

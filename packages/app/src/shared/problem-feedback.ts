@@ -64,6 +64,8 @@ export interface FeedbackView {
 
 export interface FeedbackMessage {
   sequence?: 'INSTANT' | 'GATE' | 'CONNECTOR' | 'SECTION' | 'QUESTION' | 'CLOSING';
+  /** 모델 판정을 기다리던 '생각 중' 말풍선 자리에 남는 마무리 말풍선. 모델 입력·판정에는 쓰지 않는다. */
+  kind?: 'WAIT_DONE';
   id: string; role: 'STUDENT' | 'COACH'; text: string; phase: FeedbackView['phase'];
 }
 export interface FeedbackWorkbenchView extends FeedbackView {

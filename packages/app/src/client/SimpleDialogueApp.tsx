@@ -7,6 +7,7 @@ import { parseInitialParagraph, problemLink } from './dev-part-nav-links.js';
 import { AnnotatedText } from './annotated-text.js';
 import { SimpleBubble, SimpleDialogueDrawer } from './SimpleDialogueDrawer.js';
 import { getSimple, navigateSimple, newAttemptSimple, respondSimple, startSimple } from './simple-dialogue-api.js';
+import { bubbleDelayMs } from './bubble-pacing.js';
 import { simpleWaitingText } from './simple-waiting.js';
 import './simple-dialogue.css';
 
@@ -20,9 +21,11 @@ export function SimpleDialogueApp(): React.JSX.Element {
   const [error, setError] = useState('');
   const [drawer, setDrawer] = useState(false);
   const [mobilePane, setMobilePane] = useState('chat');
-  const [pending, setPending] = useState<{ text: string; stage: SimpleStage; startedAt: number } | null>(null);
+  const [pending, setPending] = useState<{ text: string; stage: SimpleStage; startedAt: number; transitionId: string } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [seenAt, setSeenAt] = useState(() => Date.now());
+  const [reveal, setReveal] = useState({ key: '', count: 0 });
+  const [reducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const inFlight = useRef(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const accept = (next: SimpleDialogueView) => {
@@ -60,7 +63,20 @@ export function SimpleDialogueApp(): React.JSX.Element {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [waiting]);
-  useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' }); }, [view?.current.messages.length, busy, waiting]);
+  // 새로 받은 메시지만 하나씩 보인다. 복원(새로고침·문단 이동·새 시도)된 메시지는 한 번에 보인다. 학생 발화와 마무리 말풍선은 바로 보인다.
+  const messages = view?.current.messages ?? [];
+  const revealKey = view ? `${view.sessionId}:${view.current.index}:${view.current.attemptNumber}` : '';
+  let visible = reveal.key === revealKey ? Math.min(reveal.count, messages.length) : messages.length;
+  while (visible < messages.length && (messages[visible]!.role === 'student' || messages[visible]!.kind === 'WAIT_DONE')) visible++;
+  const sequenceDone = visible === messages.length;
+  const sequenceDelay = sequenceDone ? null : bubbleDelayMs(messages[visible - 1]?.text ?? '');
+  useEffect(() => {
+    if (reveal.key !== revealKey || reveal.count !== visible) setReveal({ key: revealKey, count: visible });
+    if (sequenceDelay === null) return;
+    const timer = window.setTimeout(() => setReveal({ key: revealKey, count: visible + 1 }), sequenceDelay);
+    return () => window.clearTimeout(timer);
+  }, [revealKey, visible, sequenceDelay]);
+  useEffect(() => { chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' }); }, [visible, messages.length, busy, waiting]);
 
   if (!passages) return <main className="dialogue-shell"><p>불러오는 중…</p>{error && <p role="alert">{error}</p>}</main>;
   if (!view) return <main className="dialogue-shell dialogue-start">
@@ -83,11 +99,12 @@ export function SimpleDialogueApp(): React.JSX.Element {
   const last = current.index + 1 >= view.paragraphs.length;
   const submit = () => {
     const text = draft.trim();
-    if (!text || busy || !current.canRespond) return;
-    setPending({ text, stage: current.stage, startedAt: Date.now() });
+    if (!text || busy || !current.canRespond || !sequenceDone) return;
+    const transitionId = crypto.randomUUID();
+    setPending({ text, stage: current.stage, startedAt: Date.now(), transitionId });
     void run(async () => {
       try {
-        const next = await respondSimple(view.sessionId, { transitionId: crypto.randomUUID(), paragraphIndex: current.index, text });
+        const next = await respondSimple(view.sessionId, { transitionId, paragraphIndex: current.index, text });
         if (next.current.evaluationStatus !== 'RETRYABLE_ERROR') setDrafts(old => ({ ...old, [current.index]: '' }));
         accept(next);
       } finally { setPending(null); }
@@ -124,25 +141,26 @@ export function SimpleDialogueApp(): React.JSX.Element {
         <section className="simple-restated" aria-label="지금까지 내 요약"><small>지금까지 내 요약</small>
           <p>{current.restatedSummary === null ? '첫 요약을 보내면 여기에 정리돼.' : current.restatedSummary === '' ? '아직 이 문단에 대한 내용이 없어.' : current.restatedSummary}</p></section>
         <div className="chat-scroll" ref={chatRef} aria-label="대화 기록" aria-live="polite">
-          {!current.messages.length && <p className="chat-welcome">이 문단의 중심 내용과 관계를 자기 말로 써 보세요.</p>}
-          {current.messages.map((m, i) => <div className="chat-round" key={i}>
+          {!messages.length && <p className="chat-welcome">이 문단의 중심 내용과 관계를 자기 말로 써 보세요.</p>}
+          {messages.slice(0, visible).map((m, i) => <div className="chat-round" key={i}>
             <SimpleBubble message={m} /></div>)}
+          {!sequenceDone && !reducedMotion && <div className="chat-round"><article className="chat-message tutor simple-waiting simple-sequence-waiting" role="status" aria-label="다음 이야기 준비 중"><span className="simple-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></article></div>}
           {pending && <div className="chat-round"><SimpleBubble message={{ role: 'student', text: pending.text, label: simpleStudentLabel[pending.stage] }} /></div>}
           {waiting && <div className="chat-round"><article className="chat-message tutor simple-waiting" role="status" aria-live="polite"><small className="simple-label">피드백</small>
-            <p>{simpleWaitingText(pending?.stage ?? current.stage, Math.max(0, now - (pending?.startedAt ?? seenAt)))}<span className="simple-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></article></div>}
+            <p>{simpleWaitingText(pending?.stage ?? current.stage, Math.max(0, now - (pending?.startedAt ?? seenAt)), pending?.transitionId ?? view.sessionId)}<span className="simple-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></article></div>}
           {current.evaluationError && <p role="alert" className="chat-notice">{current.evaluationError}</p>}
         </div>
         <footer className="chat-footer">{error && <p className="err" role="alert">{error}</p>}
-          {current.done ? <div className="chat-progress-actions"><p>이 문단은 끝났어요.</p><div>
+          {current.done ? !sequenceDone ? null : <div className="chat-progress-actions"><p>이 문단은 끝났어요.</p><div>
             {!last && <button className="primary" disabled={busy} onClick={() => go(current.index + 1)}>다음 문단</button>}
             {last && view.problemUrl && <button className="primary" onClick={() => window.location.assign(view.problemUrl!)}>문제 풀기</button>}
             {last && !view.allDone && <small>끝나지 않은 문단이 있어요. 위의 문단 번호로 이동하세요.</small>}</div></div>
             : <div className="dialogue-compose"><label className="simple-sr-only" htmlFor="simple-response">이 문단의 중심 내용과 관계를 설명해 주세요.</label>
-              <textarea id="simple-response" value={draft} disabled={busy || !current.canRespond} placeholder="내 생각을 적어보세요…"
+              <textarea id="simple-response" value={draft} disabled={busy || !current.canRespond || !sequenceDone} placeholder="내 생각을 적어보세요…"
                 onChange={e => setDrafts(old => ({ ...old, [current.index]: e.target.value }))}
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submit(); } }} />
               <div className="dialogue-compose-row"><small>⌘/Ctrl + Enter</small>
-                <button className="primary" disabled={busy || !current.canRespond || !draft.trim()} onClick={submit}>{failed ? '다시 시도' : '보내기'}</button></div></div>}
+                <button className="primary" disabled={busy || !current.canRespond || !sequenceDone || !draft.trim()} onClick={submit}>{failed ? '다시 시도' : '보내기'}</button></div></div>}
         </footer>
       </section>
     </div>

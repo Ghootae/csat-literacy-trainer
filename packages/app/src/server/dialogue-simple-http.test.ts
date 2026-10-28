@@ -67,7 +67,7 @@ describe('dialogue-simple HTTP', () => {
     expect(responded.status).toBe(200);
     const view = await responded.json() as SimpleDialogueView;
     expect(view.current).toMatchObject({ done: true, evaluationStatus: 'IDLE' });
-    expect(view.current.messages.at(-1)).toEqual({ role: 'tutor', text: '잘 잡았어', label: '피드백' });
+    expect(view.current.messages.at(-1)).toMatchObject({ role: 'tutor', text: expect.stringMatching(/잘했어~$/), label: '피드백' });
     const last = passage.paragraphs.length - 1;
     const nav = await (await send(`${base}${root}/${created.sessionId}/navigate`, 'POST', { paragraphIndex: last })).json() as SimpleDialogueView;
     expect(nav.currentIndex).toBe(last);

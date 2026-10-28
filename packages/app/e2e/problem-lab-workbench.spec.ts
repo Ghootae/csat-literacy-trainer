@@ -16,6 +16,17 @@ const evaluator: FeedbackEvaluator = { async evaluate(s) {
   const observation = s.observations.at(-1)!;
   const command = observation.command;
   const text = command.type === 'CORRECT' ? command.text : (command.type === 'SELECT' || command.type === 'RATIONALE') && command.rationale.mode === 'PROVIDED' ? command.rationale.text : '';
+  if (text.includes('페이싱')) {
+    // 말풍선 운영 규칙 시험 전용: 현재 판정 스키마에 맞는 최소 출력.
+    await new Promise(resolve => setTimeout(resolve, 3500));
+    const evidence = [{ observationId: observation.observationId, quote: text }];
+    const unknownKind = !text.includes('오류');
+    return { metadata, rawOutput: { mode: 'SELECTION', boundary: 'NONE', reason: unknownKind ? '확인할 수 없음' : '내용 오류', reconstructability: unknownKind ? 'UNKNOWN' : 'RECONSTRUCTABLE',
+      reconstructedPath: unknownKind ? [] : [text], rationaleImpliedVerdict: unknownKind ? 'UNKNOWN' : 'INVALID', contentAssessment: unknownKind ? 'UNKNOWN' : 'ERROR', insufficiencyKind: 'NONE', studentEvidence: evidence,
+      sourceEvidence: unknownKind ? [] : [{ location: 'PASSAGE', quote: s.source.passage.slice(0, 30), mediaId: null, visualObservation: null }],
+      errors: unknownKind ? [] : [{ errorId: 'E1', errorType: 'CONTENT', description: '관계 오류', studentEvidence: evidence, sourceEvidence: [{ location: 'PASSAGE', quote: s.source.passage.slice(0, 30), mediaId: null, visualObservation: null }], basis: 'STATED', question: '원문과 비교하면 어떻게 달라지나요?' }],
+      errorHypothesis: null, selectionMismatchQuestion: null } };
+  }
   if (text.includes('느린 판정')) await new Promise(resolve => setTimeout(resolve, 6000));
   if (text.includes('두 번 통신')) {
     const count = failures.get(observation.observationId) ?? 0;
@@ -442,7 +453,7 @@ test('direct choice flow on the negative-stem question: only the answer has a st
   await expect(radio(page, 5)).toHaveAttribute('aria-disabled', 'false');
   await expect(composer.getByRole('button', { name: /번 선택/ })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /학습 맵으로 돌아가기/ })).toHaveCount(0);
-  const main = composer.locator('.lab-primary-actions button').first();
+  const main = composer.locator('.lab-primary-actions button').last();
   await expect(main).toHaveText('전략 보기');
   await expect(composer.getByRole('button', { name: '다시 풀기', exact: true })).toBeVisible();
   const boxes = [(await main.boundingBox())!];
@@ -474,4 +485,55 @@ test('direct choice flow on the negative-stem question: only the answer has a st
   await expect(chat).toContainText('선지를 누르면 출제자가 어떤 전략으로 정답 선지에 함정을 만들었는지 검토할 수 있어.');
   await expect(main).toHaveText('전략 보기');
   await expect(chat.locator('small', { hasText: '출제자 전략' })).toHaveCount(0);
+});
+
+// 말풍선 운영 규칙: 마무리 말풍선이 남고, 순차 말풍선 간격은 앞 말풍선 길이에 비례하며 동작 줄이기에서도 유지된다.
+const GATE_KEYS = ['다 살펴봤어', '근거만으로는', '정답은 ⑤번이야.', '하나씩 같이 볼까?'];
+const doneLines = ['다 살펴봤어.', '생각이 끝났어.', '정리가 끝났어.'];
+async function watchBubbles(page: Page) {
+  await page.evaluate(() => {
+    const seen: Record<string, number> = {};
+    (window as unknown as { __seen: Record<string, number> }).__seen = seen;
+    const scan = () => document.querySelectorAll('.chat-message.tutor').forEach(el => {
+      const text = el.textContent ?? '';
+      for (const key of ['다 살펴봤어', '생각이 끝났어', '정리가 끝났어', '근거만으로는', '정답은 ⑤번이야.', '하나씩 같이 볼까?']) if (text.includes(key) && !(key in seen)) seen[key] = performance.now();
+    });
+    new MutationObserver(scan).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+}
+async function bubbleGaps(page: Page) {
+  const seen = await page.evaluate(() => (window as unknown as { __seen: Record<string, number> }).__seen);
+  const done = Math.min(...doneLines.map(l => seen[l.replace('.', '')] ?? Infinity));
+  const at = [done, seen['근거만으로는']!, seen['정답은 ⑤번이야.']!, seen['하나씩 같이 볼까?']!];
+  return at.slice(1).map((t, i) => t - at[i]!);
+}
+for (const reduced of [false, true]) {
+  test(`gate bubbles are at least 1200ms apart ${reduced ? 'under reduced motion (no dots)' : 'with dots'}`, async ({ page }) => {
+    if (reduced) await page.emulateMedia({ reducedMotion: 'reduce' });
+    await open(page); await watchBubbles(page);
+    await select(page, 1, '페이싱 모호한 근거야.');
+    await expect(page.getByLabel('대화 기록')).toContainText('하나씩 같이 볼까?', { timeout: 15000 });
+    const gaps = await bubbleGaps(page);
+    console.log(`MEASURE ${reduced ? 'reduced' : 'normal'} done→note→answer→ask`, JSON.stringify(gaps.map(Math.round)));
+    for (const gap of gaps) expect(gap).toBeGreaterThanOrEqual(1150);
+    // 점 말풍선은 동작 줄이기에서만 없다.
+    if (reduced) await expect(page.locator('.lab-sequence-waiting')).toHaveCount(0);
+  });
+}
+test('the thinking bubble gives way to a closing bubble that stays, also after reload', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 }); await open(page);
+  await select(page, 1, '페이싱 오류 관계가 반대야.');
+  await expect(page.locator('.lab-waiting')).toContainText(/.+/);
+  const waitingText = await page.locator('.lab-waiting p').first().textContent();
+  expect(['네 근거를 읽고 있어', '네가 쓴 이유를 차근차근 읽고 있어', '네 생각을 따라가 보고 있어'].some(t => waitingText!.startsWith(t))).toBe(true);
+  const done = page.locator('.chat-message.lab-wait-done');
+  await expect(done).toHaveCount(1, { timeout: 15000 });
+  expect(doneLines).toContain(await done.locator('p').textContent());
+  await expect(page.locator('.lab-waiting')).toHaveCount(0);
+  await expect(page.getByLabel('대화 기록')).toContainText('원문과 비교하면 어떻게 달라지나요?', { timeout: 10000 });
+  await page.screenshot({ path: '/Users/mac/Projects/csat-literacy-problem-solving-mvp/docs/handoffs/2026-10-28-bubble-pacing-problem.png' });
+  const text = await done.locator('p').textContent();
+  await page.reload();
+  await expect(page.locator('.chat-message.lab-wait-done')).toHaveCount(1);
+  await expect(page.locator('.chat-message.lab-wait-done p')).toHaveText(text!);
 });

@@ -4,8 +4,9 @@ import { getExaminerStrategy, getFeedback, markExaminerStrategyView, startFeedba
 import { FeedbackDrawer } from './FeedbackDrawer.js';
 import './problem-feedback-workbench.css';
 import { Markdown } from './markdown.js';
-import { composerState, sequenceState, instantWaitingDelay, waitingKind, waitingText, type WaitingKind, type ButtonId } from './problem-composer-state.js';
+import { composerState, sequenceState, waitingKind, waitingText, type WaitingKind, type ButtonId } from './problem-composer-state.js';
 import { choiceHintText, circled, currentStrategyPosition, defaultStrategyPosition, initialStrategyState, strategyLeadText, nextStrategyParagraph, openStrategy, seenStrategyPositions, strategyBubbles, strategyStage } from './examiner-strategy-state.js';
+import { bubbleDelayMs } from './bubble-pacing.js';
 import { AnnotatedText } from './annotated-text.js';
 import { DevPartNav } from './DevPartNav.js';
 import { paragraphLink, resolveReturnTo } from './dev-part-nav-links.js';
@@ -162,14 +163,14 @@ export function ProblemLabApp(): React.JSX.Element {
   const correctionRevealed = !!view && sequence.visibleCount === view.transcript.length;
   useEffect(() => { if (correctionRevealed) scrollToHighlight(); }, [view?.sessionId, view?.revision, pane, reducedMotion, correctionRevealed]);
 
-  const instant = view?.transcript.findLast(m => m.sequence === 'INSTANT');
+  const instant = view?.transcript.findLast(m => m.sequence === 'INSTANT' && !m.kind);
   const pendingInstant = pending?.command.type === 'SELECT' && pending.command.rationale.mode === 'PROVIDED';
   useEffect(() => {
     setInstantWaitReady(false);
     if (!instant || !pendingInstant) return;
-    const timer = window.setTimeout(() => setInstantWaitReady(true), instantWaitingDelay(reducedMotion));
+    const timer = window.setTimeout(() => setInstantWaitReady(true), bubbleDelayMs(instant.text));
     return () => window.clearTimeout(timer);
-  }, [instant?.id, pendingInstant, reducedMotion]);
+  }, [instant?.id, pendingInstant]);
   useEffect(() => {
     if (!waiting && !pending) return;
     const timer = window.setInterval(() => setWaitClock(clock => ({ ...clock, elapsedMs: Date.now() - clock.startedAt })), 1000);
@@ -272,10 +273,10 @@ export function ProblemLabApp(): React.JSX.Element {
             items[(at + step + items.length) % items.length]?.focus();
           }}><span>{o.choice.position}</span><div><p id={`lab-choice-text-${o.choice.position}`}>{o.choice.text}{o.tag && <em className={`lab-choice-tag${o.tag === '봤음' ? ' is-seen' : ''}`}>{o.tag}</em>}</p><Media items={view.question.media.filter(m => m.placement.scope === 'CHOICE' && m.placement.choiceId === o.choice.choiceId)} /></div></li>)}</ol></div></div></section>
       <section className="workbench-pane chat-pane" aria-label="응답과 피드백"><header className="pane-header"><h2>생각을 나누는 공간</h2><small>{view.phase === 'COMPLETED' ? '풀이 완료' : correction ? '생각 다시 살피기' : view.phase === 'AWAITING_RESELECTION' ? '마지막 선택' : '선택과 근거'}</small></header>
-        <div className="chat-scroll lab-chat-scroll" ref={chat} aria-label="대화 기록">{view.transcript.slice(0, sequence.visibleCount).map(entry => <article className={`chat-message ${entry.role === 'STUDENT' ? 'student' : 'tutor'}`} key={entry.id}><small>{entry.role === 'STUDENT' ? '나의 응답' : entry.phase === 'AWAITING_CORRECTION' ? '함께 확인하기' : '피드백'}</small>{entry.role === 'COACH' ? <Markdown text={entry.text} /> : <p>{entry.text}</p>}{correction && firstHighlight && entry.role === 'COACH' && entry.phase === 'AWAITING_CORRECTION' && entry.id === view.transcript.at(-1)?.id && <button onClick={() => { setPane(firstHighlight.location === 'PASSAGE' ? 'source' : 'problem'); scrollToHighlight(); }}>지문에서 보기</button>}</article>)}
+        <div className="chat-scroll lab-chat-scroll" ref={chat} aria-label="대화 기록">{view.transcript.slice(0, sequence.visibleCount).map(entry => <article className={`chat-message ${entry.role === 'STUDENT' ? 'student' : 'tutor'}${entry.kind === 'WAIT_DONE' ? ' lab-wait-done' : ''}`} key={entry.id}><small>{entry.role === 'STUDENT' ? '나의 응답' : entry.kind !== 'WAIT_DONE' && entry.phase === 'AWAITING_CORRECTION' ? '함께 확인하기' : '피드백'}</small>{entry.kind === 'WAIT_DONE' ? <p>{entry.text}</p> : entry.role === 'COACH' ? <Markdown text={entry.text} /> : <p>{entry.text}</p>}{correction && firstHighlight && entry.role === 'COACH' && entry.phase === 'AWAITING_CORRECTION' && entry.id === view.transcript.at(-1)?.id && <button onClick={() => { setPane(firstHighlight.location === 'PASSAGE' ? 'source' : 'problem'); scrollToHighlight(); }}>지문에서 보기</button>}</article>)}
           {sequence.showDots && <article className="chat-message tutor lab-sequence-waiting" role="status" aria-label="다음 이야기 준비 중"><span className="lab-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></article>}
           {pendingText && !view.transcript.some(m => m.id === `student-${pending?.transitionId}`) && <article className="chat-message student"><small>나의 응답 · 전송 확인 중</small><p>{pendingText}</p></article>}
-          {(waiting || pending) && (!pendingInstant || (instant?.id === `instant-${pending?.transitionId}` && (reducedMotion || instantWaitReady))) && <article className="chat-message tutor lab-waiting" role="status" aria-live="polite"><small>피드백</small><p>{waitingText(waitClock.kind, waitClock.elapsedMs)}<span className="lab-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></article>}
+          {(waiting || pending) && (!pendingInstant || (instant?.id === `instant-${pending?.transitionId}` && instantWaitReady)) && <article className="chat-message tutor lab-waiting" role="status" aria-live="polite"><small>피드백</small><p>{waitingText(waitClock.kind, waitClock.elapsedMs, pending?.transitionId ?? view.sessionId)}<span className="lab-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></article>}
           {view.result?.answerRevealed && view.result.answer && <article className="lab-answer-reveal"><h3>정답 {view.result.answer.position}번</h3><p>{view.result.answer.text}</p></article>}
           {view.phase === 'COMPLETED' && view.transcript.filter(m => m.role === 'COACH').at(-1)?.sequence !== 'CLOSING' && <p className="lab-terminal">이 문제 풀이는 여기까지야.</p>}
           {strategyStageNow && <article className="chat-message tutor"><small>피드백</small><p>{strategy.available ? strategyLeadText(strategy.stemPolarity) : ''}</p></article>}

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { FeedbackWorkbenchView } from '../shared/problem-feedback.js';
-import { composerState, sequenceState, instantWaitingDelay, waitingKind, waitingText, type ComposerLocal, type WaitingKind } from './problem-composer-state.js';
+import { bubbleLines, pickLine } from '../shared/bubble-lines.js';
+import { bubbleDelayMs } from './bubble-pacing.js';
+import { composerState, sequenceState, waitingKind, waitingText, type ComposerLocal, type WaitingKind } from './problem-composer-state.js';
 const view = (phase: FeedbackWorkbenchView['phase']): FeedbackWorkbenchView => ({
   phase, evaluationStatus: 'IDLE', evaluationError: null, selectedChoiceId: 'C1',
   postRepairOptions: ['RESELECT', 'REQUEST_EXPLANATION'],
@@ -76,12 +78,12 @@ describe('composerState', () => {
     expect(state.input.disabled).toBe(true); expect(state.actions.buttons[0]?.disabled).toBe(false);
     expect(composerState(view('AWAITING_CORRECTION'), { ...local, draft: '', omit: true }).actions.buttons[0]?.disabled).toBe(true);
   });
-  it('puts the strategy open/next button in the primary slot and keeps restart fixed, without number or return buttons', () => {
+  it('puts restart before the strategy open/next primary button, which stays rightmost, without number or return buttons', () => {
     const labels = (strategy?: ComposerLocal['strategy'], phase: FeedbackWorkbenchView['phase'] = 'COMPLETED') => composerState(view(phase), { ...local, strategy }).actions.buttons.map(b => b.label);
     expect(labels()).toEqual(['다시 풀기']);
-    expect(labels({ stage: 'INTRO', position: null })).toEqual(['전략 보기', '다시 풀기']);
-    expect(labels({ stage: 'READING', position: 2 })).toEqual(['다음', '다시 풀기']);
-    expect(labels({ stage: 'ENDED', position: 2 })).toEqual(['전략 보기', '다시 풀기']);
+    expect(labels({ stage: 'INTRO', position: null })).toEqual(['다시 풀기', '전략 보기']);
+    expect(labels({ stage: 'READING', position: 2 })).toEqual(['다시 풀기', '다음']);
+    expect(labels({ stage: 'ENDED', position: 2 })).toEqual(['다시 풀기', '전략 보기']);
     expect(labels({ stage: 'INTRO', position: null }, 'AWAITING_SELECTION')).toEqual(['제출']);
     expect(composerState(view('COMPLETED'), local).actions).not.toHaveProperty('strategyChoices');
   });
@@ -97,14 +99,20 @@ describe('composerState', () => {
 });
 describe('waitingText', () => {
   const times = [0, 5999, 6000, 14999, 15000, 24999, 25000];
-  const long = '조금 오래 걸리고 있어. 조금만 더 기다려 줘';
-  const expected: Record<WaitingKind, string[]> = {
-    ANSWER: ['네 근거를 읽고 있어', '네 근거를 읽고 있어', '원문이랑 하나씩 맞춰 보고 있어', '원문이랑 하나씩 맞춰 보고 있어', '어디서 판단이 갈렸는지 살펴보고 있어', '어디서 판단이 갈렸는지 살펴보고 있어', long],
-    CORRECTION: ['네 답을 읽고 있어', '네 답을 읽고 있어', '아까 질문이랑 맞춰 보고 있어', '아까 질문이랑 맞춰 보고 있어', '아까 질문이랑 맞춰 보고 있어', '아까 질문이랑 맞춰 보고 있어', long],
-    EXPLANATION: [...Array<string>(6).fill('설명을 정리하고 있어'), long],
-    UNKNOWN: [...Array<string>(6).fill('네 답을 살펴보고 있어'), long],
+  const sets = bubbleLines;
+  const expected: Record<WaitingKind, (readonly string[])[]> = {
+    ANSWER: [sets.answerEarly, sets.answerEarly, sets.answerMid, sets.answerMid, sets.answerLate, sets.answerLate, sets.long],
+    CORRECTION: [sets.correctionEarly, sets.correctionEarly, sets.correctionLate, sets.correctionLate, sets.correctionLate, sets.correctionLate, sets.long],
+    EXPLANATION: [...Array<readonly string[]>(6).fill(sets.explanation), sets.long],
+    UNKNOWN: [...Array<readonly string[]>(6).fill(sets.unknown), sets.long],
   };
-  for (const kind of Object.keys(expected) as WaitingKind[]) it.each(times.map((time, i) => [time, expected[kind][i]] as const))(`${kind} at %ims`, (time, text) => expect(waitingText(kind, time)).toBe(text));
+  for (const kind of Object.keys(expected) as WaitingKind[]) it.each(times.map((time, i) => [time, expected[kind][i]!] as const))(`${kind} at %ims picks from its set and is stable per key`, (time, set) => {
+    for (const key of ['T1', 'T2', 'T3', 'T4']) {
+      expect(set).toContain(waitingText(kind, time, key));
+      expect(waitingText(kind, time, key)).toBe(waitingText(kind, time, key));
+      expect(waitingText(kind, time, key)).toBe(pickLine(set, key));
+    }
+  });
   it('maps commands and reuses the preceding kind only for RESUME', () => {
     expect(waitingKind({ type: 'SELECT', choiceId: 'C1', rationale: { mode: 'OMITTED' } })).toBe('ANSWER');
     expect(waitingKind({ type: 'RATIONALE', rationale: { mode: 'OMITTED' } })).toBe('ANSWER');
@@ -119,24 +127,24 @@ describe('end sequence controls and pacing', () => {
   const messages = (kinds: ('GATE' | 'CONNECTOR' | 'SECTION' | 'QUESTION' | 'CLOSING')[]) => kinds.map((sequence, i) => ({ id: String(i), role: 'COACH' as const, text: '내용', phase: 'AWAITING_UNDERSTANDING' as const, sequence }));
   const coaching = messages(['CONNECTOR', 'SECTION', 'CONNECTOR', 'SECTION', 'CONNECTOR', 'SECTION', 'QUESTION']);
   it('paces every connector and section, pauses after choices, automatically asks after answer', () => {
-    expect(sequenceState(coaching, 0)).toMatchObject({ visibleCount: 0, delayMs: 800, showDots: true });
-    expect(sequenceState(coaching, 1)).toMatchObject({ visibleCount: 1, delayMs: 800 });
+    expect(sequenceState(coaching, 0)).toMatchObject({ visibleCount: 0, delayMs: 1200, showDots: true });
+    expect(sequenceState(coaching, 1)).toMatchObject({ visibleCount: 1, delayMs: bubbleDelayMs('내용') });
     for (const count of [2, 4]) {
       expect(sequenceState(coaching, count)).toMatchObject({ needsNext: true, delayMs: null, showDots: false });
-      expect(sequenceState(coaching, count, false, true)).toMatchObject({ visibleCount: count, needsNext: false, delayMs: 800, showDots: true });
+      expect(sequenceState(coaching, count, false, true)).toMatchObject({ visibleCount: count, needsNext: false, delayMs: bubbleDelayMs('내용'), showDots: true });
     }
-    expect(sequenceState(coaching, 6)).toMatchObject({ needsNext: false, delayMs: 800 });
+    expect(sequenceState(coaching, 6)).toMatchObject({ needsNext: false, delayMs: bubbleDelayMs('내용') });
     expect(sequenceState(coaching, 7)).toMatchObject({ complete: true, delayMs: null });
   });
-  it('reduced motion skips delay and dots while retaining both next boundaries', () => {
-    expect(sequenceState(coaching, 0, true)).toMatchObject({ visibleCount: 2, needsNext: true, showDots: false, delayMs: null });
-    expect(sequenceState(coaching, 2, true, true)).toMatchObject({ visibleCount: 4, needsNext: true, showDots: false });
-    expect(sequenceState(coaching, 4, true, true)).toMatchObject({ visibleCount: 7, complete: true, showDots: false });
+  it('reduced motion keeps the same pacing and boundaries and only drops the dots', () => {
+    expect(sequenceState(coaching, 0, true)).toMatchObject({ visibleCount: 0, needsNext: false, showDots: false, delayMs: 1200 });
+    expect(sequenceState(coaching, 2, true)).toMatchObject({ visibleCount: 2, needsNext: true, showDots: false, delayMs: null });
+    expect(sequenceState(coaching, 2, true, true)).toMatchObject({ visibleCount: 2, needsNext: false, showDots: false, delayMs: bubbleDelayMs('내용') });
   });
   it('restored entries and closing appear immediately', () => {
     expect(sequenceState(coaching, coaching.length)).toMatchObject({ complete: true, visibleCount: 7 });
     expect(sequenceState(messages(['CLOSING']), 0)).toMatchObject({ complete: true, visibleCount: 1 });
-    expect(sequenceState(messages(['GATE', 'GATE']), 0, true)).toMatchObject({ complete: true, visibleCount: 2 });
+    expect(sequenceState(messages(['GATE', 'GATE']), 2, true)).toMatchObject({ complete: true, visibleCount: 2 });
   });
   it.each([false, true])('gate buttons wait for both bubbles, complete=%s', complete => {
     const state = composerState(view('AWAITING_END_START'), { ...local, sequence: { complete, needsNext: false } });
@@ -161,9 +169,27 @@ describe('end sequence controls and pacing', () => {
 });
 
 
-it('reveals INSTANT without delay and delays waiting by 800ms unless motion is reduced', () => {
-  const messages = [{ id: 'instant', role: 'COACH' as const, phase: 'AWAITING_EVALUATION' as const, sequence: 'INSTANT' as const, text: '정답이야! 근거도 같이 살펴볼게.' }];
-  expect(sequenceState(messages, 0, false, false).visibleCount).toBe(1);
-  expect(instantWaitingDelay(false)).toBe(800);
-  expect(instantWaitingDelay(true)).toBe(0);
+it('reveals INSTANT without delay; the next bubble waits for a delay that grows with the previous text', () => {
+  const messages = [{ id: 'instant', role: 'COACH' as const, phase: 'AWAITING_EVALUATION' as const, sequence: 'INSTANT' as const, text: '정답이야! 근거도 같이 살펴볼게.' },
+    { id: 'gate', role: 'COACH' as const, phase: 'AWAITING_END_START' as const, sequence: 'GATE' as const, text: '정답은 ⑤번이야.' }];
+  expect(sequenceState(messages, 0, false, false)).toMatchObject({ visibleCount: 1, delayMs: bubbleDelayMs(messages[0]!.text) });
+  expect(sequenceState(messages, 0, true, false).delayMs).toBe(sequenceState(messages, 0, false, false).delayMs);
+});
+describe('bubbleDelayMs', () => {
+  it('is 1200ms for empty or short text and caps at 2500ms', () => {
+    expect(bubbleDelayMs('')).toBe(1200);
+    expect(bubbleDelayMs('가'.repeat(10))).toBe(1300);
+    expect(bubbleDelayMs('가'.repeat(130))).toBe(2500);
+    expect(bubbleDelayMs('가'.repeat(1000))).toBe(2500);
+  });
+});
+describe('pickLine', () => {
+  const set = ['a', 'b', 'c'];
+  it('is stable per key, covers the set across keys, and avoid moves to the next item', () => {
+    expect(pickLine(set, 'T1')).toBe(pickLine(set, 'T1'));
+    expect(new Set(Array.from({ length: 60 }, (_, i) => pickLine(set, `id-${i}`))).size).toBe(3);
+    const picked = pickLine(set, 'T1');
+    expect(pickLine(set, 'T1', picked)).toBe(set[(set.indexOf(picked) + 1) % 3]);
+    expect(pickLine(set, 'T1', 'zzz')).toBe(picked);
+  });
 });
