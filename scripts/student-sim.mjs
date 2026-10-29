@@ -29,7 +29,7 @@ const HELP = `학생 역할 시뮬레이션 도구 (문단 요약·문제 풀이
   para-new-attempt --key <키>
         새 시도(처음부터 다시 쓰기). 끝나지 않은 시도는 중단으로 남는다.
 
-문제 (문제 v5.6, 마지막 설명 레이아웃 v1)
+문제 (문제 v5.7-2, 마지막 설명 레이아웃 v1)
   prob-start --question <questionId> --label <이름>
         세션을 만들고 키, 지문·발문·선지를 출력한다.
   prob-select --key <키> --choice <1~5> (--text "<근거>" | --no-rationale)
@@ -45,6 +45,18 @@ const HELP = `학생 역할 시뮬레이션 도구 (문단 요약·문제 풀이
   prob-understood --key <키> (--yes | --no)       "이해됐어?"에 응/아니
   prob-resume   --key <키>        판정 실패 뒤 [평가 다시 시도]
   prob-restart  --key <키>        [다시 풀기]. 같은 문항의 새 세션(새 키)을 만든다.
+
+지시문 버전 (run 단위 설정, 기본은 제품 기본값: 문단 v4.8, 문제 v5.7-2)
+  --para-prompt <경로> --para-prompt-version <이름>
+        문단 판정 지시문을 바꾼다. 권장: --para-prompt-version paragraph-simple-holistic-v4.9
+        (경로 packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.9.md).
+        v4.9면 para-say 출력에 각 질문의 givesRelation도 보인다.
+  --prob-prompt <경로> --prob-prompt-version <이름>
+        문제 판정(ASSESSMENT) 지시문을 바꾼다. 예: --prob-prompt-version problem-feedback-v5.6
+        (경로 packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.6.md, 이전 기본값).
+  처음 쓰는 명령에서 run.json에 저장되고, 이후 같은 run의 모든 명령이 그 값을 쓴다.
+  저장된 값과 다른 값을 주거나, 세션이 이미 있는 run에 새로 지정하면 오류로 멈춘다. 경로·이름은 한 쌍으로 준다.
+  config               이 run의 지시문 설정을 출력하고 evaluator 생성까지만 확인한다(모델 호출 없음).
 
 공통
   show --key <키>      지금까지 전체 대화(학생·튜터)
@@ -84,6 +96,19 @@ function openRun(opts) {
     const cap = Number(opts['cap-usd']);
     if (!(cap > 0)) throw new Error('--cap-usd 는 양수여야 합니다.');
     manifest.capUsd = cap;
+  }
+  const config = manifest.config ?? (manifest.config = {});
+  for (const [kind, label] of [['para', '문단'], ['prob', '문제']]) {
+    const p = opts[`${kind}-prompt`]; const v = opts[`${kind}-prompt-version`];
+    if (p === undefined && v === undefined) continue;
+    if (typeof p !== 'string' || typeof v !== 'string') throw new Error(`--${kind}-prompt 와 --${kind}-prompt-version 은 둘 다 값과 함께 주어야 합니다.`);
+    const stored = config[kind];
+    if (stored) {
+      if (stored.promptPath !== p || stored.promptVersion !== v) throw new Error(`이 run의 ${label} 지시문 설정은 이미 ${stored.promptPath} (${stored.promptVersion}) 로 저장되어 있어 바꿀 수 없습니다.`);
+    } else {
+      if (Object.values(manifest.sessions).some(x => x.kind === kind)) throw new Error(`이 run에는 ${label} 세션이 이미 있어 지시문 설정을 새로 지정할 수 없습니다(기본값으로 만든 기록과 섞임).`);
+      config[kind] = { promptPath: p, promptVersion: v };
+    }
   }
   const paths = {
     paraDir: resolve(dir, 'logs/dialogue'),
@@ -155,13 +180,26 @@ function printCost(run) {
 }
 
 // ---------- 서비스 로딩 ----------
+// run.json의 config가 없으면 evaluator 옵션도 없다 = 제품 기본값.
+async function makeParaEvaluator(run) {
+  const c = run.manifest.config.para;
+  if (!c) return undefined;
+  const { OpenAISimpleEvaluator } = await import(resolve(REPO, 'packages/pipeline/dist/index.js'));
+  return new OpenAISimpleEvaluator({ promptPath: c.promptPath, promptVersion: c.promptVersion });
+}
+async function makeProbEvaluator(run) {
+  const c = run.manifest.config.prob;
+  if (!c) return undefined;
+  const { OpenAIFeedbackEvaluator } = await import(resolve(REPO, 'packages/pipeline/dist/index.js'));
+  return new OpenAIFeedbackEvaluator({ promptPath: c.promptPath, promptVersion: c.promptVersion });
+}
 async function loadPara(run) {
   const mod = await import(resolve(REPO, 'packages/app/dist/server/dialogue-simple.js'));
-  return new mod.SimpleDialogueController({ logDirectory: run.paths.paraDir });
+  return new mod.SimpleDialogueController({ logDirectory: run.paths.paraDir, evaluator: await makeParaEvaluator(run) });
 }
-async function loadProb() {
+async function loadProb(run) {
   const mod = await import(resolve(REPO, 'packages/app/dist/server/problem-feedback.js'));
-  return new mod.ProblemFeedbackController();
+  return new mod.ProblemFeedbackController({ evaluator: await makeProbEvaluator(run) });
 }
 
 // ---------- 출력 ----------
@@ -243,6 +281,9 @@ async function paraTurn(run, key, s, ctl, before, view, extra = {}) {
   if (c.evaluationStatus === 'RETRYABLE_ERROR') out.push('(판정 실패) ' + c.evaluationError);
   for (const m of fresh) out.push(renderPara(m));
   const info = step ? { stage: step.stage, action: step.action, category: step.output.category, corePartsCovered: step.output.corePartsCovered } : {};
+  if (/v4\.9/.test(run.manifest.config.para?.promptVersion ?? '') && step?.output.gaps?.length) {
+    out.push(`-- [개발자 확인] gaps givesRelation: ${step.output.gaps.map((g, i) => `${i}=${g.givesRelation}`).join(', ')}`);
+  }
   out.push(`-- 판정(마지막 단계): ${step ? `단계=${info.stage}, action=${info.action}, category=${info.category}, corePartsCovered=${JSON.stringify(info.corePartsCovered)}` : '없음'}`);
   out.push(`-- 다음 단계=${c.stage}, 끝남=${c.done}${attempt.state.outcome ? ' (결과 ' + attempt.state.outcome + ')' : ''}`);
   out.push(`-- 지금 할 수 있는 것: ${paraButtons(view).join(' / ') || '없음'}`);
@@ -303,7 +344,7 @@ function printProbTurn(key, view, before, extra = {}) {
 async function probSubmit(run, opts, command) {
   const s = session(run, opts, 'prob');
   checkCap(run);
-  const ctl = await loadProb();
+  const ctl = await loadProb(run);
   await probRestore(ctl, run, s.key, s);
   const cur = ctl.get(s.sessionId);
   const before = cur.transcript.length;
@@ -323,6 +364,11 @@ async function main() {
   const run = openRun(opts);
 
   if (cmd === 'cost') return printCost(run);
+  if (cmd === 'config') {
+    await makeParaEvaluator(run); await makeProbEvaluator(run);
+    console.log(`[지시문 설정] 문단=${JSON.stringify(run.manifest.config.para ?? '제품 기본값(v4.8)')} 문제=${JSON.stringify(run.manifest.config.prob ?? '제품 기본값(v5.7-2)')}`);
+    return;
+  }
 
   if (cmd === 'para-start') {
     const passageId = need(opts, 'passage'); const n = Number(need(opts, 'paragraph')); const label = need(opts, 'label');
@@ -365,7 +411,7 @@ async function main() {
 
   if (cmd === 'prob-start') {
     const questionId = need(opts, 'question'); const label = need(opts, 'label');
-    const ctl = await loadProb();
+    const ctl = await loadProb(run);
     const view = ctl.start(questionId);
     const key = nextKey(run, 'prob');
     run.manifest.sessions[key] = { kind: 'prob', label, questionId, sessionId: view.sessionId, startedAt: new Date().toISOString() };
@@ -383,7 +429,7 @@ async function main() {
   }
   if (cmd === 'prob-restart') {
     const s = session(run, opts, 'prob');
-    const ctl = await loadProb();
+    const ctl = await loadProb(run);
     const view = ctl.start(s.questionId);
     const key = nextKey(run, 'prob');
     run.manifest.sessions[key] = { kind: 'prob', label: s.label, questionId: s.questionId, sessionId: view.sessionId, restartedFrom: s.key, startedAt: new Date().toISOString() };
@@ -395,7 +441,7 @@ async function main() {
   if (cmd === 'prob-select') {
     const s = session(run, opts, 'prob');
     const n = Number(need(opts, 'choice'));
-    const ctl = await loadProb();
+    const ctl = await loadProb(run);
     const rt = await probRestore(ctl, run, s.key, s);
     const choice = rt.session.source.choices.find(c => c.position === n);
     if (!choice) throw new Error('--choice 는 선지 번호(1~5)여야 합니다.');
@@ -407,7 +453,7 @@ async function main() {
   }
   if (cmd === 'prob-correct') {
     const s = session(run, opts, 'prob');
-    const ctl = await loadProb();
+    const ctl = await loadProb(run);
     const rt = await probRestore(ctl, run, s.key, s);
     if (!rt.session.activeErrorId) throw new Error('지금은 교정 질문이 없습니다.');
     return probSubmit(run, opts, { type: 'CORRECT', errorId: rt.session.activeErrorId, text: need(opts, 'text') });
@@ -436,7 +482,7 @@ async function main() {
       console.log(out.join('\n'));
       console.log(JSON.stringify({ key, attempts: insp.attempts.map(a => ({ n: a.attemptNumber, status: a.status, messages: a.messages })) }));
     } else {
-      const ctl = await loadProb();
+      const ctl = await loadProb(run);
       const rt = await probRestore(ctl, run, key, s);
       console.log([`[문제 ${key} 전체 대화] 라벨=${s.label} ${s.questionId} 단계=${rt.session.phase}`, ...rt.transcript.map(renderProb)].join('\n'));
       console.log(JSON.stringify({ key, phase: rt.session.phase, transcript: rt.transcript }));

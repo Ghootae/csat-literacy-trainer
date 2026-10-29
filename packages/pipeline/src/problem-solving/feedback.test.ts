@@ -83,6 +83,20 @@ describe('hardening regressions', () => {
     expect(call.metadata.attempts?.map(a => a.kind)).toEqual(['ASSESSMENT', 'CONCLUSION_AUDIT']);
     expect(assess(s, call.rawOutput).errors.map(e => e.kind)).toContain('SELECTION_EXECUTION');
   });
+  it('판정 지시문 경로·버전: 옵션이 없으면 v5.7-2, 주면 그 경로와 버전을 쓴다', async () => {
+    const seen = async (options: { promptPath?: string; promptVersion?: string }) => {
+      const s = selection(); const a = output(s); const requests: { instructions: string }[] = [];
+      const call = await new OpenAIFeedbackEvaluator({ ...options, transport: { async create(request) {
+        requests.push(request as never); return response(a);
+      } } }).evaluate(s);
+      return { instructions: requests[0]!.instructions, version: call.metadata.promptVersion };
+    };
+    const v572 = readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.7-2.md', 'utf8');
+    const v57Path = 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.7.md';
+    expect(await seen({})).toEqual({ instructions: v572, version: 'problem-feedback-v5.7-2' });
+    expect(await seen({ promptPath: v57Path, promptVersion: 'problem-feedback-v5.7' }))
+      .toEqual({ instructions: readFileSync(v57Path, 'utf8'), version: 'problem-feedback-v5.7' });
+  });
   it('I1 missing latest-response proof is a contract failure; latest submission is explicitly attributed', () => {
     const r = stored('cycles/I1-repair.json'); const raw = r.steps[0].call.rawOutput;
     const text = r.steps[0].command.text; const s = reply(questioned(), text);
@@ -732,8 +746,8 @@ describe('developer connection contracts', () => {
       expect(requests.map(r => r.model)).toEqual([model, model]);
       expect(requests.every(r => r.reasoning.effort === 'medium')).toBe(true);
       expect(requests[0].text.format.schema.required).toContain('studentClaims');
-      expect(requests[0].instructions).toBe(readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.6.md', 'utf8'));
-      expect(call.metadata.promptVersion).toBe('problem-feedback-v5.6');
+      expect(requests[0].instructions).toBe(readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.7-2.md', 'utf8'));
+      expect(call.metadata.promptVersion).toBe('problem-feedback-v5.7-2');
       expect(call.metadata.attempts?.map(a => a.model)).toEqual([model, model]);
       expect(call.rawOutput).toEqual({ ...a, readingSummary: expect.any(Object) }); expect(call.metadata.attempts?.[0]?.rawOutput).toEqual(withClaims(a, s));
       expect(assess(s, call.rawOutput).version).toBe('problem-feedback-v4');
@@ -763,6 +777,18 @@ describe('developer connection contracts', () => {
     expect(changed[83]).not.toBe(v55[83]);
     expect(v55[85]).toMatch(/^relation은/);
     expect(v56).toEqual([...changed.slice(0, 86), ...added, ...changed.slice(86)]);
+  });
+  it('v5.7-2 differs from v5.6 only in the title and the correction-question rules', () => {
+    const dir = 'packages/pipeline/experiments/problem-solving/';
+    const v56 = readFileSync(`${dir}source-direct-problem-feedback-v5.6.md`, 'utf8').split('\n');
+    const v572 = readFileSync(`${dir}source-direct-problem-feedback-v5.7-2.md`, 'utf8').split('\n');
+    expect(v572[0]).toBe('# 문제 풀이 판정 v5.7-2');
+    expect(v572.slice(1, 256)).toEqual(v56.slice(1, 256));
+    expect(v572.slice(277)).toEqual(v56.slice(267));
+    const rules = v572.slice(256, 277).join('\n');
+    expect(rules).toContain('원문의 답 표현은 질문에 넣지');
+    expect(rules).toContain('두 갈래 질문은 대상 오류(TARGET)와 선지 읽기 오류(READING)에서만 쓴다.');
+    expect(rules).toContain('예/아니오로 답할 수 있는 질문');
   });
   for (const correct of [false, true]) it(`repair uses luna: ${correct}`, async () => {
     const s = reply(questioned(correct ? 'C5' : 'C4'));

@@ -20,7 +20,8 @@ export const SimpleErrorSchema = z.object({
   feedback: z.string(),
 }).strict();
 
-export const SimpleGapSchema = z.object({ corePartIndex: z.number().int(), description: z.string(), sourceQuote: z.string(), question: z.string(), asksOneThing: z.boolean() }).strict();
+/** givesRelation은 v4.9 지시문의 점검 칸이다. v4.8 출력(칸 없음)도 통과해야 하므로 optional이고, 요청 스키마에는 v4.9일 때만 required로 넣는다(evaluator.ts). */
+export const SimpleGapSchema = z.object({ corePartIndex: z.number().int(), description: z.string(), sourceQuote: z.string(), question: z.string(), asksOneThing: z.boolean(), givesRelation: z.boolean().optional() }).strict();
 
 export const SimpleOutputSchema = z.object({
   category: SimpleCategorySchema,

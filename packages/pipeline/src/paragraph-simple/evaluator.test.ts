@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import OpenAI from 'openai';
-import { OpenAISimpleEvaluator, SimpleEvaluationError, evaluateSimple, type SimpleEvaluator, type SimpleModelCall, type SimpleTransport } from './evaluator.js';
+import { OpenAISimpleEvaluator, simpleRequestJsonSchema, SimpleEvaluationError, evaluateSimple, type SimpleEvaluator, type SimpleModelCall, type SimpleTransport } from './evaluator.js';
 import type { SimpleEvaluationInput, SimpleOutput } from './schema.js';
 
 const text = '광합성은 빛에너지를 화학에너지로 바꾼다.';
@@ -88,6 +88,22 @@ describe('evaluateSimple', () => {
 });
 
 describe('OpenAISimpleEvaluator (모의 전송)', () => {
+  it('요청 스키마: v4.8은 gaps에 givesRelation이 없고, v4.9 지시문일 때만 required로 있다', async () => {
+    const gapOf = (schema: unknown) => (schema as { properties: { gaps: { items: { properties: Record<string, unknown>; required: string[] } } } }).properties.gaps.items;
+    const schemaSent = async (options: { promptPath?: string; promptVersion?: string }) => {
+      const create = vi.fn<SimpleTransport['create']>(async () => ({ status: 'completed', output_text: JSON.stringify(good) }));
+      await new OpenAISimpleEvaluator({ transport: { create }, ...options }).complete(input);
+      return (create.mock.calls[0]![0].text as { format: { schema: unknown } }).format.schema;
+    };
+    const v48 = gapOf(await schemaSent({}));
+    expect(Object.keys(v48.properties)).not.toContain('givesRelation');
+    expect(v48.required).toEqual(['corePartIndex', 'description', 'sourceQuote', 'question', 'asksOneThing']);
+    expect(await schemaSent({ promptVersion: 'paragraph-simple-holistic-v4.8' })).toEqual(await schemaSent({}));
+    const v49 = gapOf(await schemaSent({ promptPath: 'packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.9.md', promptVersion: 'paragraph-simple-holistic-v4.9' }));
+    expect(v49.properties['givesRelation']).toEqual({ type: 'boolean' });
+    expect(v49.required).toEqual([...v48.required, 'givesRelation']);
+    expect(JSON.stringify(simpleRequestJsonSchema(false))).toBe(JSON.stringify(await schemaSent({})));
+  });
   it('프롬프트·strict 스키마·store=false로 호출하고 사용량을 기록한다', async () => {
     const create = vi.fn<SimpleTransport['create']>(async () => ({ status: 'completed', output_text: JSON.stringify(good),
       usage: { input_tokens: 10, output_tokens: 5, input_tokens_details: { cached_tokens: 3 } } }));

@@ -92,7 +92,7 @@ export const FEEDBACK_REPAIR_MODEL = 'gpt-6-luna';
 
 export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
   private client: OpenAI | undefined;
-  constructor(private readonly options: { model?: string; timeoutMs?: number; maxOutputTokens?: number; maxRetries?: number; transport?: FeedbackTransport; endLayout?: EndExplanationLayout } = {}) {}
+  constructor(private readonly options: { model?: string; timeoutMs?: number; maxOutputTokens?: number; maxRetries?: number; transport?: FeedbackTransport; endLayout?: EndExplanationLayout; promptPath?: string; promptVersion?: string } = {}) {}
   async evaluate(s: FeedbackSession): Promise<FeedbackEvaluationCall> {
     const started = performance.now();
     const attempts: NonNullable<FeedbackEvaluationCall['metadata']['attempts']> = [];
@@ -103,7 +103,7 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
     let validationFeedback: string | null = null;
     const aggregate = (): FeedbackEvaluationCall => ({
       rawOutput: candidate,
-      metadata: { provider: 'openai', model, promptVersion: 'problem-feedback-v5.6',
+      metadata: { provider: 'openai', model, promptVersion: this.options.promptVersion ?? 'problem-feedback-v5.7-2',
         durationMs: Math.round(performance.now() - started), attempts,
         inputTokens: attempts.reduce((n, a) => n + a.inputTokens, 0),
         outputTokens: attempts.reduce((n, a) => n + a.outputTokens, 0),
@@ -144,7 +144,7 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
         if (validationFeedback) content.push({ type: 'input_text', text: JSON.stringify({ validationFeedback }) });
         candidate = await request('ASSESSMENT',
           s.evaluationMode === 'REPAIR' ? FeedbackRepairAssessmentSchema : FeedbackSelectionAssessmentSchema,
-          readFileSync(resolve(process.cwd(), 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.6.md'), 'utf8'), content);
+          readFileSync(resolve(process.cwd(), this.options.promptPath ?? 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.7-2.md'), 'utf8'), content);
         if (s.evaluationMode === 'SELECTION') {
           const choice = s.source.choices.find(c => c.choiceId === s.selections.at(-1)?.choiceId)!;
           const options = { correctChoice: choice.choiceId === s.source.answerChoiceId, targetVerdict: s.choiceImpliedVerdict, choiceText: choice.text };

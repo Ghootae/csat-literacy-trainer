@@ -99,6 +99,7 @@ export function validateSimpleOutput(input: SimpleEvaluationInput, output: Simpl
       else if (covered[g.corePartIndex] !== false) problems.push(`gaps[${i}].corePartIndex가 가리키는 부분의 corePartsCovered가 false여야 한다.`);
       usedGapParts.add(g.corePartIndex);
       if (!g.asksOneThing) problems.push(`gaps[${i}].asksOneThing이 true여야 한다(한 가지만 묻도록 질문을 고쳐라).`);
+      if (g.givesRelation === true) problems.push(`gaps[${i}].givesRelation이 true다. 학생이 쓰지 않은 관계 요소를 빼고 질문을 다시 써서 false로 만든다.`);
       if (!g.description.trim()) problems.push(`gaps[${i}].description이 비어 있다.`);
       if (!g.question.trim()) problems.push(`gaps[${i}].question이 비어 있다.`);
       if (g.sourceQuote === '' || !input.targetParagraph.text.includes(g.sourceQuote)) problems.push(`gaps[${i}].sourceQuote가 대상 문단의 연속 부분 문자열이 아니다.`);

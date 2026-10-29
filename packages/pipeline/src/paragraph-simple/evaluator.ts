@@ -75,6 +75,15 @@ export interface SimpleTransport {
 export const PARAGRAPH_SIMPLE_DEFAULT_MODEL = 'gpt-6-luna';
 export const PARAGRAPH_SIMPLE_DEFAULT_PROMPT_PATH = 'packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.8.md';
 
+/** 모델 요청용 JSON Schema. OpenAI strict는 모든 칸이 required여야 하므로 gaps.givesRelation은 v4.9 지시문일 때만 required로 넣고, 아니면 뺀다(v4.8 요청은 이전과 같다). */
+export function simpleRequestJsonSchema(withGivesRelation: boolean): Record<string, unknown> {
+  const schema = z.toJSONSchema(SimpleOutputSchema) as { properties: { gaps: { items: { properties: Record<string, unknown>; required: string[] } } } };
+  const gap = schema.properties.gaps.items;
+  if (withGivesRelation) gap.required = [...gap.required, 'givesRelation'];
+  else delete gap.properties['givesRelation'];
+  return schema;
+}
+
 export class OpenAISimpleEvaluator implements SimpleEvaluator {
   private client: OpenAI | undefined;
   constructor(private readonly options: { model?: string; timeoutMs?: number; maxOutputTokens?: number; transport?: SimpleTransport; promptPath?: string; promptVersion?: string } = {}) {}
@@ -86,7 +95,7 @@ export class OpenAISimpleEvaluator implements SimpleEvaluator {
       model, store: false, reasoning: { effort: 'medium' }, max_output_tokens: this.options.maxOutputTokens ?? 8000,
       instructions: readFileSync(resolve(process.cwd(), this.options.promptPath ?? PARAGRAPH_SIMPLE_DEFAULT_PROMPT_PATH), 'utf8'),
       input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(input) }] }] as never,
-      text: { format: { type: 'json_schema', name: 'paragraph_simple_holistic', strict: true, schema: z.toJSONSchema(SimpleOutputSchema) } },
+      text: { format: { type: 'json_schema', name: 'paragraph_simple_holistic', strict: true, schema: simpleRequestJsonSchema(/v4\.9/.test(`${this.options.promptVersion ?? ''} ${this.options.promptPath ?? ''}`)) } },
     }, { timeout: this.options.timeoutMs ?? 60_000, maxRetries: 0 });
     if (response.status !== 'completed') throw new Error(`평가 응답 미완료: ${response.status}`);
     let raw: unknown = response.output_text;

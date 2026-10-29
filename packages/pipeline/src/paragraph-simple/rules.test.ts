@@ -189,6 +189,12 @@ describe('출력 검증', () => {
     expect(rawCheck(input('INITIAL'), multi).problems).toEqual([]);
     expect(rawCheck(input('INITIAL'), { ...multi, errors: [errFb, errFb] }).problems.join()).toMatch(/겹친다/);
   });
+  it('v4.9: gaps[].givesRelation이 true면 거부하고, 칸이 없거나 false면 통과한다', () => {
+    const q: SimpleOutput = { ...base, category: 'GAP', corePartsCovered: [true, false], gaps: [gap], action: 'GAP_QUESTION', message: gap.question };
+    expect(rawCheck(input('INITIAL'), q).problems).toEqual([]);
+    expect(rawCheck(input('INITIAL'), { ...q, gaps: [{ ...gap, givesRelation: false }] }).problems).toEqual([]);
+    expect(rawCheck(input('INITIAL'), { ...q, gaps: [{ ...gap, givesRelation: true }] }).problems.join()).toMatch(/gaps\[0\]\.givesRelation이 true다/);
+  });
   it('v4.2: GAP_QUESTION의 gaps는 담지 못한 부분과 짝지어지고 개수·asksOneThing이 맞아야 한다', () => {
     const q: SimpleOutput = { ...base, category: 'GAP', gaps: [gap], action: 'GAP_QUESTION', corePartsCovered: [true, false] };
     expect(rawCheck(input('INITIAL'), q).problems).toEqual([]);
