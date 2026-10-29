@@ -83,7 +83,7 @@ describe('hardening regressions', () => {
     expect(call.metadata.attempts?.map(a => a.kind)).toEqual(['ASSESSMENT', 'CONCLUSION_AUDIT']);
     expect(assess(s, call.rawOutput).errors.map(e => e.kind)).toContain('SELECTION_EXECUTION');
   });
-  it('판정 지시문 경로·버전: 옵션이 없으면 v5.7-2, 주면 그 경로와 버전을 쓴다', async () => {
+  it('판정 지시문 경로·버전: 옵션이 없으면 v5.8, 주면 그 경로와 버전을 쓴다', async () => {
     const seen = async (options: { promptPath?: string; promptVersion?: string }) => {
       const s = selection(); const a = output(s); const requests: { instructions: string }[] = [];
       const call = await new OpenAIFeedbackEvaluator({ ...options, transport: { async create(request) {
@@ -91,9 +91,9 @@ describe('hardening regressions', () => {
       } } }).evaluate(s);
       return { instructions: requests[0]!.instructions, version: call.metadata.promptVersion };
     };
-    const v572 = readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.7-2.md', 'utf8');
+    const v58 = readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.8.md', 'utf8');
     const v57Path = 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.7.md';
-    expect(await seen({})).toEqual({ instructions: v572, version: 'problem-feedback-v5.7-2' });
+    expect(await seen({})).toEqual({ instructions: v58, version: 'problem-feedback-v5.8' });
     expect(await seen({ promptPath: v57Path, promptVersion: 'problem-feedback-v5.7' }))
       .toEqual({ instructions: readFileSync(v57Path, 'utf8'), version: 'problem-feedback-v5.7' });
   });
@@ -746,8 +746,8 @@ describe('developer connection contracts', () => {
       expect(requests.map(r => r.model)).toEqual([model, model]);
       expect(requests.every(r => r.reasoning.effort === 'medium')).toBe(true);
       expect(requests[0].text.format.schema.required).toContain('studentClaims');
-      expect(requests[0].instructions).toBe(readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.7-2.md', 'utf8'));
-      expect(call.metadata.promptVersion).toBe('problem-feedback-v5.7-2');
+      expect(requests[0].instructions).toBe(readFileSync('packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.8.md', 'utf8'));
+      expect(call.metadata.promptVersion).toBe('problem-feedback-v5.8');
       expect(call.metadata.attempts?.map(a => a.model)).toEqual([model, model]);
       expect(call.rawOutput).toEqual({ ...a, readingSummary: expect.any(Object) }); expect(call.metadata.attempts?.[0]?.rawOutput).toEqual(withClaims(a, s));
       expect(assess(s, call.rawOutput).version).toBe('problem-feedback-v4');
@@ -789,6 +789,18 @@ describe('developer connection contracts', () => {
     expect(rules).toContain('원문의 답 표현은 질문에 넣지');
     expect(rules).toContain('두 갈래 질문은 대상 오류(TARGET)와 선지 읽기 오류(READING)에서만 쓴다.');
     expect(rules).toContain('예/아니오로 답할 수 있는 질문');
+  });
+  it('v5.8 differs from v5.7-2 only in the title, the ground span and holds rule, and the one-step definition rule', () => {
+    const dir = 'packages/pipeline/experiments/problem-solving/';
+    const v572 = readFileSync(`${dir}source-direct-problem-feedback-v5.7-2.md`, 'utf8').split('\n');
+    const v58 = readFileSync(`${dir}source-direct-problem-feedback-v5.8.md`, 'utf8').split('\n');
+    expect(v58[0]).toBe('# 문제 풀이 판정 v5.8');
+    expect(v58.slice(1, 163)).toEqual(v572.slice(1, 163));
+    expect(v58[167]).toBe(v572[163]);
+    expect(v58.slice(171, 329)).toEqual(v572.slice(165, 323));
+    expect(v58.slice(330)).toEqual(v572.slice(324));
+    expect(v58.slice(163, 171).join('\n')).toContain('holds는 ground에 인용한 학생 말이 참이라고 할 때');
+    expect(v58[329]).toContain('정의의 부정');
   });
   for (const correct of [false, true]) it(`repair uses luna: ${correct}`, async () => {
     const s = reply(questioned(correct ? 'C5' : 'C4'));
@@ -1355,7 +1367,8 @@ describe('three-cell judgment (v5.3)', () => {
       judgment: judgment('INVALID'), studentClaims: [studentClaim('법인격의 부여 대상은 단체')], ...over });
     it('K4: a blank filled with a cue is SUPPORTED', () => {
       expect(judge(k4Assessment(), k4, {})).toBeNull();
-      expect(() => judge(k4Assessment({ contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' }), k4, {})).toThrow(/must be SUPPORTED/);
+      // A model INSUFFICIENT is kept, not rejected (v5.8: the server never raises it).
+      expect(() => judge(k4Assessment({ contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' }), k4, {})).not.toThrow();
     });
     it('KF: the same blank without a cue is INSUFFICIENT (BLANK_UNSUPPORTED)', () => {
       const kf = cell([{ observationId: 'o1', text: '법인격은 단체에 부여됨.' }], k4.choiceText);
@@ -1470,7 +1483,7 @@ describe('three-cell judgment (v5.3)', () => {
       const shared = base({ choiceReading: { claims: [reading('c1', '가나다', 'EXACT', '가나다 라마바')] }, ground: ground('FACT', '라마바'), judgment: judgment('INVALID'),
         studentClaims: [studentClaim('라마바')] });
       expect(judge(shared, c, {})).toBeNull();
-      expect(() => judge({ ...shared, contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' }, c, {})).toThrow(/must be SUPPORTED/);
+      expect(() => judge({ ...shared, contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' }, c, {})).not.toThrow();
     });
     it('a BLANK_FILLED reading is SUPPORTED whether or not its cue overlaps the ground', () => {
       const blank = [{ slot: '자리', candidates: ['가나다', '라마바'], chosen: '가나다', cue: { observationId: 'o1', quote: '사마아' } }];
@@ -1635,6 +1648,12 @@ describe('server settles the conclusion from the three cells (v5.3 stage 3)', ()
     expect(r.notes).toEqual(expect.arrayContaining([expect.stringContaining('rationaleImpliedVerdict set from judgment.verdict'), expect.stringContaining('contentAssessment set to SUPPORTED')]));
     const weak = run({ ...qf, judgment: { ...qf.judgment, holds: false } }, qfObs, correctPos);
     expect(weak.a).toMatchObject({ contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' });
+  });
+  it('3d. a model INSUFFICIENT is never raised to SUPPORTED, even when the three cells meet the criteria (prob-11, v5.8 P1-r2)', () => {
+    const r = run({ ...qf, contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'JUDGMENT_METHOD' }, qfObs, correctPos);
+    expect(r.a).toMatchObject({ contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK' });
+    expect(r.insufficiencyCase).toBe('MISSING_LINK');
+    expect(r.notes).toContain('contentAssessment kept INSUFFICIENT: the server does not raise the model conclusion');
   });
   it('3c. a model UNKNOWN on a correct choice with all three cells filled is reconstructed by the server', () => {
     const unknown = { ...qf, reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', reconstructedPath: [], studentEvidence: [] };

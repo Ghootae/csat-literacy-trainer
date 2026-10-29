@@ -98,8 +98,8 @@ export function validateClaims(assessment: any, observations: { observationId: s
   }
   const judged = readingJudgment(assessment, options);
   if (judged && (assessment.contentAssessment === 'SUPPORTED' || assessment.contentAssessment === 'INSUFFICIENT')) {
-    if ((assessment.contentAssessment === 'SUPPORTED') !== judged.supported) fail(judged.supported
-      ? 'three cells support the choice, so contentAssessment must be SUPPORTED' : 'SUPPORTED requires the three cells to meet the sufficiency criteria');
+    // An INSUFFICIENT is never judged supported, so only an unsupported SUPPORTED can fail here.
+    if ((assessment.contentAssessment === 'SUPPORTED') !== judged.supported) fail('SUPPORTED requires the three cells to meet the sufficiency criteria');
     if (!judged.supported && assessment.insufficiencyKind !== judged.insufficiencyKind) fail(`insufficiencyKind must be ${judged.insufficiencyKind} for this ground`);
   }
   return claims;
@@ -220,8 +220,11 @@ export function settleConclusion(assessment: any, observations: { observationId:
     notes.push('reconstructability set to RECONSTRUCTABLE from the three cells');
   }
   if (options.correctChoice && derived && a.reconstructability === 'RECONSTRUCTABLE' && a.judgment.verdict === options.targetVerdict && noErrors) {
-    const judged = readingJudgment({ ...a, contentAssessment: 'UNKNOWN' }, options)!;
+    // The server lowers a model SUPPORTED but never raises a model INSUFFICIENT: the three cells can miss an unsupported step (prob-11, v5.8 P1-r2).
+    const held = a.contentAssessment === 'INSUFFICIENT';
+    const judged = readingJudgment({ ...a, contentAssessment: held ? 'INSUFFICIENT' : 'UNKNOWN' }, options)!;
     const [content, kind] = judged.supported ? ['SUPPORTED', 'NONE'] : ['INSUFFICIENT', judged.insufficiencyKind];
+    if (held && judged.cellsSupported) notes.push('contentAssessment kept INSUFFICIENT: the server does not raise the model conclusion');
     if (a.contentAssessment !== content || a.insufficiencyKind !== kind) { a.contentAssessment = content; a.insufficiencyKind = kind; notes.push(`contentAssessment set to ${content} from the three cells`); }
   }
   return { assessment: a, notes };
@@ -240,7 +243,8 @@ function readingJudgment(assessment: any, options: ClaimsOptions) {
   const targets = touched.filter((c: any) => judgment.targetClaimIds.includes(c.claimId));
   const groundClaims = (assessment.studentClaims as any[]).filter(c => overlaps(c, ground));
   const claimsOk = negative ? targets.some(fits) : touched.length === claims.length && touched.every(fits);
-  const supported = ground.kind === 'FACT' && groundClaims.length > 0 && groundClaims.every(c => c.sourceCheck === 'CONSISTENT') && claimsOk && judgment.holds;
+  const cellsSupported = ground.kind === 'FACT' && groundClaims.length > 0 && groundClaims.every(c => c.sourceCheck === 'CONSISTENT') && claimsOk && judgment.holds;
+  const supported = cellsSupported && assessment.contentAssessment !== 'INSUFFICIENT';
   const fitsAny = negative ? targets.some(fits) : false;
   const insufficiencyCase = supported ? null
     : ground.kind === 'CONCLUSION_RESTATED' ? 'CONCLUSION_ONLY'
@@ -250,7 +254,7 @@ function readingJudgment(assessment: any, options: ClaimsOptions) {
     : !negative && touched.length < claims.length ? 'PARTIAL_SUPPORT'
     : 'MISSING_LINK';
   const insufficiencyKind = ['CONCLUSION_RESTATED', 'JUDGMENT_METHOD'].includes(ground.kind) ? 'JUDGMENT_METHOD' : 'MISSING_LINK';
-  return { supported, insufficiencyCase, insufficiencyKind };
+  return { supported, cellsSupported, insufficiencyCase, insufficiencyKind };
 }
 
 /** What the end explanation keeps of the three cells; stored on the SELECTION assessment, never requested from the model. */

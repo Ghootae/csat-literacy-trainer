@@ -103,7 +103,7 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
     let validationFeedback: string | null = null;
     const aggregate = (): FeedbackEvaluationCall => ({
       rawOutput: candidate,
-      metadata: { provider: 'openai', model, promptVersion: this.options.promptVersion ?? 'problem-feedback-v5.7-2',
+      metadata: { provider: 'openai', model, promptVersion: this.options.promptVersion ?? 'problem-feedback-v5.8',
         durationMs: Math.round(performance.now() - started), attempts,
         inputTokens: attempts.reduce((n, a) => n + a.inputTokens, 0),
         outputTokens: attempts.reduce((n, a) => n + a.outputTokens, 0),
@@ -144,7 +144,7 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
         if (validationFeedback) content.push({ type: 'input_text', text: JSON.stringify({ validationFeedback }) });
         candidate = await request('ASSESSMENT',
           s.evaluationMode === 'REPAIR' ? FeedbackRepairAssessmentSchema : FeedbackSelectionAssessmentSchema,
-          readFileSync(resolve(process.cwd(), this.options.promptPath ?? 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.7-2.md'), 'utf8'), content);
+          readFileSync(resolve(process.cwd(), this.options.promptPath ?? 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.8.md'), 'utf8'), content);
         if (s.evaluationMode === 'SELECTION') {
           const choice = s.source.choices.find(c => c.choiceId === s.selections.at(-1)?.choiceId)!;
           const options = { correctChoice: choice.choiceId === s.source.answerChoiceId, targetVerdict: s.choiceImpliedVerdict, choiceText: choice.text };

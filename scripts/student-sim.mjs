@@ -29,7 +29,7 @@ const HELP = `학생 역할 시뮬레이션 도구 (문단 요약·문제 풀이
   para-new-attempt --key <키>
         새 시도(처음부터 다시 쓰기). 끝나지 않은 시도는 중단으로 남는다.
 
-문제 (문제 v5.7-2, 마지막 설명 레이아웃 v1)
+문제 (문제 v5.8, 마지막 설명 레이아웃 v1)
   prob-start --question <questionId> --label <이름>
         세션을 만들고 키, 지문·발문·선지를 출력한다.
   prob-select --key <키> --choice <1~5> (--text "<근거>" | --no-rationale)
@@ -46,7 +46,7 @@ const HELP = `학생 역할 시뮬레이션 도구 (문단 요약·문제 풀이
   prob-resume   --key <키>        판정 실패 뒤 [평가 다시 시도]
   prob-restart  --key <키>        [다시 풀기]. 같은 문항의 새 세션(새 키)을 만든다.
 
-지시문 버전 (run 단위 설정, 기본은 제품 기본값: 문단 v4.8, 문제 v5.7-2)
+지시문 버전 (run 단위 설정, 기본은 제품 기본값: 문단 v4.8, 문제 v5.8)
   --para-prompt <경로> --para-prompt-version <이름>
         문단 판정 지시문을 바꾼다. 권장: --para-prompt-version paragraph-simple-holistic-v4.9
         (경로 packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.9.md).
@@ -366,7 +366,7 @@ async function main() {
   if (cmd === 'cost') return printCost(run);
   if (cmd === 'config') {
     await makeParaEvaluator(run); await makeProbEvaluator(run);
-    console.log(`[지시문 설정] 문단=${JSON.stringify(run.manifest.config.para ?? '제품 기본값(v4.8)')} 문제=${JSON.stringify(run.manifest.config.prob ?? '제품 기본값(v5.7-2)')}`);
+    console.log(`[지시문 설정] 문단=${JSON.stringify(run.manifest.config.para ?? '제품 기본값(v4.8)')} 문제=${JSON.stringify(run.manifest.config.prob ?? '제품 기본값(v5.8)')}`);
     return;
   }
 
