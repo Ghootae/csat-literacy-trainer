@@ -37,7 +37,7 @@
 - 청킹·압축 측정과 보상·처벌은 보류([D-0012](./decisions/D-0012-paragraph-compression-measurement-deferred.md)).
 - **운영 후보: 단순 형식 v4.7**([D-0174](./decisions/D-0174-paragraph-simple-v47-operating-candidate.md)): 근본 검토([D-0138](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md))를 끝내고 확정. 지시문 `paragraph-simple-holistic-prompt-v4.7.md`, 판정 모델 luna(코드 기본값), 개발자 주소 `/dialogue/lab`(옛 `/dialogue/dev/simple` 넘김), 골드 미사용, 학생 상태 원장·문제 판정 미연결. 작동 순서 [문서](../docs/PARAGRAPH-LAB-FLOW-2026-10-25.md). 학생용 전환은 별도 결정.
 - 축 기반 쪽(개발자 화면 `/dialogue/dev`, 보여 주기 개발자 모드 D-0134~D-0137, Q-0036)은 단순 형식 채택으로 보류(D-0174). 학생용이 V4라 코드는 유지, 폐기 여부는 학생용 전환 때 결정. 경계 규칙 방향은 (나″)([D-0133](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md)), 운영 미변경.
-- 중심 이야기 2단계 골드 생성은 v3에서 멈춤(과적합 우려, 재개 여부 미정, [체크포인트](./checkpoints/2026-10-08-two-stage-paused-at-v3.md)). 원문 분할·JEV 흐름은 중단([D-0094](./decisions/D-0094-source-jev-gold-flow-stopped.md)). JEV 제품 적용은 `PARKED`([D-0036](./decisions/D-0036-jev-product-work-parked.md)).
+- 중심 이야기 2단계 골드 생성은 v3에서 멈춤(과적합 우려, 재개 여부 미정, [체크포인트](./checkpoints/2026-10-08-two-stage-paused-at-v3.md)). 원문 분할·JEV 흐름은 중단([D-0094](./decisions/D-0094-source-jev-gold-flow-stopped.md)). JEV 제품 적용은 `PARKED`([D-0036](./decisions/D-0036-jev-product-work-parked.md)). 근거 작성 중 신호 탐색 2회(충분성·선택 확률 이동)도 보류([Q-0040](./OPEN_QUESTIONS.md), [체크포인트](./checkpoints/2026-10-30-jev-choice-shift-parked.md)).
 - 축 묶임 문제는 [Q-0036](./OPEN_QUESTIONS.md)(gold-v2 미변경).
 
 ## 학습자 생각 진단·분석 지도
