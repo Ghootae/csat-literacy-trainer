@@ -73,25 +73,25 @@ export interface SimpleTransport {
 }
 // 운영 후보 판정 모델(D-0174). 환경변수 PARAGRAPH_SIMPLE_OPENAI_MODEL로만 바꾼다.
 export const PARAGRAPH_SIMPLE_DEFAULT_MODEL = 'gpt-6-luna';
-const PROMPT_PATH = 'packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.7.md';
+export const PARAGRAPH_SIMPLE_DEFAULT_PROMPT_PATH = 'packages/pipeline/experiments/dialogue/paragraph-simple-holistic-prompt-v4.8.md';
 
 export class OpenAISimpleEvaluator implements SimpleEvaluator {
   private client: OpenAI | undefined;
-  constructor(private readonly options: { model?: string; timeoutMs?: number; maxOutputTokens?: number; transport?: SimpleTransport } = {}) {}
+  constructor(private readonly options: { model?: string; timeoutMs?: number; maxOutputTokens?: number; transport?: SimpleTransport; promptPath?: string; promptVersion?: string } = {}) {}
   async complete(input: SimpleEvaluationInput): Promise<SimpleModelCall> {
     const started = performance.now();
     const model = this.options.model ?? process.env['PARAGRAPH_SIMPLE_OPENAI_MODEL'] ?? PARAGRAPH_SIMPLE_DEFAULT_MODEL;
     const transport = this.options.transport ?? (this.client ??= new OpenAI({ maxRetries: 0 })).responses;
     const response = await transport.create({
       model, store: false, reasoning: { effort: 'medium' }, max_output_tokens: this.options.maxOutputTokens ?? 8000,
-      instructions: readFileSync(resolve(process.cwd(), PROMPT_PATH), 'utf8'),
+      instructions: readFileSync(resolve(process.cwd(), this.options.promptPath ?? PARAGRAPH_SIMPLE_DEFAULT_PROMPT_PATH), 'utf8'),
       input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify(input) }] }] as never,
       text: { format: { type: 'json_schema', name: 'paragraph_simple_holistic', strict: true, schema: z.toJSONSchema(SimpleOutputSchema) } },
     }, { timeout: this.options.timeoutMs ?? 60_000, maxRetries: 0 });
     if (response.status !== 'completed') throw new Error(`평가 응답 미완료: ${response.status}`);
     let raw: unknown = response.output_text;
     try { raw = JSON.parse(response.output_text); } catch { /* 검증이 스키마 위반으로 기록한다 */ }
-    return { rawOutput: raw, metadata: { provider: 'openai', model, promptVersion: PARAGRAPH_SIMPLE_PROMPT_VERSION,
+    return { rawOutput: raw, metadata: { provider: 'openai', model, promptVersion: this.options.promptVersion ?? PARAGRAPH_SIMPLE_PROMPT_VERSION,
       durationMs: Math.round(performance.now() - started),
       inputTokens: response.usage?.input_tokens ?? 0, outputTokens: response.usage?.output_tokens ?? 0,
       cachedTokens: response.usage?.input_tokens_details?.cached_tokens ?? 0 } };

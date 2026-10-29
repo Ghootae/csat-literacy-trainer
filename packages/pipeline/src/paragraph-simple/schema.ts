@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 
-/** 단순 형식 문단 판정(simple-holistic) 계약. 프롬프트: experiments/dialogue/paragraph-simple-holistic-prompt-v4.7.md */
-export const PARAGRAPH_SIMPLE_PROMPT_VERSION = 'paragraph-simple-holistic-v4.7';
+/** 단순 형식 문단 판정(simple-holistic) 계약. 프롬프트: experiments/dialogue/paragraph-simple-holistic-prompt-v4.8.md */
+export const PARAGRAPH_SIMPLE_PROMPT_VERSION = 'paragraph-simple-holistic-v4.8';
 
 export const SimpleCategorySchema = z.enum(['CAPTURED', 'GAP', 'ONE_ERROR', 'MULTI_ERROR', 'IRRELEVANT', 'COPY']);
 export const SimpleActionSchema = z.enum([
@@ -60,6 +60,8 @@ export interface SimpleEvaluationInput {
   coreParts: SimpleCorePart[] | null;
   targetError: SimpleError | null;
   targetGaps: SimpleGap[] | null;
+  /** v4.8: 현재 시도의 앞 단계에서 한 번이라도 담았다고 본 부분(corePartsCovered와 같은 길이·순서). INITIAL·없음이면 null/생략. */
+  coveredBefore?: boolean[] | null;
   /** INITIAL·RETRY에서 서버가 정한 원문 옮겨 적기 여부(v4.5, `detectSourceCopy`). true면 판정은 COPY여야 한다. */
   sourceCopyDetected?: boolean;
   validationFeedback?: string;

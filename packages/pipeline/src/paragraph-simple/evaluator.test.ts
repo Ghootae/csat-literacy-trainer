@@ -88,11 +88,11 @@ describe('OpenAISimpleEvaluator (모의 전송)', () => {
     const call = await new OpenAISimpleEvaluator({ model: 'x', transport: { create } }).complete(input);
     const [request, options] = create.mock.calls[0]!;
     expect(request).toMatchObject({ model: 'x', store: false, reasoning: { effort: 'medium' }, text: { format: { type: 'json_schema', strict: true } } });
-    expect(String(request.instructions)).toContain('paragraph-simple-holistic-v4.7');
+    expect(String(request.instructions)).toContain('paragraph-simple-holistic-v4.8');
     expect(options).toEqual({ timeout: 60_000, maxRetries: 0 });
     expect(JSON.parse(((request.input as { content: { text: string }[] }[])[0]!.content[0]!.text))).toMatchObject({ stage: 'INITIAL' });
     expect(call.rawOutput).toEqual(good);
-    expect(call.metadata).toMatchObject({ provider: 'openai', model: 'x', promptVersion: 'paragraph-simple-holistic-v4.7', inputTokens: 10, outputTokens: 5, cachedTokens: 3 });
+    expect(call.metadata).toMatchObject({ provider: 'openai', model: 'x', promptVersion: 'paragraph-simple-holistic-v4.8', inputTokens: 10, outputTokens: 5, cachedTokens: 3 });
   });
   it('환경 변수로 모델을 바꾼다', async () => {
     const create = vi.fn<SimpleTransport['create']>(async () => ({ status: 'completed', output_text: '{}' }));

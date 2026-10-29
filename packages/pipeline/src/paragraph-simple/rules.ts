@@ -25,6 +25,13 @@ export function expectedAction(stage: SimpleStage, output: Pick<SimpleOutput, 'c
   }
 }
 
+/** 현재 시도의 앞 단계 출력들에서 한 번이라도 담은 부분(corePartsCovered의 OR). 단계가 없으면 null. */
+export function coveredBeforeFromSteps(steps: readonly Pick<SimpleOutput, 'corePartsCovered'>[]): boolean[] | null {
+  if (!steps.length) return null;
+  const length = Math.max(...steps.map(s => s.corePartsCovered.length));
+  return Array.from({ length }, (_, i) => steps.some(s => s.corePartsCovered[i] === true));
+}
+
 /** 출력 검증. 문제 목록을 돌려주며, 빈 배열이면 통과다. */
 export function validateSimpleOutput(input: SimpleEvaluationInput, output: SimpleOutput): string[] {
   const problems: string[] = [];
@@ -61,6 +68,13 @@ export function validateSimpleOutput(input: SimpleEvaluationInput, output: Simpl
   } else if (output.coreParts.length !== 0) problems.push('coreParts는 INITIAL에서만 채우고 그 밖에는 빈 배열이어야 한다.');
   const covered = output.corePartsCovered;
   if (covered.length !== parts.length) problems.push('corePartsCovered는 기준 핵심 부분과 같은 길이여야 한다.');
+  if (Array.isArray(input.coveredBefore)) {
+    input.coveredBefore.forEach((was, i) => {
+      if (was === true && covered[i] === false && !output.errors.some(e => e.corePartIndex === i)) {
+        problems.push(`coveredBefore[${i}]이 true인데 corePartsCovered[${i}]가 false다. 앞 단계에서 담은 부분은 학생이 그 부분을 뒤집어 오류로 잡을 때가 아니면 true로 둔다.`);
+      }
+    });
+  }
   const usedParts = new Set<number>();
   output.errors.forEach((e, i) => {
     if (e.corePartIndex < 0 || e.corePartIndex >= parts.length) problems.push(`errors[${i}].corePartIndex가 핵심 부분 범위 밖이다.`);

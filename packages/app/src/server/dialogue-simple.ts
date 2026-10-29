@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { z } from 'zod/v4';
 import {
-  OpenAISimpleEvaluator, SimpleEvaluationError, applySimpleAction, evaluateSimple, expectedAction, initialSimpleState,
+  OpenAISimpleEvaluator, SimpleEvaluationError, applySimpleAction, coveredBeforeFromSteps, evaluateSimple, expectedAction, initialSimpleState,
   type SimpleAction, type SimpleEvaluationInput, type SimpleEvaluationResult, type SimpleEvaluator, type SimpleOutput, type SimpleParagraphState,
 } from '@csat/pipeline';
 import { appendJsonlLine, loadDialoguePassages, readJsonlLines, type DialoguePassageContent } from './content.js';
@@ -163,6 +163,8 @@ export class SimpleDialogueController {
       targetParagraph: { paragraphId: paragraph.paragraphId, text: paragraph.text },
       stage: p.state.stage, dialogue: p.transcript.filter(m => m.kind !== 'WAIT_DONE').map(({ role, text, items, copied }) => ({ role, text: items ? `${text}\n${items.map((q, i) => `${i + 1}. ${q}`).join('\n')}` : text, ...(copied ? { copied } : {}) })),
       coreParts: p.state.stage === 'INITIAL' ? null : p.state.coreParts, targetError: p.state.stage === 'AFTER_CORRECTION' ? p.state.targetError : null, targetGaps: p.state.stage === 'AFTER_GAP' ? p.state.targetGaps : null,
+      // 현재 시도의 앞 단계에서 담은 부분. coreParts는 INITIAL에서만 정해지고 RETRY 뒤에도 그대로라 길이·순서가 같다.
+      coveredBefore: coveredBeforeFromSteps(p.steps.map(s => s.output as SimpleOutput)),
     };
     try {
       const stage = p.state.stage;

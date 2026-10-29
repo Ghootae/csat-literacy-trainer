@@ -109,7 +109,7 @@ describe('흐름 시나리오 8개', () => {
   });
   it('6. 오류1 -> 교정 -> 구멍 -> 미해결(질문 2회)', async () => {
     const { controller: c, view, inputs } = setup(
-      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' }),
+      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }),
       out({ category: 'GAP', gaps: [gap], targetErrorResolved: true, action: 'GAP_QUESTION' }),
       out({ category: 'GAP', ...after, targetGapReadings: ['읽기'], targetGapsFilled: [false], action: 'CLOSE_GAP' }));
     const q1 = await say(c, view, quoted);
@@ -122,7 +122,7 @@ describe('흐름 시나리오 8개', () => {
     expect(c.inspect(v.sessionId, 0).attempts[0]!.state).toMatchObject({ outcome: 'GAP_REVEALED', questionsAsked: 2 });
   });
   it('교정 질문 뒤에는 근거 문장 하나를 HINT로, 빈 곳 질문 뒤에는 표시 없이, 마무리 뒤에는 REVEAL로 준다', async () => {
-    const e = setup(out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' }), out({ category: 'ONE_ERROR', errors: [fb(err, 'f')], targetErrorResolved: false, action: 'CLOSE_ERRORS', ...closeAdd }));
+    const e = setup(out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }), out({ category: 'ONE_ERROR', errors: [fb(err, 'f')], targetErrorResolved: false, action: 'CLOSE_ERRORS', ...closeAdd }));
     const asked = await say(e.controller, e.view, quoted);
     expect(asked.current.stage).toBe('AFTER_CORRECTION');
     expect(asked.current.highlightKind).toBe('HINT');
@@ -135,7 +135,7 @@ describe('흐름 시나리오 8개', () => {
   });
   it('7. 오류1 -> 교정 실패', async () => {
     const { controller: c, view } = setup(
-      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' }),
+      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }),
       out({ category: 'ONE_ERROR', errors: [fb(err, '바꿔 말하면 안 돼')], targetErrorResolved: false, action: 'CLOSE_ERRORS', ...closeAdd, message: '바로잡기' }));
     const q = await say(c, view, quoted);
     expect(q.current).toMatchObject({ highlightKind: 'HINT', highlights: [expect.objectContaining({ text: err.sourceQuote })] });
@@ -154,7 +154,7 @@ describe('흐름 시나리오 8개', () => {
 describe('판정 입력 계약', () => {
   it('targetError는 AFTER_CORRECTION에서만 상태 값이고, 교정 뒤 빈 곳 질문 단계에서는 null이다', async () => {
     const { controller: c, view, inputs } = setup(
-      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' }),
+      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }),
       out({ category: 'GAP', gaps: [gap], targetErrorResolved: true, action: 'GAP_QUESTION' }),
       out({ ...after, targetGapReadings: ['읽기'], targetGapsFilled: [true] }));
     const q = await say(c, view, quoted);
@@ -178,7 +178,7 @@ describe('입력·공개 범위', () => {
   it('모델 입력에 골드·축이 없고, 공개 view에 판정·원출력이 없다', async () => {
     const { controller: c, view, inputs } = setup(out({}));
     const v = await say(c, view, '답');
-    expect(Object.keys(inputs[0]!).sort()).toEqual(['coreParts', 'dialogue', 'passage', 'sourceCopyDetected', 'stage', 'targetError', 'targetGaps', 'targetParagraph']);
+    expect(Object.keys(inputs[0]!).sort()).toEqual(['coreParts', 'coveredBefore', 'dialogue', 'passage', 'sourceCopyDetected', 'stage', 'targetError', 'targetGaps', 'targetParagraph']);
     expect(JSON.stringify(inputs[0])).not.toContain('SECRET');
     expect(JSON.stringify(v)).not.toMatch(/category|reason|SECRET|rawOutput|expectedAction/);
   });
@@ -279,7 +279,7 @@ describe('v2: 라벨·재구성 요약', () => {
   it('학생 3종 라벨과 튜터 행동별 라벨을 붙이고, 모델 입력 dialogue에는 라벨이 없다', async () => {
     const { controller: c, view, inputs } = setup(
       out({ category: 'COPY', action: 'RETRY_PROMPT' }),
-      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' }),
+      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }),
       out({ category: 'GAP', gaps: [gap], targetErrorResolved: true, action: 'GAP_QUESTION' }),
       out({ category: 'GAP', ...after, targetGapReadings: ['읽기'], targetGapsFilled: [false], action: 'CLOSE_GAP' }));
     let v = await say(c, view, P1);
@@ -333,7 +333,7 @@ describe('v2: 라벨·재구성 요약', () => {
     const g = setup(out({ category: 'GAP', gaps: [gap, gap2], action: 'GAP_QUESTION', message: '두 가지 확인할게' }), out({ category: 'GAP', ...after, targetGapReadings: ['읽기', '읽기'], targetGapsFilled: [true, false], action: 'CLOSE_GAP' }));
     await say(g.controller, await say(g.controller, g.view, 'a'), 'b');
     expect(g.inputs.map(i => i.targetGaps)).toEqual([null, [gap, gap2]]);
-    const e = setup(out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' }), out({ category: 'ONE_ERROR', errors: [fb(err, 'f')], targetErrorResolved: false, action: 'CLOSE_ERRORS', ...closeAdd }),
+    const e = setup(out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }), out({ category: 'ONE_ERROR', errors: [fb(err, 'f')], targetErrorResolved: false, action: 'CLOSE_ERRORS', ...closeAdd }),
       out({ category: 'COPY', action: 'RETRY_PROMPT' }));
     const q = await say(e.controller, e.view, quoted); await say(e.controller, q, '그대로');
     expect(e.inputs.map(i => i.targetGaps)).toEqual([null, null]);
@@ -383,7 +383,7 @@ describe('v2: 라벨·재구성 요약', () => {
   });
   it('v4: 고침 + 구멍 -> GAP_QUESTION(번호 목록) -> AFTER_GAP 판정', async () => {
     const { controller: c, view, inputs } = setup(
-      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION' }),
+      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }),
       out({ category: 'GAP', gaps: [gap, gap2], targetErrorResolved: true, action: 'GAP_QUESTION', message: '확인할 게 둘 있어' }),
       out({ ...after, targetGapReadings: ['읽기', '읽기'], targetGapsFilled: [true, true] }));
     const q2 = await say(c, await say(c, view, quoted), '화학에너지가 돼');
@@ -400,6 +400,41 @@ describe('v2: 라벨·재구성 요약', () => {
     const q = await say(c, view, 'a');
     expect(q.current.restatedSummary).toBe('빛이 변한다');
     expect((await say(c, q, 'b')).current.restatedSummary).toBe('');
+  });
+});
+
+describe('v4.8: coveredBefore', () => {
+  it('INITIAL 입력은 null, 앞 단계가 있으면 담은 부분의 OR이 들어간다', async () => {
+    const { controller: c, view, inputs } = setup(
+      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, true] }),
+      out({ ...after, corePartsCovered: [true, true], targetErrorResolved: true }));
+    await say(c, await say(c, view, quoted), '화학에너지가 된다');
+    expect(inputs[0]!.coveredBefore).toBeNull();
+    expect(inputs[1]!.stage).toBe('AFTER_CORRECTION');
+    expect(inputs[1]!.coveredBefore).toEqual([false, true]);
+  });
+  it('앞 단계에서 담은 부분을 false로 뒤집으면 검증 실패로 재요청하고 두 번째 출력을 쓴다', async () => {
+    const { controller: c, view, inputs } = setup(
+      out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, true] }),
+      out({ category: 'GAP', gaps: [gap], targetErrorResolved: true, action: 'GAP_QUESTION', corePartsCovered: [true, false] }),
+      out({ ...after, corePartsCovered: [true, true], targetErrorResolved: true }));
+    const q1 = await say(c, view, quoted);
+    const v = await say(c, q1, '화학에너지가 된다');
+    expect(inputs).toHaveLength(3);
+    expect(inputs[2]!.validationFeedback).toMatch(/coveredBefore\[1\]/);
+    expect(v.current.done).toBe(true);
+    const step = c.inspect(v.sessionId, 0).attempts[0]!.steps[1]!;
+    expect(step.output).toMatchObject({ corePartsCovered: [true, true] });
+    expect(step.validationFailures).toHaveLength(1); expect(step.call.attempts).toBe(2);
+  });
+  it('INITIAL에서 무관해 다시 쓰기(RETRY)로 가도 coreParts는 그대로라 RETRY 입력의 coveredBefore는 같은 길이다', async () => {
+    const { controller: c, view, inputs } = setup(
+      out({ category: 'IRRELEVANT', action: 'RETRY_PROMPT' }),
+      out({ category: 'GAP', gaps: [gap], action: 'GAP_QUESTION' }));
+    await say(c, await say(c, view, '딴소리'), '빛이 변한다');
+    expect(inputs[1]!.stage).toBe('RETRY');
+    expect(inputs[1]!.coveredBefore).toEqual([false, false]);
+    expect(inputs[1]!.coveredBefore).toHaveLength(inputs[1]!.coreParts!.length);
   });
 });
 
