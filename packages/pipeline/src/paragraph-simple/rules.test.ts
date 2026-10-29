@@ -282,3 +282,14 @@ describe('문단 상태 기계', () => {
     expect(step(g, { category: 'GAP', action: 'CLOSE_GAP', targetGapsFilled: null }).revealQuotes).toEqual([gap.sourceQuote, gap2.sourceQuote]);
   });
 });
+
+describe('한국어 검사', () => {
+  it('중국어 message는 문제로 잡힌다', () => {
+    const i = input('INITIAL');
+    const problems = rawCheck(i, { ...base, message: '你答出了细胞膜会阻挡亲水物质通过这一点。' }).problems;
+    expect(problems.some(p => p.includes('message가 한국어가 아니다'))).toBe(true);
+  });
+  it('한국어 message는 문제가 없다', () => {
+    expect(rawCheck(input('INITIAL'), base).problems.some(p => p.includes('한국어가 아니다'))).toBe(false);
+  });
+});

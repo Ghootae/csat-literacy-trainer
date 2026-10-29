@@ -2,6 +2,7 @@ import {
   SimpleOutputSchema,
   type SimpleAction, type SimpleCorePart, type SimpleError, type SimpleGap, type SimpleEvaluationInput, type SimpleOutput, type SimpleStage,
 } from './schema.js';
+import { nonKoreanProblem } from '../korean-text.js';
 
 /** 행동 표. 프롬프트의 표와 같다. */
 export function expectedAction(stage: SimpleStage, output: Pick<SimpleOutput, 'category' | 'targetErrorResolved'>): SimpleAction {
@@ -133,6 +134,18 @@ export function validateSimpleOutput(input: SimpleEvaluationInput, output: Simpl
   const noResponse = output.action === 'CLOSE_NO_RESPONSE';
   if (noResponse ? !output.coreSourceQuote || !input.targetParagraph.text.includes(output.coreSourceQuote) : output.coreSourceQuote !== null) problems.push('coreSourceQuote는 CLOSE_NO_RESPONSE에서만 비어 있지 않은 대상 문단의 연속 부분 문자열이고 그 밖에는 null이어야 한다.');
   if (!output.message.trim()) problems.push('message가 비어 있다.');
+  const visible: [string, string][] = [
+    ['message', output.message],
+    ...output.gaps.map((g, i): [string, string] => [`gaps[${i}].question`, g.question]),
+    ...output.corePartSummaries.map((t, i): [string, string] => [`corePartSummaries[${i}]`, t]),
+    ...(output.closingFeedback === null ? [] : [['closingFeedback', output.closingFeedback] as [string, string]]),
+    ...output.errors.map((e, i): [string, string] => [`errors[${i}].feedback`, e.feedback]),
+    ...output.coreParts.map((c, i): [string, string] => [`coreParts[${i}].description`, c.description]),
+  ];
+  for (const [field, text] of visible) {
+    const problem = nonKoreanProblem(field, text);
+    if (problem) problems.push(problem);
+  }
   return problems;
 }
 

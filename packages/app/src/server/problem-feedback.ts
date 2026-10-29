@@ -217,23 +217,7 @@ export class ProblemFeedbackController {
       const reason = s.pendingEnd?.endReason;
       const supplement = s.observations.findLast(o => o.selectionNumber === s.selections.length && o.command.type === 'RATIONALE');
       const rationale = supplement?.command.type === 'RATIONALE' ? supplement.command.rationale.mode : s.selections.at(-1)!.rationale.mode;
-      const note = reason === 'RATIONALE_UNVERIFIABLE'
-        ? rationale === 'PROVIDED'
-          ? '네가 쓴 근거만으로는 어떻게 판단했는지 다 알기 어려웠어. 그래서 네 생각을 짐작하지 않고 선지 내용 위주로 볼게.'
-          : '근거를 적지 않아서 어떻게 판단했는지는 알 수 없었어. 선지 내용 위주로 볼게.'
-        : reason === 'CORRECT_UNVERIFIED'
-          // A reconstructable but insufficient rationale was read; only an unreadable one is "not fully visible".
-          ? s.assessments.findLast(a => a.mode === 'SELECTION')?.reconstructability === 'RECONSTRUCTABLE'
-            ? '네 근거에서 맞는 부분은 살리고, 더 이어야 할 연결을 같이 채워 볼게.'
-            : '네 근거만으로는 이 답에 어떻게 이르렀는지 다 보이지는 않았어. 빠진 연결을 같이 채워 볼게.'
-          // UI backlog 28: a failed correction answer or a wrong reselection gets feedback before the answer is revealed.
-          : reason === 'REPAIR_FAILED'
-            ? correct
-              ? '네 근거에 고쳐야 할 부분이 있어서 질문했는데, 방금 답도 정확하지 않았어. 더 묻지 않고 근거를 같이 정리해 볼게.'
-              : '네 답과 근거에 고쳐야 할 부분이 있어서 질문했는데, 방금 답도 정확하지 않았어. 더 묻지 않고 정답을 먼저 알려 줄게.'
-            : reason === 'RESELECTION_WRONG'
-              ? '다시 고른 답도 정답이 아니야. 더 묻지 않고 정답을 먼저 알려 줄게.'
-              : null;
+      const note = gateNote(s, reason, correct, rationale);
       if (note) add('-unverifiable-gate', note, 'GATE');
       if (!correct) add('-gate-1', `정답은 ${number(s.source.answerChoiceId)}번이야.`, 'GATE');
       add('-gate-2', correct ? '네 근거를 하나씩 같이 볼까?' : '네 답을 하나씩 같이 볼까?', 'GATE');
@@ -260,4 +244,33 @@ export class ProblemFeedbackController {
       // Raw errors can contain source/key material and are kept only in the internal audit log.
       evaluationError: r.evaluationStatus === 'RETRYABLE_ERROR' ? '피드백을 만들지 못했어. 제출한 내용은 저장돼 있으니 다시 시도해 줘.' : null });
   }
+}
+
+/** Gate sentence before the end explanation; follows the judge's reconstructability, UNCONFIRMED and insufficiencyKind distinctions. */
+function gateNote(s: FeedbackSession, reason: NonNullable<FeedbackSession['pendingEnd']>['endReason'] | undefined, correct: boolean, rationale: 'PROVIDED' | 'OMITTED'): string | null {
+  const sel = s.assessments.findLast(a => a.mode === 'SELECTION');
+  const reconstructable = sel?.reconstructability === 'RECONSTRUCTABLE';
+  if (reason === 'RATIONALE_UNVERIFIABLE') {
+    if (rationale !== 'PROVIDED') return '근거를 적지 않아서 어떻게 판단했는지는 알 수 없었어. 선지 내용 위주로 볼게.';
+    return reconstructable
+      ? '네가 어떻게 판단했는지는 알겠어. 다만 어디서 생각이 달라졌는지 하나로 짚기는 어려워서, 선지 내용을 원문과 같이 볼게.'
+      : '네가 쓴 근거만으로는 어떻게 판단했는지 다 알기 어려웠어. 그래서 네 생각을 짐작하지 않고 선지 내용 위주로 볼게.';
+  }
+  if (reason === 'CORRECT_UNVERIFIED') {
+    // A reconstructable but insufficient rationale was read; only an unreadable one is "not fully visible".
+    if (!reconstructable) return '네 근거만으로는 이 답에 어떻게 이르렀는지 다 보이지는 않았어. 빠진 연결을 같이 채워 볼게.';
+    return sel?.insufficiencyKind === 'JUDGMENT_METHOD'
+      ? '네가 어떻게 골랐는지는 보였어. 다만 선지를 원문과 맞대어 판단하는 과정이 더 필요해서, 그 방법을 같이 볼게.'
+      : '네 근거에서 맞는 부분은 살리고, 더 이어야 할 연결을 같이 채워 볼게.';
+  }
+  // UI backlog 28: a failed correction answer or a wrong reselection gets feedback before the answer is revealed.
+  if (reason === 'REPAIR_FAILED') {
+    const unresolved = [...s.errors, ...s.additionalErrors].filter(e => e.status !== 'REPAIRED');
+    const tail = unresolved.length > 0 && !unresolved.some(e => e.status === 'REMAINING') ? '방금 답에서는 어떻게 생각했는지 확인하지 못했어.' : '방금 답도 정확하지 않았어.';
+    return correct
+      ? `네 근거에 고쳐야 할 부분이 있어서 질문했는데, ${tail} 더 묻지 않고 근거를 같이 정리해 볼게.`
+      : `네 답과 근거에 고쳐야 할 부분이 있어서 질문했는데, ${tail} 더 묻지 않고 정답을 먼저 알려 줄게.`;
+  }
+  if (reason === 'RESELECTION_WRONG') return '다시 고른 답도 정답이 아니야. 더 묻지 않고 정답을 먼저 알려 줄게.';
+  return null;
 }

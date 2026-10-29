@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { overlaps } from './feedback-claims.js';
+import { nonKoreanProblem } from '../korean-text.js';
 import { SourceDirectProblemBundleSchema, type SourceDirectProblemBundle } from './source-direct-evaluator.js';
 
 // 저장 자료 호환을 위해 값 유지(D-0173)
@@ -218,9 +219,11 @@ export function applyFeedbackEndExplanation(session: FeedbackSession, raw: unkno
   for (const text of [explanation.firstChoice, explanation.reselection]) {
     if (text !== null && /^\s*[①②③④⑤][을를] 고른 건 맞아/u.test(text)) throw new Error('종료 설명 칸이 화면에 이미 붙는 첫 문장을 되풀이합니다. 그 다음 문장부터 쓰세요.');
   }
-  for (const text of [explanation.firstChoice, explanation.reselection, explanation.answer]) {
+  for (const [field, text] of [['firstChoice', explanation.firstChoice], ['reselection', explanation.reselection], ['answer', explanation.answer]] as const) {
     if (text === null) continue;
     validateFeedbackCoaching(text);
+    const problem = nonKoreanProblem(field, text);
+    if (problem) throw new Error(problem);
     if (/(^|[^A-Za-z0-9])[CEce][0-9]+(?![0-9])/u.test(text)) throw new Error('종료 설명에 내부 식별자가 있습니다.');
     if (/교정\s*질문/u.test(text)) throw new Error('종료 설명에 내부 용어 "교정 질문"이 있습니다. 대화에서 쓰는 말(예: "아까 내 질문")로 다시 쓰세요.');
   }
@@ -382,8 +385,16 @@ export function validateFeedbackAssessment(s: FeedbackSession, raw: unknown): Fe
     if (mismatch && s.selections.length === 1 && !a.selectionMismatchQuestion) throw new Error('선택–근거 충돌 질문이 누락됐습니다.');
     // Only questions that can actually be shown are checked; final selections never ask.
     if (s.selections.length === 1) {
-      for (const e of a.errors) validateQuestion(s, e.question);
-      if (mismatch) validateQuestion(s, a.selectionMismatchQuestion!);
+      for (const [i, e] of a.errors.entries()) {
+        const problem = nonKoreanProblem(`errors[${i}].question`, e.question);
+        if (problem) throw new Error(problem);
+        validateQuestion(s, e.question);
+      }
+      if (mismatch) {
+        const problem = nonKoreanProblem('selectionMismatchQuestion', a.selectionMismatchQuestion!);
+        if (problem) throw new Error(problem);
+        validateQuestion(s, a.selectionMismatchQuestion!);
+      }
     }
   } else {
     if (a.boundary !== 'NONE') return a;

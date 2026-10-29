@@ -1110,6 +1110,12 @@ describe('sectioned end coaching', () => {
     expect(done.message).toBe(answer ? '좋아, 이 문제는 여기까지야.' : '이 문제는 나중에 다시 볼 수 있게 표시해 둘게.');
     expect(() => submit(gate, { type: 'UNDERSTOOD', answer }, 'early')).toThrow();
   });
+  it('rejects a non-Korean end explanation field', () => {
+    const s = endCase(false, 'RATIONALE_UNVERIFIABLE');
+    for (const field of ['firstChoice', 'answer'] as const) {
+      expect(() => applyFeedbackEndExplanation(s, { ...sections(s), [field]: '你答出了细胞膜会阻挡亲水物质通过这一点。 확인해 봐.' })).toThrow(/한국어가 아니다/);
+    }
+  });
   for (const reselected of [false, true]) for (const field of ['firstChoice', 'reselection', 'answer'] as const) {
     it(`rejects invalid ${field}, reselected=${reselected}`, () => {
       const s = endCase(false, reselected ? 'RESELECTION_WRONG' : 'RATIONALE_UNVERIFIABLE');
@@ -1263,6 +1269,18 @@ describe('answer-leak guard after the answer is chosen', () => {
     expect(() => assess(wrong, a)).toThrow(/미공개 정답/);
     const leak = output(correct, { rationaleImpliedVerdict: 'VALID', errors: [], contentAssessment: 'SUPPORTED', selectionMismatchQuestion: '정답은 ⑤야. 맞지?' });
     expect(() => assess(correct, leak)).toThrow(/미공개 정답/);
+  });
+});
+
+
+describe('Korean-only student-visible text', () => {
+  it('rejects a non-Korean error question and mismatch question', () => {
+    const wrong = selection('C4');
+    const a = output(wrong); a.errors[0]!.question = '你答出了细胞膜会阻挡亲水物质通过这一点。';
+    expect(() => assess(wrong, a)).toThrow(/한국어가 아니다/);
+    const correct = selection('C5');
+    const m = output(correct, { rationaleImpliedVerdict: 'VALID', errors: [], contentAssessment: 'SUPPORTED', selectionMismatchQuestion: 'Is this choice appropriate or not?' });
+    expect(() => assess(correct, m)).toThrow(/한국어가 아니다/);
   });
 });
 

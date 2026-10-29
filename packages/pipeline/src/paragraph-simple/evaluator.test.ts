@@ -45,6 +45,12 @@ describe('evaluateSimple', () => {
     const r = await evaluateSimple(e, input);
     expect(r.output).toEqual(good); expect(r.validationFailures).toEqual([]); expect(r.call.attempts).toBe(1); expect(e.seen).toHaveLength(1);
   });
+  it('중국어 message는 검증 실패로 재요청되고 두 번째 한국어를 받아들인다', async () => {
+    const e = evaluator({ ...good, message: '你答出了细胞膜会阻挡亲水物质通过这一点。' }, good);
+    const r = await evaluateSimple(e, input);
+    expect(r.output).toEqual(good);
+    expect(e.seen[1]!.validationFeedback).toMatch(/message가 한국어가 아니다/);
+  });
   it('인용 검증 실패 -> 이유를 담아 1회 재요청 -> 통과, 호출 메타는 합산', async () => {
     const e = evaluator(bad, good);
     const r = await evaluateSimple(e, input);

@@ -13,7 +13,9 @@
 - (2026-10-29) 원문 정의를 한 단계 적용한 추론(예: 19번 ⑤ "중성이 되면 전하가 없어지니 소수성은 약해지지 않음", 3문단 "전하를 띠는 물질 = 친수성")은 **정확한 근거**로 본다. → 판정기가 이런 추론을 UNDETERMINED로 두는 쪽과, 서버 `settleConclusion`(`packages/pipeline/src/problem-solving/feedback-claims.ts`)이 판정기와 다른 결론을 내는 쪽을 고친다.
 - 2단계(나머지 5개 지문)는 아래 3번을 고친 뒤, 검증을 겸해 진행(Claude 권고, 사용자 이견 없음). 상한은 넉넉히 잡아도 된다고 함.
 
-## 다음 할 일 (권고 순서, 아직 아무것도 시작 안 함)
+## 다음 할 일 (권고 순서)
+
+> 2026-10-29: 1·2번 완료(커밋 전). [인계·결과](./2026-10-29-korean-guard-and-gate-lines.md), [체크포인트](../../memory/checkpoints/2026-10-29-korean-guard-and-gate-lines.md). 다음은 3번.
 
 1. **외국어 출력 차단(코드, 작고 확실).** 학생에게 나가는 모델 문장(문단 message·corePartSummaries·closingFeedback·gaps.question 등, 문제 교정 질문·마지막 설명)에 한글 비율 검사 → 실패면 검증 실패로 재요청. 사례 para-33(전부 중국어, 검증 통과).
 2. **문제 안내 문장이 판정기 구분을 따르게(코드, 작고 확실).** `packages/app/src/server/problem-feedback.ts` 222~233행 근처 분기. 오답도 판단 경로 파악 여부로 문장 분기(prob-7), 교정 실패 '모름'(UNCONFIRMED)과 '틀림' 구분(prob-9), 부족한 정답의 '판단 방법'·'연결 부족' 구분(prob-2~4).

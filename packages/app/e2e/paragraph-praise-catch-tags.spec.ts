@@ -12,7 +12,7 @@ const port = Number(process.env['CSAT_API_PORT'] ?? 5374);
 const passage = loadDialoguePassages().find(p => p.paragraphs.length > 0 && p.passageId)!;
 const quote = passage.paragraphs[0]!.text;
 const parts = [{ description: '첫째 핵심', sourceQuote: quote }, { description: '둘째 핵심', sourceQuote: quote }];
-const base: SimpleOutput = { category: 'CAPTURED', reason: 'r', coreParts: parts, corePartsCovered: [true, true], errors: [], gaps: [], targetErrorResolved: null, targetGapReadings: null, targetGapsFilled: null, restatedSummary: '요약', action: 'PRAISE', message: 'm', corePartSummaries: ['첫째를 잡았다', '둘째를 잡았다'], closingFeedback: null, coreSourceQuote: null };
+const base: SimpleOutput = { category: 'CAPTURED', reason: 'r', coreParts: parts, corePartsCovered: [true, true], errors: [], gaps: [], targetErrorResolved: null, targetGapReadings: null, targetGapsFilled: null, restatedSummary: '요약', action: 'PRAISE', message: '잘 잡았어', corePartSummaries: ['첫째를 잡았다', '둘째를 잡았다'], closingFeedback: null, coreSourceQuote: null };
 const gap = { corePartIndex: 1, description: '둘째', sourceQuote: quote, question: '둘째 내용을 다시 볼래?', asksOneThing: true };
 const scripted: SimpleOutput[] = [
   { ...base, category: 'GAP', corePartsCovered: [true, false], gaps: [gap], action: 'GAP_QUESTION', message: '하나 확인할게', corePartSummaries: [] },

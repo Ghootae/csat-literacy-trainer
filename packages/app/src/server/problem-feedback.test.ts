@@ -283,6 +283,21 @@ describe('unverifiable rationale connector', () => {
     const next = await submitSettled(c, v.sessionId, request(v, { type: 'SELECT', choiceId: 'C2', rationale: { mode: 'PROVIDED', text: '같은 시민의 글일 수 있음' } }));
     expect(next.transcript.filter(m => m.sequence === 'GATE')[0]?.text).toBe('네 근거에서 맞는 부분은 살리고, 더 이어야 할 연결을 같이 채워 볼게.');
   });
+  const reconstructable = (verdict: string, insufficiencyKind: string) => async (s: FeedbackSession): Promise<FeedbackEvaluationCall> => {
+    const call = unknown(s);
+    if (s.evaluationMode !== 'SELECTION') return call;
+    return { ...call, rawOutput: { ...(call.rawOutput as Record<string, unknown>), reconstructability: 'RECONSTRUCTABLE', rationaleImpliedVerdict: verdict,
+      reconstructedPath: ['학생은 선지를 보고 나름대로 판단했다.', '그래서 이 답을 골랐다.'], contentAssessment: 'INSUFFICIENT', insufficiencyKind,
+      sourceEvidence: [{ location: 'PASSAGE', quote: '중복 게시로 여론이 왜곡될 수 있다.', mediaId: null, visualObservation: null }] } };
+  };
+  it.each([
+    ['wrong and reconstructable but not pinpointable', 'C1', 'INVALID', 'MISSING_LINK', '네가 어떻게 판단했는지는 알겠어. 다만 어디서 생각이 달라졌는지 하나로 짚기는 어려워서, 선지 내용을 원문과 같이 볼게.'],
+    ['correct, judgment method missing', 'C2', 'INVALID', 'JUDGMENT_METHOD', '네가 어떻게 골랐는지는 보였어. 다만 선지를 원문과 맞대어 판단하는 과정이 더 필요해서, 그 방법을 같이 볼게.'],
+  ])('%s gets its own gate sentence', async (_name, choiceId, verdict, kind, text) => {
+    const { controller: c, view: v } = setup({ evaluate: reconstructable(verdict, kind) });
+    const next = await submitSettled(c, v.sessionId, request(v, { type: 'SELECT', choiceId, rationale: { mode: 'PROVIDED', text: '나름의 이유' } }));
+    expect(next.transcript.filter(m => m.sequence === 'GATE')[0]?.text).toBe(text);
+  });
   it.each([
     ['provided', 'C1', 'PROVIDED', '네가 쓴 근거만으로는 어떻게 판단했는지 다 알기 어려웠어. 그래서 네 생각을 짐작하지 않고 선지 내용 위주로 볼게.'],
     ['omitted', 'C1', 'OMITTED', '근거를 적지 않아서 어떻게 판단했는지는 알 수 없었어. 선지 내용 위주로 볼게.'],
@@ -322,6 +337,27 @@ describe('unverifiable rationale connector', () => {
     expect(next.transcript.filter(m => m.sequence === 'GATE').map(m => m.text)).toEqual(gates);
     next = await submitSettled(c, v.sessionId, request(next, { type: 'END_START', accept: true }, 'accept'));
     expect(next.transcript.filter(m => m.sequence === 'CONNECTOR')).toHaveLength(2);
+  });
+});
+
+
+describe('unconfirmed repair gate', () => {
+  it.each([
+    ['C1', '네 답과 근거에 고쳐야 할 부분이 있어서 질문했는데, 방금 답에서는 어떻게 생각했는지 확인하지 못했어. 더 묻지 않고 정답을 먼저 알려 줄게.'],
+    ['C2', '네 근거에 고쳐야 할 부분이 있어서 질문했는데, 방금 답에서는 어떻게 생각했는지 확인하지 못했어. 더 묻지 않고 근거를 같이 정리해 볼게.'],
+  ])('says the answer could not be confirmed when every unresolved error is UNCONFIRMED (%s)', async (choiceId, text) => {
+    const { controller: c, view: v } = setup({ async evaluate(s) {
+      if (s.evaluationMode === 'END_EXPLANATION') return unknown(s);
+      const o = s.observations.at(-1)!;
+      const studentEvidence = [{ observationId: o.observationId, quote: '모르겠어요' }];
+      if (s.evaluationMode === 'REPAIR') return { metadata, rawOutput: { mode: 'REPAIR', boundary: 'NONE', reason: '확인 불가', reviewedResponse: studentEvidence[0], repairs: [{ errorId: 'E1', status: 'UNCONFIRMED', studentEvidence }], newErrors: [], verificationComplete: true, rationaleSufficient: false, sufficiencyEvidence: [] } };
+      const raw = unknown(s).rawOutput as Record<string, unknown>;
+      return { metadata, rawOutput: { ...raw, reconstructability: 'RECONSTRUCTABLE', reconstructedPath: ['반대 관계'], rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR', insufficiencyKind: 'NONE', sourceEvidence: [{ location: 'PASSAGE', quote: source.passage, mediaId: null, visualObservation: null }],
+        errors: [{ errorId: 'E1', errorType: 'CONTENT', description: '내부 오류 설명', studentEvidence, sourceEvidence: [{ location: 'PASSAGE', quote: source.passage, mediaId: null, visualObservation: null }, { location: 'EXPLANATION', quote: source.officialExplanation, mediaId: null, visualObservation: null }], basis: 'STATED', question: '원문은 어떻게 말해?' }] } };
+    } });
+    let next = await submitSettled(c, v.sessionId, request(v, { ...select, choiceId }));
+    next = await submitSettled(c, v.sessionId, request(next, { type: 'CORRECT', errorId: 'E1', text: '모르겠어요' }, 'repair'));
+    expect(next.transcript.filter(m => m.sequence === 'GATE')[0]?.text).toBe(text);
   });
 });
 

@@ -122,7 +122,7 @@ describe('흐름 시나리오 8개', () => {
     expect(c.inspect(v.sessionId, 0).attempts[0]!.state).toMatchObject({ outcome: 'GAP_REVEALED', questionsAsked: 2 });
   });
   it('교정 질문 뒤에는 근거 문장 하나를 HINT로, 빈 곳 질문 뒤에는 표시 없이, 마무리 뒤에는 REVEAL로 준다', async () => {
-    const e = setup(out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }), out({ category: 'ONE_ERROR', errors: [fb(err, 'f')], targetErrorResolved: false, action: 'CLOSE_ERRORS', ...closeAdd }));
+    const e = setup(out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }), out({ category: 'ONE_ERROR', errors: [fb(err, '피드백')], targetErrorResolved: false, action: 'CLOSE_ERRORS', ...closeAdd }));
     const asked = await say(e.controller, e.view, quoted);
     expect(asked.current.stage).toBe('AFTER_CORRECTION');
     expect(asked.current.highlightKind).toBe('HINT');
@@ -144,7 +144,7 @@ describe('흐름 시나리오 8개', () => {
     expect(c.inspect(v.sessionId, 0).attempts[0]!.state).toMatchObject({ outcome: 'ERRORS_REVEALED', questionsAsked: 1 });
   });
   it('8. 오류2 즉시 공개(질문 없음)', async () => {
-    const { controller: c, view } = setup(out({ category: 'MULTI_ERROR', errors: [fb(err, 'f1'), fb(err2, 'f2')], action: 'CLOSE_ERRORS', ...closeAdd, message: '바로잡기' }));
+    const { controller: c, view } = setup(out({ category: 'MULTI_ERROR', errors: [fb(err, '피드백1'), fb(err2, '피드백2')], action: 'CLOSE_ERRORS', ...closeAdd, message: '바로잡기' }));
     const v = await say(c, view, quoted);
     expect(v.current.highlights.map(h => h.text)).toEqual([err.sourceQuote, err2.sourceQuote]);
     expect(c.inspect(v.sessionId, 0).attempts[0]!.state).toMatchObject({ outcome: 'ERRORS_REVEALED', questionsAsked: 0 });
@@ -327,17 +327,17 @@ describe('v2: 라벨·재구성 요약', () => {
   });
   it('v4: AFTER_GAP 입력에만 targetGaps를 넘기고, 모델 입력 dialogue에는 quote·parts·items 키가 없다', async () => {
     const { controller: c, view, inputs } = setup(
-      out({ category: 'MULTI_ERROR', errors: [fb(err, 'f1'), fb(err2, 'f2')], action: 'CLOSE_ERRORS', ...closeAdd, message: 'm' }));
+      out({ category: 'MULTI_ERROR', errors: [fb(err, '피드백1'), fb(err2, '피드백2')], action: 'CLOSE_ERRORS', ...closeAdd, message: '마무리' }));
     await say(c, view, quoted);
     expect(inputs[0]!.targetGaps).toBeNull();
     const g = setup(out({ category: 'GAP', gaps: [gap, gap2], action: 'GAP_QUESTION', message: '두 가지 확인할게' }), out({ category: 'GAP', ...after, targetGapReadings: ['읽기', '읽기'], targetGapsFilled: [true, false], action: 'CLOSE_GAP' }));
     await say(g.controller, await say(g.controller, g.view, 'a'), 'b');
     expect(g.inputs.map(i => i.targetGaps)).toEqual([null, [gap, gap2]]);
-    const e = setup(out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }), out({ category: 'ONE_ERROR', errors: [fb(err, 'f')], targetErrorResolved: false, action: 'CLOSE_ERRORS', ...closeAdd }),
+    const e = setup(out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', corePartsCovered: [false, false] }), out({ category: 'ONE_ERROR', errors: [fb(err, '피드백')], targetErrorResolved: false, action: 'CLOSE_ERRORS', ...closeAdd }),
       out({ category: 'COPY', action: 'RETRY_PROMPT' }));
     const q = await say(e.controller, e.view, quoted); await say(e.controller, q, '그대로');
     expect(e.inputs.map(i => i.targetGaps)).toEqual([null, null]);
-    const f = setup(out({ category: 'MULTI_ERROR', errors: [fb(err, 'f1'), fb(err2, 'f2')], action: 'CLOSE_ERRORS', ...closeAdd }));
+    const f = setup(out({ category: 'MULTI_ERROR', errors: [fb(err, '피드백1'), fb(err2, '피드백2')], action: 'CLOSE_ERRORS', ...closeAdd }));
     const done = await say(f.controller, f.view, quoted);
     expect(done.current.messages.some(m => m.quote !== undefined && m.parts === undefined)).toBe(true);
     for (const i of [...f.inputs, ...g.inputs, ...e.inputs]) for (const m of i.dialogue) expect(Object.keys(m).sort()).toEqual(['role', 'text']);
