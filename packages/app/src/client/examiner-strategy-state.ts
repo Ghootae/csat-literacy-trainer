@@ -1,3 +1,4 @@
+import { locateUniqueQuote } from '../shared/quote-locate.js';
 export type StrategyChoices = { position: number; paragraphs: string[] }[];
 /** opened의 마지막 항목이 지금 보는 선지다. shown은 그 선지에서 보여 준 문단 수. */
 export interface StrategyState { opened: { position: number; shown: number }[] }
@@ -61,19 +62,10 @@ export function strategyBubbles(state: StrategyState, choices: StrategyChoices):
 
 /** 말풍선 글의 ‘…’ 인용 중 지문에 정확히 한 번 나오는 것의 원문 위치. 공백 연속은 한 칸으로 보고 인용 끝의 . , 는 뗀다. */
 export function strategyHighlights(text: string, passage: string): { location: 'PASSAGE'; start: number; end: number; text: string }[] {
-  let flat = ''; const origin: number[] = [];
-  for (let i = 0; i < passage.length; i++) {
-    if (/\s/u.test(passage[i]!)) { if (flat.endsWith(' ')) continue; flat += ' '; } else flat += passage[i];
-    origin.push(i);
-  }
   const found: { location: 'PASSAGE'; start: number; end: number; text: string }[] = [];
   for (const match of text.matchAll(/‘([^’]+)’/gu)) {
-    const quote = match[1]!.replace(/\s+/gu, ' ').trim().replace(/[.,]+$/u, '').trim();
-    if (!quote) continue;
-    const at = flat.indexOf(quote);
-    if (at < 0 || flat.indexOf(quote, at + 1) >= 0) continue;
-    const start = origin[at]!; const end = origin[at + quote.length - 1]! + 1;
-    found.push({ location: 'PASSAGE', start, end, text: passage.slice(start, end) });
+    const at = locateUniqueQuote(passage, match[1]!.replace(/\s+/gu, ' ').trim().replace(/[.,]+$/u, '').trim());
+    if (at) found.push({ location: 'PASSAGE', ...at, text: passage.slice(at.start, at.end) });
   }
   return found;
 }

@@ -141,6 +141,13 @@ describe('end sequence controls and pacing', () => {
     expect(sequenceState(coaching, 6)).toMatchObject({ needsNext: false, delayMs: bubbleDelayMs('내용') });
     expect(sequenceState(coaching, 7)).toMatchObject({ complete: true, delayMs: null });
   });
+  it('paragraph bubbles need next between SECTION bubbles but the answer section still leads to the question automatically', () => {
+    const paragraphs = messages(['CONNECTOR', 'SECTION', 'SECTION', 'CONNECTOR', 'SECTION', 'SECTION', 'QUESTION']);
+    expect(sequenceState(paragraphs, 2)).toMatchObject({ needsNext: true, delayMs: null });
+    expect(sequenceState(paragraphs, 3)).toMatchObject({ needsNext: true, delayMs: null });
+    expect(sequenceState(paragraphs, 5)).toMatchObject({ needsNext: true, delayMs: null });
+    expect(sequenceState(paragraphs, 6)).toMatchObject({ needsNext: false, delayMs: bubbleDelayMs('내용') });
+  });
   it('reduced motion keeps the same pacing and boundaries and only drops the dots', () => {
     expect(sequenceState(coaching, 0, true)).toMatchObject({ visibleCount: 0, needsNext: false, showDots: false, delayMs: 1200 });
     expect(sequenceState(coaching, 2, true)).toMatchObject({ visibleCount: 2, needsNext: true, showDots: false, delayMs: null });

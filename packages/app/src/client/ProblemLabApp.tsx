@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ExaminerStrategyView, FeedbackMediaView, FeedbackRequest, FeedbackWorkbenchView } from '../shared/problem-feedback.js';
-import { getExaminerStrategy, getFeedback, markExaminerStrategyView, startFeedback, submitFeedback } from './problem-feedback-api.js';
+import { getExaminerStrategy, getFeedback, markExaminerStrategyView, startEndPreview, startFeedback, submitFeedback } from './problem-feedback-api.js';
 import { FeedbackDrawer } from './FeedbackDrawer.js';
 import './problem-feedback-workbench.css';
 import { Markdown } from './markdown.js';
@@ -25,6 +25,9 @@ export function ProblemLabApp(): React.JSX.Element {
   const requestedReturn = params.get('returnTo') ?? '';
   const returnTo = resolveReturnTo(requestedReturn);
   const cacheKey = `csat.problem.lab.${questionId}.${returnTo}`;
+  // 마지막 설명 미리보기: 저장된 세션을 쓰지도 남기지도 않고, 처음 열 때 마지막 설명 말풍선부터 차례로 보인다.
+  // accept()가 주소를 sessionId로 바꾸므로 처음 연 주소에서 한 번만 읽는다.
+  const [endPreview] = useState(() => params.get('sessionId') ? null : params.get('endPreview'));
   const [view, setView] = useState<FeedbackWorkbenchView | null>(null);
   const [navPassage, setNavPassage] = useState<DialoguePassageSummary | null>(null);
   const [choice, setChoice] = useState<string | null>(null);
@@ -54,19 +57,20 @@ export function ProblemLabApp(): React.JSX.Element {
   const draftKey = view ? `csat.problem.lab.draft.${view.sessionId}` : '';
   function accept(next: FeedbackWorkbenchView) {
     if (sequenceSession.current !== next.sessionId) {
-      sequenceSession.current = next.sessionId; setRevealed(next.transcript.length); setReleased(false); previousButtons.current = [];
+      const endStart = endPreview ? next.transcript.findIndex(m => m.phase === 'AWAITING_UNDERSTANDING') : -1;
+      sequenceSession.current = next.sessionId; setRevealed(endStart >= 0 ? endStart : next.transcript.length); setReleased(false); previousButtons.current = [];
       setStrategy({ available: false }); setStrategyState(initialStrategyState);
     }
     setView(next); setChoice(next.phase === 'AWAITING_RESELECTION' ? null : next.selectedChoiceId);
-    store(cacheKey, next.sessionId);
+    if (!endPreview) store(cacheKey, next.sessionId);
     const query = new URLSearchParams({ questionId: next.question.questionId, sessionId: next.sessionId, returnTo });
     window.history.replaceState(null, '', `/problem/lab?${query}`);
   }
   useEffect(() => {
     let active = true;
     if (!initialization.current) {
-      const id = params.get('sessionId') ?? read(cacheKey);
-      initialization.current = id ? getFeedback(id) : startFeedback(questionId);
+      const id = params.get('sessionId') ?? (endPreview ? null : read(cacheKey));
+      initialization.current = id ? getFeedback(id) : endPreview ? startEndPreview(endPreview) : startFeedback(questionId);
     }
     void initialization.current.then(next => {
       if (!active) return;
@@ -167,6 +171,11 @@ export function ProblemLabApp(): React.JSX.Element {
   const strategyMarks = useMemo(() => strategyBubble && view ? strategyHighlights(strategyBubble.text, view.question.passageText) : [], [strategyBubble?.key, strategyBubble?.text, view?.question.passageText]);
   useEffect(() => { if (strategyMarks.length) scrollToHighlight('PASSAGE'); }, [strategyBubble?.key, strategyMarks]);
 
+  // 마지막 설명 문단 말풍선: 보이는 것 중 가장 최근 문단의 칠할 곳(없으면 빈 배열)을 칠한다. 연결·질문 말풍선은 직전 상태를 유지한다.
+  const sectionBubble = view?.transcript.slice(0, sequence.visibleCount).findLast(m => m.phase === 'AWAITING_UNDERSTANDING' && m.sequence === 'SECTION' && m.highlights);
+  const sectionMarks = !strategyBubble && !view?.correctionHighlights.length && view?.phase === 'AWAITING_UNDERSTANDING' ? sectionBubble?.highlights ?? [] : [];
+  useEffect(() => { if (sectionMarks[0]) scrollToHighlight(sectionMarks[0].location); }, [sectionBubble?.id]);
+
   const instant = view?.transcript.findLast(m => m.sequence === 'INSTANT' && !m.kind);
   const pendingInstant = pending?.command.type === 'SELECT' && pending.command.rationale.mode === 'PROVIDED';
   useEffect(() => {
@@ -263,8 +272,8 @@ export function ProblemLabApp(): React.JSX.Element {
     <nav className="workbench-tabs" aria-label="문제 화면 전환">{[['source', '지문'], ['problem', '문제'], ['chat', '대화']].map(([id, title]) => <button key={id} aria-pressed={pane === id} onClick={() => setPane(id!)}>{title}</button>)}</nav>
     <div className="workbench-columns" ref={sourcePanes}>
       <section className="workbench-pane source-pane" aria-label="전체 지문"><header className="pane-header source-head"><div className="source-title"><h1 title={view.title}>{view.title}</h1><small>{view.exam}</small></div>{navPassage && <DevPartNav currentParagraph={null} currentIsProblem problem={{ onSelect: () => {} }}
-            paragraphs={Array.from({ length: navPassage.paragraphCount }, (_, i) => ({ label: `문단 ${i + 1}`, onSelect: () => window.location.assign(paragraphLink(returnTo, navPassage.passageId, i)) }))} />}</header><div className="source-scroll"><AnnotatedText text={view.question.passageText} annotations={view.question.textAnnotations.filter(a => a.location === 'PASSAGE')} highlights={strategyBubble ? strategyMarks : view.correctionHighlights.filter(a => a.location === 'PASSAGE')} /><Media items={view.question.media.filter(m => m.placement.scope === 'PASSAGE')} /></div></section>
-      <section className="workbench-pane question-pane" aria-label="문제와 선지"><header className="pane-header question-head"><h2>문제 {view.questionNumber}</h2><h3>{view.question.stem}</h3></header><div className="lab-question-scroll"><p className="lab-choice-hint">{choiceHintText(solving, strategyStageNow, strategyChoices.length)}</p>{(view.question.scenarioText || view.question.media.some(m => m.placement.scope === 'SCENARIO')) && <section className="lab-scenario"><h4>보기</h4><AnnotatedText text={view.question.scenarioText} annotations={view.question.textAnnotations.filter(a => a.location === 'SCENARIO')} highlights={view.correctionHighlights.filter(a => a.location === 'SCENARIO')} /><Media items={view.question.media.filter(m => m.placement.scope === 'SCENARIO')} /></section>}
+            paragraphs={Array.from({ length: navPassage.paragraphCount }, (_, i) => ({ label: `문단 ${i + 1}`, onSelect: () => window.location.assign(paragraphLink(returnTo, navPassage.passageId, i)) }))} />}</header><div className="source-scroll"><AnnotatedText text={view.question.passageText} annotations={view.question.textAnnotations.filter(a => a.location === 'PASSAGE')} highlights={strategyBubble ? strategyMarks : [...view.correctionHighlights, ...sectionMarks].filter(a => a.location === 'PASSAGE')} /><Media items={view.question.media.filter(m => m.placement.scope === 'PASSAGE')} /></div></section>
+      <section className="workbench-pane question-pane" aria-label="문제와 선지"><header className="pane-header question-head"><h2>문제 {view.questionNumber}</h2><h3>{view.question.stem}</h3></header><div className="lab-question-scroll"><p className="lab-choice-hint">{choiceHintText(solving, strategyStageNow, strategyChoices.length)}</p>{(view.question.scenarioText || view.question.media.some(m => m.placement.scope === 'SCENARIO')) && <section className="lab-scenario"><h4>보기</h4><AnnotatedText text={view.question.scenarioText} annotations={view.question.textAnnotations.filter(a => a.location === 'SCENARIO')} highlights={[...view.correctionHighlights, ...sectionMarks].filter(a => a.location === 'SCENARIO')} /><Media items={view.question.media.filter(m => m.placement.scope === 'SCENARIO')} /></section>}
         <div className="lab-choices-scroll"><ol className="lab-choices" role="radiogroup" aria-label="선지">{options.map(o => <li key={o.choice.choiceId} role="radio" aria-checked={o.selected} aria-disabled={!o.enabled} aria-label={`${circled(o.choice.position)}번 선지`} aria-describedby={`lab-choice-text-${o.choice.position}`} tabIndex={o.choice.choiceId === focusTarget ? 0 : -1} data-selected={o.selected} data-dim={o.dim}
           onClick={() => { if (o.enabled) pickChoice(o.choice); }}
           onKeyDown={e => {

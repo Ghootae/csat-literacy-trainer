@@ -12,6 +12,7 @@ async function request<T>(url: string, body?: unknown): Promise<T> {
   return response.json() as Promise<T>;
 }
 export const startFeedback = (questionId: string) => request<FeedbackWorkbenchView>(root, { questionId });
+export const startEndPreview = (caseId: string) => request<FeedbackWorkbenchView>('/api/developer/problem-lab/end-preview', { caseId });
 export const getFeedback = (id: string) => request<FeedbackWorkbenchView>(`${root}/${encodeURIComponent(id)}`);
 export const submitFeedback = (id: string, body: FeedbackRequest) => request<FeedbackWorkbenchView>(`${root}/${encodeURIComponent(id)}`, body);
 export const inspectFeedback = (id: string) => request<FeedbackInspection>(`${root}/${encodeURIComponent(id)}/inspect`);

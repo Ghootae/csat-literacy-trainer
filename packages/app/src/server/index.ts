@@ -48,7 +48,7 @@ import { DialogueController } from './dialogue.js';
 import { ProblemSolvingController } from './problem-solving.js';
 import { SimpleDialogueController } from './dialogue-simple.js';
 import { loadExaminerStrategies, strategyFor } from './examiner-strategy.js';
-import { ProblemFeedbackController, type FeedbackRecord } from './problem-feedback.js';
+import { ProblemFeedbackController, PreviewCaseError, type FeedbackRecord } from './problem-feedback.js';
 import {
   findPassageManifestForParagraph,
   listPassages,
@@ -228,6 +228,13 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
           const body = await readBody(req) as { questionId?: unknown };
           if (typeof body.questionId !== 'string' || !body.questionId.trim()) return json(res, 400, { error: 'questionId가 필요합니다.' });
           return json(res, 200, problemFeedback.start(body.questionId));
+        }
+        // 모델을 부르지 않고 FIXTURE의 마지막 설명 문단으로 세션을 만든다.
+        if (req.method === 'POST' && url.pathname === '/api/developer/problem-lab/end-preview') {
+          const body = await readBody(req) as { caseId?: unknown };
+          if (typeof body.caseId !== 'string') return json(res, 400, { error: 'caseId가 필요합니다.' });
+          try { return json(res, 200, problemFeedback.startEndPreview(body.caseId)); }
+          catch (error) { if (error instanceof PreviewCaseError) return json(res, 400, { error: error.message }); throw error; }
         }
         const match = /^\/api\/developer\/problem-lab\/session\/([^/]+)$/u.exec(url.pathname);
         const inspection = /^\/api\/developer\/problem-lab\/session\/([^/]+)\/inspect$/u.exec(url.pathname);

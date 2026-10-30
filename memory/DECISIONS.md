@@ -252,3 +252,4 @@
 | [`D-0190`](./decisions/D-0190-problem-feedback-v58-default.md) | accepted | 문제 판정 기본 지시문 v5.8 | v5.7-2 대비 ground를 반박 단계까지, holds는 논리만, 정의 한 번 적용 규칙. 회귀 17/18 같음(1 흔들림), 정답 8세션 같음. v5.7-2 재현용 |
 | [`D-0191`](./decisions/D-0191-paragraph-gap-answer-lenient-judgment-accepted.md) | accepted | 문단 빈 곳 답: 질문 전제를 이어받은 답·덜 말한 답 충족 수용 | 학생 시뮬레이션(v4.8) 사용자 판정. 질문이 원인을 주고 학생이 결과를 말한 답, 원문 정리 수준·요건 일부만 말한 답도 충족(빠진 것은 마무리 상자가 공개). v4.9 질문 규칙 6은 유지, 교정 질문 힌트는 D-0175 그대로 |
 | [`D-0192`](./decisions/D-0192-keep-luna-sol-over-deepseek-pro.md) | accepted | DeepSeek V4-Pro·Flash 시험 뒤 luna·sol 유지 | 19번 ⑤ P1 SUPPORTED Pro 3/10·Flash 0/10(sol 4/10). Pro는 출력 토큰이 sol의 5.5배라 피크에 sol보다 비싸고(세션 약 $0.074 대 $0.051), 지연 중앙 173초. DeepSeek 대체 종결 |
+| [`D-0193`](./decisions/D-0193-end-explanation-paragraph-steps-with-marks.md) | accepted | 마지막 설명: 요점 문단 단위로 넘기고 문단마다 지문·〈보기〉 한 곳 칠하기 | 기존 글 FIXTURE 미리보기로 사용자 사용 판정 "매우 좋아짐". 칠할 곳 없는 문단은 칠하기 지움, 선지는 칠하지 않음. 모델 생성(지시문·형식)은 다음 단계 |

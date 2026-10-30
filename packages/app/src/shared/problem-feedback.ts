@@ -67,6 +67,8 @@ export interface FeedbackMessage {
   /** 모델 판정을 기다리던 '생각 중' 말풍선 자리에 남는 마무리 말풍선. 모델 입력·판정에는 쓰지 않는다. */
   kind?: 'WAIT_DONE';
   id: string; role: 'STUDENT' | 'COACH'; text: string; phase: FeedbackView['phase'];
+  /** 마지막 설명 문단 말풍선이 근거로 칠할 지문·〈보기〉 위치. 빈 배열이면 칠하기를 지운다. */
+  highlights?: FeedbackView['correctionHighlights'];
 }
 export interface FeedbackWorkbenchView extends FeedbackView {
   title: string; exam: string; questionNumber: number;

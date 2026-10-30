@@ -87,6 +87,11 @@ export function appendJsonlLine(path: string, row: unknown): void {
   appendFileSync(path, `${JSON.stringify(row)}\n`, 'utf8');
 }
 
+/** 마지막 설명 문단 미리보기 FIXTURE(저장소 루트 기준 경로). 파일이 없으면 오류. */
+export function loadJsonFromRoot<T>(relativePath: string): T {
+  return JSON.parse(readFileSync(resolve(process.cwd(), relativePath), 'utf8')) as T;
+}
+
 /** 개발자 실험 기록 JSONL 읽기. 파일이 없으면 빈 목록. */
 export function readJsonlLines<T>(path: string): T[] {
   if (!existsSync(path)) return [];

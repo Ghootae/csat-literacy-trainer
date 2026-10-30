@@ -476,3 +476,52 @@ function deferredEndController() {
   const { controller: c, view: v, records } = setup(deferred);
   return { c, v, records, deferred };
 }
+
+describe('end explanation paragraph preview', () => {
+  const never = { async evaluate(): Promise<FeedbackEvaluationCall> { throw new Error('미리보기는 모델을 부르면 안 된다.'); } };
+  const preview = (caseId: string) => {
+    const evaluate = vi.spyOn(never, 'evaluate');
+    const controller = new ProblemFeedbackController({ evaluator: never, save: () => {} });
+    return { view: controller.startEndPreview(caseId), evaluate, controller };
+  };
+  const sections = (v: { transcript: { id: string; sequence?: string }[] }) => v.transcript.filter(m => m.sequence === 'SECTION');
+  it.each([['S-A1', 4, 4, 4], ['KF-r1', 1, 3, 4], ['QP-r2', 1, 1, 1]])('%s: paragraph counts, lead/closing placement, marks, no model call', (caseId, first, answer, marked) => {
+    const { view, evaluate } = preview(caseId);
+    expect(view.phase).toBe('AWAITING_UNDERSTANDING');
+    const all = view.transcript.filter(m => m.sequence === 'SECTION') as (typeof view.transcript[number])[];
+    const firstP = all.filter(m => m.id.includes('-first-section-p')); const answerP = all.filter(m => m.id.includes('-answer-section-p'));
+    expect([firstP.length, answerP.length]).toEqual([first, answer]);
+    expect(firstP.at(-1)!.text).toContain('\n\n');
+    expect(firstP.slice(0, -1).every(m => !m.text.includes('\n\n'))).toBe(true);
+    expect(answerP.every(m => !m.text.includes('\n\n'))).toBe(true);
+    expect(all.every(m => Array.isArray(m.highlights))).toBe(true);
+    expect(all.filter(m => m.highlights!.length === 1)).toHaveLength(marked);
+    for (const m of all) for (const h of m.highlights!) expect((h.location === 'PASSAGE' ? view.question.passageText : view.question.scenarioText).slice(h.start, h.end)).toBe(h.text);
+    expect(view.transcript.at(-1)).toMatchObject({ sequence: 'QUESTION', text: '이해됐어?' });
+    expect(view.transcript.filter(m => m.sequence === 'CONNECTOR').length).toBeGreaterThanOrEqual(2);
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+  it('KF-r1 third answer paragraph is marked in the scenario', () => {
+    const answerP = sections(preview('KF-r1').view).filter(m => m.id.includes('-answer-section-p')) as { highlights: { location: string }[] }[];
+    expect(answerP[2]!.highlights[0]!.location).toBe('SCENARIO');
+  });
+  it('lead is attached to the first paragraph and closing to the last; unmarked paragraphs get an empty highlight list', () => {
+    const { view } = preview('S-A1');
+    const firstP = view.transcript.filter(m => m.id.includes('-first-section-p'));
+    expect(firstP[0]!.text.indexOf(' ')).toBeGreaterThan(0);
+    expect(firstP.at(-1)!.text.split('\n\n').length).toBe(2);
+    expect(view.transcript.filter(m => m.sequence === 'SECTION' && m.highlights?.length === 0).length).toBeGreaterThan(0);
+  });
+  it('rejects an unknown case id', () => {
+    expect(() => new ProblemFeedbackController({ evaluator: never }).startEndPreview('nope')).toThrow('알 수 없는');
+    expect(() => new ProblemFeedbackController({ evaluator: never }).startEndPreview('__proto__')).toThrow('알 수 없는');
+  });
+  it('a normal session has no paragraph bubbles or highlights', async () => {
+    const { controller, view } = setup();
+    await submitSettled(controller, view.sessionId, request(view));
+    await vi.waitFor(() => expect(controller.get(view.sessionId).phase).toBe('AWAITING_END_START'));
+    const shown = await submitSettled(controller, view.sessionId, request(controller.get(view.sessionId), { type: 'END_START', accept: true }, 'accept'));
+    expect(shown.transcript.some(m => m.id.includes('-section-p') || m.highlights)).toBe(false);
+    expect(shown.transcript.filter(m => m.sequence === 'SECTION').map(m => m.id.replace(/^coach-\d+/, ''))).toEqual(['-first-section', '-answer-section']);
+  });
+});

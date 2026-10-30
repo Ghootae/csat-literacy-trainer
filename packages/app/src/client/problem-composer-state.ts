@@ -75,7 +75,7 @@ export function composerState(view: FeedbackWorkbenchView, local: ComposerLocal)
 /** Restored entries start at messages.length; only newly received entries are paced. Pacing is the same under reduced motion; only the dots go away. */
 export function sequenceState(messages: FeedbackMessage[], revealed: number, reducedMotion = false, released = false) {
   let visibleCount = Math.min(revealed, messages.length);
-  const needsNextAt = (index: number) => messages[index - 1]?.sequence === 'SECTION' && messages[index]?.sequence === 'CONNECTOR';
+  const needsNextAt = (index: number) => messages[index - 1]?.sequence === 'SECTION' && (messages[index]?.sequence === 'CONNECTOR' || messages[index]?.sequence === 'SECTION');
   while (visibleCount < messages.length) {
     const next = messages[visibleCount]!;
     if (!next.sequence || next.sequence === 'INSTANT' || next.sequence === 'CLOSING') { visibleCount++; continue; }
