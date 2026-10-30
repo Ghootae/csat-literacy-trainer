@@ -100,7 +100,9 @@ export class ProblemFeedbackController {
       }
       if (command.type === 'SELECT' && command.rationale.mode === 'PROVIDED' && next.phase === 'AWAITING_EVALUATION') {
         transcript.push({ id: `instant-${request.transitionId}`, role: 'COACH', phase: next.phase, sequence: 'INSTANT',
-          text: command.choiceId === next.source.answerChoiceId ? '정답이야! 근거도 같이 살펴볼게.' : '정답이 아니야. 어디서 생각이 달라졌는지 살펴볼게.' });
+          // A wrong reselection is never questioned (it goes straight to the answer), so it must not promise a look at where the thinking went wrong.
+          text: command.choiceId === next.source.answerChoiceId ? '정답이야! 근거도 같이 살펴볼게.'
+            : next.selections.length === 2 ? '다시 고른 답도 정답이 아니야. 어떻게 생각했는지 읽어 볼게.' : '정답이 아니야. 어디서 생각이 달라졌는지 살펴볼게.' });
       }
       // Persist accepted observation BEFORE a model call. A failed call never consumes it twice.
       const submitted = { ...r, session: next, transcript };
@@ -258,10 +260,11 @@ function gateNote(s: FeedbackSession, reason: NonNullable<FeedbackSession['pendi
   }
   if (reason === 'CORRECT_UNVERIFIED') {
     // A reconstructable but insufficient rationale was read; only an unreadable one is "not fully visible".
-    if (!reconstructable) return '네 근거만으로는 이 답에 어떻게 이르렀는지 다 보이지는 않았어. 빠진 연결을 같이 채워 볼게.';
+    // No question follows (D-0182), so the note points to the explanation instead of promising to fill the gap together.
+    if (!reconstructable) return '네 근거만으로는 이 답에 어떻게 이르렀는지 다 보이지는 않았어. 빠진 연결은 설명에서 같이 볼게.';
     return sel?.insufficiencyKind === 'JUDGMENT_METHOD'
       ? '네가 어떻게 골랐는지는 보였어. 다만 선지를 원문과 맞대어 판단하는 과정이 더 필요해서, 그 방법을 같이 볼게.'
-      : '네 근거에서 맞는 부분은 살리고, 더 이어야 할 연결을 같이 채워 볼게.';
+      : '네 근거에서 맞는 부분은 살리고, 더 이어야 할 연결은 설명에서 같이 볼게.';
   }
   // UI backlog 28: a failed correction answer or a wrong reselection gets feedback before the answer is revealed.
   if (reason === 'REPAIR_FAILED') {
@@ -271,6 +274,7 @@ function gateNote(s: FeedbackSession, reason: NonNullable<FeedbackSession['pendi
       ? `네 근거에 고쳐야 할 부분이 있어서 질문했는데, ${tail} 더 묻지 않고 근거를 같이 정리해 볼게.`
       : `네 답과 근거에 고쳐야 할 부분이 있어서 질문했는데, ${tail} 더 묻지 않고 정답을 먼저 알려 줄게.`;
   }
-  if (reason === 'RESELECTION_WRONG') return '다시 고른 답도 정답이 아니야. 더 묻지 않고 정답을 먼저 알려 줄게.';
+  // With a rationale the instant bubble already said the reselection is wrong.
+  if (reason === 'RESELECTION_WRONG') return rationale === 'PROVIDED' ? '더 묻지 않고 정답을 먼저 알려 줄게.' : '다시 고른 답도 정답이 아니야. 더 묻지 않고 정답을 먼저 알려 줄게.';
   return null;
 }

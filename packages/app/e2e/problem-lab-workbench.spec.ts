@@ -255,7 +255,8 @@ test('wrong reselection gates and reveals each section through understanding NO 
   await select(page, 3, '느린 설명: 다시 고른 답도 맞다고 생각해.');
   await expect(page.getByRole('button', { name: '응', exact: true })).toBeDisabled(); await measure();
   await expect(page.getByLabel('대화 기록')).toContainText('정답은 ⑤번이야.');
-  await expect(page.getByLabel('대화 기록')).toContainText('다시 고른 답도 정답이 아니야. 더 묻지 않고 정답을 먼저 알려 줄게.');
+  await expect(page.getByLabel('대화 기록')).toContainText('다시 고른 답도 정답이 아니야. 어떻게 생각했는지 읽어 볼게.');
+  await expect(page.getByLabel('대화 기록')).toContainText('더 묻지 않고 정답을 먼저 알려 줄게.');
   await page.getByRole('button', { name: '응', exact: true }).click();
   await expect(page.locator('.lab-waiting')).toContainText(/설명을 정리하고 있어|어떻게 설명할지 정리하고 있어|설명할 내용을 하나씩 모으고 있어/); await measure();
   await expect(page.getByLabel('대화 기록')).toContainText('처음에 고른 ①번부터 볼게.', { timeout: 15000 });

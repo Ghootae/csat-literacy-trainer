@@ -281,7 +281,7 @@ describe('unverifiable rationale connector', () => {
         sourceEvidence: [{ location: 'PASSAGE', quote: '중복 게시로 여론이 왜곡될 수 있다.', mediaId: null, visualObservation: null }] } };
     } });
     const next = await submitSettled(c, v.sessionId, request(v, { type: 'SELECT', choiceId: 'C2', rationale: { mode: 'PROVIDED', text: '같은 시민의 글일 수 있음' } }));
-    expect(next.transcript.filter(m => m.sequence === 'GATE')[0]?.text).toBe('네 근거에서 맞는 부분은 살리고, 더 이어야 할 연결을 같이 채워 볼게.');
+    expect(next.transcript.filter(m => m.sequence === 'GATE')[0]?.text).toBe('네 근거에서 맞는 부분은 살리고, 더 이어야 할 연결은 설명에서 같이 볼게.');
   });
   const reconstructable = (verdict: string, insufficiencyKind: string) => async (s: FeedbackSession): Promise<FeedbackEvaluationCall> => {
     const call = unknown(s);
@@ -301,7 +301,7 @@ describe('unverifiable rationale connector', () => {
   it.each([
     ['provided', 'C1', 'PROVIDED', '네가 쓴 근거만으로는 어떻게 판단했는지 다 알기 어려웠어. 그래서 네 생각을 짐작하지 않고 선지 내용 위주로 볼게.'],
     ['omitted', 'C1', 'OMITTED', '근거를 적지 않아서 어떻게 판단했는지는 알 수 없었어. 선지 내용 위주로 볼게.'],
-    ['correct', 'C2', 'PROVIDED', '네 근거만으로는 이 답에 어떻게 이르렀는지 다 보이지는 않았어. 빠진 연결을 같이 채워 볼게.'],
+    ['correct', 'C2', 'PROVIDED', '네 근거만으로는 이 답에 어떻게 이르렀는지 다 보이지는 않았어. 빠진 연결은 설명에서 같이 볼게.'],
     ['supplement', 'C1', 'OMITTED', '네가 쓴 근거만으로는 어떻게 판단했는지 다 알기 어려웠어. 그래서 네 생각을 짐작하지 않고 선지 내용 위주로 볼게.'],
   ])('%s places the note before the gate and never after acceptance', async (kind, choiceId, mode, text) => {
     const { controller: c, view: v } = setup();
@@ -395,7 +395,7 @@ describe('instant acceptance contract', () => {
     expect(instants()).toHaveLength(1);
     const reselect = await c.submit(v.sessionId, request(next, { ...select, choiceId: reselected }, 'reselect'));
     expect(reselect.transcript.at(-1)).toMatchObject({ sequence: 'INSTANT',
-      text: reselected === 'C2' ? '정답이야! 근거도 같이 살펴볼게.' : '정답이 아니야. 어디서 생각이 달라졌는지 살펴볼게.' });
+      text: reselected === 'C2' ? '정답이야! 근거도 같이 살펴볼게.' : '다시 고른 답도 정답이 아니야. 어떻게 생각했는지 읽어 볼게.' });
     await c.settled(v.sessionId);
     expect(instants()).toHaveLength(2);
   });
