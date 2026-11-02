@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, validateClaims, type ClaimsOptions } from './feedback-claims.js';
-import { CORRECT_END_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, feedbackEndExplanationContent, feedbackSectionClosing, feedbackSectionLead, stemVerdictWords } from './feedback-end-explanation.js';
+import { CORRECT_END_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V2_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, feedbackEndExplanationContent, feedbackSectionClosing, feedbackSectionLead, stemVerdictWords } from './feedback-end-explanation.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import {
   applyFeedbackAssessment as assess, createFeedbackSession, feedbackConsistency, feedbackPublicView,
   normalizeFeedbackPolarity, submitFeedbackCommand as submit, validateFeedbackAssessment, FeedbackSelectionAssessmentSchema, FeedbackRepairAssessmentSchema,
   recoverFeedbackSourceQuote, validateFeedbackCoaching, applyFeedbackEndExplanation, feedbackObservationText,
+  endExplanationParagraphs, endQuoteProblems, stripUnsourcedQuotes, FeedbackEndParagraphsSchema,
   type FeedbackSession, type FeedbackSelectionAssessment, type FeedbackRepairAssessment,
 } from './feedback.js';
 import { feedbackEvaluationInput, feedbackRequestContent, OpenAIFeedbackEvaluator } from './feedback-evaluator.js';
@@ -1818,14 +1819,122 @@ describe('end explanation layout v1', () => {
     const block = /## 2\. [^\n]*\n\n```\n([\s\S]*?)\n```\n/u.exec(draft)![1];
     expect(END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS).toBe(block);
   });
-  it('the evaluator sends the layout instructions by default and the v5.3 instructions only when asked (D-0184)', async () => {
+  it('the evaluator sends the v2 instructions by default, the v1 or v5.3 instructions only when asked (D-0184, D-0193)', async () => {
     const s = selection('C5');
     const gate = acceptEnd(assess(s, output(s, { errors: [], reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', reconstructedPath: [] })));
-    for (const endLayout of [undefined, 'layout-v1' as const, 'v5.3' as const]) {
-      const create = vi.fn(async () => ({ status: 'completed', output_text: JSON.stringify(sections(gate)), usage: { input_tokens: 1, output_tokens: 1 } }));
+    for (const endLayout of [undefined, 'layout-v2' as const, 'layout-v1' as const, 'v5.3' as const]) {
+      const v2 = endLayout !== 'layout-v1' && endLayout !== 'v5.3';
+      const create = vi.fn(async () => ({ status: 'completed', output_text: JSON.stringify(v2 ? paragraphSections(gate) : sections(gate)), usage: { input_tokens: 1, output_tokens: 1 } }));
       await new OpenAIFeedbackEvaluator({ transport: { create } as never, ...(endLayout ? { endLayout } : {}) }).evaluate(gate);
       const sent = (create.mock.calls[0] as unknown as [{ instructions: string }])[0].instructions;
-      expect(sent === END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS).toBe(endLayout !== 'v5.3');
+      expect(sent === END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS).toBe(endLayout === 'layout-v1');
+      expect(sent === END_EXPLANATION_LAYOUT_V2_INSTRUCTIONS).toBe(v2);
     }
+  });
+});
+
+const paragraphSections = (s: FeedbackSession, text = '원문을 바탕으로 판단 관계를 다시 확인해 봐.', mark: { location: 'PASSAGE' | 'SCENARIO'; quote: string } | null = null) => ({
+  firstChoice: [{ text, mark }, { text: '선지가 하는 말을 원문과 나란히 놓고 비교해 봐.', mark: null }],
+  reselection: s.selections.length === 2 ? [{ text: '다시 고른 답을 원문과 비교해 봐.', mark: null }] : null,
+  answer: [{ text: '정답은 원문의 판단 관계로 설명할 수 있어.', mark: null }],
+});
+describe('end explanation layout v2 (paragraphs + marks)', () => {
+  const gateOf = () => {
+    const s = selection('C5');
+    return acceptEnd(assess(s, output(s, { errors: [], reconstructability: 'UNKNOWN', rationaleImpliedVerdict: 'UNKNOWN', contentAssessment: 'UNKNOWN', reconstructedPath: [] })));
+  };
+  const withText = (s: FeedbackSession, text: string) => { const e = paragraphSections(s); e.firstChoice[0]!.text = text; return e; };
+  const quoteSession = () => ({ ...gateOf(), source: { ...source, passage: '자산은 법인에게 귀속된다*. 사원은 책임이 없다.' } }) as FeedbackSession;
+  const evaluate = (s: FeedbackSession, outputs: unknown[], extra: { maxRetries?: number } = {}) => {
+    const requests: any[] = [];
+    const create = vi.fn(async (r: any) => { requests.push(r); return { status: 'completed', output_text: JSON.stringify(outputs[Math.min(requests.length, outputs.length) - 1]), usage: { input_tokens: 1, output_tokens: 1 } }; });
+    return { requests, run: () => new OpenAIFeedbackEvaluator({ transport: { create } as never, ...extra }).evaluate(s) };
+  };
+  it('the v2 instructions are the experiment text plus only the v1 asked sentence, at the same place as in v1', () => {
+    const experiment = readFileSync('docs/experiments/end-explanation-paragraph-marks-v22-2026-11-02/instructions-v2.txt', 'utf8');
+    expect(createHash('sha256').update(experiment).digest('hex')).toBe('12d686b9452a5ad5081bcf41ae7a0e10270d02d9bdf2bcfc381f341c6ba807a5');
+    const anchor = '학생이 했을 법한 생각 과정을 큰따옴표로 보인다.';
+    const asked = '그 오류의 asked가 true이면 생각 과정을 보인 바로 뒤에, 그 짐작한 지점을 아까 내 질문으로 물어봤다는 것을 한 문장으로 잇는다.';
+    expect(END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS).toContain(`${anchor} ${asked}`);
+    expect(END_EXPLANATION_LAYOUT_V2_INSTRUCTIONS).toBe(experiment.replace(anchor, `${anchor} ${asked}`));
+    expect(END_EXPLANATION_LAYOUT_V2_INSTRUCTIONS).not.toBe(END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS);
+  });
+  it('layout-v2 builds the same input as layout-v1', () => {
+    const s = acceptEnd(gateOf());
+    expect(feedbackEndExplanationContent(s, { layout: 'layout-v2' })).toEqual(feedbackEndExplanationContent(s, { layout: 'layout-v1' }));
+  });
+  it('accepts paragraphs with and without marks and exposes them through endExplanationParagraphs', () => {
+    const s = gateOf();
+    const shown = applyFeedbackEndExplanation(s, paragraphSections(s, '원문을 바탕으로 판단 관계를 다시 확인해 봐.', { location: 'PASSAGE', quote: '아무 구절' }));
+    expect(shown.phase).toBe('AWAITING_UNDERSTANDING');
+    expect(endExplanationParagraphs(shown.endExplanation)?.firstChoice).toHaveLength(2);
+    expect(endExplanationParagraphs(applyFeedbackEndExplanation(s, sections(s)).endExplanation)).toBeNull();
+    expect(endExplanationParagraphs(null)).toBeNull();
+  });
+  it('rejects empty lists, unknown keys, a reselection cell that disagrees with the choices, a repeated lead, internal ids, and paragraphs under four Hangul', () => {
+    const s = gateOf();
+    expect(() => applyFeedbackEndExplanation(s, { ...paragraphSections(s), answer: [] })).toThrow();
+    expect(() => applyFeedbackEndExplanation(s, { ...paragraphSections(s), firstChoice: [{ text: '원문을 확인해 봐.', mark: null, extra: 1 }] })).toThrow();
+    expect(() => FeedbackEndParagraphsSchema.parse({ ...paragraphSections(s), answer: [{ text: '원문을 확인해 봐.', mark: { location: 'IMAGE', quote: '가' } }] })).toThrow();
+    expect(() => applyFeedbackEndExplanation(s, { ...paragraphSections(s), reselection: [{ text: '다시 고른 답을 비교해 봐.', mark: null }] })).toThrow(/재선택/u);
+    expect(() => applyFeedbackEndExplanation(s, withText(s, '⑤를 고른 건 맞아. 원문을 보자.'))).toThrow(/되풀이/u);
+    expect(() => applyFeedbackEndExplanation(s, withText(s, '여기서 E1 오류가 보여.'))).toThrow(/내부 식별자/u);
+    expect(() => applyFeedbackEndExplanation(s, withText(s, '교정 질문을 다시 보자.'))).toThrow(/교정 질문/u);
+    expect(() => applyFeedbackEndExplanation(s, withText(s, '맞아.'))).toThrow(/손상된 문자열/u);
+  });
+  it('endQuoteProblems ignores footnote asterisks and a trailing period, and flags a reworded quote', () => {
+    const s = quoteSession();
+    const check = (text: string) => endQuoteProblems(s, paragraphSections(s, text));
+    expect(check('지문은 ‘자산은 법인에게 귀속된다.’고 말해.')).toEqual([]);
+    expect(check('선지의 ‘이 사례는 소수 의견을 뒷받침하는 근거가 될 수 있다’를 보자.')).toEqual([]);
+    expect(check('지문은 ‘자산이 법인에게 귀속된다’고 말해.')).toEqual(['firstChoice: 인용 ‘자산이 법인에게 귀속된다’이 선지·원문에 없음']);
+  });
+  it('stripUnsourcedQuotes removes only the quotation marks of quotes that are not in the source', () => {
+    const s = quoteSession();
+    const e = paragraphSections(s, '‘자산은 법인에게 귀속된다’와 ‘자산이 법인에게 귀속된다’를 비교해 봐.');
+    const stripped = stripUnsourcedQuotes(s, e);
+    expect(stripped.firstChoice[0]!.text).toBe('‘자산은 법인에게 귀속된다’와 자산이 법인에게 귀속된다를 비교해 봐.');
+    expect(e.firstChoice[0]!.text).toContain('‘자산이 법인에게');
+    expect(endQuoteProblems(s, stripped)).toEqual([]);
+  });
+  it('evaluator: a quote failure on the first attempt retries with validationFeedback and succeeds on the second', async () => {
+    const s = quoteSession();
+    const bad = paragraphSections(s, '지문은 ‘자산이 법인에게 귀속된다’고 말해.'), good = paragraphSections(s, '지문은 ‘자산은 법인에게 귀속된다’고 말해.');
+    const { requests, run } = evaluate(s, [bad, good]);
+    const call = await run();
+    expect(requests).toHaveLength(2);
+    expect(requests[1].instructions).toBe(END_EXPLANATION_LAYOUT_V2_INSTRUCTIONS);
+    expect(JSON.stringify(requests[1].input)).toContain('validationFeedback');
+    expect(JSON.stringify(requests[1].input)).toContain('이 선지·원문에 없음');
+    expect(call.rawOutput).toEqual(good);
+    expect(call.metadata.attempts?.map(a => a.outcome)).toEqual(['ERROR', 'SUCCESS']);
+  });
+  it('evaluator: quote failures on both attempts strip the quotation marks and record QUOTE_STRIPPED', async () => {
+    const s = quoteSession();
+    const bad = paragraphSections(s, '지문은 ‘자산이 법인에게 귀속된다’고 말해.');
+    const { requests, run } = evaluate(s, [bad, bad]);
+    const call = await run();
+    expect(requests).toHaveLength(2);
+    expect((call.rawOutput as ReturnType<typeof paragraphSections>).firstChoice[0]!.text).toBe('지문은 자산이 법인에게 귀속된다고 말해.');
+    const last = call.metadata.attempts!.at(-1)!;
+    expect(last.outcome).toBe('SUCCESS');
+    expect(last.normalized?.[0]).toMatch(/^QUOTE_STRIPPED: /u);
+    expect(applyFeedbackEndExplanation(s, call.rawOutput).phase).toBe('AWAITING_UNDERSTANDING');
+  });
+  it('evaluator: failures other than quotes on both attempts end in an error', async () => {
+    const s = quoteSession();
+    const bad = paragraphSections(s, '여기서 E1 오류가 보여.');
+    const { requests, run } = evaluate(s, [bad, bad]);
+    await expect(run()).rejects.toThrow(/내부 식별자/u);
+    expect(requests).toHaveLength(2);
+  });
+  it('evaluator: the request schema for layout-v2 is the paragraph list with nullable marks', async () => {
+    const s = gateOf();
+    const { requests, run } = evaluate(s, [paragraphSections(s)]);
+    await run();
+    const schema = requests[0].text.format.schema;
+    expect(schema.required).toEqual(['firstChoice', 'reselection', 'answer']);
+    expect(schema.properties.firstChoice).toMatchObject({ type: 'array', minItems: 1, items: { required: ['text', 'mark'], additionalProperties: false } });
+    expect(schema.properties.firstChoice.items.properties.mark.anyOf.map((x: any) => x.type)).toEqual(['object', 'null']);
   });
 });

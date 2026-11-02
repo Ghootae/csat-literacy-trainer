@@ -125,7 +125,8 @@ export interface FeedbackSession {
     | 'AWAITING_END_START' | 'AWAITING_UNDERSTANDING' | 'AWAITING_CORRECTION' | 'AWAITING_POST_REPAIR_CHOICE' | 'AWAITING_RESELECTION' | 'ITEM_REVIEW' | 'COMPLETED';
   evaluationMode: 'SELECTION' | 'REPAIR' | 'END_EXPLANATION' | null;
   pendingEnd: { endReason: 'REPAIR_FAILED' | 'COACHING_REQUESTED' | 'RESELECTION_WRONG' | 'RATIONALE_UNVERIFIABLE' | 'NO_CORRECTION' | 'CORRECT_UNVERIFIED'; outcome: FeedbackResult['outcome'] } | null;
-  endExplanation: z.infer<typeof FeedbackEndExplanationSchema> | null;
+  // 문자열 세 칸(layout v1·v5.3) 또는 문단 목록 세 칸(layout v2).
+  endExplanation: z.infer<typeof FeedbackEndExplanationSchema> | FeedbackEndParagraphs | null;
   observations: FeedbackObservation[];
   assessments: FeedbackAssessment[];
   selectionComparisons: { observationId: string; choiceImpliedVerdict: 'VALID' | 'INVALID';
@@ -212,15 +213,61 @@ function endExplanation(s: FeedbackSession, endReason: NonNullable<FeedbackSessi
   return s;
 }
 export const FeedbackEndExplanationSchema = z.object({ firstChoice: Text, reselection: Text.nullable(), answer: Text }).strict();
+export const EndParagraphSchema = z.object({
+  text: Text,
+  mark: z.object({ location: z.enum(['PASSAGE', 'SCENARIO']), quote: z.string().min(1) }).strict().nullable(),
+}).strict();
+export const FeedbackEndParagraphsSchema = z.object({
+  firstChoice: z.array(EndParagraphSchema).min(1), reselection: z.array(EndParagraphSchema).min(1).nullable(), answer: z.array(EndParagraphSchema).min(1),
+}).strict();
+export type FeedbackEndParagraphs = z.infer<typeof FeedbackEndParagraphsSchema>;
+const END_SECTIONS = ['firstChoice', 'reselection', 'answer'] as const;
+
+/** v2 모양(칸마다 문단 목록)이면 그 문단들을, v1·v5.3 모양(문자열 칸)이면 null을 돌려준다. */
+export function endExplanationParagraphs(e: FeedbackSession['endExplanation']): FeedbackEndParagraphs | null {
+  return e && Array.isArray(e.firstChoice) ? e as FeedbackEndParagraphs : null;
+}
+
+const flatText = (t: string) => t.replace(/\s+/gu, ' ').trim();
+/** 인용 검사용 원문 묶음: 지문·<보기>·선지 원문에서 각주 *를 지우고 공백을 한 칸으로 줄인 것. */
+function endQuotePool(s: FeedbackSession) {
+  return [s.source.passage, s.source.scenario ?? '', ...s.source.choices.map(c => c.text)].map(t => flatText(t.replace(/\*/gu, ''))).join('\n');
+}
+const quoteOf = (m: string) => flatText(m).replace(/[.,]+$/u, '');
+
+/** 문단 속 ‘…’ 인용 중 선지·원문에 그대로 없는 것의 오류 문구 목록(재시도 메시지로 쓴다). */
+export function endQuoteProblems(s: FeedbackSession, explanation: FeedbackEndParagraphs): string[] {
+  const pool = endQuotePool(s);
+  return END_SECTIONS.flatMap(key => (explanation[key] ?? []).flatMap(p => [...p.text.matchAll(/‘([^’]+)’/gu)].flatMap(m => {
+    const q = quoteOf(m[1]!);
+    return q && !pool.includes(q) ? [`${key}: 인용 ‘${q.slice(0, 30)}’이 선지·원문에 없음`] : [];
+  })));
+}
+
+/** 원문에 없는 ‘…’ 인용의 따옴표만 벗긴 사본. 글은 그대로 둔다. */
+export function stripUnsourcedQuotes(s: FeedbackSession, explanation: FeedbackEndParagraphs): FeedbackEndParagraphs {
+  const pool = endQuotePool(s);
+  const strip = (text: string) => text.replace(/‘([^’]+)’/gu, (m, q: string) => pool.includes(quoteOf(q)) ? m : q);
+  const copy = structuredClone(explanation);
+  for (const key of END_SECTIONS) for (const p of copy[key] ?? []) p.text = strip(p.text);
+  return copy;
+}
+
 export function applyFeedbackEndExplanation(session: FeedbackSession, raw: unknown): FeedbackSession {
-  const explanation = FeedbackEndExplanationSchema.parse(raw);
+  const paragraphs = FeedbackEndParagraphsSchema.safeParse(raw);
+  const explanation = paragraphs.success ? paragraphs.data : FeedbackEndExplanationSchema.parse(raw);
   if ((session.selections.length === 2) !== (explanation.reselection !== null)) throw new Error('종료 설명의 재선택 칸이 선택 기록과 일치하지 않습니다.');
+  // v2는 문단마다, v1은 칸마다 같은 검사를 한다(한글 4자 미만 문단은 validateFeedbackCoaching이 거른다). 첫 문장 되풀이는 firstChoice·reselection 칸의 첫 글에만 적용한다.
+  const entries = END_SECTIONS.flatMap(field => {
+    const value = explanation[field];
+    if (value === null) return [];
+    return typeof value === 'string' ? [{ field, text: value, first: true }] : value.map((p, i) => ({ field, text: p.text, first: i === 0 }));
+  });
   // The code prepends each choice section's lead sentence ("②를 고른 건 맞아."); the model must not repeat it.
-  for (const text of [explanation.firstChoice, explanation.reselection]) {
-    if (text !== null && /^\s*[①②③④⑤][을를] 고른 건 맞아/u.test(text)) throw new Error('종료 설명 칸이 화면에 이미 붙는 첫 문장을 되풀이합니다. 그 다음 문장부터 쓰세요.');
+  for (const { field, text, first } of entries) {
+    if (field !== 'answer' && first && /^\s*[①②③④⑤][을를] 고른 건 맞아/u.test(text)) throw new Error('종료 설명 칸이 화면에 이미 붙는 첫 문장을 되풀이합니다. 그 다음 문장부터 쓰세요.');
   }
-  for (const [field, text] of [['firstChoice', explanation.firstChoice], ['reselection', explanation.reselection], ['answer', explanation.answer]] as const) {
-    if (text === null) continue;
+  for (const { field, text } of entries) {
     validateFeedbackCoaching(text);
     const problem = nonKoreanProblem(field, text);
     if (problem) throw new Error(problem);

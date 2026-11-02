@@ -4,10 +4,11 @@ import OpenAI from 'openai';
 import { z } from 'zod/v4';
 import { assertNoStructuredProblemGold, SOURCE_TEXT_ANNOTATION_GUIDE } from './source-direct-evaluator.js';
 import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, validateClaims } from './feedback-claims.js';
-import { feedbackEndExplanationContent, CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS, type EndExplanationLayout } from './feedback-end-explanation.js';
+import { feedbackEndExplanationContent, CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V2_INSTRUCTIONS, type EndExplanationLayout } from './feedback-end-explanation.js';
 import {
   FeedbackRepairAssessmentSchema, FeedbackSelectionAssessmentSchema, PROBLEM_FEEDBACK_SESSION_VERSION,
-  applyFeedbackAssessment, applyFeedbackEndExplanation, FeedbackEndExplanationSchema, feedbackObservationText,
+  applyFeedbackAssessment, applyFeedbackEndExplanation, endExplanationParagraphs, endQuoteProblems, stripUnsourcedQuotes,
+  FeedbackEndExplanationSchema, FeedbackEndParagraphsSchema, feedbackObservationText,
   validateFeedbackAssessment, type FeedbackSession,
 } from './feedback.js';
 
@@ -131,13 +132,21 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
       const attemptStart = attempts.length;
       try {
         if (end) {
-          // Layout v1 is the default end explanation (D-0184); 'v5.3' reproduces the earlier per-case instructions.
-          const layout = this.options.endLayout ?? 'layout-v1';
+          // Layout v2 (paragraphs + marks) is the default end explanation (D-0193); 'layout-v1' and 'v5.3' stay as options.
+          const layout = this.options.endLayout ?? 'layout-v2';
           const content = feedbackEndExplanationContent(s, { layout });
           if (validationFeedback) content.push({ type: 'input_text', text: JSON.stringify({ validationFeedback }) });
-          candidate = await request('END_EXPLANATION', FeedbackEndExplanationSchema,
-            layout === 'layout-v1' ? END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS : correct ? CORRECT_END_INSTRUCTIONS : INCORRECT_END_INSTRUCTIONS, content);
-          applyFeedbackEndExplanation(s, candidate);
+          candidate = await request('END_EXPLANATION', layout === 'layout-v2' ? FeedbackEndParagraphsSchema : FeedbackEndExplanationSchema,
+            layout === 'layout-v2' ? END_EXPLANATION_LAYOUT_V2_INSTRUCTIONS : layout === 'layout-v1' ? END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS : correct ? CORRECT_END_INSTRUCTIONS : INCORRECT_END_INSTRUCTIONS, content);
+          const applied = applyFeedbackEndExplanation(s, candidate);
+          const paragraphs = layout === 'layout-v2' ? endExplanationParagraphs(applied.endExplanation) : null;
+          const quoteProblems = paragraphs ? endQuoteProblems(s, paragraphs) : [];
+          if (paragraphs && quoteProblems.length) {
+            // The shared retry bound applies: only the last attempt falls back to stripping the unsourced quotation marks.
+            if (attempt < (this.options.maxRetries ?? 1)) throw new Error(quoteProblems.join('\n'));
+            candidate = stripUnsourcedQuotes(s, paragraphs);
+            attempts.at(-1)!.normalized = [`QUOTE_STRIPPED: ${quoteProblems.join(' / ')}`];
+          }
           return aggregate();
         }
         const content = feedbackRequestContent(s);

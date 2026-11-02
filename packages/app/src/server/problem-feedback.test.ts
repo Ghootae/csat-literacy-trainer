@@ -525,3 +525,41 @@ describe('end explanation paragraph preview', () => {
     expect(shown.transcript.filter(m => m.sequence === 'SECTION').map(m => m.id.replace(/^coach-\d+/, ''))).toEqual(['-first-section', '-answer-section']);
   });
 });
+
+describe('layout v2 end explanation in a real session', () => {
+  const long = (head: string) => `${head} 이 말풍선은 합쳐지지 않도록 마흔 자를 넘기게 일부러 길게 써 둔 한 문단이야.`;
+  function v2Evaluator(): FeedbackEvaluator {
+    return { async evaluate(s) {
+      if (s.evaluationMode !== 'END_EXPLANATION') return unknown(s);
+      return { metadata, rawOutput: {
+        firstChoice: [{ text: long('지문은 중복 게시를 이야기해.'), mark: { location: 'PASSAGE', quote: '중복 게시로 여론이 왜곡될 수 있다' } }, { text: long('선지의 말을 비교해 봐.'), mark: null }],
+        reselection: null,
+        answer: [{ text: long('정답은 이렇게 확인해.'), mark: { location: 'PASSAGE', quote: '없는 구절' } }, { text: long('그래서 틀린 진술이야.'), mark: null }, { text: long('마지막이야.'), mark: null }],
+      } };
+    } };
+  }
+  async function shownSession(evaluator: FeedbackEvaluator) {
+    const { controller: c, view: v } = setup(evaluator);
+    const gate = await submitSettled(c, v.sessionId, request(v));
+    return submitSettled(c, v.sessionId, request(gate, { type: 'END_START', accept: true }, 'accept'));
+  }
+  it('shows one bubble per paragraph, puts the lead and closing on the first and last, and highlights the located sentence', async () => {
+    const shown = await shownSession(v2Evaluator());
+    const sections = shown.transcript.filter(m => m.sequence === 'SECTION');
+    expect(sections).toHaveLength(5);
+    const [f0, f1, a0, a1, a2] = sections;
+    expect(f0!.text.startsWith('①은 옳은 내용이야. 옳지 않은 것을 고르는 문제니까 ①은 정답이 아니야. 지문은 중복 게시를')).toBe(true);
+    expect(f0!.text).not.toContain('설명이 이해됐으면');
+    expect(f1!.text.endsWith('\n\n설명이 이해됐으면, 이번엔 정답에 대한 설명으로 넘어가 보자.')).toBe(true);
+    expect(f0!.highlights).toEqual([{ location: 'PASSAGE', start: 0, end: '중복 게시로 여론이 왜곡될 수 있다.'.length, text: '중복 게시로 여론이 왜곡될 수 있다.' }]);
+    expect(f1!.highlights).toEqual([]);
+    expect(a0!.highlights).toEqual([]);
+    expect([a0, a1, a2].every(m => !m!.text.includes('\n\n'))).toBe(true);
+    expect(shown.transcript.map(m => m.sequence).slice(-8)).toEqual(['CONNECTOR', 'SECTION', 'SECTION', 'CONNECTOR', 'SECTION', 'SECTION', 'SECTION', 'QUESTION']);
+  });
+  it('a stored v1 string session still shows one bubble per section', async () => {
+    const shown = await shownSession({ async evaluate(s) { return unknown(s); } });
+    expect(shown.transcript.filter(m => m.sequence === 'SECTION')).toHaveLength(2);
+    expect(shown.transcript.filter(m => m.sequence === 'SECTION').every(m => !m.highlights)).toBe(true);
+  });
+});

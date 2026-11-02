@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-10-30
+갱신: 2026-11-02
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -50,7 +50,7 @@
 │  │     판정 v5.8 기본값(결론 재계산·정의 한 번 적용, 회귀 17/18 같음)                 D-0190
 │  │     DeepSeek Pro·Flash 시험(19번 ⑤): 비용·지연 이점 없음, luna·sol 유지        D-0192
 │  │     열린 질문: 정의 잘못 적용 근거를 오류로 볼지(N2, Pro만 ERROR)                Q-0041
-│  │     마지막 설명 문단 넘기기·지문/〈보기〉 칠하기: 미리보기 사용감 좋음        D-0193
+│  │     마지막 설명 문단 넘기기·칠하기: v2.2 실제 생성 연결 D-0193·D-0194
 │  │     다음: 모델이 문단·칠할 곳을 쓰는 지시문 시험(저장 입력 12건, 사용자 판정)
 │  │     다음: 서버 재빌드·화면 확인, 관찰(형식 재시도·근거 엄격도)
 │  │     리마인드: luna 자신의 기호 오독(S2-r3) 해결 — 질문 자동 검사 vs 교정 단계 sol   Q-0030
@@ -96,6 +96,7 @@
 | D-0182 | [v5.3 보강판 채택](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) |
 | D-0185 | [판정 v5.6 선지 읽기 보강](./decisions/D-0185-judge-reading-added-vs-stronger-v56.md), [보고](../docs/experiments/judge-reading-paraphrase-d1-2026-10-28/REPORT-human.md) |
 | D-0188 | [판정 v5.7-2 교정 질문](./decisions/D-0188-problem-feedback-v57-2-direct-questions.md), [보고](../docs/experiments/v57-regression-2026-10-29/REPORT-human.md) |
+| D-0194 | [마지막 설명 v2.2 연결](./decisions/D-0194-end-explanation-layout-v22-default.md), [보고](../docs/experiments/end-explanation-paragraph-marks-v22-2026-11-02/REPORT-human.md), [체크포인트](./checkpoints/2026-11-02-end-explanation-v22-wired.md) |
 | D-0184 | [마지막 설명 레이아웃 v1](./decisions/D-0184-end-explanation-layout-v1-adopted.md), [보고](../docs/experiments/end-explanation-layout-2026-10-28/REPORT-human.md) |
 | CP-H | [v5.3 보강 재실행](./checkpoints/2026-10-27-k4-v53-stage3-rerun.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27-b/REPORT-human.md) |
 | CP-G | [v5.3 실측 중단](./checkpoints/2026-10-27-k4-v53-stage2-live.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27/REPORT-human.md) |

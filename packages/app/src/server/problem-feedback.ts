@@ -3,11 +3,11 @@ import { resolve } from 'node:path';
 import { z } from 'zod/v4';
 import {
   FeedbackCommandSchema, FeedbackEvaluationError, OpenAIFeedbackEvaluator,
-  applyFeedbackAssessment, applyFeedbackEndExplanation, createFeedbackSession, feedbackPublicView, feedbackSectionClosing, feedbackSectionLead, submitFeedbackCommand,
-  type FeedbackEvaluationCall, type FeedbackEvaluator, type FeedbackSession, type SourceDirectProblemBundle,
+  applyFeedbackAssessment, applyFeedbackEndExplanation, createFeedbackSession, endExplanationParagraphs, feedbackPublicView, feedbackSectionClosing, feedbackSectionLead, submitFeedbackCommand,
+  type FeedbackEndParagraphs, type FeedbackEvaluationCall, type FeedbackEvaluator, type FeedbackSession, type SourceDirectProblemBundle,
 } from '@csat/pipeline';
 import { bubbleLines, pickLine } from '../shared/bubble-lines.js';
-import { locateUniqueQuote } from '../shared/quote-locate.js';
+import { arrangeEndParagraphs, type EndParagraph } from '../shared/end-paragraphs.js';
 import { loadJsonFromRoot, loadProblemSolvingBundle, readJsonlLines } from './content.js';
 import { appendFeedbackRecord } from './session.js';
 import type { FeedbackView, FeedbackWorkbenchView, FeedbackMessage, FeedbackInspection } from '../shared/problem-feedback.js';
@@ -30,9 +30,12 @@ export interface FeedbackRecord {
   error: string | null;
   transcript?: FeedbackMessage[];
 }
-/** 마지막 설명 한 문단. mark가 있으면 그 quote를 지문(PASSAGE)이나 〈보기〉(SCENARIO)에서 찾아 칠한다. */
-export interface EndParagraph { text: string; mark: { location: 'PASSAGE' | 'SCENARIO'; quote: string } | null }
-const END_PREVIEW_FIXTURE = 'docs/experiments/end-explanation-paragraph-preview-2026-10-30/FIXTURE.json';
+export type { EndParagraph } from '../shared/end-paragraphs.js';
+// caseId 접두 'v2:'·'v21:'·'v22:'는 레이아웃 v2·v2.1·v2.2 모델 생성 결과(v2.1·v2.2 키는 <사례>-r<회차>), 접두 없음은 사람이 나눈 미리보기 자료.
+const END_PREVIEW_FIXTURES = { '': 'docs/experiments/end-explanation-paragraph-preview-2026-10-30/FIXTURE.json',
+  'v2:': 'docs/experiments/end-explanation-paragraph-marks-2026-10-31/FIXTURE.json',
+  'v21:': 'docs/experiments/end-explanation-paragraph-marks-v21-2026-10-31/FIXTURE.json',
+  'v22:': 'docs/experiments/end-explanation-paragraph-marks-v22-2026-11-02/FIXTURE.json' } as const;
 interface Runtime {
   /** 개발자 미리보기 전용. 있으면 마지막 설명을 칸당 말풍선 하나 대신 문단 말풍선으로 만든다. */
   endParagraphs?: { firstChoice: EndParagraph[]; reselection: EndParagraph[] | null; answer: EndParagraph[] };
@@ -67,9 +70,10 @@ export class ProblemFeedbackController {
     return this.view(r);
   }
   /** FIXTURE의 저장 세션을 마지막 설명 게이트에서 이어 받아 AWAITING_UNDERSTANDING으로 만든다. 모델은 부르지 않는다. */
-  startEndPreview(caseId: string): FeedbackWorkbenchView {
+  startEndPreview(previewId: string): FeedbackWorkbenchView {
+    const prefix = (['v22:', 'v21:', 'v2:'] as const).find(p => previewId.startsWith(p)) ?? '', caseId = previewId.slice(prefix.length);
     const fixture = loadJsonFromRoot<{ cases: Record<string, {
-      sessionRecords: string; originalOutput: unknown; sections: { firstChoice: EndParagraph[]; reselection?: EndParagraph[]; answer: EndParagraph[] } }> }>(END_PREVIEW_FIXTURE);
+      sessionRecords: string; originalOutput: unknown; sections: { firstChoice: EndParagraph[]; reselection?: EndParagraph[]; answer: EndParagraph[] } }> }>(END_PREVIEW_FIXTURES[prefix]);
     const c = Object.hasOwn(fixture.cases, caseId) ? fixture.cases[caseId] : undefined;
     if (!c) throw new PreviewCaseError(caseId);
     const gate = readJsonlLines<FeedbackRecord>(resolve(process.cwd(), c.sessionRecords))
@@ -240,12 +244,13 @@ export class ProblemFeedbackController {
       const messageId = id + suffix;
       if (!r.transcript.some(m => m.id === messageId)) r.transcript.push({ id: messageId, role: 'COACH', text, phase: s.phase, ...(sequence ? { sequence } : {}), ...(highlights ? { highlights } : {}) });
     };
-    // 문단 말풍선: 첫 문단 앞에 칸 첫 문장, 마지막 문단 뒤에 칸 마무리 문장(lead·closing이 있는 칸만)을 붙인다.
-    const addParagraphs = (key: string, paragraphs: EndParagraph[], lead?: string, closing?: string) => paragraphs.forEach((p, i) => {
-      const text = `${i === 0 && lead ? lead + ' ' : ''}${p.text}${i === paragraphs.length - 1 && closing ? '\n\n' + closing : ''}`;
-      const at = p.mark && locateUniqueQuote(p.mark.location === 'PASSAGE' ? s.source.passage : s.source.scenario, p.mark.quote);
-      add(`-${key}-section-p${i}`, text, 'SECTION', at && p.mark ? [{ location: p.mark.location, ...at, text: (p.mark.location === 'PASSAGE' ? s.source.passage : s.source.scenario).slice(at.start, at.end) }] : []);
-    });
+    // 문단 말풍선: 짧은 결론 문단 합치기·칠할 곳 문장 단위·연속 칠하기 지우기(arrangeEndParagraphs) 뒤,
+    // 첫 문단 앞에 칸 첫 문장, 마지막 문단 뒤에 칸 마무리 문장(lead·closing이 있는 칸만)을 붙인다.
+    const addParagraphs = (key: string, paragraphs: EndParagraph[], lead?: string, closing?: string) => {
+      const arranged = arrangeEndParagraphs(paragraphs, s.source);
+      arranged.forEach((p, i) => add(`-${key}-section-p${i}`,
+        `${i === 0 && lead ? lead + ' ' : ''}${p.text}${i === arranged.length - 1 && closing ? '\n\n' + closing : ''}`, 'SECTION', p.highlights));
+    };
     const number = (choiceId: string) => '①②③④⑤'[s.source.choices.find(c => c.choiceId === choiceId)!.position - 1];
     if (s.phase === 'AWAITING_END_START') {
       // Background storage preserves revision, so these IDs also prevent duplicate gates.
@@ -259,16 +264,19 @@ export class ProblemFeedbackController {
       add('-gate-2', correct ? '네 근거를 하나씩 같이 볼까?' : '네 답을 하나씩 같이 볼까?', 'GATE');
     } else if (s.phase === 'AWAITING_UNDERSTANDING' && s.endExplanation) {
       add('-first-connector', `${s.selections.length === 1 ? '네가 고른' : '처음에 고른'} ${number(s.selections[0]!.choiceId)}번부터 볼게.`, 'CONNECTOR');
-      if (r.endParagraphs) addParagraphs('first', r.endParagraphs.firstChoice, feedbackSectionLead(s, 1), feedbackSectionClosing(s, 1));
-      else add('-first-section', feedbackSectionLead(s, 1) + ' ' + s.endExplanation.firstChoice + '\n\n' + feedbackSectionClosing(s, 1), 'SECTION');
+      // 문단 소스: 개발자 미리보기(r.endParagraphs) → 저장된 v2 설명 → 없으면(v1 문자열) 칸당 말풍선 하나.
+      const paragraphs = r.endParagraphs ?? endExplanationParagraphs(s.endExplanation);
+      const text = s.endExplanation as Exclude<typeof s.endExplanation, FeedbackEndParagraphs | null>;
+      if (paragraphs) addParagraphs('first', paragraphs.firstChoice, feedbackSectionLead(s, 1), feedbackSectionClosing(s, 1));
+      else add('-first-section', feedbackSectionLead(s, 1) + ' ' + text.firstChoice + '\n\n' + feedbackSectionClosing(s, 1), 'SECTION');
       if (s.selections.length === 2) {
         add('-reselection-connector', `다음은 다시 고른 ${number(s.selections[1]!.choiceId)}번이야.`, 'CONNECTOR');
-        if (r.endParagraphs?.reselection) addParagraphs('reselection', r.endParagraphs.reselection, feedbackSectionLead(s, 2), feedbackSectionClosing(s, 2));
-        else add('-reselection-section', feedbackSectionLead(s, 2) + ' ' + s.endExplanation.reselection! + '\n\n' + feedbackSectionClosing(s, 2), 'SECTION');
+        if (paragraphs?.reselection) addParagraphs('reselection', paragraphs.reselection, feedbackSectionLead(s, 2), feedbackSectionClosing(s, 2));
+        else add('-reselection-section', feedbackSectionLead(s, 2) + ' ' + text.reselection! + '\n\n' + feedbackSectionClosing(s, 2), 'SECTION');
       }
       add('-answer-connector', `이제 ${number(s.source.answerChoiceId)}번이 정답인 이유를 볼게.`, 'CONNECTOR');
-      if (r.endParagraphs) addParagraphs('answer', r.endParagraphs.answer);
-      else add('-answer-section', s.endExplanation.answer, 'SECTION');
+      if (paragraphs) addParagraphs('answer', paragraphs.answer);
+      else add('-answer-section', text.answer, 'SECTION');
       add('-question', '이해됐어?', 'QUESTION');
     } else {
       const closing = s.phase === 'COMPLETED' && ['END_START', 'UNDERSTOOD'].includes(s.observations.at(-1)?.command.type ?? '');
