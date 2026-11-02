@@ -254,3 +254,5 @@
 | [`D-0192`](./decisions/D-0192-keep-luna-sol-over-deepseek-pro.md) | accepted | DeepSeek V4-Pro·Flash 시험 뒤 luna·sol 유지 | 19번 ⑤ P1 SUPPORTED Pro 3/10·Flash 0/10(sol 4/10). Pro는 출력 토큰이 sol의 5.5배라 피크에 sol보다 비싸고(세션 약 $0.074 대 $0.051), 지연 중앙 173초. DeepSeek 대체 종결 |
 | [`D-0193`](./decisions/D-0193-end-explanation-paragraph-steps-with-marks.md) | accepted | 마지막 설명: 요점 문단 단위로 넘기고 문단마다 지문·〈보기〉 한 곳 칠하기 | 기존 글 FIXTURE 미리보기로 사용자 사용 판정 "매우 좋아짐". 칠할 곳 없는 문단은 칠하기 지움, 선지는 칠하지 않음. 모델 생성(지시문·형식)은 다음 단계 |
 | [`D-0194`](./decisions/D-0194-end-explanation-layout-v22-default.md) | accepted | 마지막 설명 기본값 layout v2.2(문단 목록 + 칠할 곳) 실제 생성 연결 | v2.2 24/24 생성, 판정 22/24(회사법 ② 제외) 통과, 메모 42번 asked 문장 추가, 인용 실패 시 따옴표 벗기기. 회사법 ②·XS-r1 선지 읽기 문제는 K4 작업으로 |
+| [`D-0195`](./decisions/D-0195-judge-format-slip-normalization.md) | accepted | 판정기 형식 실수(결론 문장 표시, 줄인 인용)는 서버가 기계적으로 고침 | v5.8 재작성 5/86 중 3건 재작성 불필요, 기존 통과 66건 결과 변화 0(재생) |
+| [`D-0196`](./decisions/D-0196-corporate-law-q13-c2-defective-choice.md) | accepted | 회사법 13번 ②는 선지 결함 문항, 선지 읽기 작업 보류, K4 확인 단계 닫음 | 사용자 판단. 선지 읽기 문제 12칸 중 10칸이 이 문항. 회사법 밖 재발 시 재개 |

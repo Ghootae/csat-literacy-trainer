@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import OpenAI from 'openai';
 import { z } from 'zod/v4';
 import { assertNoStructuredProblemGold, SOURCE_TEXT_ANNOTATION_GUIDE } from './source-direct-evaluator.js';
-import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, validateClaims } from './feedback-claims.js';
+import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, snapQuotes, validateClaims } from './feedback-claims.js';
 import { feedbackEndExplanationContent, CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V2_INSTRUCTIONS, type EndExplanationLayout } from './feedback-end-explanation.js';
 import {
   FeedbackRepairAssessmentSchema, FeedbackSelectionAssessmentSchema, PROBLEM_FEEDBACK_SESSION_VERSION,
@@ -160,8 +160,9 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
           const observations = feedbackEvaluationInput(s).observations.map(o => ({ observationId: o.observationId, text: feedbackObservationText(o) }));
           const normalized = normalizeCells(candidate, options);
           const attempt = attempts.at(-1)!; attempt.normalized = normalized.notes;
-          const settled = settleConclusion(normalized.assessment, observations, options);
-          attempt.normalized = [...normalized.notes, ...settled.notes];
+          const snapped = snapQuotes(normalized.assessment, observations);
+          const settled = settleConclusion(snapped.assessment, observations, options);
+          attempt.normalized = [...normalized.notes, ...snapped.notes, ...settled.notes];
           validateClaims(settled.assessment, observations, options);
           const { studentClaims: _claims, claimConflicts: _conflicts, choiceReading: _reading, ground: _ground, judgment: _judgment, ...assessment } = settled.assessment as Record<string, unknown>;
           candidate = { ...assessment, readingSummary: readingSummary(settled.assessment, options) };

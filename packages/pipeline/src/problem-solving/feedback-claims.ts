@@ -158,6 +158,19 @@ function validateCells(assessment: any, observations: { observationId: string; t
   return { touched };
 }
 
+// A student sentence that only states the verdict on a choice number ("그래서 5번이 틀렸어."); any other content word keeps it out.
+const CONJUNCTION = '(?:(?:그래서|따라서|그러므로|그러니까|그럼|그러면|즉|결국)[,，]?\\s*)*';
+const CHOICE_NUMBER = '(?:[①-⑤]|[1-5]\\s*번|[1-5])\\s*(?:은|는|이|가|도|만)?\\s*';
+const LIKE = '(?:것|거)\\s*같(?:아|아요|습니다)?';
+const VERDICT_PREDICATE = [
+  '틀(?:렸(?:어|어요|다|네|네요|습니다)|려(?:요)?|리다|린\\s*' + LIKE + ')',
+  '맞(?:아(?:요)?|다|네(?:요)?|습니다|는\\s*' + LIKE + ')',
+  '옳(?:아(?:요)?|다|네(?:요)?|습니다|지\\s*않(?:아|아요|다|네|습니다)|은\\s*' + LIKE + ')',
+  '적절(?:하(?:다|네|네요|지\\s*않(?:아|아요|다|네|습니다))|해(?:요)?)',
+  '(?:정답|답)(?:이야|이에요|이다|입니다|인\\s*' + LIKE + '|같아(?:요)?)',
+].join('|');
+const CONCLUSION_SENTENCE = new RegExp(`^${CONJUNCTION}${CHOICE_NUMBER}(?:${VERDICT_PREDICATE})[\\s.!?。…~]*$`, 'u');
+
 /** Cleans mechanical slips in the three cells before validation. Returns a copy and one note per change; the input is untouched. */
 export function normalizeCells(assessment: any, options: ClaimsOptions): { assessment: any; notes: string[] } {
   const notes: string[] = [];
@@ -169,6 +182,12 @@ export function normalizeCells(assessment: any, options: ClaimsOptions): { asses
     if ((typeof c.studentReading === 'string' && c.studentReading !== '') || (c.readingQuote ?? null) !== null || (Array.isArray(c.blanks) && c.blanks.length)) {
       c.studentReading = ''; c.readingQuote = null; c.blanks = []; notes.push(`cleared reading fields of UNTOUCHED claim ${c.claimId}`);
     }
+  }
+  // A bare verdict sentence has no source claim to contradict, so it is the choice reading and needs no error entry.
+  if (Array.isArray(a.studentClaims) && Array.isArray(a.errors)) for (const c of a.studentClaims) {
+    if (c?.sourceCheck !== 'CONTRADICTED' || typeof c.quote !== 'string' || !CONCLUSION_SENTENCE.test(normalize(c.quote))) continue;
+    if (a.errors.some((e: any) => Array.isArray(e?.studentEvidence) && e.studentEvidence.some((x: any) => typeof x?.quote === 'string' && overlaps(x, c)))) continue;
+    c.sourceCheck = 'CHOICE_READING'; notes.push(`sourceCheck of a bare verdict sentence set to CHOICE_READING: ${normalize(c.quote)}`);
   }
   const j = a.judgment;
   if (j && typeof j === 'object' && Array.isArray(j.targetClaimIds) && Array.isArray(claims)) {
@@ -190,6 +209,35 @@ export function normalizeCells(assessment: any, options: ClaimsOptions): { asses
   if (!options.correctChoice && a.reconstructability === 'RECONSTRUCTABLE' && Array.isArray(a.errors) && a.errors.some((e: any) => e?.errorType === 'READING') && a.contentAssessment !== 'ERROR') {
     a.contentAssessment = 'ERROR'; a.insufficiencyKind = 'NONE'; notes.push('contentAssessment set to ERROR: READING error on a wrong choice');
   }
+  return { assessment: a, notes };
+}
+
+const SNAP_ANCHOR = 6;
+const SNAP_MIN_LENGTH = 12;
+const SNAP_RATIO_MIN = 0.7;
+const SNAP_RATIO_MAX = 1.5;
+/** Replaces a slightly altered readingQuote or ground quote with the student's exact span when both its ends are unambiguous in the utterance. Returns a copy and one note per change. */
+export function snapQuotes(assessment: any, observations: { observationId: string; text: string }[]): { assessment: any; notes: string[] } {
+  const notes: string[] = [];
+  if (!assessment || typeof assessment !== 'object') return { assessment, notes };
+  const a = structuredClone(assessment);
+  const snap = (ref: any, what: string) => {
+    if (!ref || typeof ref.quote !== 'string' || typeof ref.observationId !== 'string') return;
+    const text = observations.find(o => o.observationId === ref.observationId)?.text;
+    const quote = normalize(ref.quote);
+    if (typeof text !== 'string' || quote.length < SNAP_MIN_LENGTH) return;
+    const utterance = normalize(text);
+    if (utterance.includes(quote)) return;
+    const head = quote.slice(0, SNAP_ANCHOR); const tail = quote.slice(-SNAP_ANCHOR);
+    const start = utterance.indexOf(head); const end = utterance.indexOf(tail);
+    if (start < 0 || start !== utterance.lastIndexOf(head) || end < 0 || end !== utterance.lastIndexOf(tail) || start >= end) return;
+    const span = utterance.slice(start, end + SNAP_ANCHOR);
+    const ratio = span.length / quote.length;
+    if (ratio < SNAP_RATIO_MIN || ratio > SNAP_RATIO_MAX) return;
+    ref.quote = span; notes.push(`${what} snapped to the student's words: ${span}`);
+  };
+  if (Array.isArray(a.choiceReading?.claims)) for (const c of a.choiceReading.claims) snap(c?.readingQuote, 'readingQuote');
+  if (a.ground?.kind !== 'NONE') snap(a.ground, 'ground quote');
   return { assessment: a, notes };
 }
 

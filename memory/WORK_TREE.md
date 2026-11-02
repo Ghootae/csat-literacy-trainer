@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-11-02
+갱신: 2026-11-03
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -96,6 +96,7 @@
 | D-0182 | [v5.3 보강판 채택](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) |
 | D-0185 | [판정 v5.6 선지 읽기 보강](./decisions/D-0185-judge-reading-added-vs-stronger-v56.md), [보고](../docs/experiments/judge-reading-paraphrase-d1-2026-10-28/REPORT-human.md) |
 | D-0188 | [판정 v5.7-2 교정 질문](./decisions/D-0188-problem-feedback-v57-2-direct-questions.md), [보고](../docs/experiments/v57-regression-2026-10-29/REPORT-human.md) |
+| D-0195·D-0196 | [판정기 형식 실수 정리](./decisions/D-0195-judge-format-slip-normalization.md), [인계](../docs/handoffs/2026-11-03-judge-format-slip-normalization.md), [회사법 ② 결함 문항](./decisions/D-0196-corporate-law-q13-c2-defective-choice.md) |
 | D-0194 | [마지막 설명 v2.2 연결](./decisions/D-0194-end-explanation-layout-v22-default.md), [보고](../docs/experiments/end-explanation-paragraph-marks-v22-2026-11-02/REPORT-human.md), [체크포인트](./checkpoints/2026-11-02-end-explanation-v22-wired.md) |
 | D-0184 | [마지막 설명 레이아웃 v1](./decisions/D-0184-end-explanation-layout-v1-adopted.md), [보고](../docs/experiments/end-explanation-layout-2026-10-28/REPORT-human.md) |
 | CP-H | [v5.3 보강 재실행](./checkpoints/2026-10-27-k4-v53-stage3-rerun.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27-b/REPORT-human.md) |

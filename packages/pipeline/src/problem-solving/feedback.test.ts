@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, validateClaims, type ClaimsOptions } from './feedback-claims.js';
+import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, snapQuotes, validateClaims, type ClaimsOptions } from './feedback-claims.js';
 import { CORRECT_END_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V2_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, feedbackEndExplanationContent, feedbackSectionClosing, feedbackSectionLead, stemVerdictWords } from './feedback-end-explanation.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -1936,5 +1936,135 @@ describe('end explanation layout v2 (paragraphs + marks)', () => {
     expect(schema.required).toEqual(['firstChoice', 'reselection', 'answer']);
     expect(schema.properties.firstChoice).toMatchObject({ type: 'array', minItems: 1, items: { required: ['text', 'mark'], additionalProperties: false } });
     expect(schema.properties.firstChoice.items.properties.mark.anyOf.map((x: any) => x.type)).toEqual(['object', 'null']);
+  });
+});
+
+// Fixtures are trimmed first attempts from the saved v5.8 judge records (sessions 97a9de5f, 206a362f, 9924082b); the expected judgment is that of the saved second attempt.
+describe('server fixes two judge format slips (bare verdict sentence, slightly altered quote)', () => {
+  const ref = (observationId: string, quote: string) => ({ observationId, quote });
+  const cl = (claimId: string, choiceText: string, relation: string, studentReading: string, readingQuote: any) => ({ claimId, choiceText, studentReading, relation, readingQuote, blanks: [] as any[] });
+  const sc = (observationId: string, quote: string, sourceCheck: string) => ({ observationId, quote, claimAsStated: quote, sourceBasis: '대조', sourceCheck });
+  const err = (observationId: string, quote: string) => ({ errorId: 'E1', errorType: 'CONTENT', description: '오류', studentEvidence: [ref(observationId, quote)],
+    sourceEvidence: [{ location: 'PASSAGE', quote: '원문', mediaId: null, visualObservation: null }], question: '질문', basis: 'STATED' });
+  const base = { claimConflicts: [], boundary: 'NONE', reconstructability: 'RECONSTRUCTABLE', insufficiencyKind: 'NONE', contentAssessment: 'ERROR', errorHypothesis: null,
+    selectionMismatchQuestion: null, reconstructedPath: ['경로'], sourceEvidence: [{ location: 'PASSAGE', quote: '원문', mediaId: null, visualObservation: null }] };
+  const clean = (raw: any, obs: { observationId: string; text: string }[], options: ClaimsOptions) => {
+    const n = normalizeCells(raw, options); const sn = snapQuotes(n.assessment, obs); const st = settleConclusion(sn.assessment, obs, options);
+    validateClaims(st.assessment, obs, options);
+    return { a: st.assessment, notes: [...n.notes, ...sn.notes, ...st.notes] };
+  };
+
+  const O1 = '627bcc13';
+  const T1 = 'ph가 높아지면 지질이 저하를 띄게 됨 -> 친수성이 증가 = 소수성이 약해짐. 소수성 분자간의 인력이라는 부분이 있으므로, 전하를 띈(친수성이 강해진) 지질은 인력이 약해짐 -> 따라서 5번은 옳지 않은 내용';
+  const lipidObs = [{ observationId: O1, text: T1 }];
+  const lipidOptions: ClaimsOptions = { correctChoice: true, targetVerdict: 'INVALID', choiceText: 'pH가 높아지면 이온화 지질의 소수성이 약해져 소수성 분자 간의 인력이 감소하므로 더욱 미세한 크기의 mRNA-지질 나노 입자 복합체가 형성되겠군.' };
+  const SHORT = '소수성 분자간의 인력이 있으므로, 전하를 띈(친수성이 강해진) 지질은 인력이 약해짐';
+  const FULL = '소수성 분자간의 인력이라는 부분이 있으므로, 전하를 띈(친수성이 강해진) 지질은 인력이 약해짐';
+  const lipid = (readingQuote: string, groundQuote: string) => ({ ...base, rationaleImpliedVerdict: 'INVALID',
+    choiceReading: { claims: [
+      cl('C5-1', 'pH가 높아지면 이온화 지질의 소수성이 약해져', 'EXACT', '소수성이 약해진다고 읽음', ref(O1, 'ph가 높아지면 지질이 저하를 띄게 됨 -> 친수성이 증가 = 소수성이 약해짐')),
+      cl('C5-2', '소수성 분자 간의 인력이 감소하므로', 'EXACT', '인력이 약해진다고 읽음', ref(O1, readingQuote)),
+      cl('C5-3', '더욱 미세한 크기의 mRNA-지질 나노 입자 복합체가 형성되겠군.', 'UNTOUCHED', '복합체 크기는 확인되지 않음', null)] },
+    ground: { kind: 'FACT', ...ref(O1, groundQuote) },
+    judgment: { verdict: 'INVALID', targetClaimIds: ['C5-1', 'C5-2', 'C5-3'], contradiction: '학생 근거는 선지와 같은 방향이다.', holds: false },
+    studentEvidence: [ref(O1, 'ph가 높아지면 지질이 저하를 띄게 됨')], errors: [err(O1, 'ph가 높아지면 지질이 저하를 띄게 됨')],
+    studentClaims: [sc(O1, 'ph가 높아지면 지질이 저하를 띄게 됨', 'CONTRADICTED'), sc(O1, '친수성이 증가 = 소수성이 약해짐', 'UNDETERMINED'),
+      sc(O1, '따라서 5번은 옳지 않은 내용', 'UNDETERMINED')] });
+
+  it('a reading quote and ground quote shortened by the model snap back to the student words', () => {
+    const raw = lipid(SHORT, `ph가 높아지면 지질이 저하를 띄게 됨 -> 친수성이 증가 = 소수성이 약해짐. ${SHORT}`);
+    expect(() => validateClaims(raw, lipidObs, lipidOptions)).toThrow('readingQuote not in observation');
+    const before = structuredClone(raw);
+    const r = clean(raw, lipidObs, lipidOptions);
+    expect(raw).toEqual(before);
+    expect(r.a.choiceReading.claims[1].readingQuote.quote).toBe(FULL);
+    expect(r.a.ground.quote).toBe(`ph가 높아지면 지질이 저하를 띄게 됨 -> 친수성이 증가 = 소수성이 약해짐. ${FULL}`);
+    expect(r.notes).toEqual(expect.arrayContaining([expect.stringContaining('readingQuote snapped'), expect.stringContaining('ground quote snapped')]));
+    expect(r.a).toMatchObject({ judgment: { verdict: 'INVALID' }, rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR' });
+  });
+
+  const O2 = '5adb41d8';
+  const dopamineText = '병이 진행되면 도파민성 뉴런이 더 파괴되니까 레보도파를 늘려도 흡수할 뉴런이 없어서 소용없어. 그래서 5번이 틀렸어.';
+  const dopamineOptions: ClaimsOptions = { correctChoice: false, targetVerdict: 'INVALID', choiceText: '파킨슨병이 진행됨에 따라 증상을 완화하기 위해서는 (가)의 양을 늘리거나 (가)와 (다)를 병용할 수 있겠군.' };
+  const dopamine = (verdictQuote: string) => ({ ...base, rationaleImpliedVerdict: 'INVALID',
+    choiceReading: { claims: [cl('C5-1', '파킨슨병이 진행됨에 따라 증상을 완화하기 위해서는 (가)의 양을 늘리거나', 'EXACT', '증량을 부정함', ref(O2, '레보도파를 늘려도 흡수할 뉴런이 없어서 소용없어.')),
+      cl('C5-2', '(가)와 (다)를 병용할 수 있겠군.', 'UNTOUCHED', '', null)] },
+    ground: { kind: 'FACT', ...ref(O2, '병이 진행되면 도파민성 뉴런이 더 파괴되니까 레보도파를 늘려도 흡수할 뉴런이 없어서 소용없어.') },
+    judgment: { verdict: 'INVALID', targetClaimIds: ['C5-1'], contradiction: '흡수할 뉴런이 없으면 증량은 소용없다.', holds: true },
+    studentEvidence: [ref(O2, dopamineText)], errors: [err(O2, '레보도파를 늘려도 흡수할 뉴런이 없어서 소용없어.')],
+    studentClaims: [sc(O2, '병이 진행되면 도파민성 뉴런이 더 파괴되니까', 'CONSISTENT'), sc(O2, '레보도파를 늘려도 흡수할 뉴런이 없어서 소용없어.', 'CONTRADICTED'), sc(O2, verdictQuote, 'CONTRADICTED')] });
+
+  it('a CONTRADICTED bare verdict sentence without an error becomes CHOICE_READING (206a362f)', () => {
+    const obs = [{ observationId: O2, text: dopamineText }];
+    const raw = dopamine('그래서 5번이 틀렸어.');
+    expect(() => validateClaims(raw, obs, dopamineOptions)).toThrow('CONTRADICTED claim has no error');
+    const before = structuredClone(raw);
+    const r = clean(raw, obs, dopamineOptions);
+    expect(raw).toEqual(before);
+    expect(r.a.studentClaims.map((c: any) => c.sourceCheck)).toEqual(['CONSISTENT', 'CONTRADICTED', 'CHOICE_READING']);
+    expect(r.notes).toEqual(expect.arrayContaining([expect.stringContaining('bare verdict sentence')]));
+    expect(r.a).toMatchObject({ judgment: { verdict: 'INVALID' }, rationaleImpliedVerdict: 'INVALID', contentAssessment: 'ERROR' });
+  });
+
+  const O3 = '4c25ec4b';
+  const inkText = '더 끈적거리면 점도가 커지니까 오네소르게 수가 작아지고, 범위보다 작아지면 위성 잉크 방울이 생기니까 5번이 맞아.';
+  const inkOptions: ClaimsOptions = { correctChoice: false, targetVerdict: 'VALID', choiceText: '구입 후 다섯 달이 지났을 때, 파란색 잉크가 구입할 당시의 밀도와 표면 장력은 변하지 않았으나 더 끈적거리는 성질로 변하였다면 파란색 위성 잉크 방울이 생성될 수 있겠군.' };
+  const ink = { ...base, rationaleImpliedVerdict: 'VALID',
+    choiceReading: { claims: [
+      cl('C5-1', '구입 후 다섯 달이 지났을 때,', 'UNTOUCHED', '', null),
+      cl('C5-2', '파란색 잉크가 구입할 당시의 밀도와 표면 장력은 변하지 않았으나', 'UNTOUCHED', '', null),
+      cl('C5-3', '더 끈적거리는 성질로 변하였다면', 'EXACT', '점도가 커지는 조건으로 읽음', ref(O3, '더 끈적거리면 점도가 커지니까')),
+      cl('C5-4', '파란색 위성 잉크 방울이 생성될 수 있겠군.', 'EXACT', '생성 가능성을 판단함', ref(O3, '범위보다 작아지면 위성 잉크 방울이 생기니까 5번이 맞아.'))] },
+    ground: { kind: 'FACT', ...ref(O3, '더 끈적거리면 점도가 커지니까 오네소르게 수가 작아지고, 범위보다 작아지면 위성 잉크 방울이 생기니까') },
+    judgment: { verdict: 'VALID', targetClaimIds: ['C5-3', 'C5-4'], contradiction: '학생 근거를 참으로 두면 생성 가능성을 지지한다.', holds: true },
+    studentEvidence: [ref(O3, inkText)], errors: [err(O3, '점도가 커지니까 오네소르게 수가 작아지고')],
+    studentClaims: [sc(O3, '더 끈적거리면 점도가 커지니까', 'CONSISTENT'), sc(O3, '점도가 커지니까 오네소르게 수가 작아지고', 'CONTRADICTED'),
+      sc(O3, '범위보다 작아지면 위성 잉크 방울이 생기니까', 'CONSISTENT'), sc(O3, '5번이 맞아.', 'CONTRADICTED')] };
+
+  it('a CONTRADICTED "5번이 맞아." is moved while the real contradicted claim keeps its error (9924082b)', () => {
+    const obs = [{ observationId: O3, text: inkText }];
+    expect(() => validateClaims(ink, obs, inkOptions)).toThrow('CONTRADICTED claim has no error');
+    const r = clean(ink, obs, inkOptions);
+    expect(r.a.studentClaims.map((c: any) => c.sourceCheck)).toEqual(['CONSISTENT', 'CONTRADICTED', 'CONSISTENT', 'CHOICE_READING']);
+    expect(r.a).toMatchObject({ judgment: { verdict: 'VALID' }, rationaleImpliedVerdict: 'VALID', contentAssessment: 'ERROR' });
+  });
+
+  describe('cases left alone', () => {
+    const verdict = (quote: string, errors: any[] = []) => {
+      const text = `레보도파를 늘려도 소용없어. ${quote}`;
+      const obs = [{ observationId: O2, text }];
+      const raw = { ...dopamine(quote), errors: [err(O2, '레보도파를 늘려도 소용없어.'), ...errors.map((e, i) => ({ ...e, errorId: `E${i + 2}` }))] };
+      raw.choiceReading.claims[0]!.readingQuote = ref(O2, '레보도파를 늘려도 소용없어.');
+      raw.ground = { kind: 'FACT', ...ref(O2, '레보도파를 늘려도 소용없어.') };
+      raw.studentClaims = [sc(O2, '레보도파를 늘려도 소용없어.', 'CONTRADICTED'), sc(O2, quote, 'CONTRADICTED')];
+      raw.studentEvidence = [ref(O2, text)];
+      return { raw, obs };
+    };
+    it('a verdict sentence with a content word is not moved', () => {
+      const { raw, obs } = verdict('5번은 점도가 커서 틀려.');
+      expect(normalizeCells(raw, dopamineOptions).assessment.studentClaims[1].sourceCheck).toBe('CONTRADICTED');
+      expect(() => clean(raw, obs, dopamineOptions)).toThrow('CONTRADICTED claim has no error');
+    });
+    it('a CONTRADICTED verdict sentence that overlaps an error is not moved', () => {
+      const { raw, obs } = verdict('그래서 5번이 틀렸어.', [err(O2, '그래서 5번이 틀렸어.')]);
+      expect(normalizeCells(raw, dopamineOptions).assessment.studentClaims[1].sourceCheck).toBe('CONTRADICTED');
+      expect(() => clean(raw, obs, dopamineOptions)).not.toThrow();
+    });
+    it('a head that appears twice is not snapped', () => {
+      const text = '소수성 분자간의 인력이라는 부분이 있고, 소수성 분자간의 인력이라는 부분이 있으므로 인력이 약해짐';
+      const quote = '소수성 분자간의 인력이 있으므로 인력이 약해짐';
+      const a = { choiceReading: { claims: [cl('C1', 'x', 'EXACT', 'y', ref(O1, quote))] }, ground: { kind: 'NONE', observationId: '', quote: '' } };
+      expect(snapQuotes(a, [{ observationId: O1, text }]).notes).toEqual([]);
+    });
+    it('a span whose length ratio is out of range is not snapped', () => {
+      const long = '소수성 분자간의 인력이라는 부분이 있으므로 그 사이에 아주 긴 다른 이야기가 길게 길게 길게 이어지고 나서 전하를 띈 지질은 인력이 약해짐';
+      const quote = '소수성 분자간의 인력이 약해짐';
+      const a = { choiceReading: { claims: [cl('C1', 'x', 'EXACT', 'y', ref(O1, quote))] }, ground: { kind: 'NONE', observationId: '', quote: '' } };
+      expect(snapQuotes(a, [{ observationId: O1, text: long }]).notes).toEqual([]);
+    });
+    it('a quote shorter than 12 characters is not snapped', () => {
+      const a = { choiceReading: { claims: [cl('C1', 'x', 'EXACT', 'y', ref(O1, '소수성 분자 인력이'))] }, ground: { kind: 'NONE', observationId: '', quote: '' } };
+      expect(snapQuotes(a, [{ observationId: O1, text: '소수성 분자간의 인력이라는 것이 인력이' }]).notes).toEqual([]);
+    });
   });
 });
