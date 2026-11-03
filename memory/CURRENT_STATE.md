@@ -23,11 +23,11 @@
 - 서버는 판정기 INSUFFICIENT를 SUPPORTED로 올리지 않는다(내리기만, [D-0189](./decisions/D-0189-server-never-raises-insufficient.md)). 판정 지시문 기본값은 v5.8([D-0190](./decisions/D-0190-problem-feedback-v58-default.md)).
 - 판정기 형식 실수 두 종류(결론 문장 표시, 줄인 인용)는 서버가 고친다([D-0195](./decisions/D-0195-judge-format-slip-normalization.md)). 회사법 13번 ②는 선지 결함 문항, K4 닫음·선지 읽기 보류([D-0196](./decisions/D-0196-corporate-law-q13-c2-defective-choice.md)). luna 기호 오독(Q-0030)은 관찰([D-0197](./decisions/D-0197-luna-marker-misread-observe.md)). 다음(시점 미정): gpt-6.1-terra로 sol 대체 시험, S2 기호 조건 포함.
 - 선택형 출제자 전략 피드백([D-0170](./decisions/D-0170-optional-examiner-strategy-feedback.md)): 동결본 truth FALSE 선지 57편을 sol·지시문 v4로 생성하고 코드 에이전트 검토(골드 수정 4, 재생성 통과)까지 마쳤다([FINAL.json](../docs/experiments/examiner-strategy-2026-10-23/FINAL.json)). 개발자 문제 화면에 연결했다(세션 종료 뒤 말풍선·[다음], 커밋 `dc6c295`). 같은 커밋에서 선지를 가운데 문제 칸에서 직접 누르도록 바꿨다([D-0172](./decisions/D-0172-problem-ui-choice-direct-select.md)). 다음: 사용자 직접 사용 메모 반영. 메모장 38번 [다시 풀기]를 주 버튼 왼쪽에 두기는 결정·구현 대기, 40번 쉽게 풀어쓰기·41번 원문 칠하기·43번 전략 입구 하나로는 논의 대기([메모장](../docs/review/v4-dev-ui-feedback-backlog-2026-10-11.md)). 문제 세트 흐름([다음 문제로]·[다음 지문으로])은 별도 과제다.
-- 마지막 설명에 선지 연결 좌표를 넣는 안은 차이가 없어 운영 미반영 확정([D-0167](./decisions/D-0167-choice-link-end-explanation-comparison.md)).
+- 마지막 설명에 선지 연결 좌표 넣기는 차이 없어 미반영([D-0167](./decisions/D-0167-choice-link-end-explanation-comparison.md)).
 - 구조화 문제 골드는 학생용 런타임 입력과 실행 조건으로 쓰지 않는다. 모든 런타임 단계는 완전한 원문·문항·선지·정답·공식 해설·원자료 이미지를 직접 쓴다.
-- 명시적 오류는 교정하고, 불충분하거나 모호한 근거는 진단한다.
-- 정책·코드 불일치: 정책 문서는 '코칭 후 종료'인데 현행 코드는 1·2차 오답의 질문 한도 소진 시 현재 선지 코칭 확인 뒤에도 재선택한다. 코드·회귀 정의를 근거로 현행 동작을 구분한다([확인 기록](./checkpoints/2026-10-01-problem-feedback-policy-runtime-discrepancy.md)).
-- 인용·상태 계약 오류는 학생 선택·근거·후속 답변을 보존한 `EVALUATION_ERROR`에서 자동 1회와 수동 재개가 가능하다.
+- 명시적 오류는 교정하고, 불충분·모호한 근거는 진단한다.
+- 정책·코드 불일치: 정책 문서는 '코칭 후 종료'인데 현행 코드는 1·2차 오답의 질문 한도 소진 시 현재 선지 코칭 확인 뒤에도 재선택한다. 현행 동작은 코드·회귀 정의 기준([확인 기록](./checkpoints/2026-10-01-problem-feedback-policy-runtime-discrepancy.md)).
+- 인용·상태 계약 오류는 `EVALUATION_ERROR`(학생 입력 보존)에서 자동 1회·수동 재개된다.
 
 ## 문단 요약 대화
 
@@ -63,7 +63,7 @@
 - 학생용 `/dialogue`는 연결 가능한 6개 지문을 제공한다. 웹 루트 `/`는 `/dialogue`로 간다. 이전 문단 훈련 UI는 `/legacy`에 보존한다.
 - 개발자 화면: `/dialogue/lab`(문단 단순 형식), `/dialogue/dev`(문단 축 기반), `/problem/lab`(문제, API는 5175 분리 실행 `problem-feedback-entry.js`). 앞으로 URL은 개발자 화면만 안내하며 학생용 UI는 개발자 UI 확정 전 수정하지 않는다([D-0031](./decisions/D-0031-developer-ui-url-only.md)).
 - Cloudflare Named Tunnel `csat-dialogue` → `https://dialogue.cogaxis.net`. 상시 서버는 보류. 로컬 ingress 파일이 없어 `--url http://127.0.0.1:5173`이 필요하고, 자동 시작 미등록이라 프로세스가 살아 있어야 한다. 인증 없는 골드·내부 판정 공개는 기존 사용자 승인 범위다. 인증·서버 재시작 복원은 미완료.
-- 2026-09-12 사용자가 학생 역할로 6지문·30문단·연결 문항 6개를 직접 수행했다(문단 최종 PASS 30/30, 문제 최종 정답 6/6). UI 실사용 자료이지 외부 학생 효과 자료가 아니다.
+- 2026-09-12 사용자가 학생 역할로 6지문 전 구간 수행(문단 PASS 30/30, 문제 6/6). 학생 효과 자료 아님.
 
 ## 검증된 핵심 결론
 
@@ -75,6 +75,8 @@
 ## 현재 우선순위
 
 학생용 전환 순서는 [D-0176](./decisions/D-0176-student-switch-roadmap-pilot-before-expansion.md): 1′ 6지문으로 개발자 경로 알려진 문제 0건 → 얇은 학생판 준비 → 방식과 무관한 원자료 확대만 먼저 → (섭외 뒤) 실제 학생 확인 → 운영 방식 확정 → 부가 자산 확대 → 정식 전환. 실제 학생 섭외처는 아직 없다(2026-10-25).
+
+사전 점검: 중학교 교사 2~3명 원격 시연 준비 완료([D-0198](./decisions/D-0198-teacher-demo-pilot.md)). 다음(사용자): 설문 링크·연락처, 공유, 서버·터널.
 
 1. 1′ 첫 과제: 문제 판정 v5.1 `coaching` 필드 정리 완료([D-0177](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md)).
 2. 1′ 나머지: 문제 개발자 경로 메모장 30번 논의, 출제자 전략·선지 직접 누르기 화면 사용 메모 반영. 문단 작동 순서 문서 남김 1건(골드 없는 지문 추가 때 목록 필터).
