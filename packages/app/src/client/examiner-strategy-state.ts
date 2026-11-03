@@ -54,7 +54,7 @@ export function strategyBubbles(state: StrategyState, choices: StrategyChoices):
     const bubbles: StrategyBubble[] = paragraphs.slice(0, opened.shown).map((text, i) => ({ key: `strategy-${index}-${opened.position}-${i}`, label, text, end: false }));
     if (opened.shown >= paragraphs.length) {
       const remaining = choices.map(c => c.position).filter(p => !state.opened.slice(0, index + 1).some(o => o.position === p));
-      bubbles.push({ key: `strategy-${index}-${opened.position}-end`, label: '피드백', text: strategyEndText(opened.position, remaining), end: true });
+      bubbles.push({ key: `strategy-${index}-${opened.position}-end`, label: `출제자 전략 · 마무리`, text: strategyEndText(opened.position, remaining), end: true });
     }
     return bubbles;
   });

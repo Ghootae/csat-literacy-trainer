@@ -38,8 +38,8 @@ interface ParagraphRuntime { attempts: AttemptRuntime[] }
 const newAttempt = (attemptNumber: number): AttemptRuntime =>
   ({ attemptNumber, state: initialSimpleState(), transcript: [], steps: [], status: 'IDLE', abandoned: false });
 const tutorLabel: Record<SimpleAction, SimpleMessageLabel> = {
-  PRAISE: '피드백', RETRY_PROMPT: '다시 써 보기', CORRECTION_QUESTION: '확인하기', GAP_QUESTION: '생각해 보기',
-  CLOSE_GAP: '빠진 내용', CLOSE_NO_RESPONSE: '문단 핵심', CLOSE_ERRORS: '바로잡기',
+  PRAISE: '잘 쓴 점', RETRY_PROMPT: '다시 써 보기', CORRECTION_QUESTION: '틀린 부분 묻기', GAP_QUESTION: '빠진 내용 묻기',
+  CLOSE_GAP: '빠진 내용 정리', CLOSE_NO_RESPONSE: '문단 핵심', CLOSE_ERRORS: '틀린 부분 바로잡기',
 };
 type LogEvent = 'STEP' | 'EVALUATION_FAILED' | 'ATTEMPT_STARTED' | 'ATTEMPT_ABANDONED';
 interface Runtime {
@@ -188,13 +188,13 @@ export class SimpleDialogueController {
   /** GAP_QUESTION: 리액션+번호 질문 한 말풍선. 질문 뒤 PRAISE·CLOSE_GAP·CLOSE_NO_RESPONSE: 전체 피드백 + 부분별 핵심 상자 한 말풍선. CLOSE_ERRORS: 도입 -> 오류마다 -> 마무리 피드백 + 부분별 핵심 상자. */
   private tutorMessages(o: SimpleOutput, stage: SimpleParagraphState['stage'], key: string, coreDescriptions: string[], steps: Step[]): SimpleMessageView[] {
     const tutor = (m: Omit<SimpleMessageView, 'role'>): SimpleMessageView => ({ role: 'tutor', ...m });
-    if (o.action === 'GAP_QUESTION') return [tutor({ text: o.message, items: o.gaps.map(g => g.question), label: '생각해 보기' })];
+    if (o.action === 'GAP_QUESTION') return [tutor({ text: o.message, items: o.gaps.map(g => g.question), label: '빠진 내용 묻기' })];
     // 칭찬 문장은 코드가 고른다(o.message는 기록·서랍에만 남는다). 질문 뒤에는 부분별 요약, 첫 요약·다시 쓴 요약에는 기준 핵심 부분 설명을 상자에 둔다.
-    if (o.action === 'PRAISE') return [tutor({ text: pickLine(bubbleLines.praise, key), parts: stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP' ? o.corePartSummaries : coreDescriptions, partsTitle: '내가 파악한 문단의 핵심 내용', partTags: catchTags(steps, o.corePartsCovered.length), label: '피드백' })];
-    if (o.action === 'CLOSE_GAP') return [tutor({ text: o.message, parts: o.corePartSummaries, label: '빠진 내용' })];
-    if (o.action === 'CLOSE_ERRORS') return [tutor({ text: o.message, label: '바로잡기' }),
-      ...o.errors.map(e => tutor({ text: e.feedback, quote: e.studentQuote, label: '바로잡기' })),
-      tutor({ text: o.closingFeedback ?? '', parts: o.corePartSummaries, label: '바로잡기' })];
+    if (o.action === 'PRAISE') return [tutor({ text: pickLine(bubbleLines.praise, key), parts: stage === 'AFTER_CORRECTION' || stage === 'AFTER_GAP' ? o.corePartSummaries : coreDescriptions, partsTitle: '내가 파악한 문단의 핵심 내용', partTags: catchTags(steps, o.corePartsCovered.length), label: '잘 쓴 점' })];
+    if (o.action === 'CLOSE_GAP') return [tutor({ text: o.message, parts: o.corePartSummaries, label: '빠진 내용 정리' })];
+    if (o.action === 'CLOSE_ERRORS') return [tutor({ text: o.message, label: '틀린 부분 바로잡기' }),
+      ...o.errors.map(e => tutor({ text: e.feedback, quote: e.studentQuote, label: '틀린 부분 바로잡기' })),
+      tutor({ text: o.closingFeedback ?? '', parts: o.corePartSummaries, label: '틀린 부분 바로잡기' })];
     if (o.action === 'CLOSE_NO_RESPONSE') return [tutor({ text: o.message, parts: o.corePartSummaries, label: '문단 핵심' })];
     return [tutor({ text: o.message, label: tutorLabel[o.action] })];
   }

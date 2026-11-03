@@ -8,6 +8,8 @@ import { AnnotatedText } from './annotated-text.js';
 import { SimpleBubble, SimpleDialogueDrawer } from './SimpleDialogueDrawer.js';
 import { getSimple, navigateSimple, newAttemptSimple, respondSimple, startSimple } from './simple-dialogue-api.js';
 import { bubbleDelayMs } from './bubble-pacing.js';
+import { RationaleSymbolBar } from './RationaleSymbolBar.js';
+import { toSubmittedText, type SymbolMark } from './rationale-tools.js';
 import { simpleWaitingText } from './simple-waiting.js';
 import './simple-dialogue.css';
 
@@ -17,6 +19,9 @@ export function SimpleDialogueApp(): React.JSX.Element {
   const [passages, setPassages] = useState<readonly DialoguePassageSummary[] | null>(null);
   const [view, setView] = useState<SimpleDialogueView | null>(null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
+  const responseBox = useRef<HTMLTextAreaElement>(null);
+  const symbolMarks = useRef<SymbolMark[]>([]);
+  useEffect(() => { symbolMarks.current = []; }, [current?.index]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [drawer, setDrawer] = useState(false);
@@ -98,7 +103,7 @@ export function SimpleDialogueApp(): React.JSX.Element {
   const failed = current.evaluationStatus === 'RETRYABLE_ERROR';
   const last = current.index + 1 >= view.paragraphs.length;
   const submit = () => {
-    const text = draft.trim();
+    const text = toSubmittedText(draft, symbolMarks.current).trim();
     if (!text || busy || !current.canRespond || !sequenceDone) return;
     const transitionId = crypto.randomUUID();
     setPending({ text, stage: current.stage, startedAt: Date.now(), transitionId });
@@ -156,11 +161,12 @@ export function SimpleDialogueApp(): React.JSX.Element {
             {last && view.problemUrl && <button className="primary" onClick={() => window.location.assign(view.problemUrl!)}>문제 풀기</button>}
             {last && !view.allDone && <small>끝나지 않은 문단이 있어요. 위의 문단 번호로 이동하세요.</small>}</div></div>
             : <div className="dialogue-compose"><label className="simple-sr-only" htmlFor="simple-response">이 문단의 중심 내용과 관계를 설명해 주세요.</label>
-              <textarea id="simple-response" value={draft} disabled={busy || !current.canRespond || !sequenceDone} placeholder="내 생각을 적어보세요…"
+              <textarea ref={responseBox} id="simple-response" value={draft} disabled={busy || !current.canRespond || !sequenceDone} placeholder="내 생각을 적어보세요…"
                 onChange={e => setDrafts(old => ({ ...old, [current.index]: e.target.value }))}
                 onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); submit(); } }} />
+              <RationaleSymbolBar key={current.index} marks={symbolMarks} value={draft} onChange={text => setDrafts(old => ({ ...old, [current.index]: text }))} input={responseBox} disabled={busy || !current.canRespond || !sequenceDone} />
               <div className="dialogue-compose-row"><small>⌘/Ctrl + Enter</small>
-                <button className="primary" disabled={busy || !current.canRespond || !sequenceDone || !draft.trim()} onClick={submit}>{failed ? '다시 시도' : '보내기'}</button></div></div>}
+                <button data-rationale-submit="" className="primary" disabled={busy || !current.canRespond || !sequenceDone || !draft.trim()} onClick={submit}>{failed ? '다시 시도' : '보내기'}</button></div></div>}
         </footer>
       </section>
     </div>

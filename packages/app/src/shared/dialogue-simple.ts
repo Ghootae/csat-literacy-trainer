@@ -1,5 +1,5 @@
 /** 단순 형식 문단 개발자 모드(simple-holistic)의 서버-클라이언트 계약. */
-export type SimpleMessageLabel = '나의 요약' | '다시 쓴 요약' | '나의 답' | '피드백' | '다시 써 보기' | '확인하기' | '생각해 보기' | '빠진 내용' | '바로잡기' | '문단 핵심';
+export type SimpleMessageLabel = '나의 요약' | '다시 쓴 요약' | '나의 답' | '피드백' | '잘 쓴 점' | '다시 써 보기' | '틀린 부분 묻기' | '빠진 내용 묻기' | '빠진 내용 정리' | '틀린 부분 바로잡기' | '문단 핵심';
 /** `quote`: 말풍선 위에 작게 보일 학생 발화 인용. `parts`: 말풍선 안 옅은 배경 상자에 번호 목록으로 보일 부분별 문단 핵심. `partsTitle`: 상자 맨 위 제목. `partTags`: 항목별 꼬리표(parts와 같은 길이). `items`: 말풍선 안 번호 목록(빈 곳 질문). */
 export interface SimpleMessageView { role: 'student' | 'tutor'; text: string; label: SimpleMessageLabel; quote?: string; parts?: string[]; partsTitle?: string; partTags?: string[]; items?: string[]; copied?: true;
   /** 판정을 기다리던 '생각 중' 말풍선 자리에 남는 마무리 말풍선. 모델 입력에는 넣지 않는다. */ kind?: 'WAIT_DONE' }

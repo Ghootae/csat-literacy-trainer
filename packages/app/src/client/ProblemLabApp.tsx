@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ExaminerStrategyView, FeedbackMediaView, FeedbackRequest, FeedbackWorkbenchView } from '../shared/problem-feedback.js';
+import type { ExaminerStrategyView, FeedbackMediaView, FeedbackMessage, FeedbackRequest, FeedbackWorkbenchView } from '../shared/problem-feedback.js';
 import { getExaminerStrategy, getFeedback, markExaminerStrategyView, startEndPreview, startFeedback, submitFeedback } from './problem-feedback-api.js';
 import { FeedbackDrawer } from './FeedbackDrawer.js';
 import './problem-feedback-workbench.css';
 import { Markdown } from './markdown.js';
+import { appendConclusion, conclusionText, toSubmittedText, type SymbolMark } from './rationale-tools.js';
+import { RationaleSymbolBar } from './RationaleSymbolBar.js';
 import { composerState, sequenceState, waitingKind, waitingText, type WaitingKind, type ButtonId } from './problem-composer-state.js';
 import { choiceHintText, circled, currentStrategyPosition, initialStrategyState, strategyLeadText, nextStrategyParagraph, openStrategy, seenStrategyPositions, strategyBubbles, strategyHighlights, strategyStage } from './examiner-strategy-state.js';
 import { bubbleDelayMs } from './bubble-pacing.js';
@@ -13,6 +15,10 @@ import { paragraphLink, resolveReturnTo } from './dev-part-nav-links.js';
 import { fetchDialoguePassages } from './api.js';
 import type { DialoguePassageSummary } from '../shared/contract.js';
 
+// 말풍선 제목: 서버가 붙인 순서 표시(sequence)와 단계로 기능을 구분한다.
+const coachLabel = (entry: FeedbackMessage) => entry.kind === 'WAIT_DONE' ? '진행' : entry.phase === 'AWAITING_CORRECTION' ? '틀린 부분 묻기'
+  : entry.sequence === 'GATE' ? '설명 시작' : entry.sequence === 'CONNECTOR' || entry.sequence === 'SECTION' ? '선지별 설명'
+  : entry.sequence === 'QUESTION' ? '이해 확인' : entry.sequence === 'CLOSING' ? '마무리' : '판정 결과';
 const read = (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } };
 const store = (key: string, value: string | null) => { try { if (value === null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); } catch { /* Server transcript remains authoritative. */ } };
 function Media({ items }: { items: FeedbackMediaView[] }) {
@@ -32,6 +38,7 @@ export function ProblemLabApp(): React.JSX.Element {
   const [navPassage, setNavPassage] = useState<DialoguePassageSummary | null>(null);
   const [choice, setChoice] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const symbolMarks = useRef<SymbolMark[]>([]);
   const [omit, setOmit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -263,8 +270,9 @@ export function ProblemLabApp(): React.JSX.Element {
     : `${pendingCommand.type === 'SELECT' ? `${view.question.choices.find(c => c.choiceId === pendingCommand.choiceId)?.position}번 선택\n` : ''}${pendingCommand.rationale.mode === 'PROVIDED' ? pendingCommand.rationale.text : '근거 미제출'}`;
   function submit() {
     if (!canSubmit) return;
-    const evidence = omit ? { mode: 'OMITTED' as const } : { mode: 'PROVIDED' as const, text: draft.trim() };
-    void send(correction ? { type: 'CORRECT', errorId: view!.activeErrorId!, text: draft.trim() } : selection ? { type: 'SELECT', choiceId: choice!, rationale: evidence } : { type: 'RATIONALE', rationale: evidence });
+    const text = toSubmittedText(draft, symbolMarks.current).trim();
+    const evidence = omit ? { mode: 'OMITTED' as const } : { mode: 'PROVIDED' as const, text };
+    void send(correction ? { type: 'CORRECT', errorId: view!.activeErrorId!, text } : selection ? { type: 'SELECT', choiceId: choice!, rationale: evidence } : { type: 'RATIONALE', rationale: evidence });
   }
   return <main className="reading-workbench is-developer problem-lab-workbench" data-pane={pane}>
     <header className="workbench-header"><div className="lab-strip-lead"><p className="dialogue-kicker">COGAXIS / PERSONAL LAB</p><p className="developer-notice" title="문제 풀이 개발자 테스트 · 평가 서랍에 내부 판정이 공개됩니다. 실제 포인트는 차감하지 않습니다.">문제 풀이 개발자 테스트 · 평가 서랍에 내부 판정이 공개됩니다. 실제 포인트는 차감하지 않습니다.</p></div>
@@ -285,8 +293,8 @@ export function ProblemLabApp(): React.JSX.Element {
             const at = items.indexOf(e.currentTarget);
             items[(at + step + items.length) % items.length]?.focus();
           }}><span>{o.choice.position}</span><div><p id={`lab-choice-text-${o.choice.position}`}>{o.choice.text}{o.tag && <em className={`lab-choice-tag${o.tag === '봤음' ? ' is-seen' : ''}`}>{o.tag}</em>}</p><Media items={view.question.media.filter(m => m.placement.scope === 'CHOICE' && m.placement.choiceId === o.choice.choiceId)} /></div></li>)}</ol></div></div></section>
-      <section className="workbench-pane chat-pane" aria-label="응답과 피드백"><header className="pane-header"><h2>생각을 나누는 공간</h2><small>{view.phase === 'COMPLETED' ? '풀이 완료' : correction ? '생각 다시 살피기' : view.phase === 'AWAITING_RESELECTION' ? '마지막 선택' : '선택과 근거'}</small></header>
-        <div className="chat-scroll lab-chat-scroll" ref={chat} aria-label="대화 기록">{view.transcript.slice(0, sequence.visibleCount).map(entry => <article className={`chat-message ${entry.role === 'STUDENT' ? 'student' : 'tutor'}${entry.kind === 'WAIT_DONE' ? ' lab-wait-done' : ''}`} key={entry.id}><small>{entry.role === 'STUDENT' ? '나의 응답' : entry.kind !== 'WAIT_DONE' && entry.phase === 'AWAITING_CORRECTION' ? '함께 확인하기' : '피드백'}</small>{entry.kind === 'WAIT_DONE' ? <p>{entry.text}</p> : entry.role === 'COACH' ? <Markdown text={entry.text} /> : <p>{entry.text}</p>}{correction && firstHighlight && entry.role === 'COACH' && entry.phase === 'AWAITING_CORRECTION' && entry.id === view.transcript.at(-1)?.id && <button onClick={() => { setPane(firstHighlight.location === 'PASSAGE' ? 'source' : 'problem'); scrollToHighlight(); }}>지문에서 보기</button>}</article>)}
+      <section className="workbench-pane chat-pane" aria-label="응답과 피드백"><header className="pane-header"><h2>생각을 나누는 공간</h2><small>{view.phase === 'COMPLETED' ? '풀이 완료' : correction ? '질문에 답하기' : view.phase === 'AWAITING_RESELECTION' ? '다시 고르기' : '선택과 근거'}</small></header>
+        <div className="chat-scroll lab-chat-scroll" ref={chat} aria-label="대화 기록">{view.transcript.slice(0, sequence.visibleCount).map(entry => <article className={`chat-message ${entry.role === 'STUDENT' ? 'student' : 'tutor'}${entry.kind === 'WAIT_DONE' ? ' lab-wait-done' : ''}`} key={entry.id}><small>{entry.role === 'STUDENT' ? '나의 응답' : coachLabel(entry)}</small>{entry.kind === 'WAIT_DONE' ? <p>{entry.text}</p> : entry.role === 'COACH' ? <Markdown text={entry.text} /> : <p>{entry.text}</p>}{correction && firstHighlight && entry.role === 'COACH' && entry.phase === 'AWAITING_CORRECTION' && entry.id === view.transcript.at(-1)?.id && <button onClick={() => { setPane(firstHighlight.location === 'PASSAGE' ? 'source' : 'problem'); scrollToHighlight(); }}>지문에서 보기</button>}</article>)}
           {sequence.showDots && <article className="chat-message tutor lab-sequence-waiting" role="status" aria-label="다음 이야기 준비 중"><span className="lab-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></article>}
           {pendingText && !view.transcript.some(m => m.id === `student-${pending?.transitionId}`) && <article className="chat-message student"><small>나의 응답 · 전송 확인 중</small><p>{pendingText}</p></article>}
           {(waiting || pending) && (!pendingInstant || (instant?.id === `instant-${pending?.transitionId}` && instantWaitReady)) && <article className="chat-message tutor lab-waiting" role="status" aria-live="polite"><small>피드백</small><p>{waitingText(waitClock.kind, waitClock.elapsedMs, pending?.transitionId ?? view.sessionId)}<span className="lab-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></article>}
@@ -299,7 +307,13 @@ export function ProblemLabApp(): React.JSX.Element {
           <div className="lab-composer-top"><div className="lab-composer-notice" role={composer.notice.kind === 'error' ? 'alert' : 'status'} title={composer.notice.text || undefined}>{composer.notice.text || composer.status.text}{!composer.notice.text && composer.status.canChange && <button type="button" className="lab-change-choice" onClick={changeChoice}>문제에서 바꾸기</button>}</div>
             <label className="lab-omit"><input type="checkbox" checked={composer.actions.check ? omit : false} disabled={!composer.actions.check || composer.actions.checkDisabled} onChange={e => setOmit(e.target.checked)} />{composer.actions.check ?? '정답만 입력'}</label></div>
           <div className="lab-composer-input"><label className="lab-sr-only" htmlFor="lab-response">{composer.input.label}</label><textarea ref={response} id="lab-response" value={draft} disabled={composer.input.disabled} onChange={e => setDraft(e.target.value)} placeholder={composer.input.placeholder} /></div>
-          <div className="lab-compose-actions"><div className="lab-primary-actions">{composer.actions.buttons.map(button => <button key={button.id} className={button.id === 'RESTART' ? undefined : 'primary'} disabled={button.disabled} onClick={() => {
+          <RationaleSymbolBar value={draft} onChange={setDraft} input={response} marks={symbolMarks} disabled={composer.input.disabled} hidden={composer.input.disabled}>{(() => {
+            const position = view.question.choices.find(c => c.choiceId === choice)?.position, conclusion = position && !correction ? conclusionText(view.question.stem, position) : null;
+            return <button type="button" className="rationale-conclusion" data-hint={conclusion ? `→ ${conclusion.replace("따라서 ", "").replace("번은", "")}` : "선지 고른 뒤 결론"} disabled={composer.input.disabled || !conclusion} onClick={() => {
+              const text = appendConclusion(response.current?.value ?? draft, conclusion!); setDraft(text); requestAnimationFrame(() => { response.current?.focus(); response.current?.setSelectionRange(text.length, text.length); });
+            }}>결론</button>;
+          })()}</RationaleSymbolBar>
+          <div className="lab-compose-actions"><div className="lab-primary-actions">{composer.actions.buttons.map(button => <button key={button.id} data-rationale-submit={button.id === 'SUBMIT' ? '' : undefined} className={button.id === 'RESTART' ? undefined : 'primary'} disabled={button.disabled} onClick={() => {
             if (button.id === 'SUBMIT') submit();
             else if (button.id === 'RETRY') void send();
             else if (button.id === 'RESTART') void restart(true);
