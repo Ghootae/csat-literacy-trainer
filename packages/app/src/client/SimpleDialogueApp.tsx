@@ -21,7 +21,7 @@ export function SimpleDialogueApp(): React.JSX.Element {
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const responseBox = useRef<HTMLTextAreaElement>(null);
   const symbolMarks = useRef<SymbolMark[]>([]);
-  useEffect(() => { symbolMarks.current = []; }, [current?.index]);
+  useEffect(() => { symbolMarks.current = []; }, [view?.current.index]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [drawer, setDrawer] = useState(false);
