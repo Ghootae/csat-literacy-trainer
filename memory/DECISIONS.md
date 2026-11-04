@@ -258,3 +258,4 @@
 | [`D-0196`](./decisions/D-0196-corporate-law-q13-c2-defective-choice.md) | accepted | 회사법 13번 ②는 선지 결함 문항, 선지 읽기 작업 보류, K4 확인 단계 닫음 | 사용자 판단. 선지 읽기 문제 12칸 중 10칸이 이 문항. 회사법 밖 재발 시 재개 |
 | [`D-0197`](./decisions/D-0197-luna-marker-misread-observe.md) | accepted | luna 기호 오독(Q-0030)은 고치지 않고 관찰, 후보 ①·② 불채택 | 사용자 판단. 확정 6건(공손룡 ⓓ), v5.8 재현 학생 노출 0/20, 마지막 설명 오독 0/2 |
 | [`D-0198`](./decisions/D-0198-teacher-demo-pilot.md) | accepted | 중학교 국어 교사 2~3명 원격 시연을 학생 확인 앞 사전 점검으로, 튜토리얼 후 자유 사용·사용 후 짧은 설문 | 사용자 판단. 각본 최종 칸 3/3 기대 반응, 판정별 의견은 받지 않음 |
+| [`D-0199`](./decisions/D-0199-keep-sol-over-terra-61.md) | accepted | gpt-6.1-terra 시험 뒤에도 오답 경로 sol 유지, terra는 대체 후보로 기록 | 사용자 판단. 판정 13/13 같음·기호 오독 0, P1 SUPPORTED terra 0/10 대 sol 4/10, 설명 압축 1건, 비용 절반 |

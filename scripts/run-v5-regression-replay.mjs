@@ -7,14 +7,14 @@ import { pathToFileURL } from 'node:url';
 import { ProblemFeedbackController } from '../packages/app/dist/server/problem-feedback.js';
 import { OpenAIFeedbackEvaluator } from '../packages/pipeline/dist/index.js';
 
-const RATES = { 'gpt-6.1-sol': { input: 2, output: 10 }, 'gpt-6-luna': { input: 0.10, output: 0.50 } }; // USD per 1M tokens
+const RATES = { 'gpt-6.1-sol': { input: 2, output: 10 }, 'gpt-6-luna': { input: 0.10, output: 0.50 }, 'gpt-6.1-terra': { input: 1, output: 5 } }; // USD per 1M tokens
 const read = p => JSON.parse(readFileSync(p, 'utf8'));
 const put = (p, x) => { writeFileSync(p + '.tmp', JSON.stringify(x, null, 2) + '\n'); renameSync(p + '.tmp', p); };
 
 export const HELP = `사용법:
   node --env-file-if-exists=.env scripts/run-v5-regression-replay.mjs \\
     --base <기준 폴더> --out <새 폴더> --prompt <지시문 경로> --prompt-version <이름> --cap-usd <n> \\
-    [--only <id,id>] [--answers <json 경로>]
+    [--only <id,id>] [--answers <json 경로>] [--incorrect-model <모델>] [--end-layout <layout-v1|layout-v2|v5.3>]
   node scripts/run-v5-regression-replay.mjs --base <기준 폴더> --dry     (외부 호출 없이 입력만 읽어 세션별 step 수·첫 명령 출력)
 
 기준 세션의 학생 명령을 같은 순서로 새 지시문에 넣는다. 기준 step의 inReplyTo.phase가 현재 화면 phase와 같을 때만 넣고,
@@ -22,6 +22,7 @@ export const HELP = `사용법:
 --answers JSON: { "<id>": [{ "atStep": n, "command": {...} }] }  (n = 그 세션에 이미 넣은 명령 수. 갈라진 지점에서 그 명령을 넣고
   기준 step 위치는 그대로 둔 채 이어 간다.)
 <out>에 이미 있는 세션은 --only로 지정하지 않으면 건너뛴다. 비용 누적(<out>/ledger.jsonl 포함)이 --cap-usd를 넘으면 새 요청 전에 멈춘다.
+--incorrect-model: REPAIR가 아니고 마지막 선택이 오답인 판정 세션만 그 모델로 판정한다(나머지는 기본 라우팅). --end-layout: 마지막 설명 layout(기본은 제품 기본값).
 출력: <out>/cases/<id>.json, <out>/cases/<id>.records.jsonl, <out>/requests/, <out>/SUMMARY.json`;
 
 function parseArgs(argv) {
@@ -184,6 +185,15 @@ function ledgerUsd(out) {
   return existsSync(p) ? readFileSync(p, 'utf8').split('\n').filter(Boolean).reduce((n, l) => n + (JSON.parse(l).costUsd ?? 0), 0) : 0;
 }
 
+// 오답 선택 세션(REPAIR 제외)만 incorrectModel로 판정하는 평가기. incorrectModel이 없으면 기본 라우팅 평가기 하나와 같다.
+export function makeRoutedEvaluator({ promptPath, promptVersion, endLayout, incorrectModel, transport }, Evaluator = OpenAIFeedbackEvaluator) {
+  const common = { promptPath, promptVersion, transport, ...(endLayout ? { endLayout } : {}) };
+  const byDefault = new Evaluator(common);
+  if (!incorrectModel) return byDefault;
+  const forIncorrect = new Evaluator({ ...common, model: incorrectModel });
+  return { evaluate: session => (session.evaluationMode !== 'REPAIR' && session.selections.at(-1)?.choiceId !== session.source.answerChoiceId ? forIncorrect : byDefault).evaluate(session) };
+}
+
 export async function runReplay(opts, deps = {}) {
   const { base, out, promptPath, promptVersion, capUsd } = opts;
   const { ids, sources, cases } = loadBase(base);
@@ -193,7 +203,7 @@ export async function runReplay(opts, deps = {}) {
     return (send.client ??= new OpenAI({ maxRetries: 0 })).responses.create(request, options);
   });
   const transport = makeTransport(out, capUsd, send);
-  const makeEvaluator = deps.makeEvaluator ?? (t => new OpenAIFeedbackEvaluator({ promptPath, promptVersion, transport: t }));
+  const makeEvaluator = deps.makeEvaluator ?? (t => makeRoutedEvaluator({ promptPath, promptVersion, endLayout: opts.endLayout, incorrectModel: opts.incorrectModel, transport: t }));
   const only = opts.only ? opts.only.split(',').filter(Boolean) : null;
   const answers = opts.answers ? read(opts.answers) : {};
   for (const id of only ?? []) if (!ids.includes(id)) throw new Error(`기준 SET에 없는 세션: ${id}`);
@@ -220,9 +230,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     for (const r of dryReport(o.base)) console.log(JSON.stringify(r));
   } else {
     for (const k of ['base', 'out', 'prompt', 'promptVersion', 'capUsd']) if (!o[k]) throw new Error(`--${k.replace(/[A-Z]/g, c => '-' + c.toLowerCase())} 필요`);
+    if (o.endLayout && !['layout-v1', 'layout-v2', 'v5.3'].includes(o.endLayout)) throw new Error('--end-layout은 layout-v1|layout-v2|v5.3');
     const capUsd = Number(o.capUsd);
     if (!Number.isFinite(capUsd) || capUsd <= 0) throw new Error('--cap-usd는 양수');
-    const summary = await runReplay({ base: o.base, out: o.out, promptPath: o.prompt, promptVersion: o.promptVersion, capUsd, only: o.only, answers: o.answers });
+    const summary = await runReplay({ base: o.base, out: o.out, promptPath: o.prompt, promptVersion: o.promptVersion, capUsd, only: o.only, answers: o.answers, incorrectModel: o.incorrectModel, endLayout: o.endLayout });
     console.log(JSON.stringify({ counts: summary.counts, usd: summary.usd, stopped: summary.stopped ?? null }));
   }
 }

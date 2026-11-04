@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { runReplay, loadBase, dryReport } from './run-v5-regression-replay.mjs';
+import { runReplay, loadBase, dryReport, makeRoutedEvaluator } from './run-v5-regression-replay.mjs';
 
 const BASE = 'docs/experiments/v5-diverse-48-regression-2026-10-28-v56';
 const base = loadBase(BASE);
@@ -122,4 +122,22 @@ test('평가 실패(RETRYABLE_ERROR)는 RESUME 1회로 다시 시도하고, 계�
   await runReplay({ base: BASE, out, capUsd: 100, only: 'C-A1' }, { send: send(), makeEvaluator: flaky(2) });
   c = readJson(`${out}/cases/C-A1.json`);
   assert.equal(c.status, 'ERROR');
+});
+
+test('--incorrect-model: 오답 선택(REPAIR 아님)만 지정 모델, 정답 선택·REPAIR는 기본 평가기; --end-layout 전달', async () => {
+  const made = [];
+  class Fake { constructor(o) { this.o = o; made.push(o); } async evaluate() { return this.o.model ?? 'default'; } }
+  const sess = (mode, last) => ({ evaluationMode: mode, selections: [{ choiceId: last }], source: { answerChoiceId: 'C1' } });
+  const ev = makeRoutedEvaluator({ promptPath: 'p', promptVersion: 'v', endLayout: 'layout-v1', incorrectModel: 'gpt-6.1-terra', transport: {} }, Fake);
+  assert.equal(await ev.evaluate(sess('SELECTION', 'C2')), 'gpt-6.1-terra');
+  assert.equal(await ev.evaluate(sess('CONCLUSION_AUDIT', 'C2')), 'gpt-6.1-terra');
+  assert.equal(await ev.evaluate(sess('END_EXPLANATION', 'C2')), 'gpt-6.1-terra');
+  assert.equal(await ev.evaluate(sess('SELECTION', 'C1')), 'default');
+  assert.equal(await ev.evaluate(sess('REPAIR', 'C2')), 'default');
+  assert.ok(made.length === 2 && made.every(o => o.endLayout === 'layout-v1'));
+  // 옵션이 없으면 기존과 같다: 평가기 하나, model·endLayout 키 없음.
+  made.length = 0;
+  const plain = makeRoutedEvaluator({ promptPath: 'p', promptVersion: 'v', transport: {} }, Fake);
+  assert.equal(await plain.evaluate(sess('SELECTION', 'C2')), 'default');
+  assert.equal(made.length, 1); assert.ok(!('model' in made[0]) && !('endLayout' in made[0]));
 });
