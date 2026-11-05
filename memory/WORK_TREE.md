@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-11-04
+갱신: 2026-11-05
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -51,7 +51,6 @@
 │  │     DeepSeek Pro·Flash 시험(19번 ⑤): 비용·지연 이점 없음, luna·sol 유지        D-0192
 │  │     열린 질문: 정의 잘못 적용 근거를 오류로 볼지(N2, Pro만 ERROR)                Q-0041
 │  │     마지막 설명 문단 넘기기·칠하기: v2.2 실제 생성 연결 D-0193·D-0194
-│  │     다음: 모델이 문단·칠할 곳을 쓰는 지시문 시험(저장 입력 12건, 사용자 판정)
 │  │     다음: 서버 재빌드·화면 확인, 관찰(형식 재시도·근거 엄격도)
 │  │     관찰 사례: 도파민 ② 근거 엄격·설명 인정 누락(11-03), 입력 기호 버튼·낱말 변환 996c38c7
 │  │     luna 기호 오독: 관찰로 남김(학생 노출 0)                              D-0197
@@ -84,6 +83,10 @@
 │        sol 종단 검증 대체로 양호(실패 종류 17/20, 3회 일관성 33/35)
 │        다음: 실제 학생 풀이, 여러 문항에서 노드 분할 일관성 확인
 │
+├─ SNS 독해력 진단평가 모드 — 결과 화면·맛보기 추천에 사고 패턴 분석 활용     D-0200
+│  └─○ 방향 확정(내 위치 → 풀이 결과 → 독해 패턴), 설계 전                  D-0200
+│        다음(사용자): 선택률 출처·이용 범위 Q-0042, 지문 범위 Q-0043 → 설계
+│
 └─○ 문항 골드 — 오프라인 감사·회귀용으로만 보관                              CP-C
 
 ● 진행 중  ○ 보류·대기  ✓ 확정  ✗ 폐기  ? 미해결 질문
@@ -100,6 +103,7 @@
 | D-0182 | [v5.3 보강판 채택](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) |
 | D-0185 | [판정 v5.6 선지 읽기 보강](./decisions/D-0185-judge-reading-added-vs-stronger-v56.md), [보고](../docs/experiments/judge-reading-paraphrase-d1-2026-10-28/REPORT-human.md) |
 | D-0188 | [판정 v5.7-2 교정 질문](./decisions/D-0188-problem-feedback-v57-2-direct-questions.md), [보고](../docs/experiments/v57-regression-2026-10-29/REPORT-human.md) |
+| D-0200 | [SNS 진단평가 모드 방향](./decisions/D-0200-sns-diagnostic-mode-result-screen-direction.md), [웹 에이전트 결과](../docs/reports/REPORT-learner-analysis-usage-web-result.md), [선택률 대응 확인](../docs/experiments/megastudy-rate-coverage-2026-11-05/README.md) |
 | D-0199 | [terra 대 sol 비교·sol 유지](./decisions/D-0199-keep-sol-over-terra-61.md), [보고](../docs/experiments/terra-vs-sol-2026-11-04/REPORT-human.md) |
 | D-0195·D-0196 | [판정기 형식 실수 정리](./decisions/D-0195-judge-format-slip-normalization.md), [인계](../docs/handoffs/2026-11-03-judge-format-slip-normalization.md), [회사법 ② 결함 문항](./decisions/D-0196-corporate-law-q13-c2-defective-choice.md) |
 | D-0194 | [마지막 설명 v2.2 연결](./decisions/D-0194-end-explanation-layout-v22-default.md), [보고](../docs/experiments/end-explanation-paragraph-marks-v22-2026-11-02/REPORT-human.md), [체크포인트](./checkpoints/2026-11-02-end-explanation-v22-wired.md) |
@@ -127,7 +131,7 @@
 | D-0183 | [문단 분석 화면 사용](./decisions/D-0183-paragraph-analysis-ui-tree-and-relation-graphs.md), [1단계 인계](../docs/handoffs/2026-10-27-paragraph-analysis-view-stage1.md), [1단계 체크포인트](./checkpoints/2026-10-27-paragraph-analysis-view-stage1.md) |
 | D-0181 | [오류 분류 두 축](./decisions/D-0181-problem-error-taxonomy-two-axes-later.md), [대응표](../docs/review/problem-error-taxonomy-crosswalk-2026-10-27.md) |
 | D-0112 | [v5 개발자 경로 종료 상태](./decisions/D-0112-v5-developer-path-connection-end-states.md), [연결 기록](./checkpoints/2026-10-10-v5-developer-path-connected.md) |
-| Q-0032·Q-0033·Q-0034·Q-0036 | [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md) |
+| Q-0032·Q-0033·Q-0034·Q-0036·Q-0042·Q-0043 | [`OPEN_QUESTIONS.md`](./OPEN_QUESTIONS.md) |
 | D-0132·D-0133 | [판정기 V4 유지](./decisions/D-0132-paragraph-judge-keep-v4.md), [경계 규칙 (나″)](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md) |
 | D-0134~D-0137 | [개발자 모드](./decisions/D-0134-boundary-show-dev-mode-central-object.md), [오류 축마다 질문](./decisions/D-0135-boundary-show-error-question-per-axis.md), [반말](./decisions/D-0136-boundary-show-banmal-question-feedback.md), [effectiveResponse](./decisions/D-0137-boundary-show-effective-response-restatement.md) |
 | CP-A | [두 단계 생성 v3에서 멈춤](./checkpoints/2026-10-08-two-stage-paused-at-v3.md) |

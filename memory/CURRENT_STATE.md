@@ -22,7 +22,7 @@
 - 마지막 설명(M4) 기본값은 layout v2.2([D-0194](./decisions/D-0194-end-explanation-layout-v22-default.md)): 칸마다 문단 목록과 칠할 곳, 서버가 문장 단위 칠하기·겹침 지우기, 화면은 문단 넘기기([D-0193](./decisions/D-0193-end-explanation-paragraph-steps-with-marks.md)). 회사법 ②·XS-r1 선지 읽기 문장은 미해결. layout v1([D-0184](./decisions/D-0184-end-explanation-layout-v1-adopted.md))·v5.3은 재현용.
 - 서버는 판정기 INSUFFICIENT를 SUPPORTED로 올리지 않는다(내리기만, [D-0189](./decisions/D-0189-server-never-raises-insufficient.md)). 판정 지시문 기본값은 v5.8([D-0190](./decisions/D-0190-problem-feedback-v58-default.md)).
 - 판정기 형식 실수 두 종류(결론 문장 표시, 줄인 인용)는 서버가 고친다([D-0195](./decisions/D-0195-judge-format-slip-normalization.md)). 회사법 13번 ②는 선지 결함 문항, K4 닫음·선지 읽기 보류([D-0196](./decisions/D-0196-corporate-law-q13-c2-defective-choice.md)). luna 기호 오독(Q-0030)은 관찰([D-0197](./decisions/D-0197-luna-marker-misread-observe.md)).
-- 선택형 출제자 전략 피드백([D-0170](./decisions/D-0170-optional-examiner-strategy-feedback.md)): 동결본 truth FALSE 선지 57편을 sol·지시문 v4로 생성하고 코드 에이전트 검토(골드 수정 4, 재생성 통과)까지 마쳤다([FINAL.json](../docs/experiments/examiner-strategy-2026-10-23/FINAL.json)). 개발자 문제 화면에 연결했다(세션 종료 뒤 말풍선·[다음], 커밋 `dc6c295`). 같은 커밋에서 선지를 가운데 문제 칸에서 직접 누르도록 바꿨다([D-0172](./decisions/D-0172-problem-ui-choice-direct-select.md)). 다음: 사용자 직접 사용 메모 반영. 메모장 38번 [다시 풀기]를 주 버튼 왼쪽에 두기는 결정·구현 대기, 40번 쉽게 풀어쓰기·41번 원문 칠하기·43번 전략 입구 하나로는 논의 대기([메모장](../docs/review/v4-dev-ui-feedback-backlog-2026-10-11.md)). 문제 세트 흐름([다음 문제로]·[다음 지문으로])은 별도 과제다.
+- 선택형 출제자 전략 피드백([D-0170](./decisions/D-0170-optional-examiner-strategy-feedback.md)): 동결본 truth FALSE 선지 57편을 sol·지시문 v4로 생성하고 코드 에이전트 검토(골드 수정 4, 재생성 통과)까지 마쳤다([FINAL.json](../docs/experiments/examiner-strategy-2026-10-23/FINAL.json)). 개발자 문제 화면에 연결했다(세션 종료 뒤 말풍선·[다음], 커밋 `dc6c295`). 같은 커밋에서 선지를 가운데 문제 칸에서 직접 누르도록 바꿨다([D-0172](./decisions/D-0172-problem-ui-choice-direct-select.md)). 사용 메모 38·40·41·43번은 2026-10-28 반영([메모장](../docs/review/v4-dev-ui-feedback-backlog-2026-10-11.md)). 문제 세트 흐름([다음 문제로]·[다음 지문으로])은 별도 과제다.
 - 마지막 설명에 선지 연결 좌표 넣기는 차이 없어 미반영([D-0167](./decisions/D-0167-choice-link-end-explanation-comparison.md)).
 - 구조화 문제 골드는 학생용 런타임 입력과 실행 조건으로 쓰지 않는다. 모든 런타임 단계는 완전한 원문·문항·선지·정답·공식 해설·원자료 이미지를 직접 쓴다.
 - 명시적 오류는 교정하고, 불충분·모호한 근거는 진단한다.
@@ -42,10 +42,11 @@
 
 ## 학습자 생각 진단·분석 지도
 
-- 문단 분석 지도(지문을 명제→묶음→요지로 쌓은 동결 지도에 학생 요약을 대어 무엇을 잡고 놓쳤는지 기록, [D-0141](./decisions/D-0141-paragraph-analysis-map-direction.md)): 대화용 골드와 분리한 상향 위계 지도, 1회 생성 후 동결. 공손룡 기준선(판정 v3)과 도파민 일반화 기준 통과([D-0146](./decisions/D-0146-analysis-map-dopamine-generalization.md)). 관계 유형 4갈래 18유형([D-0147](./decisions/D-0147-relation-vocabulary-sampling.md)). 분석 골드 동결·입장은 코드 에이전트 검토로 운용([D-0158](./decisions/D-0158-analysis-gold-claude-review-without-further-calibration.md)), 동결 지도 6장. 학생 이해 지문 집계 규칙([D-0160](./decisions/D-0160-student-fingerprint-aggregation.md)), 학생별 18유형 칸은 표본 부족. 화면 사용([D-0183](./decisions/D-0183-paragraph-analysis-ui-tree-and-relation-graphs.md)): 수형도(마지막 차례, 보상)+관계 유형 그래프(첫 차례, 진단). 1단계 개발자 화면 `/dialogue/lab/analysis` 구현(기존 공손룡·도파민 판정, 외부 전송 없음). 다음: 사용자 화면 확인 → 2단계(요약 직후 판정, 시간·비용 측정 승인).
+- 문단 분석 지도(지문을 명제→묶음→요지로 쌓은 동결 지도에 학생 요약을 대어 무엇을 잡고 놓쳤는지 기록, [D-0141](./decisions/D-0141-paragraph-analysis-map-direction.md)): 대화용 골드와 분리한 상향 위계 지도, 1회 생성 후 동결. 공손룡 기준선(판정 v3)과 도파민 일반화 기준 통과(D-0146). 관계 유형 4갈래 18유형(D-0147). 분석 골드 동결·입장은 코드 에이전트 검토로 운용(D-0158), 동결 지도 6장. 학생 이해 지문 집계 규칙([D-0160](./decisions/D-0160-student-fingerprint-aggregation.md)), 학생별 18유형 칸은 표본 부족. 화면 사용([D-0183](./decisions/D-0183-paragraph-analysis-ui-tree-and-relation-graphs.md)): 수형도(마지막 차례, 보상)+관계 유형 그래프(첫 차례, 진단). 1단계 개발자 화면 `/dialogue/lab/analysis` 구현. 다음: 사용자 화면 확인 → 2단계(요약 직후 판정, 시간·비용 측정 승인).
 - 선지 연결 층([D-0162](./decisions/D-0162-choice-link-layer-direction.md)): 오프라인 진단용 먼저(D-0002 유지). 비틂 목록 확정, UI 6지문 동결 완료(120선지, [기록](./checkpoints/2026-10-22-choice-link-ui-freeze.md)).
-- 사고 진단 v0.1(풀이 이유 문장으로 무너진 단계·걸린 함정 판정, [D-0111](./decisions/D-0111-thought-diagnosis-v0-experiment.md)): 학생이 쓴 선택 이유로 다섯 단계(발문·선지 해석·근거 위치·근거 해석·대조) 중 처음 실패한 단계와 함정 유형 12종을 판정하고, 근거가 없으면 판단 불가로 둔다. 가상 풀이 36/36·과잉 분류 0. 실시간 아닌 주기 실행·모델 sol 고정([D-0115](./decisions/D-0115-thought-diagnosis-periodic-sol.md)). 다음: 처음 보는 사례·실제 학생 풀이로 검증. 함정 강도·선택률 예측은 LLM·JEV 모두 실패해 목표를 재정의했다([D-0109](./decisions/D-0109-trap-map-v0-external-rate-experiment.md)). 큰 논의는 문단·문제 안정화 뒤 재개(Q-0034).
+- 사고 진단 v0.1(풀이 이유 문장으로 무너진 단계·걸린 함정 판정, [D-0111](./decisions/D-0111-thought-diagnosis-v0-experiment.md)): 학생이 쓴 선택 이유로 다섯 단계(발문·선지 해석·근거 위치·근거 해석·대조) 중 처음 실패한 단계와 함정 유형 12종을 판정하고, 근거가 없으면 판단 불가로 둔다. 가상 풀이 36/36·과잉 분류 0. 실시간 아닌 주기 실행·모델 sol 고정([D-0115](./decisions/D-0115-thought-diagnosis-periodic-sol.md)). 다음: 처음 보는 사례·실제 학생 풀이로 검증. 함정 강도 예측은 실패(D-0109). 활용 논의는 D-0200으로 재개.
 - 정답 경로 분석(문항마다 정답에 이르는 노드 지도를 만들고, 학생이 어느 노드·요소에서 틀렸는지 기록, [D-0119](./decisions/D-0119-answer-path-elements-and-depth.md)·[D-0121~D-0124](./decisions/D-0124-answer-path-element-override-on-evidence.md)): sol이 문항 지도(READ·LINK·APPLY 노드, 요소 E1~E10)를 1회 생성·동결하고, 정답은 경로 전체 성공, 오답은 실패 노드·요소로 채점한다(추가 질문 없음). 깊이는 노드 수. sol 종단 검증 대체로 양호(실패 종류 17/20, 3회 일관성 33/35, [기록](./checkpoints/2026-10-14-answer-path-sol-e2e-results.md)). 다음: 실제 학생 풀이, 여러 문항에서 노드 분할 일관성.
+- 활용 방향([D-0200](./decisions/D-0200-sns-diagnostic-mode-result-screen-direction.md), 방향만): SNS 진단평가 모드를 따로 두고 결과 화면(내 위치 → 풀이 결과[정답의 질·무너진 단계 경향·걸린 비틂] → 독해 패턴)과 맛보기 추천에 쓴다. 선택률은 DB 752문항 모두 메가스터디 회차와 대응, 미수집·이용 범위 미정(Q-0042).
 - 문제 쪽 오류 분류([D-0181](./decisions/D-0181-problem-error-taxonomy-two-axes-later.md)): 함정 태그 12종·요구 요소 E1~E10·비틂 14종을 지금은 [대응표](../docs/review/problem-error-taxonomy-crosswalk-2026-10-27.md)로 묶는다. 실제 학생 풀이로 재검증할 때 내용 축(비틂 14종)·과정 축(읽기 과정 7가지)으로 재구성한다.
 
 ## 학생 상태 모델
@@ -79,8 +80,9 @@
 사전 점검: 중학교 교사 2~3명 원격 시연 준비 완료([D-0198](./decisions/D-0198-teacher-demo-pilot.md)). 다음(사용자): 설문 링크·연락처, 공유, 서버·터널.
 
 1. 1′ 첫 과제: 문제 판정 v5.1 `coaching` 필드 정리 완료([D-0177](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md)).
-2. 1′ 나머지: 문제 개발자 경로 메모장 30번 논의, 출제자 전략·선지 직접 누르기 화면 사용 메모 반영. 문단 작동 순서 문서 남김 1건(골드 없는 지문 추가 때 목록 필터).
+2. 1′ 나머지: 문단 작동 순서 문서 남김 1건(골드 없는 지문 추가 때 목록 필터). 메모장 30번은 수정 안 함(10-26), 38·40·41·43은 반영(10-28).
 3. 얇은 학생판 범위 설계(내부 정보 숨김, 로그 저장, 최소 인증, 서버 상시 실행).
+4. SNS 진단평가 모드(D-0200, 방향만): Q-0042(선택률 출처·이용 범위)·Q-0043(지문 범위) 사용자 결정 뒤 화면·백엔드 설계.
 
 ## 금지선
 

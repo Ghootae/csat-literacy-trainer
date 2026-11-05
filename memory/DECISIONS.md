@@ -259,3 +259,4 @@
 | [`D-0197`](./decisions/D-0197-luna-marker-misread-observe.md) | accepted | luna 기호 오독(Q-0030)은 고치지 않고 관찰, 후보 ①·② 불채택 | 사용자 판단. 확정 6건(공손룡 ⓓ), v5.8 재현 학생 노출 0/20, 마지막 설명 오독 0/2 |
 | [`D-0198`](./decisions/D-0198-teacher-demo-pilot.md) | accepted | 중학교 국어 교사 2~3명 원격 시연을 학생 확인 앞 사전 점검으로, 튜토리얼 후 자유 사용·사용 후 짧은 설문 | 사용자 판단. 각본 최종 칸 3/3 기대 반응, 판정별 의견은 받지 않음 |
 | [`D-0199`](./decisions/D-0199-keep-sol-over-terra-61.md) | accepted | gpt-6.1-terra 시험 뒤에도 오답 경로 sol 유지, terra는 대체 후보로 기록 | 사용자 판단. 판정 13/13 같음·기호 오독 0, P1 SUPPORTED terra 0/10 대 sol 4/10, 설명 압축 1건, 비용 절반 |
+| [`D-0200`](./decisions/D-0200-sns-diagnostic-mode-result-screen-direction.md) | accepted | SNS 독해력 진단평가 모드를 따로 두고 결과 화면(내 위치 → 풀이 결과 → 독해 패턴)과 맛보기 추천에 사고 패턴 분석을 씀, 방향만 | 웹 에이전트 논의·사용자 승인. 설계 전 조건: 선택률 출처·이용 범위(Q-0042), 지문 범위(Q-0043), 위치 폭, 추천 최소 근거, 비용, 개인정보 |
