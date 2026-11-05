@@ -14,21 +14,21 @@
 │  └─○ 중심 이야기 2단계 생성 — v3에서 멈춤, 재개 여부 미정(과적합 우려)      CP-A
 │        다음: 재개 여부 결정(Claude 권고: v3 고정·반복 실행·새 문단 검증, 미승인)
 │
-├─ 문단 요약 응답 판정 — 학생 기본값 V4, 운영 후보 단순 형식 v4.8(luna)       D-0013·D-0174
+├─ 문단 요약 응답 판정 — 운영 후보 단순 형식 v4.8(luna), 옛 학생용 V4 폐기   D-0174·D-0202
 │  ├─✓ 근본 검토 — 단순 형식 v4.7로 확정, 개발자 주소 /dialogue/lab        D-0138~D-0149·D-0174
 │  │     작동 순서 문서 확인 필요 11건 처리, 교정 질문 힌트 기록      D-0175
 │  │     학생 시뮬레이션(10-30): 빈 곳 답 관대 판정 수용, 남은 2건은 v4.10 후보   D-0191
 │  │     다음: 학생용 전환 — 순서 확정(1′ 정리 → 학생 확인 → 확대), 섭외 대기  D-0176
 │  ├─✓ 전체 판정(H0) 그림자 실험 — 판정기는 V4 유지, 경계 규칙 (나″)        D-0132·D-0133
 │  ├─○ 보여 주기 개발자 모드(축 기반) — 단순 형식 채택으로 보류               D-0134~D-0137·D-0174
-│  └─○ 축 하나에 한 내용 — 보류, 폐기 여부는 학생용 전환 때                  Q-0036·D-0174
+│  └─○ 축 하나에 한 내용 — 보류, 코드 정리는 학생용 새로 만들 때             Q-0036·D-0202
 │
 ├─ 문항 기호 해석본 생성
 │  └─○ 자동 생성·검수 파이프라인 v2 완성 — 현재 v5(methods)에는 미포함        D-0093·D-0114
 │        terra의 ⓓ 오독 대응책이었으나 sol은 해석본 없이 해당 오독이 없었음
 │        luna 오독 집계: 확정 6건(공손룡 ⓓ)·현행 학생 노출 0 → 필요성 낮음, 관찰  D-0197
 │
-├─ 문제 풀이 응답 판정 — 학생 기본값 v3, 운영 후보 v5(methods)               D-0090
+├─ 문제 풀이 응답 판정 — 운영 후보 v5(methods), 옛 학생용 v3 폐기          D-0090·D-0202
 │  ├─✓ 모델 라우팅: 정답 luna / 오답 sol, 세션 안 배정                       D-0104·D-0107
 │  ├─✓ 교정: 국소 오류만 판정, 선지를 가르는 관계까지 질문                   D-0108·D-0105
 │  ├─✓ 피드백·코칭: 해요체·마크다운 렌더링, 교정 뒤 [다시 선택]/[코칭 보기]  D-0110·D-0106
@@ -55,7 +55,7 @@
 │  │     관찰 사례: 도파민 ② 근거 엄격·설명 인정 누락(11-03), 입력 기호 버튼·낱말 변환 996c38c7
 │  │     luna 기호 오독: 관찰로 남김(학생 노출 0)                              D-0197
 │  │     gpt-6.1-terra 대체 시험: 판정 같음·P1 엄격·설명 압축 → sol 유지      D-0199
-│  ├─○ 학생용 전환 — 순서 D-0176(실제 학생 확인 뒤 확대·전환)              CP-B·D-0176
+│  ├─○ 학생용 — 확정된 개발자용을 고쳐 새로 만듦, 순서 D-0176              D-0176·D-0202
 │  │     교사 2~3명 원격 시연(사전 점검): 튜토리얼·설문·운영 안내 완료       D-0198
 │  │     다음(사용자): 설문 링크·연락처 채우기, 공유, 기간 중 서버·터널 실행
 │  └─? 경계 응답 판정 기준(짧지만 충분 vs 대상만 언급)                       Q-0032
@@ -96,7 +96,7 @@
 
 | 표기 | 연결 |
 |---|---|
-| D-0013 | [문단 선택적 보완 V4](./decisions/D-0013-paragraph-optional-revision-v4.md) |
+| D-0013 | [문단 선택적 보완 V4](./decisions/D-0013-paragraph-optional-revision-v4.md)(학생용 기본값 지위는 D-0202로 폐기) |
 | D-0138 | [문단 요약 근본 검토](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md), [질문 비교 묶음](../docs/experiments/question-quality-h0-vs-v4-2026-10-15/README.md), [D-0139 질문 규칙](./decisions/D-0139-paragraph-simple-format-question-rules.md), [D-0140 개발자 모드](./decisions/D-0140-paragraph-simple-holistic-dev-mode.md) |
 | D-0090 | [v5 명칭](./decisions/D-0090-problem-evaluator-v5-naming.md) |
 | CP-I | [K4 확인 단계 실험](./checkpoints/2026-10-27-k4-blank-probe.md), [보고](../docs/experiments/k4-blank-probe-2026-10-27/REPORT-human.md) |
@@ -111,6 +111,7 @@
 | CP-H | [v5.3 보강 재실행](./checkpoints/2026-10-27-k4-v53-stage3-rerun.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27-b/REPORT-human.md) |
 | CP-G | [v5.3 실측 중단](./checkpoints/2026-10-27-k4-v53-stage2-live.md), [보고](../docs/experiments/v53-three-cell-check-2026-10-27/REPORT-human.md) |
 | D-0177 | [문제 판정 v5.1 coaching 제거](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md), [회귀 보고](../docs/experiments/v5-diverse-48-regression-2026-10-26/REPORT-human.md) |
+| D-0202 | [지금의 학생용 폐기](./decisions/D-0202-current-student-version-discarded.md) |
 | D-0176 | [학생용 전환 순서](./decisions/D-0176-student-switch-roadmap-pilot-before-expansion.md), [coaching 정리 인계](../docs/handoffs/2026-10-26-problem-feedback-coaching-field-cleanup.md) |
 | D-0191 | [문단 빈 곳 답 관대 판정 수용](./decisions/D-0191-paragraph-gap-answer-lenient-judgment-accepted.md), [학생 시뮬레이션 보고](../docs/experiments/student-sim-2026-10-30/REPORT-human.md) |
 | D-0175 | [문단 교정 질문 중 근거 문장 힌트](./decisions/D-0175-paragraph-simple-correction-hint-during-question.md) |

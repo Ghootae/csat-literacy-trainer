@@ -12,8 +12,8 @@
 
 ## 문제 풀이 대화
 
-- 학생용 기본값은 v3(2026-09-11 사용자 승인·고정). v2는 과거 회귀·비교용으로만 보존한다. 정책: [`PS-PROBLEM-SOURCE-DIRECT-V1`](../docs/PROBLEM-SOLVING-SOURCE-DIRECT-OPERATIONAL-POLICY-2026-09-08.md).
-- 운영 후보는 **v5**([D-0090](./decisions/D-0090-problem-evaluator-v5-naming.md): 'v3 기반 v4 후보'의 이름, v4는 운영 후보 아님, 파일·코드 이름은 그대로). 상태: `V3_STUDENT_DEFAULT / V4_DEVELOPER_UI_LIVE / REAL_STUDENT_USE_PENDING`. 학생용 전환은 개발자 경로 확인 뒤 별도 승인이 필요하다.
+- **지금의 학생용은 폐기**([D-0202](./decisions/D-0202-current-student-version-discarded.md), 기록 수준·코드 유지): 문제 v3·문단 V4·학생용 화면은 기준이 아니다. 개발자 경로가 정본이고, 학생용은 확정된 개발자용을 고쳐 새로 만든다.
+- 운영 후보는 **v5**([D-0090](./decisions/D-0090-problem-evaluator-v5-naming.md): 'v3 기반 v4 후보'의 이름, 파일·코드 이름은 그대로). 실제 학생 사용 전.
 - v5 구성: 해석본 없는 methods 조성. 기호 해석본 사용은 luna·sol 기호 오독 확인 전까지 보류([D-0114](./decisions/D-0114-v5-current-composition-methods-without-gloss.md)). 기호 해석본 파이프라인 v2는 완성돼 있으나 v5에 미포함([D-0093](./decisions/D-0093-v5-composition-auto-gloss-pipeline.md)).
 - 판정 모델: 선택 정오 라우팅, 정답 luna·오답 sol([D-0104](./decisions/D-0104-problem-evaluator-model-routing-by-choice.md)), 세션 안 배정([D-0107](./decisions/D-0107-session-model-routing-repair-reselect-coaching.md)). Gemini 가격 재확인([D-0129](./decisions/D-0129-keep-luna-sol-over-gemini-after-price-check.md)), DeepSeek 1017 재시험([D-0165](./decisions/D-0165-keep-luna-sol-over-deepseek-1017.md)), DeepSeek Pro·Flash([D-0192](./decisions/D-0192-keep-luna-sol-over-deepseek-pro.md)), gpt-6.1-terra([D-0199](./decisions/D-0199-keep-sol-over-terra-61.md)) 시험 뒤에도 유지.
 - 교정·피드백 규칙: 교정은 국소 오류만 판정([D-0108](./decisions/D-0108-repair-judges-local-error-only.md)), 교정 질문은 선지 정오를 가르는 관계까지([D-0105](./decisions/D-0105-correction-question-covers-choice-deciding-relation.md)), 교정 뒤 "다시 선택"/"코칭 보기" 버튼([D-0106](./decisions/D-0106-post-repair-choice-reselect-or-coaching.md)), 학생용 문장 반말([D-0116](./decisions/D-0116-student-facing-tone-banmal.md)), 선택 충돌 인용은 충분성 인용 가능([D-0164](./decisions/D-0164-selection-mismatch-quote-allowed-as-sufficiency.md)), "원문에 없음" 근거는 반박 여부로 판정([D-0166](./decisions/D-0166-absence-rationale-by-refutation.md)).
@@ -31,12 +31,10 @@
 
 ## 문단 요약 대화
 
-- 학생용 기본값은 V4(`PS-DIALOGUE-STUDENT-AGENCY-V4`, [D-0013](./decisions/D-0013-paragraph-optional-revision-v4.md), [정책](../docs/PARAGRAPH-SUMMARY-DIALOGUE-OPERATIONAL-POLICY-V4-2026-09-19.md)). 소스·빌드 기본값: `axis-dialogue-selective-v4`, 1차 `central-story-gate-prompt-v4-claims-v2`, 2차 `dialogue-selective-feedback-prompt-v4-guide-v1`. 판정기 V4 유지([D-0132](./decisions/D-0132-paragraph-judge-keep-v4.md)).
-- V4 동작: 불필요한 개입 최소화, OK는 확인된 부분만 공개·자동 질문 없음. SERIOUS/ERROR는 질문을 제시하지만 모든 상태에서 진행 선택 가능, SKIPPED와 기존 판정을 함께 보존하며 PASS로 승격하지 않는다. 모든 문단이 완료·진행되면 문제를 연다. 질문은 최대 3회, 후속 응답을 누적해 다시 판정한다.
-- 통과 기준은 중심축 description에 표현된 의미뿐이다. 원문은 의미 해석·학생 주장 사실 확인용 보조자료이며 새 통과 조건을 만들 수 없다.
+- 옛 학생용 V4(골드 축 판정, D-0013)는 D-0202로 폐기. 판정기 V4 비교 기록은 [D-0132](./decisions/D-0132-paragraph-judge-keep-v4.md).
 - 청킹·압축 측정과 보상·처벌은 보류([D-0012](./decisions/D-0012-paragraph-compression-measurement-deferred.md)).
-- **운영 후보: 단순 형식**([D-0174](./decisions/D-0174-paragraph-simple-v47-operating-candidate.md)): 근본 검토(D-0138) 뒤 확정. 지시문 v4.8(`8b05f6dc`, 관대 판정 [D-0191](./decisions/D-0191-paragraph-gap-answer-lenient-judgment-accepted.md)), 판정 모델 luna(코드 기본값), 개발자 주소 `/dialogue/lab`(옛 `/dialogue/dev/simple` 넘김), 골드 미사용, 학생 상태 원장·문제 판정 미연결. 작동 순서 [문서](../docs/PARAGRAPH-LAB-FLOW-2026-10-25.md). 학생용 전환은 별도 결정.
-- 축 기반 쪽(개발자 화면 `/dialogue/dev`, 보여 주기 개발자 모드 D-0134~D-0137, Q-0036)은 단순 형식 채택으로 보류(D-0174). 학생용이 V4라 코드는 유지, 폐기 여부는 학생용 전환 때 결정. 경계 규칙 방향은 (나″)([D-0133](./decisions/D-0133-paragraph-boundary-rule-na-double-prime.md)), 운영 미변경.
+- **운영 후보: 단순 형식**([D-0174](./decisions/D-0174-paragraph-simple-v47-operating-candidate.md)): 근본 검토(D-0138) 뒤 확정. 지시문 v4.8(`8b05f6dc`, 관대 판정 [D-0191](./decisions/D-0191-paragraph-gap-answer-lenient-judgment-accepted.md)), 판정 모델 luna(코드 기본값), 개발자 주소 `/dialogue/lab`(옛 `/dialogue/dev/simple` 넘김), 골드 미사용, 학생 상태 원장·문제 판정 미연결. 작동 순서 [문서](../docs/PARAGRAPH-LAB-FLOW-2026-10-25.md).
+- 축 기반 쪽(개발자 화면 `/dialogue/dev`, 보여 주기 개발자 모드 D-0134~D-0137, Q-0036)은 단순 형식 채택으로 보류(D-0174). 코드 정리는 학생용을 새로 만들 때(D-0202).
 - 중심 이야기 2단계 골드 생성은 v3에서 멈춤(과적합 우려, 재개 여부 미정, [체크포인트](./checkpoints/2026-10-08-two-stage-paused-at-v3.md)). 원문 분할·JEV 흐름은 중단([D-0094](./decisions/D-0094-source-jev-gold-flow-stopped.md)). JEV 제품 적용은 `PARKED`([D-0036](./decisions/D-0036-jev-product-work-parked.md)). 근거 작성 중 신호 탐색 2회(충분성·선택 확률 이동)도 보류([Q-0040](./OPEN_QUESTIONS.md), [체크포인트](./checkpoints/2026-10-30-jev-choice-shift-parked.md)).
 - 축 묶임 문제는 [Q-0036](./OPEN_QUESTIONS.md)(gold-v2 미변경).
 

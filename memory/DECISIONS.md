@@ -12,12 +12,12 @@
 | [`D-0005`](./decisions/D-0005-paragraph-gold-audit-baseline.md) | accepted | 문단 골드 | 단일 감사 v1 생산 기준선을 유지 |
 | [`D-0006`](./decisions/D-0006-title-abstraction-reward-deferred.md) | accepted | 표제 평가 | 추상화 보상 판정을 보류 |
 | [`D-0007`](./decisions/D-0007-problem-dialogue-v3-candidate.md) | superseded | 문제 풀이 | 학생 발화 보존 v3 후보를 운영 v2와 분리해 검증 |
-| [`D-0008`](./decisions/D-0008-problem-dialogue-v3-operational-default.md) | accepted | 문제 풀이 | v3를 운영 기본값으로 고정하고 실제 학생 경험·세트 확장으로 검증 |
+| [`D-0008`](./decisions/D-0008-problem-dialogue-v3-operational-default.md) | superseded | 문제 풀이 | v3를 운영 기본값으로 고정하고 실제 학생 경험·세트 확장으로 검증 |
 | [`D-0009`](./decisions/D-0009-paragraph-gate-contract-retry.md) | accepted | 문단 대화 | 근거 없는 축 상태 변경을 조용히 되돌리지 않고 학생 답변 보존 계약 재시도로 처리 |
 | [`D-0010`](./decisions/D-0010-paragraph-axis-scope-v3.md) | accepted | 문단 대화 | 중심축을 유일한 통과 기준으로 제한; V3 구현의 의미 검증은 아직 실패 |
 | [`D-0011`](./decisions/D-0011-paragraph-student-controlled-progression.md) | accepted | 문단 진행 | 모든 판정에서 학생의 진행 선택 허용; D-0013에서 구현 |
 | [`D-0012`](./decisions/D-0012-paragraph-compression-measurement-deferred.md) | accepted | 문단 압축 | 청킹·압축 측정과 보상·처벌은 보류하고 새 판정 규칙 논의에 집중 |
-| [`D-0013`](./decisions/D-0013-paragraph-optional-revision-v4.md) | accepted | 문단 V4 | 축별 공개·OK 선택적 보완·모든 판정에서 진행 허용을 구현; 의미 품질 검증은 별도 |
+| [`D-0013`](./decisions/D-0013-paragraph-optional-revision-v4.md) | superseded | 문단 V4 | 축별 공개·OK 선택적 보완·모든 판정에서 진행 허용을 구현; 의미 품질 검증은 별도 |
 | [`D-0014`](./decisions/D-0014-current-claims-recording.md) | accepted | 문단 기록 | 현재 주장과 수정·철회 이력을 분리하고 현재 목록만 2차로 전달; 원문·과거 발화 보존 |
 | [`D-0015`](./decisions/D-0015-explicit-error-quotations.md) | accepted | 문단 오류 기록 | 오류 구절을 현재 주장에서 별도 지정·검증·저장; 축 첫 근거를 오류 인용으로 대체하지 않음 |
 | [`D-0016`](./decisions/D-0016-personal-reading-workbench.md) | accepted | 개인 테스트 UI | 개발자 3단·자유 탐색 맵, 학생 2단, SERIOUS 원문 위치 안내; 평가 범위와 진행 선택 유지 |
@@ -260,3 +260,5 @@
 | [`D-0198`](./decisions/D-0198-teacher-demo-pilot.md) | accepted | 중학교 국어 교사 2~3명 원격 시연을 학생 확인 앞 사전 점검으로, 튜토리얼 후 자유 사용·사용 후 짧은 설문 | 사용자 판단. 각본 최종 칸 3/3 기대 반응, 판정별 의견은 받지 않음 |
 | [`D-0199`](./decisions/D-0199-keep-sol-over-terra-61.md) | accepted | gpt-6.1-terra 시험 뒤에도 오답 경로 sol 유지, terra는 대체 후보로 기록 | 사용자 판단. 판정 13/13 같음·기호 오독 0, P1 SUPPORTED terra 0/10 대 sol 4/10, 설명 압축 1건, 비용 절반 |
 | [`D-0200`](./decisions/D-0200-sns-diagnostic-mode-result-screen-direction.md) | accepted | SNS 독해력 진단평가 모드를 따로 두고 결과 화면(내 위치 → 풀이 결과 → 독해 패턴)과 맛보기 추천에 사고 패턴 분석을 씀, 방향만 | 웹 에이전트 논의·사용자 승인. 설계 전 조건: 선택률 출처·이용 범위(Q-0042), 지문 범위(Q-0043), 위치 폭, 추천 최소 근거, 비용, 개인정보 |
+| [`D-0201`](./decisions/D-0201-sns-diagnostic-set-e.md) | accepted | SNS 진단평가 기본 세트는 조합 E(의식과 인지·경마식 보도·플라스틱·오디오, 16문항), UI 6지문은 추가 문항·확장 시험으로 | 사용자 판단. 고3 수능·평가원 30세트·2,042조합, 지문마다 난이도가 퍼짐, 구간 1·4·4·6·1 |
+| [`D-0202`](./decisions/D-0202-current-student-version-discarded.md) | accepted | 지금의 학생용(문단 V4·문제 v3·학생용 화면) 폐기, 학생용은 확정된 개발자용을 고쳐 새로 만듦. 기록 수준, 코드는 학생용 새로 만들 때 정리 | 사용자 지시("현재 학생용은 폐기하면 돼", "(가)로 기록해줘"). D-0008·D-0013 학생용 기본값 지위 대체 |

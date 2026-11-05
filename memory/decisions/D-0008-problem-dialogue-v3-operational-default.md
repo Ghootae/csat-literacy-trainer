@@ -1,12 +1,14 @@
 ---
 id: D-0008
-status: accepted
+status: superseded
 date: 2026-09-11
 scope: problem-solving-runtime
 supersedes: D-0007
 ---
 
 # 문제 풀이 v3를 운영 기본값으로 고정
+
+2026-11-05: 학생용 기본값 지위는 [D-0202](./D-0202-current-student-version-discarded.md)로 폐기(지금의 학생용 폐기, 기록 수준). 아래는 당시 결정 원문이다.
 
 ## 결정
 

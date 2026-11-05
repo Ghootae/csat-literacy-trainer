@@ -20,6 +20,11 @@ base_commit: ee88cc8d
 - SNS 독해력 진단평가 모드를 따로 두고, 결과 화면(내 위치 → 문제 풀이 결과 → 독해 패턴)과 맛보기 추천에 사고 패턴 분석을 쓴다.
   방향만 정했다([D-0200](../decisions/D-0200-sns-diagnostic-mode-result-screen-direction.md)).
 
+- D-0200 후속(같은 날): 선택률은 차후 일괄 수집·집단 편향 감수, 6지문 대표성 검토, 16문항 기본 + 원하면 더 풀기, 추천 최소 근거·비용은 더 생각할 문제.
+- 진단 기본 세트는 조합 E(의식과 인지·경마식 보도·플라스틱·오디오, 16문항)([D-0201](../decisions/D-0201-sns-diagnostic-set-e.md)). Q-0043 닫음.
+  후보 보고 `docs/experiments/sns-diagnostic-candidates-2026-11-05/`, 골드·선지 연결 인계 `docs/handoffs/2026-11-05-sns-diagnostic-set-e-gold.md`(외부 전송 승인 대기).
+- 지금의 학생용(문단 V4·문제 v3·학생용 화면)은 폐기, 기록 수준([D-0202](../decisions/D-0202-current-student-version-discarded.md)). 판정 단계(문단 단순 형식, 문제 v5)는 골드를 쓰지 않는다.
+
 ## 변경한 것
 
 - 논의 인계 `docs/reports/REPORT-learner-analysis-usage-desktop.md`(4절에 선택률 확인 결과), 웹 에이전트 결과
