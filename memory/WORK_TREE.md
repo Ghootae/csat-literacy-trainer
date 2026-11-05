@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-11-05
+갱신: 2026-11-06
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -84,8 +84,10 @@
 │        다음: 실제 학생 풀이, 여러 문항에서 노드 분할 일관성 확인
 │
 ├─ SNS 독해력 진단평가 모드 — 결과 화면·맛보기 추천에 사고 패턴 분석 활용     D-0200
-│  └─○ 방향 확정(내 위치 → 풀이 결과 → 독해 패턴), 설계 전                  D-0200
-│        다음(사용자): 선택률 출처·이용 범위 Q-0042, 지문 범위 Q-0043 → 설계
+│  ├─○ 방향 확정(내 위치 → 풀이 결과 → 독해 패턴), 설계 전                  D-0200
+│  │     다음(사용자): 선택률 출처·이용 범위 Q-0042 → ⑥ 진단평가 연결 설계
+│  └─✓ 기본 세트 E 16문항 자료 완성(판정 묶음·분석 골드·선지 연결 동결)     D-0201
+│        다음: ⑤ 품질 확인 결과 사용자 확인 → ⑥ 설계
 │
 └─○ 문항 골드 — 오프라인 감사·회귀용으로만 보관                              CP-C
 
@@ -103,6 +105,7 @@
 | D-0182 | [v5.3 보강판 채택](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) |
 | D-0185 | [판정 v5.6 선지 읽기 보강](./decisions/D-0185-judge-reading-added-vs-stronger-v56.md), [보고](../docs/experiments/judge-reading-paraphrase-d1-2026-10-28/REPORT-human.md) |
 | D-0188 | [판정 v5.7-2 교정 질문](./decisions/D-0188-problem-feedback-v57-2-direct-questions.md), [보고](../docs/experiments/v57-regression-2026-10-29/REPORT-human.md) |
+| D-0201 | [세트 E](./decisions/D-0201-sns-diagnostic-set-e.md), [제작 절차](../docs/SNS-DIAGNOSTIC-SET-PROCEDURE-2026-11-05.md), [골드·선지 연결](../docs/experiments/sns-diagnostic-gold-2026-11-05/choice-link/FROZEN.md) |
 | D-0200 | [SNS 진단평가 모드 방향](./decisions/D-0200-sns-diagnostic-mode-result-screen-direction.md), [웹 에이전트 결과](../docs/reports/REPORT-learner-analysis-usage-web-result.md), [선택률 대응 확인](../docs/experiments/megastudy-rate-coverage-2026-11-05/README.md) |
 | D-0199 | [terra 대 sol 비교·sol 유지](./decisions/D-0199-keep-sol-over-terra-61.md), [보고](../docs/experiments/terra-vs-sol-2026-11-04/REPORT-human.md) |
 | D-0195·D-0196 | [판정기 형식 실수 정리](./decisions/D-0195-judge-format-slip-normalization.md), [인계](../docs/handoffs/2026-11-03-judge-format-slip-normalization.md), [회사법 ② 결함 문항](./decisions/D-0196-corporate-law-q13-c2-defective-choice.md) |

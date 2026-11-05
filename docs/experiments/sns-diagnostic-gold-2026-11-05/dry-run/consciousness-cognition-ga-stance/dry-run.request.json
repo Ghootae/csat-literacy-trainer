@@ -1,0 +1,79 @@
+{
+  "model": "gpt-6.1-sol",
+  "instructions": "너는 수능 국어 독서 지문의 명제마다 그 내용이 누구의 입장인지 표시한다. 명제 문장은 이미 정해져 있으며 바꾸지 않는다.\n\n입장 종류(`kind`, 하나만 고른다):\n- `AUTHOR` 필자 서술: 글쓴이가 사실·배경·개념·학설의 존재를 서술한 내용. 어떤 인물이 \"~라고 주장했다\", \"~라고 보았다\"는 사실 자체를 전하는 문장은 그 주장 내용이 아니라 전달이므로, 명제가 주장 **내용**을 담으면 그 인물의 입장으로, 주장했다는 **사실이나 논의의 흐름**만 담으면 필자 서술로 본다.\n- `FIGURE` 인물·학파 주장: 지문 속 인물이나 학파가 주장하거나 그렇게 본 내용. 원문에서 \"~에 따르면\", \"~는 ~라고 하였다\", \"~는 ~라고 보았다\" 등으로 그 인물에게 귀속된 내용이다.\n- `COMMON` 상식·통념: 일반인의 상식, 일상 언어 사용, 통념으로 제시된 내용.\n\n입장 주인(`holder`):\n- `FIGURE`이면 원문에 나온 인물·학파 이름을 원문 표기 그대로 적는다(예: 공손룡, 후기 묵가).\n- `AUTHOR`, `COMMON`이면 `null`.\n\n판단 원칙:\n- 명제 문장만 보지 말고 `sourceQuote`와 그 문단 원문에서 그 내용이 누구에게 귀속되는지 확인한다. 앞 문장에서 시작된 귀속(\"그는 ~라고 하였다. 이때 ~\")이 이어지는지도 본다.\n- 원문에 없는 귀속을 지어내지 않는다. 귀속이 분명하지 않으면 `AUTHOR`로 하고 `note`에 이유를 적는다.\n- 한 인물의 주장을 다른 인물이 반박하는 내용이면, 반박하는 쪽이 주인이다.\n- 인물의 목적·의도(\"~하기 위해\", \"~하고자\", \"~하려\")를 담은 명제는, 행위 서술과 함께 있어도 그 인물의 입장(`FIGURE`)이다.\n- 인물이 부각·강조한 **내용**(그 인물의 세계 인식)을 담은 명제는 그 인물의 입장이다. 내용 없이 행위만 전하면(\"비판했다\", \"견해를 제시했다\", \"주목했다\") 필자 서술이다.\n- 인물이 \"~라고 보았다\"고 한 문장 안의 관형절 전제(이미 일어난 사실 등)는, 원문이 그 전제를 인물의 판단으로 따로 표시하지 않으면 필자 서술이다.\n\n출력: 입력의 모든 명제에 대해 정확히 하나씩, `{ \"id\", \"kind\", \"holder\", \"evidence\", \"note\" }`.\n- `evidence`: 귀속 판단의 근거가 된 원문 구절을 글자 그대로(연속 구간).\n- `note`: 판단이 애매했으면 한 문장, 아니면 빈 문자열.",
+  "reasoning": {
+    "effort": "medium"
+  },
+  "max_output_tokens": 16000,
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "{\n  \"passageId\": \"consciousness-cognition-ga\",\n  \"paragraphs\": [\n    {\n      \"paragraphId\": \"consciousness-cognition-ga-p1\",\n      \"index\": 1,\n      \"text\": \"심리 철학에서 동일론은 의식이 뇌의 물질적 상태와 동일하다고 본다. 이와 달리 기능주의는 의식은 기능이며, 서로 다른 물질에서 같은 기능이 구현될 수 있다고 주장한다. 이때 기능이란 어떤 입력이 주어졌을 때 특정한 출력을 내놓는 함수적 역할로 정의되며, 함수적 역할의 일치는 입력과 출력의 쌍이 일치함을 의미한다. 실리콘 칩으로 구성된 로봇이 찔림이라는 입력에 대해 고통을 출력으로 내놓는 기능을 가진다면, 로봇과 우리는 같은 의식을 가진다는 것이다. 이처럼 기능주의는 의식을 구현하는 물질이 무엇인지는 중요하지 않다고 본다.\"\n    },\n    {\n      \"paragraphId\": \"consciousness-cognition-ga-p2\",\n      \"index\": 2,\n      \"text\": \"설(Searle)은 기능주의를 반박하는 사고 실험을 제시한다. ‘중국어 방’ 안에 중국어를 모르는 한 사람만 있다고 하자. 그는 중국어로 된 입력이 들어오면 정해진 규칙에 따라 중국어로 된 출력을 내놓는다. 설에 의하면 방 안의 사람은 중국어 사용자와 함수적 역할이 같지만 중국어를 아는 것은 아니다. 기능이 같으면서 의식은 다른 사례가 있다는 것이다.\"\n    },\n    {\n      \"paragraphId\": \"consciousness-cognition-ga-p3\",\n      \"index\": 3,\n      \"text\": \"동일론, 기능주의, 설은 모두 의식에 대한 논의를 의식을 구현하는 몸의 내부로만 한정하고 있다. 하지만 의식의 하나인 ‘인지’ 즉 ‘무언가를 알게 됨’은 몸 바깥에서 일어나는 일과 맞물려 벌어진다. 기억나지 않는 정보를 노트북에 저장된 파일을 열람하여 확인하는 것이 한 예이다. 로랜즈의 확장 인지 이론은 이를 설명하는 이론이다.\"\n    },\n    {\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"index\": 4,\n      \"text\": \"그에 따르면 인지 과정은 주체에게 ‘심적 상태’가 생겨나게 하는 과정이다. 기억이나 믿음이 심적 상태의 예이다. 심적 상태는 어떤 것에도 의존함이 없이 주체에게 의미를 나타낸다. 예를 들어, 무언가를 기억하는 사람은 자기의 기억이 무엇인지 알아보기 위해 아무것에도 의존할 필요가 없다. 이와 달리 ‘파생적 상태’는 주체의 해석에 의존해서만 또는 사회적 합의에 의존해서만 의미를 나타내는 상태로 정의된다. 앞의 예에서 노트북에 저장된 정보는 전자적 신호가 나열된 상태로서 파생적 상태이다. 주체에 의해 열람된 후에도 노트북의 정보는 여전히 파생적 상태이다. 하지만 열람 후 주체에게는 기억이 생겨난다. 로랜즈에게 인지 과정은 파생적 상태가 심적 상태로 변환되는 과정이 아니라, 파생적 상태를 조작함으로써 심적 상태를 생겨나게 하는 과정이다. 심적 상태가 주체의 몸 외부로 확장되는 것이 아니라, 심적 상태를 생겨나게 하는 인지 과정이 확장되는 것이다. 이러한 확장된 인지 과정은 인지 주체의 것일 때에만, 다시 말해 환경의 변화를 탐지하고 그에 맞춰 행위를 조절하는 주체와 통합되어 있을 때에만 성립할 수 있다. 즉 로랜즈에게 주체 없는 인지란 있을 수 없다. 확장 인지 이론은 의식의 문제를 몸 안으로 한정하지 않고 바깥으로까지 넓혀 설명한다는 의의를 지닌다.\"\n    }\n  ],\n  \"propositions\": [\n    {\n      \"id\": \"P1-1\",\n      \"paragraphId\": \"consciousness-cognition-ga-p1\",\n      \"text\": \"심리 철학의 동일론은 의식이 뇌의 물질적 상태와 동일하다고 본다.\",\n      \"sourceQuote\": \"심리 철학에서 동일론은 의식이 뇌의 물질적 상태와 동일하다고 본다.\"\n    },\n    {\n      \"id\": \"P1-2\",\n      \"paragraphId\": \"consciousness-cognition-ga-p1\",\n      \"text\": \"기능주의는 의식을 기능으로 본다.\",\n      \"sourceQuote\": \"기능주의는 의식은 기능이며\"\n    },\n    {\n      \"id\": \"P1-3\",\n      \"paragraphId\": \"consciousness-cognition-ga-p1\",\n      \"text\": \"기능주의는 서로 다른 물질에서 같은 기능이 구현될 수 있다고 주장한다.\",\n      \"sourceQuote\": \"서로 다른 물질에서 같은 기능이 구현될 수 있다고 주장한다.\"\n    },\n    {\n      \"id\": \"P1-4\",\n      \"paragraphId\": \"consciousness-cognition-ga-p1\",\n      \"text\": \"기능은 어떤 입력이 주어졌을 때 특정한 출력을 내놓는 함수적 역할이다.\",\n      \"sourceQuote\": \"이때 기능이란 어떤 입력이 주어졌을 때 특정한 출력을 내놓는 함수적 역할로 정의되며\"\n    },\n    {\n      \"id\": \"P1-5\",\n      \"paragraphId\": \"consciousness-cognition-ga-p1\",\n      \"text\": \"함수적 역할의 일치는 입력과 출력의 쌍이 일치함을 의미한다.\",\n      \"sourceQuote\": \"함수적 역할의 일치는 입력과 출력의 쌍이 일치함을 의미한다.\"\n    },\n    {\n      \"id\": \"P1-6\",\n      \"paragraphId\": \"consciousness-cognition-ga-p1\",\n      \"text\": \"기능주의의 로봇 사례에서는 실리콘 칩으로 구성된 로봇이 찔림이라는 입력에 고통을 출력하는 기능을 가진다고 가정한다.\",\n      \"sourceQuote\": \"실리콘 칩으로 구성된 로봇이 찔림이라는 입력에 대해 고통을 출력으로 내놓는 기능을 가진다면\"\n    },\n    {\n      \"id\": \"P1-7\",\n      \"paragraphId\": \"consciousness-cognition-ga-p1\",\n      \"text\": \"기능주의에 따르면 찔림에 고통을 출력하는 로봇과 우리는 같은 의식을 가진다.\",\n      \"sourceQuote\": \"로봇과 우리는 같은 의식을 가진다는 것이다.\"\n    },\n    {\n      \"id\": \"P1-8\",\n      \"paragraphId\": \"consciousness-cognition-ga-p1\",\n      \"text\": \"기능주의는 의식을 구현하는 물질이 무엇인지는 중요하지 않다고 본다.\",\n      \"sourceQuote\": \"이처럼 기능주의는 의식을 구현하는 물질이 무엇인지는 중요하지 않다고 본다.\"\n    },\n    {\n      \"id\": \"P2-1\",\n      \"paragraphId\": \"consciousness-cognition-ga-p2\",\n      \"text\": \"설은 기능주의를 반박하기 위한 사고 실험을 제시한다.\",\n      \"sourceQuote\": \"설(Searle)은 기능주의를 반박하는 사고 실험을 제시한다.\"\n    },\n    {\n      \"id\": \"P2-2\",\n      \"paragraphId\": \"consciousness-cognition-ga-p2\",\n      \"text\": \"중국어 방 사고 실험은 방 안에 중국어를 모르는 한 사람만 있다고 가정한다.\",\n      \"sourceQuote\": \"‘중국어 방’ 안에 중국어를 모르는 한 사람만 있다고 하자.\"\n    },\n    {\n      \"id\": \"P2-3\",\n      \"paragraphId\": \"consciousness-cognition-ga-p2\",\n      \"text\": \"중국어 방 안의 사람은 중국어 입력이 들어오면 정해진 규칙에 따라 중국어 출력을 내놓는다.\",\n      \"sourceQuote\": \"그는 중국어로 된 입력이 들어오면 정해진 규칙에 따라 중국어로 된 출력을 내놓는다.\"\n    },\n    {\n      \"id\": \"P2-4\",\n      \"paragraphId\": \"consciousness-cognition-ga-p2\",\n      \"text\": \"설에 따르면 중국어 방 안의 사람은 중국어 사용자와 함수적 역할이 같다.\",\n      \"sourceQuote\": \"설에 의하면 방 안의 사람은 중국어 사용자와 함수적 역할이 같지만\"\n    },\n    {\n      \"id\": \"P2-5\",\n      \"paragraphId\": \"consciousness-cognition-ga-p2\",\n      \"text\": \"설에 따르면 중국어 방 안의 사람은 중국어를 아는 것은 아니다.\",\n      \"sourceQuote\": \"중국어를 아는 것은 아니다.\"\n    },\n    {\n      \"id\": \"P2-6\",\n      \"paragraphId\": \"consciousness-cognition-ga-p2\",\n      \"text\": \"중국어 방 사고 실험은 기능이 같으면서 의식은 다른 사례를 제시한다.\",\n      \"sourceQuote\": \"기능이 같으면서 의식은 다른 사례가 있다는 것이다.\"\n    },\n    {\n      \"id\": \"P3-1\",\n      \"paragraphId\": \"consciousness-cognition-ga-p3\",\n      \"text\": \"동일론, 기능주의, 설은 모두 의식에 대한 논의를 의식을 구현하는 몸의 내부로만 한정한다.\",\n      \"sourceQuote\": \"동일론, 기능주의, 설은 모두 의식에 대한 논의를 의식을 구현하는 몸의 내부로만 한정하고 있다.\"\n    },\n    {\n      \"id\": \"P3-2\",\n      \"paragraphId\": \"consciousness-cognition-ga-p3\",\n      \"text\": \"인지는 의식의 하나로서 무언가를 알게 됨을 뜻한다.\",\n      \"sourceQuote\": \"의식의 하나인 ‘인지’ 즉 ‘무언가를 알게 됨’\"\n    },\n    {\n      \"id\": \"P3-3\",\n      \"paragraphId\": \"consciousness-cognition-ga-p3\",\n      \"text\": \"인지는 몸 바깥에서 일어나는 일과 맞물려 벌어진다.\",\n      \"sourceQuote\": \"‘인지’ 즉 ‘무언가를 알게 됨’은 몸 바깥에서 일어나는 일과 맞물려 벌어진다.\"\n    },\n    {\n      \"id\": \"P3-4\",\n      \"paragraphId\": \"consciousness-cognition-ga-p3\",\n      \"text\": \"기억나지 않는 정보를 노트북에 저장된 파일을 열람하여 확인하는 것은 인지가 몸 바깥의 일과 맞물리는 사례이다.\",\n      \"sourceQuote\": \"기억나지 않는 정보를 노트북에 저장된 파일을 열람하여 확인하는 것이 한 예이다.\"\n    },\n    {\n      \"id\": \"P3-5\",\n      \"paragraphId\": \"consciousness-cognition-ga-p3\",\n      \"text\": \"로랜즈의 확장 인지 이론은 인지가 몸 바깥의 일과 맞물려 벌어지는 현상을 설명한다.\",\n      \"sourceQuote\": \"로랜즈의 확장 인지 이론은 이를 설명하는 이론이다.\"\n    },\n    {\n      \"id\": \"P4-1\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"로랜즈에 따르면 인지 과정은 주체에게 심적 상태가 생겨나게 하는 과정이다.\",\n      \"sourceQuote\": \"그에 따르면 인지 과정은 주체에게 ‘심적 상태’가 생겨나게 하는 과정이다.\"\n    },\n    {\n      \"id\": \"P4-2\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"기억이나 믿음은 심적 상태의 예이다.\",\n      \"sourceQuote\": \"기억이나 믿음이 심적 상태의 예이다.\"\n    },\n    {\n      \"id\": \"P4-3\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"심적 상태는 어떤 것에도 의존하지 않고 주체에게 의미를 나타낸다.\",\n      \"sourceQuote\": \"심적 상태는 어떤 것에도 의존함이 없이 주체에게 의미를 나타낸다.\"\n    },\n    {\n      \"id\": \"P4-4\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"무언가를 기억하는 사람은 자기의 기억이 무엇인지 알아보기 위해 아무것에도 의존할 필요가 없다.\",\n      \"sourceQuote\": \"예를 들어, 무언가를 기억하는 사람은 자기의 기억이 무엇인지 알아보기 위해 아무것에도 의존할 필요가 없다.\"\n    },\n    {\n      \"id\": \"P4-5\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"파생적 상태는 주체의 해석이나 사회적 합의에 의존해서만 의미를 나타내는 상태이다.\",\n      \"sourceQuote\": \"이와 달리 ‘파생적 상태’는 주체의 해석에 의존해서만 또는 사회적 합의에 의존해서만 의미를 나타내는 상태로 정의된다.\"\n    },\n    {\n      \"id\": \"P4-6\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"노트북에 저장된 정보는 전자적 신호가 나열된 상태로서 파생적 상태이다.\",\n      \"sourceQuote\": \"앞의 예에서 노트북에 저장된 정보는 전자적 신호가 나열된 상태로서 파생적 상태이다.\"\n    },\n    {\n      \"id\": \"P4-7\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"노트북의 정보는 주체가 열람한 후에도 여전히 파생적 상태이다.\",\n      \"sourceQuote\": \"주체에 의해 열람된 후에도 노트북의 정보는 여전히 파생적 상태이다.\"\n    },\n    {\n      \"id\": \"P4-8\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"노트북의 정보를 열람한 후 주체에게는 기억이 생겨난다.\",\n      \"sourceQuote\": \"하지만 열람 후 주체에게는 기억이 생겨난다.\"\n    },\n    {\n      \"id\": \"P4-9\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"로랜즈에게 인지 과정은 파생적 상태가 심적 상태로 변환되는 과정이 아니다.\",\n      \"sourceQuote\": \"로랜즈에게 인지 과정은 파생적 상태가 심적 상태로 변환되는 과정이 아니라\"\n    },\n    {\n      \"id\": \"P4-10\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"로랜즈에게 인지 과정은 파생적 상태를 조작함으로써 심적 상태를 생겨나게 하는 과정이다.\",\n      \"sourceQuote\": \"파생적 상태를 조작함으로써 심적 상태를 생겨나게 하는 과정이다.\"\n    },\n    {\n      \"id\": \"P4-11\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"확장 인지에서 심적 상태가 주체의 몸 외부로 확장되는 것은 아니다.\",\n      \"sourceQuote\": \"심적 상태가 주체의 몸 외부로 확장되는 것이 아니라\"\n    },\n    {\n      \"id\": \"P4-12\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"확장 인지에서는 심적 상태를 생겨나게 하는 인지 과정이 주체의 몸 외부로 확장된다.\",\n      \"sourceQuote\": \"심적 상태를 생겨나게 하는 인지 과정이 확장되는 것이다.\"\n    },\n    {\n      \"id\": \"P4-13\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"확장된 인지 과정은 환경의 변화를 탐지하고 그에 맞춰 행위를 조절하는 인지 주체와 통합되어 그 주체의 것일 때에만 성립한다.\",\n      \"sourceQuote\": \"이러한 확장된 인지 과정은 인지 주체의 것일 때에만, 다시 말해 환경의 변화를 탐지하고 그에 맞춰 행위를 조절하는 주체와 통합되어 있을 때에만 성립할 수 있다.\"\n    },\n    {\n      \"id\": \"P4-14\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"로랜즈에게 주체 없는 인지는 있을 수 없다.\",\n      \"sourceQuote\": \"즉 로랜즈에게 주체 없는 인지란 있을 수 없다.\"\n    },\n    {\n      \"id\": \"P4-15\",\n      \"paragraphId\": \"consciousness-cognition-ga-p4\",\n      \"text\": \"확장 인지 이론은 의식의 문제를 몸 안으로 한정하지 않고 몸 바깥까지 넓혀 설명한다는 의의가 있다.\",\n      \"sourceQuote\": \"확장 인지 이론은 의식의 문제를 몸 안으로 한정하지 않고 바깥으로까지 넓혀 설명한다는 의의를 지닌다.\"\n    }\n  ]\n}\n"
+        }
+      ]
+    }
+  ],
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "analysis_stance_v1",
+      "strict": true,
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "stances": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "AUTHOR",
+                    "FIGURE",
+                    "COMMON"
+                  ]
+                },
+                "holder": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "evidence": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "holder",
+                "evidence",
+                "note"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "stances"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}
