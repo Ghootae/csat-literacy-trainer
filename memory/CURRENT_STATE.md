@@ -81,6 +81,7 @@
 2. 1′ 나머지: 문단 작동 순서 문서 남김 1건(골드 없는 지문 추가 때 목록 필터). 메모장 30번은 수정 안 함(10-26), 38·40·41·43은 반영(10-28).
 3. 얇은 학생판 범위 설계(내부 정보 숨김, 로그 저장, 최소 인증, 서버 상시 실행).
 4. SNS 진단평가 모드(D-0200): 세트 E(D-0201) 자료 동결(`docs/experiments/sns-diagnostic-gold-2026-11-05/`). ⑥ 설계 확정: [D-0203](./decisions/D-0203-megastudy-rates-public-display-and-calibration.md)(수치 공개·위치 보정), [D-0204](./decisions/D-0204-sns-diagnostic-keeps-service-feedback.md)(본 서비스 피드백 유지·지문 단위·첫 응답), [D-0205](./decisions/D-0205-sns-diagnostic-design-issues-2-5.md)(사고 진단 대상·로컬 시범·결과 한 페이지), [D-0207](./decisions/D-0207-sns-diagnostic-position-calibration-method.md)(2026 수능 원점수 컷), [D-0208](./decisions/D-0208-sns-diagnostic-skip-item-review-rationale-prompt.md)(건너뛰기·문항 검토). 백엔드 인계 A(`docs/handoffs/2026-11-06-sns-diagnostic-backend.md`) 구현·검토 완료. 다음: 학생용 표현 판정 → 화면 인계 B → 비용 측정(별도 승인).
+5. 골드 기반 문항 생성 E1([D-0206](./decisions/D-0206-gold-based-item-generation-experiment-design.md)): 정확성은 A·A′·B 모두 천장이고, 관계 선지는 기출 24/50 대 B 13·A′ 9·A 9. 다음: B v3 "관계 먼저 설계"([체크포인트](./checkpoints/2026-11-06-e1-generation-v1-v2-depth.md)).
 
 ## 금지선
 
