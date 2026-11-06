@@ -13,3 +13,9 @@
 - 사용자가 웹 에이전트 대화를 붙여 방향을 바꿈 → [D-0204](../decisions/D-0204-sns-diagnostic-keeps-service-feedback.md). 요약 대화 순서는 코드 에이전트 권고(뒤로)와 달리 (가) 먼저.
 - 웹 에이전트 결과 문서 `docs/reports/REPORT-learner-analysis-usage-web-result.md`가 2026-11-06 개정됨(작업 트리 수정, 커밋 안 됨). 내용은 D-0204와 같음.
 - 다음: 초안 1-2(사고 진단·문단 판정이 앱에 없음)부터 논의.
+
+## 이어서: 문제점 2~5 (같은 날)
+
+- [D-0205](../decisions/D-0205-sns-diagnostic-design-issues-2-5.md). 문제점 3은 코드 확인으로 결정 없이 닫음(컨트롤러 주입점).
+- 결과 화면 샘플 캔버스: https://claude.ai/artifact/923cWFBgxxuSS2evZ8SLVX (비공개). 사용자 "일단은 이 안으로 진행".
+- 다음: 위치 보정 원자료 확인 → 백엔드 인계 문서(초안 5절 순서).
