@@ -44,7 +44,7 @@
 - 선지 연결 층([D-0162](./decisions/D-0162-choice-link-layer-direction.md)): 오프라인 진단용 먼저(D-0002 유지). 비틂 목록 확정, UI 6지문 동결 완료(120선지, [기록](./checkpoints/2026-10-22-choice-link-ui-freeze.md)).
 - 사고 진단 v0.1(풀이 이유 문장으로 무너진 단계·걸린 함정 판정, [D-0111](./decisions/D-0111-thought-diagnosis-v0-experiment.md)): 학생이 쓴 선택 이유로 다섯 단계(발문·선지 해석·근거 위치·근거 해석·대조) 중 처음 실패한 단계와 함정 유형 12종을 판정하고, 근거가 없으면 판단 불가로 둔다. 가상 풀이 36/36·과잉 분류 0. 실시간 아닌 주기 실행·모델 sol 고정([D-0115](./decisions/D-0115-thought-diagnosis-periodic-sol.md)). 다음: 처음 보는 사례·실제 학생 풀이로 검증. 함정 강도 예측은 실패(D-0109). 활용 논의는 D-0200으로 재개.
 - 정답 경로 분석(문항마다 정답에 이르는 노드 지도를 만들고, 학생이 어느 노드·요소에서 틀렸는지 기록, [D-0119](./decisions/D-0119-answer-path-elements-and-depth.md)·[D-0121~D-0124](./decisions/D-0124-answer-path-element-override-on-evidence.md)): sol이 문항 지도(READ·LINK·APPLY 노드, 요소 E1~E10)를 1회 생성·동결하고, 정답은 경로 전체 성공, 오답은 실패 노드·요소로 채점한다(추가 질문 없음). 깊이는 노드 수. sol 종단 검증 대체로 양호(실패 종류 17/20, 3회 일관성 33/35, [기록](./checkpoints/2026-10-14-answer-path-sol-e2e-results.md)). 다음: 실제 학생 풀이, 여러 문항에서 노드 분할 일관성.
-- 활용 방향([D-0200](./decisions/D-0200-sns-diagnostic-mode-result-screen-direction.md), 방향만): SNS 진단평가 모드를 따로 두고 결과 화면(내 위치 → 풀이 결과[정답의 질·무너진 단계 경향·걸린 비틂] → 독해 패턴)과 맛보기 추천에 쓴다. 선택률은 DB 752문항 모두 메가스터디 회차와 대응, 미수집·이용 범위 미정(Q-0042).
+- 활용 방향([D-0200](./decisions/D-0200-sns-diagnostic-mode-result-screen-direction.md), 방향만): SNS 진단평가 모드를 따로 두고 결과 화면(내 위치 → 풀이 결과[정답의 질·무너진 단계 경향·걸린 비틂] → 독해 패턴)과 맛보기 추천에 쓴다. 선택률은 DB 752문항 모두 메가스터디 회차와 대응, 미수집. 원래 수치 공개·위치만 보정(D-0203).
 - 문제 쪽 오류 분류([D-0181](./decisions/D-0181-problem-error-taxonomy-two-axes-later.md)): 함정 태그 12종·요구 요소 E1~E10·비틂 14종을 지금은 [대응표](../docs/review/problem-error-taxonomy-crosswalk-2026-10-27.md)로 묶는다. 실제 학생 풀이로 재검증할 때 내용 축(비틂 14종)·과정 축(읽기 과정 7가지)으로 재구성한다.
 
 ## 학생 상태 모델
@@ -80,7 +80,7 @@
 1. 1′ 첫 과제: 문제 판정 v5.1 `coaching` 필드 정리 완료([D-0177](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md)).
 2. 1′ 나머지: 문단 작동 순서 문서 남김 1건(골드 없는 지문 추가 때 목록 필터). 메모장 30번은 수정 안 함(10-26), 38·40·41·43은 반영(10-28).
 3. 얇은 학생판 범위 설계(내부 정보 숨김, 로그 저장, 최소 인증, 서버 상시 실행).
-4. SNS 진단평가 모드(D-0200, 방향만): 세트 E(D-0201) 16문항 판정 묶음·분석 골드·선지 연결 동결 완료(2026-11-06, `docs/experiments/sns-diagnostic-gold-2026-11-05/`). 다음은 Q-0042 결정 뒤 ⑥ 화면·백엔드 설계.
+4. SNS 진단평가 모드(D-0200, 방향만): 세트 E(D-0201) 16문항 판정 묶음·분석 골드·선지 연결 동결 완료(2026-11-06, `docs/experiments/sns-diagnostic-gold-2026-11-05/`). ⑤ 품질 확인 사용자 승인(2026-11-06, 의식과 인지 15번 ① 연결 판정 유지). Q-0042 닫음([D-0203](./decisions/D-0203-megastudy-rates-public-display-and-calibration.md): 메가스터디 수치 그대로 공개·출처 표기, 위치만 시험 단위 보정). 다음은 ⑥ 설계 초안 하나(문제·전략·위험) → 사용자 검토 → 백엔드·화면 인계 문서. 추천 최소 근거·비용·개인정보는 초안의 열린 항목.
 
 ## 금지선
 
