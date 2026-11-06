@@ -434,12 +434,21 @@ export function loadTargets(targetsPath, fixedPath = FIXED_PATH) {
   return readJson(targetsPath).map(t => {
     const key = t.key ?? t.passageId, passageId = t.passageId ?? t.key;
     const { passage, map, stances, protectedFiles: sectionFiles } = t.sections ? mergeSections(t.sections.map(s => loadSection(s, s.label)), key) : loadSection(t);
-    const { setId, questions, images } = loadQuestions(t.questionsPath, t.answersPath, t.assetsDir, fixedItems);
-    if (setId !== t.setId) throw new Error(`SET_MISMATCH: ${t.setId} vs ${setId}`);
+    // questionsJson (optional): questions come from that file (loadQuestion's `question` shape) instead of the DB; no answer record or image is read.
+    let questions, images;
+    if (t.questionsJson) {
+      questions = readJson(t.questionsJson); images = [];
+      if (!Array.isArray(questions) || !questions.length) throw new Error(`QUESTIONS_JSON: ${t.questionsJson}`);
+    } else {
+      const loaded = loadQuestions(t.questionsPath, t.answersPath, t.assetsDir, fixedItems);
+      if (loaded.setId !== t.setId) throw new Error(`SET_MISMATCH: ${t.setId} vs ${loaded.setId}`);
+      ({ questions, images } = loaded);
+    }
     const displayPath = resolve(dirname(t.questionsPath), '../passages', `${t.setId}.json`), displayBytes = readFileSync(displayPath);
     const passageMarks = JSON.parse(displayBytes.toString('utf8')).elements.filter(e => e.kind !== 'paragraph')
       .map(e => Object.fromEntries(['kind', 'symbol', 'style', 'text'].filter(k => e[k] != null).map(k => [k, e[k]])));
-    const protectedFiles = { ...sectionFiles, [displayPath]: hash(displayBytes), [t.questionsPath]: hash(readFileSync(t.questionsPath)), [t.answersPath]: hash(readFileSync(t.answersPath)) };
+    const protectedFiles = { ...sectionFiles, [displayPath]: hash(displayBytes), [t.questionsPath]: hash(readFileSync(t.questionsPath)),
+      ...(t.questionsJson ? { [t.questionsJson]: hash(readFileSync(t.questionsJson)) } : { [t.answersPath]: hash(readFileSync(t.answersPath)) }) };
     return { key, passageId, passage, map, stances, passageMarks, questions, images, protectedFiles };
   });
 }

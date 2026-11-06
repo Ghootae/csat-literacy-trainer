@@ -89,6 +89,11 @@
 │  └─✓ 기본 세트 E 16문항 자료 완성(판정 묶음·분석 골드·선지 연결 동결)     D-0201
 │        다음: ⑤ 품질 확인 결과 사용자 확인 → ⑥ 설계
 │
+├─ 골드 기반 문항·지문 생성 실험 — 시중 AI 생성보다 정확한 문항, 기출 대체 지문    D-0206
+│  ├─● E1 문항 생성(4지문 10자리, A·A′·B, 주 비교 A′ 대 B) — 구현·dry-run 중   D-0206
+│  │     다음: executor 구현 diff 검토 → 전송 승인 요청(생성·풀이·역연결)
+│  └─○ E2 지문 대체 생성 — E1 결과 뒤, 기준은 원문 회차 간 범위 비교          D-0206
+│
 └─○ 문항 골드 — 오프라인 감사·회귀용으로만 보관                              CP-C
 
 ● 진행 중  ○ 보류·대기  ✓ 확정  ✗ 폐기  ? 미해결 질문
@@ -105,6 +110,7 @@
 | D-0182 | [v5.3 보강판 채택](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) |
 | D-0185 | [판정 v5.6 선지 읽기 보강](./decisions/D-0185-judge-reading-added-vs-stronger-v56.md), [보고](../docs/experiments/judge-reading-paraphrase-d1-2026-10-28/REPORT-human.md) |
 | D-0188 | [판정 v5.7-2 교정 질문](./decisions/D-0188-problem-feedback-v57-2-direct-questions.md), [보고](../docs/experiments/v57-regression-2026-10-29/REPORT-human.md) |
+| D-0206 | [골드 기반 생성 실험 설계](./decisions/D-0206-gold-based-item-generation-experiment-design.md), [설계 문서](../docs/handoffs/2026-11-06-gold-based-generation-experiment.md), [E1 구현 인계](../docs/handoffs/2026-11-06-e1-item-generation-implementation.md), [지도 회차 간 천장](../docs/experiments/map-run-agreement-2026-11-06/REPORT-human.md) |
 | D-0201 | [세트 E](./decisions/D-0201-sns-diagnostic-set-e.md), [제작 절차](../docs/SNS-DIAGNOSTIC-SET-PROCEDURE-2026-11-05.md), [골드·선지 연결](../docs/experiments/sns-diagnostic-gold-2026-11-05/choice-link/FROZEN.md) |
 | D-0200 | [SNS 진단평가 모드 방향](./decisions/D-0200-sns-diagnostic-mode-result-screen-direction.md), [웹 에이전트 결과](../docs/reports/REPORT-learner-analysis-usage-web-result.md), [선택률 대응 확인](../docs/experiments/megastudy-rate-coverage-2026-11-05/README.md) |
 | D-0199 | [terra 대 sol 비교·sol 유지](./decisions/D-0199-keep-sol-over-terra-61.md), [보고](../docs/experiments/terra-vs-sol-2026-11-04/REPORT-human.md) |

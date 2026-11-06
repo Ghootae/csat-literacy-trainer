@@ -422,3 +422,21 @@ test('TWIST_OTHER review mark and report listing of OTHER details', () => {
   const y = fresh(); for (const q of y.out.questions) for (const c of q.choices) for (const p of c.parts) if (p.twisted) Object.assign(p, { twistType: 'NEGATION' });
   assert.ok(!validateChoiceLink(y.out, y.ctx).review.some(e => e.kind === 'TWIST_OTHER'));
 });
+
+test('questionsJson: questions come from the file (no answer record, no images), protected hashes list it; absent field keeps DB behavior', () => {
+  const f = fixture();
+  try {
+    const qs = [{ number: 1, stem: '윗글에 대한 이해로 적절하지 않은 것은?', supplementSegments: [], answer: 2,
+      choices: [1, 2, 3, 4, 5].map(n => ({ number: n, text: `선지 ${n}`, truth: n === 2 ? 'FALSE' : 'TRUE', explanation: null })), explanationSummary: null }];
+    const questionsJson = join(f.dir, 'generated-questions.json');
+    writeFileSync(questionsJson, JSON.stringify(qs));
+    const base = JSON.parse(readFileSync(f.targetsPath, 'utf8'))[0], { answersPath, assetsDir, ...rest } = base;
+    writeFileSync(f.targetsPath, JSON.stringify([{ ...rest, questionsJson }]));
+    const t = load(f);
+    assert.deepEqual(t.questions, qs); assert.deepEqual(t.images, []);
+    assert.ok(questionsJson in t.protectedFiles); assert.ok(!(answersPath in t.protectedFiles));
+    assert.ok(validateChoiceLink(exampleOutput(PASSAGE_ID, t.questions), { passageId: PASSAGE_ID, map: t.map, questions: t.questions, paragraphs: t.passage.paragraphs.map(p => p.text) }).allPass);
+    writeFileSync(f.targetsPath, JSON.stringify([{ ...base }]));
+    assert.deepEqual(load(f).questions.map(q => q.number), [10, 11]);
+  } finally { rmSync(f.dir, { recursive: true, force: true }); }
+});

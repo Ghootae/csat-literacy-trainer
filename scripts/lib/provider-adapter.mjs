@@ -1,4 +1,6 @@
 // Provider wire conversion only. No SDK, environment reads, or implicit retries.
+// deepseek-v4-pro prices (USD per 1M tokens), shared with scripts/run-v58-deepseek-p1.mjs and scripts/run-item-solve-check.mjs.
+const DEEPSEEK_V4_PRO_PRICES = { peak: { input: 1.32, cached: 0.044, output: 3.96 }, offPeak: { input: 0.66, cached: 0.022, output: 1.98 } };
 export const CONFIGS = {
   'gemini-3.8-flash-medium': { provider: 'gemini', model: 'gemini-3.8-flash', reasoningEffort: 'medium',
     endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', keyEnv: 'GEMINI_API_KEY', maxTokens: 16000 },
@@ -6,11 +8,14 @@ export const CONFIGS = {
     endpoint: 'https://api.deepseek.com/chat/completions', keyEnv: 'DEEPSEEK_API_KEY', maxTokens: 32000 },
   'deepseek-flash-high': { provider: 'deepseek', model: 'deepseek-flash', reasoningEffort: 'high',
     endpoint: 'https://api.deepseek.com/chat/completions', keyEnv: 'DEEPSEEK_API_KEY', maxTokens: 32000 },
+  'deepseek-v4-pro-high': { provider: 'deepseek', model: 'deepseek-v4-pro', reasoningEffort: 'high',
+    endpoint: 'https://api.deepseek.com/chat/completions', keyEnv: 'DEEPSEEK_API_KEY', maxTokens: 32000, prices: DEEPSEEK_V4_PRO_PRICES },
 };
 export const PRICES = {
   gemini: { input: 0.75, cached: 0.75, output: 3.75 },
   deepseek: { input: 0.30, cached: 0.006, output: 1.20 },
   deepseekOffPeak: { input: 0.15, cached: 0.003, output: 0.60 },
+  deepseekV4Pro: DEEPSEEK_V4_PRO_PRICES,
 };
 export const GEMINI_SCHEMA_RULE = 'Recursively remove $schema and replace const: x with enum: [x]; preserve all other keywords.';
 export function toGeminiSchema(value) {

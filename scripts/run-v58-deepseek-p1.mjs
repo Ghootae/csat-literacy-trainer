@@ -9,8 +9,7 @@ import { CONFIGS as ADAPTER, createProviderTransport, toChatRequest, isDeepSeekP
 
 const BASE = 'docs/experiments/v58-conclusion-2026-10-29';
 const CONFIGS = {
-  'deepseek-v4-pro-high': { ...ADAPTER['deepseek-flash-high'], model: 'deepseek-v4-pro',
-    prices: { peak: { input: 1.32, cached: 0.044, output: 3.96 }, offPeak: { input: 0.66, cached: 0.022, output: 1.98 } } },
+  'deepseek-v4-pro-high': ADAPTER['deepseek-v4-pro-high'],
   'deepseek-flash-high': { ...ADAPTER['deepseek-flash-high'],
     prices: { peak: { input: 0.30, cached: 0.006, output: 1.20 }, offPeak: { input: 0.15, cached: 0.003, output: 0.60 } } },
 };
