@@ -24,6 +24,7 @@ async function listen(options: Parameters<typeof createLearningServer>[0]) {
 const call = (base: string, method: 'GET' | 'POST', path: string, body?: unknown) =>
   fetch(base + path, { method, headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 const [COG] = set.passages as [typeof set.passages[number]];
+const HORSE_ID = set.passages[1]!.passageId;
 const [Q12, Q13, Q14, Q15, Q16] = COG.questionIds as [string, string, string, string, string];
 
 describe('진단평가 HTTP', () => {
@@ -77,10 +78,18 @@ describe('진단평가 HTTP', () => {
     expect((await call(base, 'POST', `${root}/item/${Q12}`, provided(wrongChoice(Q12)))).status).toBe(200);
     expect((await call(base, 'POST', `${root}/item/${Q12}`, { choiceId: 'X' })).status).toBe(400);
     expect((await call(base, 'POST', `${root}/item/${Q12}`, provided(correctChoice(Q12)))).status).toBe(200);
+    // 새로 고침 뒤 이어 가기: 문항과 임시 답(정오 없음)
+    const resumed = await call(base, 'GET', `${root}/passage/${COG.passageId}/questions`);
+    expect(resumed.status).toBe(200);
+    const resumedBody = await resumed.json() as { questions: unknown[]; drafts: Record<string, { choiceId: string } | null> };
+    expect(resumedBody.questions).toHaveLength(5); expect(resumedBody.drafts[Q12]).toEqual({ choiceId: correctChoice(Q12), rationale: { mode: 'PROVIDED', text: provided(correctChoice(Q12)).rationale.text } });
+    expect(JSON.stringify(resumedBody)).not.toContain('answerChoiceId');
+    expect((await call(base, 'GET', `${root}/passage/${HORSE_ID}/questions`)).status).toBe(409);
     expect((await call(base, 'GET', `${root}/item/${Q12}/feedback`)).status).toBe(409);
     expect((await call(base, 'GET', `${root}/passage/${COG.passageId}/summary-card`)).status).toBe(409);
     const done = await call(base, 'POST', `${root}/passage/${COG.passageId}/answers-done`);
     expect(done.status).toBe(200); expect(Object.keys(await done.json() as object)).toEqual(['position']);
+    expect((await call(base, 'GET', `${root}/passage/${COG.passageId}/questions`)).status).toBe(409);
     expect((await call(base, 'POST', `${root}/item/${Q12}`, provided(wrongChoice(Q12)))).status).toBe(409);
     await controller.idle(); await new Promise(resolve => setTimeout(resolve, 20)); await controller.idle();
     const card = await (await call(base, 'GET', `${root}/passage/${COG.passageId}/summary-card`)).json() as Record<string, unknown>;

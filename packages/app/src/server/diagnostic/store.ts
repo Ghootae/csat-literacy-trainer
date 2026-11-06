@@ -19,7 +19,7 @@ export interface DiagnosticParticipant {
     summaryChosen: boolean | null;
     summarySessionId: string | null;
     /** paragraphId → 첫 시도의 첫 학생 발화 */
-    firstTurns: Record<string, { text: string; at: string } | null>;
+    firstTurns: Record<string, { text: string; at: string; copyOverlap?: { n: 5; windows: number; matched: number; ratio: number } | null } | null>;
     feedbackCursor: number;
   }>;
   items: Record<string, {

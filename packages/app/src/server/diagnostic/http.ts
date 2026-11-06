@@ -28,7 +28,7 @@ export async function handleDiagnosticRequest(controller: DiagnosticController, 
     const id = match[1]!; const rest = match[2] ?? '';
     if (rest === '' && method === 'GET') return send(res, 200, controller.progress(id));
     if (rest === 'result' && method === 'GET') return send(res, 200, controller.result(id));
-    const passage = /^passage\/([^/]+)\/(start|answers-done|summary-card|summary\/(?:respond|navigate|finish))$/u.exec(rest);
+    const passage = /^passage\/([^/]+)\/(start|answers-done|summary-card|questions|summary\/(?:respond|navigate|finish))$/u.exec(rest);
     if (passage) {
       const [, passageId, action] = passage as unknown as [string, string, string];
       if (method === 'POST' && action === 'start') return send(res, 200, controller.start(id, passageId, await body()));
@@ -36,6 +36,7 @@ export async function handleDiagnosticRequest(controller: DiagnosticController, 
       if (method === 'POST' && action === 'summary/navigate') return send(res, 200, controller.summaryNavigate(id, passageId, await body()));
       if (method === 'POST' && action === 'summary/finish') return send(res, 200, controller.summaryFinish(id, passageId));
       if (method === 'POST' && action === 'answers-done') return send(res, 200, controller.answersDone(id, passageId));
+      if (method === 'GET' && action === 'questions') return send(res, 200, controller.answerDrafts(id, passageId));
       if (method === 'GET' && action === 'summary-card') return send(res, 200, controller.summaryCard(id, passageId));
     }
     const item = /^item\/([^/]+)(\/feedback)?$/u.exec(rest);

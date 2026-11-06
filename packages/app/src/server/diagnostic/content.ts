@@ -4,7 +4,7 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { z } from 'zod/v4';
 import { loadStanceLabels, type AnalysisMap, type SourceDirectProblemBundle } from '@csat/pipeline';
 import { loadBundleFromRoot, loadDialoguePassages, type DialoguePassageContent } from '../content.js';
@@ -73,4 +73,38 @@ export function loadChoiceLinkTwists(choiceLinkPath: string): (questionNumber: n
   return (questionNumber, choicePosition) => (file.questions.find(q => q.number === questionNumber)?.choices.find(c => c.number === choicePosition)?.parts ?? [])
     .filter(part => part.twisted && part.twistType !== null)
     .map(part => ({ twistType: part.twistType!, twistDetail: part.twistDetail }));
+}
+
+export interface ChoiceLinkTargets { readonly stemPolarity: string; readonly ids: readonly string[] }
+interface ChoiceLinkTargetFile { questions: { number: number; stemPolarity: string; choices: { number: number; parts: { twisted: boolean; twistTargetIds?: string[] }[] }[] }[] }
+/** 선지 연결 동결본에서 그 문항의 발문 방향과 그 선지의 `twisted: true` 부분이 가리키는 지도 단위 id를 모은다. 결과 화면 표시에만 쓴다(판정 입력 아님). */
+export function loadChoiceLinkTargets(choiceLinkPath: string): (questionNumber: number, choicePosition: number) => ChoiceLinkTargets | null {
+  const file = JSON.parse(readFileSync(resolve(process.cwd(), choiceLinkPath), 'utf8')) as ChoiceLinkTargetFile;
+  return (questionNumber, choicePosition) => {
+    const question = file.questions.find(q => q.number === questionNumber);
+    const choice = question?.choices.find(c => c.number === choicePosition);
+    if (!question || !choice) return null;
+    return { stemPolarity: question.stemPolarity, ids: [...new Set(choice.parts.filter(part => part.twisted).flatMap(part => part.twistTargetIds ?? []))] };
+  };
+}
+
+/** 지도 파일과 같은 실험 폴더의 `classify/<지도 폴더>/classify.json`에서 관계 id → 유형을 읽는다. 지문의 지도 순서와 같다. */
+export function loadClassifyTypes(passage: DiagnosticSetPassage): Map<string, string>[] {
+  return passage.analysisMaps.map(entry => {
+    const mapDir = dirname(entry.mapPath);
+    const path = resolve(process.cwd(), dirname(mapDir), 'classify', basename(mapDir), 'classify.json');
+    const file = JSON.parse(readFileSync(path, 'utf8')) as { items: { id: string; type: string }[] };
+    return new Map(file.items.map(item => [item.id, item.type]));
+  });
+}
+
+const RecommendationMapSchema = z.object({ schemaVersion: z.literal('sns-recommendation-map-v1'), byTwist: z.record(z.string(), z.array(z.string())) }).strict();
+/** 비틂 코드 → 추천 세트 이름 목록. 비어 있을 수 있다(공개 전에 사람이 채운다). */
+export function loadRecommendationMap(): Record<string, string[]> {
+  return RecommendationMapSchema.parse(JSON.parse(readFileSync(resolve(DIAGNOSTIC_ROOT, 'recommendation-map.json'), 'utf8'))).byTwist;
+}
+const TwistStudentTextSchema = z.object({ schemaVersion: z.literal('sns-twist-student-text-v1'), items: z.record(z.string(), z.array(z.string())) }).strict();
+/** "<문항 id>:<선지 번호>" → 그 선지의 n번째 비틂 조각에 붙는 학생용 "바뀐 내용" 문장. 비어 있을 수 있다. */
+export function loadTwistStudentText(): Record<string, string[]> {
+  return TwistStudentTextSchema.parse(JSON.parse(readFileSync(resolve(DIAGNOSTIC_ROOT, 'twist-student-text.json'), 'utf8'))).items;
 }

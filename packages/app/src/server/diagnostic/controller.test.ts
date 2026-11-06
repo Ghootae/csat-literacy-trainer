@@ -7,7 +7,7 @@ import { DiagnosticController, DiagnosticHttpError, ITEM_REVIEW_LINE, OMITTED_WR
 import { loadAnalysisMaps, loadDiagnosticPassages } from './content.js';
 import { FileDiagnosticStore, type DiagnosticParticipant } from './store.js';
 import {
-  MemoryStore, correctChoice, diagnosisFake, feedbackFake, judgeFake, omitted, provided, set, summaryEvaluator, wrongChoice,
+  MemoryStore, correctChoice, diagnosisFake, feedbackFake, judgeFake, omitted, provided, set, summaryEvaluator, transportFake, wrongChoice,
   type Behavior, type FeedbackFake, type TransportFake,
 } from './test-support.js';
 
@@ -374,3 +374,147 @@ describe('위치와 결과', () => {
 function bundleChosenPosition(questionId: string): number {
   return Number(/\d+/u.exec(correctChoice(questionId))![0]) - 1;
 }
+
+// ---------- 인계 B: 결과 자료 보강 ----------
+
+/** 요약 단계를 지나며 모든 문단의 첫 발화를 낸다(문단마다 이동 → 응답). */
+async function summarizeAll(h: Harness, passage: typeof COG) {
+  const paragraphs = loadDiagnosticPassages().find(p => p.passageId === passage.passageId)!.paragraphs;
+  h.c.start(h.id, passage.passageId, { summary: true });
+  for (const [i, q] of paragraphs.entries()) {
+    h.c.summaryNavigate(h.id, passage.passageId, { paragraphIndex: i });
+    await h.c.summaryRespond(h.id, passage.passageId, { transitionId: `t${i}`, paragraphIndex: i, text: `이 문단의 요약 ${q.paragraphId}은 이렇다. 내용을 내 말로 정리했다.` });
+  }
+  h.c.summaryFinish(h.id, passage.passageId);
+}
+const constantJudge = (label: string) => transportFake(request => ({ label, quotes: [JSON.parse(request.input[0].content[0].text).dialogue[0].text.slice(0, 3)], reason: '가짜' }));
+const choiceId = (position: number) => `C${position}`;
+
+describe('결과: 독해 패턴 개수·요약 연결·추천·학생용 문장 (인계 B)', () => {
+  it('reading[].counts: 지문 합계가 문단별 판정 개수와 같고, 모두 DIRECT면 잡음 = 전체이며 틀림 0이다', async () => {
+    const h = harness({}, {}, { judge: constantJudge('DIRECT') });
+    await summarizeAll(h, COG); await settle(h.c);
+    const reading = h.c.result(h.id).reading[0]!;
+    expect(reading.status).toBe('ready');
+    for (const layer of ['요지', '합성', '명제'] as const) { const c = reading.counts.layers[layer]; expect(c.total).toBeGreaterThan(0); expect(c.caught).toBe(c.total); }
+    const branches = Object.values(reading.counts.branches);
+    expect(branches.reduce((sum, c) => sum + c.total, 0)).toBeGreaterThan(0);
+    for (const c of branches) { expect(c.caught).toBe(c.total); expect(c.wrong).toBe(0); }
+    // 판정 개수: 두 지도의 모든 문단 노드 단위 수와 같다
+    const maps = loadAnalysisMaps(COG);
+    const units = maps.flatMap(({ map }) => [...new Set(map.propositions.map(p => p.paragraphId))].map(id => unitsForParagraph(map, id).nodes.length));
+    expect(Object.values(reading.counts.layers).reduce((sum, c) => sum + c.total, 0)).toBe(units.reduce((a, b) => a + b, 0));
+  });
+
+  it('summaryLink: 적절한 것 고르기는 고른 선지, 적절하지 않은 것 고르기는 정답 선지의 비틂이 가리키는 문단이고 세 종류가 나온다', async () => {
+    const expected = { DIRECT: 'CAUGHT', ABSENT: 'MISSED', CONTRADICTS: 'MISREAD' } as const;
+    for (const [label, kind] of Object.entries(expected)) {
+      const h = harness({ [Q12]: 'ERROR', [Q13]: 'ERROR', [Q15]: 'ERROR', [Q16]: 'ERROR' }, {}, { judge: constantJudge(label) });
+      await summarizeAll(h, COG);
+      // Q12(적절한 것 고르기, 정답 1): ②를 골랐다 → ②의 비틂 '나.P4-1' = (나) 4문단 = 지문 8번째 문단
+      // Q13(적절하지 않은 것 고르기, 정답 3): ①을 골랐다 → 정답 ③의 비틂 '가.P4-11' = (가) 4문단 = 지문 4번째 문단
+      // Q14(적절한 것 고르기, 정답 1): ①(정답)을 골랐다 → 오답이 아니므로 null
+      for (const [q, position] of [[Q12, 2], [Q13, 1], [Q14, 1], [Q15, 2], [Q16, 3]] as const) post(h, q, provided(choiceId(position)));
+      h.c.answersDone(h.id, COG.passageId); await settle(h.c);
+      const items = h.c.result(h.id).items;
+      expect(items.find(i => i.questionId === Q12)!.summaryLink).toEqual({ status: 'ready', kind, paragraphs: [8], paragraphLabel: '(나) 4문단' });
+      expect(items.find(i => i.questionId === Q13)!.summaryLink).toEqual({ status: 'ready', kind, paragraphs: [4], paragraphLabel: '(가) 4문단' });
+      expect(items.find(i => i.questionId === Q14)!.summaryLink).toBeNull();      // 정답
+      expect(items.find(i => i.questionId === Q15)!.summaryLink).toBeNull();      // 정답(2번)
+      expect(items.find(i => i.questionId === Q16)!.summaryLink).toBeNull();      // 정답(3번)
+    }
+  });
+
+  it('summaryLink: 요약하지 않은 지문, 문항 검토 문항은 null이고 source NONE뿐인 선지(오디오 14번)도 null이다', async () => {
+    const h = harness({ [Q12]: 'ERROR' });
+    const noSummary = await answerPassage(h, COG, { [Q12]: provided(choiceId(2)), [Q13]: provided(choiceId(1)), [Q14]: provided(choiceId(2)), [Q15]: provided(choiceId(1)), [Q16]: provided(choiceId(1)) });
+    expect(noSummary.position.answered).toBe(5); await settle(h.c);
+    expect(h.c.result(h.id).items.every(i => i.summaryLink === null)).toBe(true);
+    // 오디오: 요약 후 14번(적절하지 않은 것 고르기, 정답 3, 정답 선지에 비틂 id 없음)을 오답으로
+    const AUDIO = set.passages[3]!;
+    const [A14, A15, A16, A17] = AUDIO.questionIds as [string, string, string, string];
+    const h2 = harness({ [A14]: 'ERROR', [A15]: 'ERROR', [A16]: 'ERROR', [A17]: 'ERROR' }, {}, { judge: constantJudge('DIRECT') });
+    await summarizeAll(h2, AUDIO);
+    post(h2, A14, provided(choiceId(1))); post(h2, A15, provided(choiceId(1))); post(h2, A16, provided(choiceId(1))); post(h2, A17, provided(choiceId(5)));
+    h2.c.answersDone(h2.id, AUDIO.passageId); await settle(h2.c);
+    const items = h2.c.result(h2.id).items;
+    expect(items.find(i => i.questionId === A14)!.summaryLink).toBeNull();
+    expect(items.find(i => i.questionId === A15)!.summaryLink).toMatchObject({ status: 'ready', kind: 'CAUGHT' });
+  });
+
+  it('summaryLink: 관련 문단 판정이 아직이면 pending이다', async () => {
+    const gate = { release: () => {} }; const blocked = new Promise<void>(resolve => { gate.release = resolve; });
+    const judge = transportFake(request => ({ label: 'DIRECT', quotes: [JSON.parse(request.input[0].content[0].text).dialogue[0].text.slice(0, 3)], reason: '가짜' }), { delay: () => blocked });
+    const h = harness({ [Q12]: 'ERROR', [Q13]: 'ERROR', [Q15]: 'ERROR', [Q16]: 'ERROR' }, {}, { judge });
+    await summarizeAll(h, COG);
+    for (const [q, position] of [[Q12, 2], [Q13, 1], [Q14, 1], [Q15, 1], [Q16, 1]] as const) post(h, q, provided(choiceId(position)));
+    h.c.answersDone(h.id, COG.passageId); await vi.waitFor(() => expect(h.fb.calls.length).toBeGreaterThan(0));
+    const q12 = h.c.result(h.id).items.find(i => i.questionId === Q12);
+    expect(q12!.summaryLink).toMatchObject({ status: 'pending' });
+    gate.release(); await settle(h.c);
+    expect(h.c.result(h.id).items.find(i => i.questionId === Q12)!.summaryLink).toMatchObject({ status: 'ready' });
+  });
+
+  it('copyOverlap: 첫 발화를 기록할 때 함께 계산해 저장하고 사건에도 넣지만, 결과에는 내지 않는다. 짧은 발화는 null이다', async () => {
+    const h = harness();
+    const paragraphs = loadDiagnosticPassages().find(p => p.passageId === COG.passageId)!.paragraphs;
+    h.c.start(h.id, COG.passageId, { summary: true });
+    await h.c.summaryRespond(h.id, COG.passageId, { transitionId: 't0', paragraphIndex: 0, text: paragraphs[0]!.text.slice(0, Math.floor(paragraphs[0]!.text.length / 2)) });
+    h.c.summaryNavigate(h.id, COG.passageId, { paragraphIndex: 1 });
+    await h.c.summaryRespond(h.id, COG.passageId, { transitionId: 't1', paragraphIndex: 1, text: '짧은 말' });
+    h.c.summaryNavigate(h.id, COG.passageId, { paragraphIndex: 2 });
+    await h.c.summaryRespond(h.id, COG.passageId, { transitionId: 't2', paragraphIndex: 2, text: 'qwertyuiop asdfghjkl zxcvbnm' });
+    await settle(h.c);
+    const turns = h.store.load(h.id)!.passages[COG.passageId]!.firstTurns;
+    expect(turns[paragraphs[0]!.paragraphId]!.copyOverlap).toMatchObject({ n: 5, ratio: 1 });
+    expect(turns[paragraphs[1]!.paragraphId]!.copyOverlap).toBeNull();
+    expect(turns[paragraphs[2]!.paragraphId]!.copyOverlap).toMatchObject({ n: 5, matched: 0, ratio: 0 });
+    const events = h.store.events.filter(e => e.type === 'SUMMARY_FIRST_TURN');
+    expect(events.map(e => (e['copyOverlap'] as { ratio: number } | null)?.ratio ?? null)).toEqual([1, null, 0]);
+    expect(JSON.stringify(h.c.result(h.id))).not.toContain('copyOverlap');
+  });
+
+  it('answerDrafts: ANSWERING에서만 문항과 임시 답(정오 없음)을 돌려주고 고친 답이 마지막 값이다', () => {
+    const h = harness();
+    expect(() => h.c.answerDrafts(h.id, COG.passageId)).toThrow(expect.objectContaining({ status: 409 }));
+    h.c.start(h.id, COG.passageId, { summary: false });
+    expect(Object.values(h.c.answerDrafts(h.id, COG.passageId).drafts).every(d => d === null)).toBe(true);
+    post(h, Q12, provided(choiceId(2))); post(h, Q12, omitted(choiceId(3)));
+    const view = h.c.answerDrafts(h.id, COG.passageId);
+    expect(view.questions.map(q => q.questionId)).toEqual(COG.questionIds);
+    expect(view.drafts[Q12]).toEqual({ choiceId: choiceId(3), rationale: { mode: 'OMITTED' } });
+    expect(view.drafts[Q13]).toBeNull();
+    expect(JSON.stringify(view)).not.toContain('answerChoiceId');
+    for (const q of COG.questionIds) post(h, q, provided(correctChoice(q)));
+    h.c.answersDone(h.id, COG.passageId);
+    expect(() => h.c.answerDrafts(h.id, COG.passageId)).toThrow(expect.objectContaining({ status: 409 }));
+  });
+
+  it('recommendation·twist.studentText: 대응표·학생용 문장 파일이 비어 있으면 setNames []·studentText null이고, 채우면 코드 변경 없이 나온다', async () => {
+    const answers = { [Q12]: provided(choiceId(2)), [Q13]: provided(choiceId(1)), [Q14]: provided(choiceId(2)), [Q15]: provided(choiceId(1)), [Q16]: provided(choiceId(1)) };
+    const empty = harness({ [Q12]: 'ERROR', [Q13]: 'ERROR', [Q14]: 'ERROR', [Q15]: 'ERROR', [Q16]: 'ERROR' });
+    await answerPassage(empty, COG, answers); await settle(empty.c);
+    const result = empty.c.result(empty.id);
+    const twisted = result.items.filter(i => i.twist !== null);
+    expect(twisted.length).toBeGreaterThan(0);
+    expect(twisted.every(i => i.twist!.every(t => t.studentText === null))).toBe(true);
+    const picked = result.recommendation!;
+    expect(picked.setNames).toEqual([]);
+    expect(picked.twistType).not.toBe('OTHER');
+    expect(Math.max(...Object.entries(result.twists.counts).filter(([k]) => k !== 'OTHER').map(([, n]) => n))).toBe(result.twists.counts[picked.twistType]);
+
+    const q12 = result.items.find(i => i.questionId === Q12)!.twist![0]!;
+    const filled = harness({ [Q12]: 'ERROR', [Q13]: 'ERROR', [Q14]: 'ERROR', [Q15]: 'ERROR', [Q16]: 'ERROR' }, { recommendationMap: { [picked.twistType]: ['세트 가', '세트 나'] }, twistStudentText: { [`${Q12}:2`]: ['학생용 문장 하나'] } });
+    await answerPassage(filled, COG, answers); await settle(filled.c);
+    const again = filled.c.result(filled.id);
+    expect(again.recommendation).toEqual({ twistType: picked.twistType, setNames: ['세트 가', '세트 나'] });
+    expect(again.items.find(i => i.questionId === Q12)!.twist![0]).toEqual({ ...q12, studentText: '학생용 문장 하나' });
+    expect(again.items.find(i => i.questionId === Q12)!.twist!.slice(1).every(t => t.studentText === null)).toBe(true);
+  });
+
+  it('오답이 없으면 recommendation은 null이다', async () => {
+    const h = harness();
+    await answerPassage(h, COG, Object.fromEntries(COG.questionIds.map(q => [q, provided(correctChoice(q))]))); await settle(h.c);
+    expect(h.c.result(h.id).recommendation).toBeNull();
+  });
+});

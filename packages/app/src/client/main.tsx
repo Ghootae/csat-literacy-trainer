@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import { AnalysisViewApp } from './AnalysisViewApp.js';
 import { App } from './App.js';
+import { DiagnosticApp } from './DiagnosticApp.js';
 import { DialogueApp } from './DialogueApp.js';
 import { ProblemApp } from './ProblemApp.js';
 import { ProblemLabApp } from './ProblemLabApp.js';
@@ -31,7 +32,9 @@ if (window.location.pathname === '/dialogue/dev/simple') {
 
 createRoot(el).render(
   <StrictMode>
-    {window.location.pathname.startsWith('/progress')
+    {window.location.pathname === '/diagnostic'
+      ? <DiagnosticApp />
+      : window.location.pathname.startsWith('/progress')
       ? <StudentFeedbackApp />
       : window.location.pathname === '/problem/lab'
       ? <ProblemLabApp />

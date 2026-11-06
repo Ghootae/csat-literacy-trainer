@@ -7,6 +7,7 @@
  * 참가자마다 메모리 상태 하나가 기준이고, 저장은 참가자 단위 직렬 큐로 차례대로 한다(읽기 → await → 쓰기 금지).
  */
 import { randomUUID } from 'node:crypto';
+import { basename, dirname } from 'node:path';
 import { z, ZodError } from 'zod/v4';
 import {
   FeedbackRationaleSchema, combineRound, createFeedbackSession, createOpenAiTransport, diagnoseThought,
@@ -20,10 +21,15 @@ import type { SimpleDialogueView } from '../../shared/dialogue-simple.js';
 import type { FeedbackMessage, FeedbackWorkbenchView } from '../../shared/problem-feedback.js';
 import type { ProblemContentView } from '../../shared/contract.js';
 import {
-  loadAnalysisMaps, loadChoiceLinkTwists, loadDiagnosticBundle, loadDiagnosticPassages, loadDiagnosticSet,
-  type ChoiceLinkTwist, type DiagnosticSet, type DiagnosticSetPassage, type LoadedAnalysisMap,
+  loadAnalysisMaps, loadChoiceLinkTargets, loadChoiceLinkTwists, loadClassifyTypes, loadDiagnosticBundle, loadDiagnosticPassages, loadDiagnosticSet,
+  loadRecommendationMap, loadTwistStudentText,
+  type ChoiceLinkTargets, type ChoiceLinkTwist, type DiagnosticSet, type DiagnosticSetPassage, type LoadedAnalysisMap,
 } from './content.js';
-import { FileDiagnosticStore, isParticipantId, type DiagnosticParticipant, type DiagnosticStore } from './store.js';
+import {
+  addCounts, copyOverlap, countParagraph, emptyCounts, judgedUnitIndex, pickTwist, summaryLink,
+  type JudgedUnitInfo, type SummaryLink,
+} from './reading.js';
+import { FileDiagnosticStore, isParticipantId, type DiagnosticParticipant, type DiagnosticStore, type ItemAnswer } from './store.js';
 
 export class DiagnosticHttpError extends Error {
   constructor(readonly status: 400 | 404 | 409, message: string) { super(message); }
@@ -64,6 +70,14 @@ export interface DiagnosticControllerOptions {
   passages?: readonly DialoguePassageContent[];
   loadMaps?: (passage: DiagnosticSetPassage) => LoadedAnalysisMap[];
   loadTwists?: (path: string) => (questionNumber: number, choicePosition: number) => ChoiceLinkTwist[];
+  /** 선지 연결 동결본에서 비틀린 조각의 지도 단위 id를 읽는다(요약과 틀린 문항 연결, 표시 전용). */
+  loadTargets?: (path: string) => (questionNumber: number, choicePosition: number) => ChoiceLinkTargets | null;
+  /** 지도마다 관계 id → 유형(지도 순서와 같다). */
+  loadClassify?: (passage: DiagnosticSetPassage) => Map<string, string>[];
+  /** 비틂 코드 → 추천 세트 이름. 없으면 대응표 파일. */
+  recommendationMap?: Record<string, string[]>;
+  /** "<문항 id>:<선지 번호>" → 학생용 바뀐 내용 문장. 없으면 학생용 문장 파일. */
+  twistStudentText?: Record<string, string[]>;
   /** 백그라운드 판정·진단·문단 판정의 최대 시도 수(처음 1회 + 자동 재시도). 기본 3. */
   maxAttempts?: number;
   /** 문단 판정 동시 요청 수 상한. 기본 8. */
@@ -86,6 +100,13 @@ export class DiagnosticController {
   private readonly loadBundle: typeof loadDiagnosticBundle;
   private readonly loadMaps: (passage: DiagnosticSetPassage) => LoadedAnalysisMap[];
   private readonly loadTwists: NonNullable<DiagnosticControllerOptions['loadTwists']>;
+  private readonly loadTargets: NonNullable<DiagnosticControllerOptions['loadTargets']>;
+  private readonly loadClassify: NonNullable<DiagnosticControllerOptions['loadClassify']>;
+  private recommendationMap: Record<string, string[]> | undefined;
+  private twistStudentText: Record<string, string[]> | undefined;
+  private readonly targetCache = new Map<string, ReturnType<typeof loadChoiceLinkTargets>>();
+  private readonly classifyCache = new Map<string, Map<string, string>[]>();
+  private readonly unitIndexCache = new Map<string, Map<string, JudgedUnitInfo>[]>();
   private readonly maxAttempts: number;
   private readonly participants = new Map<string, Participant>();
   private readonly sessionIndex = new Map<string, { participantId: string; questionId: string }>();
@@ -109,6 +130,10 @@ export class DiagnosticController {
     this.loadBundle = options.loadBundle ?? loadDiagnosticBundle;
     this.loadMaps = options.loadMaps ?? loadAnalysisMaps;
     this.loadTwists = options.loadTwists ?? loadChoiceLinkTwists;
+    this.loadTargets = options.loadTargets ?? loadChoiceLinkTargets;
+    this.loadClassify = options.loadClassify ?? loadClassifyTypes;
+    this.recommendationMap = options.recommendationMap;
+    this.twistStudentText = options.twistStudentText;
     this.maxAttempts = options.maxAttempts ?? 3;
     this.concurrency = options.analysisConcurrency ?? 8;
     this.diagnosisTransport = options.diagnosisTransport ?? createOpenAiTransport();
@@ -162,6 +187,7 @@ export class DiagnosticController {
     const active = this.set.passages.find(passage => p.passages[passage.passageId]!.status !== 'DONE');
     const state = active ? p.passages[active.passageId]! : null;
     return { participantId, passages,
+      set: { passages: this.set.passages.map(passage => ({ passageId: passage.passageId, title: this.content(passage.passageId).title, questionIds: [...passage.questionIds] })) },
       current: active && state ? { passageId: active.passageId, questionId: state.status === 'FEEDBACK' ? active.questionIds[state.feedbackCursor] ?? null : null } : null,
       position: this.position(p) };
   }
@@ -204,6 +230,14 @@ export class DiagnosticController {
   }
 
   // ---------- 문항 답 ----------
+
+  /** 새로 고침 뒤 이어 가기: 답 입력 중인 지문의 문항과 임시 답. 정오는 없다. */
+  answerDrafts(participantId: string, passageId: string): { questions: DiagnosticItemView[]; drafts: Record<string, { choiceId: string; rationale: ItemAnswer['rationale'] } | null> } {
+    const p = this.require(participantId); const passage = this.passage(passageId); const state = p.passages[passageId]!;
+    if (state.status !== 'ANSWERING') fail(409, '지금은 답을 입력하는 지문이 아닙니다.');
+    return { questions: this.questions(passage),
+      drafts: Object.fromEntries(passage.questionIds.map(id => { const draft = p.items[id]!.draft; return [id, draft ? { choiceId: draft.choiceId, rationale: draft.rationale } : null]; })) };
+  }
 
   /** 답을 draft로 저장만 한다. 풀이 상태도 판정도 만들지 않고, 응답에는 정오·판정이 없다. */
   submitItem(participantId: string, questionId: string, raw: unknown): { saved: true } {
@@ -314,8 +348,18 @@ export class DiagnosticController {
       steps: { status: eligible.some(i => i.thoughtDiagnosis!.status === 'pending') ? 'pending' as const : eligible.length > 0 && diagnosed.length === 0 ? 'failed' as const : 'ready' as const,
         counts: stepCounts, denominator: diagnosed.length },
       twists: { counts: twistCounts },
+      recommendation: this.recommendation(twistCounts),
       reading: this.set.passages.filter(passage => p.passages[passage.passageId]!.summaryChosen === true).map(passage => this.resultReading(p, passage)),
     };
+  }
+
+  // ---------- 내부: 추천 ----------
+
+  private recommendation(twistCounts: Record<string, number>): { twistType: string; setNames: string[] } | null {
+    const twistType = pickTwist(twistCounts);
+    if (twistType === null) return null;
+    this.recommendationMap ??= loadRecommendationMap();
+    return { twistType, setNames: [...(this.recommendationMap[twistType] ?? [])] };
   }
 
   // ---------- 내부: 불러오기·이어 가기 ----------
@@ -407,8 +451,9 @@ export class DiagnosticController {
     const first = this.summary.inspect(sessionId, paragraphIndex).attempts[0];
     const message = first?.messages.find(m => m.role === 'student');
     if (!first || !message || first.steps.length === 0) return;
-    state.firstTurns[paragraphId] = { text: message.text, at: new Date().toISOString() };
-    this.event('SUMMARY_FIRST_TURN', p, { passageId, paragraphId });
+    const overlap = copyOverlap(message.text, this.content(passageId).paragraphs[paragraphIndex]!.text);
+    state.firstTurns[paragraphId] = { text: message.text, at: new Date().toISOString(), copyOverlap: overlap };
+    this.event('SUMMARY_FIRST_TURN', p, { passageId, paragraphId, copyOverlap: overlap });
     this.requestSave(p);
     this.startAnalysis(p, passageId, paragraphId);
   }
@@ -416,9 +461,22 @@ export class DiagnosticController {
   // ---------- 내부: 문단 판정 ----------
 
   private mapFor(passageId: string, paragraphId: string): LoadedAnalysisMap | null {
+    return this.maps(passageId).find(m => m.map.propositions.some(x => x.paragraphId === paragraphId)) ?? null;
+  }
+  private classifyFor(passageId: string): Map<string, string>[] {
+    let classify = this.classifyCache.get(passageId);
+    if (!classify) { classify = this.loadClassify(this.passage(passageId)); this.classifyCache.set(passageId, classify); }
+    return classify;
+  }
+  private unitIndexesFor(passageId: string): Map<string, JudgedUnitInfo>[] {
+    let indexes = this.unitIndexCache.get(passageId);
+    if (!indexes) { indexes = this.maps(passageId).map(loaded => judgedUnitIndex(loaded.map)); this.unitIndexCache.set(passageId, indexes); }
+    return indexes;
+  }
+  private maps(passageId: string): LoadedAnalysisMap[] {
     let maps = this.mapCache.get(passageId);
     if (!maps) { maps = this.loadMaps(this.passage(passageId)); this.mapCache.set(passageId, maps); }
-    return maps.find(m => m.map.propositions.some(x => x.paragraphId === paragraphId)) ?? null;
+    return maps;
   }
   private startAnalysis(p: Participant, passageId: string, paragraphId: string): void {
     if (!this.mapFor(passageId, paragraphId)) return;
@@ -641,36 +699,68 @@ export class DiagnosticController {
       correct, rationale: first.rationale.mode, megastudy, afterFeedback };
     if (review) {
       return { ...base, review: true as const, answerPosition: null, judgment: { status: 'pending' as Box, contentAssessment: null, boundary: null },
-        twist: null, thoughtDiagnosis: null, evidence: null };
+        twist: null, thoughtDiagnosis: null, evidence: null, summaryLink: null };
     }
     const assessment = session.assessments[0]?.mode === 'SELECTION' ? session.assessments[0] : null;
     let twistFn = this.twistCache.get(passage.choiceLinkPath);
     if (!twistFn) { twistFn = this.loadTwists(passage.choiceLinkPath); this.twistCache.set(passage.choiceLinkPath, twistFn); }
-    const twists = correct ? [] : twistFn(meta.questionNumber, chosen.position);
+    const twists = (correct ? [] : twistFn(meta.questionNumber, chosen.position)).map((twist, n) =>
+      ({ ...twist, studentText: (this.twistTexts()[`${questionId}:${chosen.position}`] ?? [])[n] ?? null }));
     const eligibleDiagnosis = first.rationale.mode === 'PROVIDED' && (!correct || item.firstJudgment.contentAssessment !== 'SUPPORTED');
     const output = item.thoughtDiagnosis.output as { firstFailedStep: string | null; outcomeType: string } | null;
     return { ...base, review: false as const, answerPosition: meta.answerPosition,
       judgment: { status: box(item.firstJudgment.status), contentAssessment: item.firstJudgment.contentAssessment, boundary: item.firstJudgment.boundary },
       twist: twists.length > 0 ? twists : null,
+      summaryLink: correct ? null : this.summaryLinkFor(p, passage, questionId, chosen.position),
       thoughtDiagnosis: eligibleDiagnosis && item.thoughtDiagnosis.status !== 'NONE'
         ? { status: box(item.thoughtDiagnosis.status), firstFailedStep: output?.firstFailedStep ?? null, outcomeType: output?.outcomeType ?? null } : null,
       evidence: { student: assessment && assessment.studentEvidence.length > 0 ? assessment.studentEvidence.map(e => e.quote).join(' / ') : null,
         source: (assessment?.sourceEvidence ?? []).filter(e => e.quote !== null).map(e => ({ location: e.location, quote: e.quote! })) } };
   }
 
+  private twistTexts(): Record<string, string[]> {
+    this.twistStudentText ??= loadTwistStudentText();
+    return this.twistStudentText;
+  }
+
+  /** 첫 선택이 오답이고 문항 검토가 아니며 그 지문을 요약했을 때만. 골드·선지 연결은 표시에만 쓴다(D-0002·D-0162). */
+  private summaryLinkFor(p: Participant, passage: DiagnosticSetPassage, questionId: string, chosenPosition: number): SummaryLink | null {
+    if (p.passages[passage.passageId]!.summaryChosen !== true) return null;
+    const meta = this.set.items[questionId]!;
+    let targetFn = this.targetCache.get(passage.choiceLinkPath);
+    if (!targetFn) { targetFn = this.loadTargets(passage.choiceLinkPath); this.targetCache.set(passage.choiceLinkPath, targetFn); }
+    const chosen = targetFn(meta.questionNumber, chosenPosition);
+    if (!chosen) return null;
+    // 적절한 것 고르기: 학생이 고른 선지의 비틂. 적절하지 않은 것 고르기: 고른 선지는 맞는 진술이라 비틂이 없으므로 정답 선지의 비틂(알아채지 못한 곳).
+    const source = chosen.stemPolarity === 'SELECT_INCORRECT' ? targetFn(meta.questionNumber, meta.answerPosition) : chosen;
+    if (!source) return null;
+    const content = this.content(passage.passageId);
+    return summaryLink({
+      targetIds: source.ids,
+      mapDirectories: passage.analysisMaps.map(entry => basename(dirname(entry.mapPath))),
+      unitIndexes: this.unitIndexesFor(passage.passageId),
+      analysisOf: paragraphId => p.analysis[paragraphId],
+      positionOf: paragraphId => content.paragraphs.find(q => q.paragraphId === paragraphId)?.position ?? null,
+    });
+  }
+
   private resultReading(p: Participant, passage: DiagnosticSetPassage) {
     const paragraphs = this.content(passage.passageId).paragraphs.filter(q => p.analysis[q.paragraphId] !== undefined);
     const statuses = paragraphs.map(q => p.analysis[q.paragraphId]!.status);
     const status: Box = statuses.some(s => s === 'PENDING') ? 'pending' : statuses.some(s => s === 'FAILED') ? 'failed' : 'ready';
-    return { passageId: passage.passageId, status, paragraphs: paragraphs.map(q => {
+    let counts = emptyCounts();
+    const rows = paragraphs.map(q => {
       const loaded = this.mapFor(passage.passageId, q.paragraphId)!;
       const judgments = Object.fromEntries(Object.entries(p.analysis[q.paragraphId]!.judgments).map(([id, value]) => {
         const row = value as { status?: string; finalLabel?: string };
         return [id, { finalLabel: row.status === 'OK' ? row.finalLabel ?? null : null }];
       }));
       const combined = combineRound(loaded.map, q.paragraphId, judgments);
+      const typeOf = this.classifyFor(passage.passageId)[this.maps(passage.passageId).indexOf(loaded)]!;
+      counts = addCounts(counts, countParagraph(loaded.map, q.paragraphId, judgments, typeOf));
       return { paragraphId: q.paragraphId, nodes: combined.nodes, relations: combined.relations };
-    }) };
+    });
+    return { passageId: passage.passageId, status, paragraphs: rows, counts };
   }
 
   // ---------- 내부: 저장·기록 ----------
