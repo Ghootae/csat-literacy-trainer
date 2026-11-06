@@ -1,6 +1,6 @@
 # SNS 진단평가 연결(⑥) 설계 초안
 
-- 상태: **초안, 사용자 검토 전.** 확정되면 백엔드·화면 두 인계 문서(`docs/handoffs/`)로 나눈다.
+- 상태: 문제점 1~5 확정(D-0204·D-0205·D-0207·D-0208). 백엔드는 인계 A `docs/handoffs/2026-11-06-sns-diagnostic-backend.md`로 옮겨 구현했고, 이 초안과 다른 점은 그 문서가 우선이다. 화면은 인계 B로 남음.
 - 작성: 코드 에이전트, 2026-11-06.
 - 근거 결정: [D-0200](../memory/decisions/D-0200-sns-diagnostic-mode-result-screen-direction.md)(모드 방향),
   [D-0201](../memory/decisions/D-0201-sns-diagnostic-set-e.md)(세트 E), [D-0202](../memory/decisions/D-0202-current-student-version-discarded.md)(지금의 학생용 폐기),

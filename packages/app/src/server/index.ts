@@ -47,6 +47,8 @@ import { readAnalysisViewData } from './analysis-view.js';
 import { DialogueController } from './dialogue.js';
 import { ProblemSolvingController } from './problem-solving.js';
 import { SimpleDialogueController } from './dialogue-simple.js';
+import { DiagnosticController } from './diagnostic/controller.js';
+import { handleDiagnosticRequest, isDiagnosticPath } from './diagnostic/http.js';
 import { loadExaminerStrategies, strategyFor } from './examiner-strategy.js';
 import { ProblemFeedbackController, PreviewCaseError, type FeedbackRecord } from './problem-feedback.js';
 import {
@@ -139,6 +141,10 @@ export interface LearningServerOptions {
   readonly studentEvidencePath?: string;
   readonly studentFeedbackEnabled?: boolean;
   readonly studentFeedbackPublic?: boolean;
+  /** SNS 진단평가 API(`/api/diagnostic/*`)를 연다. 없으면 환경 변수 CSAT_DIAGNOSTIC_ENABLED=1. 개발자 모드와 분리돼 있다. */
+  readonly diagnosticEnabled?: boolean;
+  /** 테스트가 가짜 평가기·저장소를 주입하는 경계. 없으면 실제 평가기와 파일 저장소. */
+  readonly diagnosticController?: DiagnosticController;
 }
 
 /**
@@ -185,6 +191,8 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
     ...(options.dialogueSimpleEvaluator === undefined ? {} : { evaluator: options.dialogueSimpleEvaluator }),
     ...(options.dialogueSimpleLogDirectory === undefined ? {} : { logDirectory: options.dialogueSimpleLogDirectory }),
   });
+  const diagnosticEnabled = options.diagnosticEnabled ?? process.env['CSAT_DIAGNOSTIC_ENABLED'] === '1';
+  const diagnostic = diagnosticEnabled ? options.diagnosticController ?? new DiagnosticController() : null;
   let spent = 0;
   const lastWarm = new Map<string, number>();
 
@@ -207,6 +215,8 @@ export function createLearningServer(options: LearningServerOptions = {}): Retur
     if (req.method === 'GET' && url.pathname === '/api/capabilities') {
       return json(res, 200, { studentFeedbackEnabled: studentFeedbackAvailable });
     }
+
+    if (diagnostic !== null && isDiagnosticPath(url.pathname)) return handleDiagnosticRequest(diagnostic, req, res, url.pathname, readBody);
 
     if (req.method === 'GET' && url.pathname === '/api/student-state') {
       if (!studentFeedbackAvailable) return json(res, 404, { error: '학생용 정기 피드백이 아직 활성화되지 않았습니다.' });

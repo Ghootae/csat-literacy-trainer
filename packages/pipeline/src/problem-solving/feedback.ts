@@ -19,6 +19,7 @@ export const FeedbackCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('FINISH') }).strict(),
   z.object({ type: z.literal('END_START'), accept: z.boolean() }).strict(),
   z.object({ type: z.literal('UNDERSTOOD'), answer: z.boolean() }).strict(),
+  z.object({ type: z.literal('SKIP') }).strict(),
 ]);
 export type FeedbackCommand = z.infer<typeof FeedbackCommandSchema>;
 export type FeedbackRationale = z.infer<typeof FeedbackRationaleSchema>;
@@ -109,6 +110,8 @@ export interface FeedbackResult {
   selectionCount: number;
   rationaleVerified: boolean;
   correctionSucceeded: boolean;
+  /** 학생이 건너뛰기(SKIP)를 눌렀는지. 이 필드가 생기기 전 저장 자료에는 없다. */
+  skipped?: boolean;
   answerRevealed: boolean;
   resolvedByStudent: boolean;
   selfReportedUnderstanding: 'YES' | 'NO' | null;
@@ -124,7 +127,7 @@ export interface FeedbackSession {
   phase: 'AWAITING_SELECTION' | 'AWAITING_RATIONALE' | 'AWAITING_EVALUATION'
     | 'AWAITING_END_START' | 'AWAITING_UNDERSTANDING' | 'AWAITING_CORRECTION' | 'AWAITING_POST_REPAIR_CHOICE' | 'AWAITING_RESELECTION' | 'ITEM_REVIEW' | 'COMPLETED';
   evaluationMode: 'SELECTION' | 'REPAIR' | 'END_EXPLANATION' | null;
-  pendingEnd: { endReason: 'REPAIR_FAILED' | 'COACHING_REQUESTED' | 'RESELECTION_WRONG' | 'RATIONALE_UNVERIFIABLE' | 'NO_CORRECTION' | 'CORRECT_UNVERIFIED'; outcome: FeedbackResult['outcome'] } | null;
+  pendingEnd: { endReason: 'REPAIR_FAILED' | 'COACHING_REQUESTED' | 'RESELECTION_WRONG' | 'RATIONALE_UNVERIFIABLE' | 'NO_CORRECTION' | 'CORRECT_UNVERIFIED' | 'SKIPPED'; outcome: FeedbackResult['outcome'] } | null;
   // 문자열 세 칸(layout v1·v5.3) 또는 문단 목록 세 칸(layout v2).
   endExplanation: z.infer<typeof FeedbackEndExplanationSchema> | FeedbackEndParagraphs | null;
   observations: FeedbackObservation[];
@@ -174,7 +177,7 @@ function finish(s: FeedbackSession, outcome: FeedbackResult['outcome'], message:
   s.result = {
     outcome, selectedChoiceId: choice.choiceId, choiceCorrect: choice.choiceId === answer.choiceId,
     selectionCount: s.selections.length, rationaleVerified: outcome === 'VERIFIED_CORRECT',
-    correctionSucceeded: s.correctionSucceeded, answerRevealed: reveal,
+    correctionSucceeded: s.correctionSucceeded, skipped: s.observations.some(o => o.command.type === 'SKIP'), answerRevealed: reveal,
     resolvedByStudent: !reveal, selfReportedUnderstanding: null,
     answer: reveal ? { choiceId: answer.choiceId, position: answer.position, text: answer.text } : null,
   };
@@ -303,6 +306,13 @@ export function submitFeedbackCommand(session: FeedbackSession, raw: unknown, ob
     if (!command.accept) return finish(s, outcome, '알겠어. 이 문제는 여기까지야.');
     if (!s.endExplanation) return evaluate(s, 'END_EXPLANATION');
     s.phase = 'AWAITING_UNDERSTANDING'; s.evaluationMode = null; s.message = '이해됐어?'; return s;
+  }
+  if (command.type === 'SKIP') {
+    if (!['AWAITING_RATIONALE', 'AWAITING_CORRECTION', 'AWAITING_RESELECTION'].includes(s.phase)) throw new Error('지금은 건너뛸 수 없습니다.');
+    s.observations.push({ observationId, command, selectionNumber: s.selections.length }); s.revision++;
+    const active = s.errors.find(e => e.errorId === s.activeErrorId);
+    if (active) active.skipped = true;
+    return endExplanation(s, 'SKIPPED', selected(s).choiceId === s.source.answerChoiceId ? 'UNVERIFIED_CORRECT' : 'COACHING_TERMINATED');
   }
   if (command.type === 'SELECT') {
     if (!['AWAITING_SELECTION', 'AWAITING_RESELECTION'].includes(s.phase) || s.selections.length >= 2) throw new Error('지금은 선택을 제출할 수 없습니다.');

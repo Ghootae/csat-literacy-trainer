@@ -1,0 +1,74 @@
+/**
+ * SNS 진단평가 참가자 저장(D-0205 4). 참가자마다 파일 하나에 상태를 통째로 쓰고, 사건은 한 줄씩 덧붙인다.
+ * 파일시스템 접근은 이 파일 안에 둔다.
+ */
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { FeedbackRationale, FeedbackSession } from '@csat/pipeline';
+import type { FeedbackMessage } from '../../shared/problem-feedback.js';
+
+export type JobStatus = 'NONE' | 'PENDING' | 'READY' | 'FAILED';
+export interface ItemAnswer { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null }
+export interface DiagnosticParticipant {
+  schemaVersion: 'sns-diagnostic-participant-v1';
+  participantId: string;
+  setId: 'set-e';
+  createdAt: string;
+  passages: Record<string, {
+    status: 'NOT_STARTED' | 'SUMMARY' | 'ANSWERING' | 'AWAITING_JUDGMENT' | 'FEEDBACK' | 'DONE';
+    summaryChosen: boolean | null;
+    summarySessionId: string | null;
+    /** paragraphId → 첫 시도의 첫 학생 발화 */
+    firstTurns: Record<string, { text: string; at: string } | null>;
+    feedbackCursor: number;
+  }>;
+  items: Record<string, {
+    /** answers-done 전 임시 답 */
+    draft: (ItemAnswer & { savedAt: string }) | null;
+    first: (ItemAnswer & { submittedAt: string }) | null;
+    session: FeedbackSession | null;
+    transcript: FeedbackMessage[];
+    firstJudgment: { status: JobStatus; attempts: number; contentAssessment: string | null; boundary: string | null };
+    thoughtDiagnosis: { status: JobStatus; output: unknown | null };
+    reviewFlag: 'WRONG_SUPPORTED' | 'BOUNDARY' | null;
+  }>;
+  /** paragraphId 단위. judgments는 단위(노드·관계) id별 결과 */
+  analysis: Record<string, { status: JobStatus; judgments: Record<string, unknown> }>;
+}
+
+export interface DiagnosticEvent { type: string; participantId: string; at?: string; [key: string]: unknown }
+export interface DiagnosticStore {
+  load(participantId: string): DiagnosticParticipant | null;
+  save(participant: DiagnosticParticipant): void;
+  appendEvent(event: DiagnosticEvent): void;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+export const isParticipantId = (id: string) => UUID.test(id);
+const DEFAULT_ROOT = 'sessions/diagnostic';
+
+export class FileDiagnosticStore implements DiagnosticStore {
+  private readonly root: string;
+  constructor(root: string = process.env['CSAT_DIAGNOSTIC_ROOT'] ?? resolve(process.cwd(), DEFAULT_ROOT)) { this.root = resolve(root); }
+  private path(participantId: string): string {
+    if (!isParticipantId(participantId)) throw new Error('참가자 ID 형식이 올바르지 않습니다.');
+    return resolve(this.root, `${participantId}.json`);
+  }
+  load(participantId: string): DiagnosticParticipant | null {
+    const path = this.path(participantId);
+    return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as DiagnosticParticipant : null;
+  }
+  /** 임시 파일에 쓴 뒤 rename으로 바꾼다. */
+  save(participant: DiagnosticParticipant): void {
+    const path = this.path(participant.participantId);
+    mkdirSync(this.root, { recursive: true });
+    const temporary = `${path}.${process.pid}.tmp`;
+    writeFileSync(temporary, JSON.stringify(participant, null, 2) + '\n', 'utf8');
+    renameSync(temporary, path);
+  }
+  appendEvent(event: DiagnosticEvent): void {
+    if (!isParticipantId(event.participantId)) throw new Error('참가자 ID 형식이 올바르지 않습니다.');
+    mkdirSync(this.root, { recursive: true });
+    appendFileSync(resolve(this.root, 'events.jsonl'), JSON.stringify({ ...event, at: event.at ?? new Date().toISOString() }) + '\n', 'utf8');
+  }
+}

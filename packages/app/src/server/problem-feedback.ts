@@ -58,6 +58,8 @@ export class ProblemFeedbackController {
     evaluator?: FeedbackEvaluator;
     loadSource?: (questionId: string) => SourceDirectProblemBundle;
     save?: (record: FeedbackRecord) => void;
+    /** SNS 진단평가용: 제출 즉시 붙는 INSTANT 말풍선("정답이야!" 등)을 붙이지 않는다. 기본은 붙인다. */
+    withoutInstantBubble?: boolean;
   } = {}) { this.evaluator = options.evaluator ?? new OpenAIFeedbackEvaluator(); }
 
   start(questionId: string): FeedbackWorkbenchView {
@@ -66,6 +68,16 @@ export class ProblemFeedbackController {
     const r: Runtime = { session, evaluationStatus: 'IDLE', busy: false, endGeneration: null, evaluation: null, transitions: new Map(), transcript: [] };
     this.appendCoach(r);
     this.save(r, 'STARTED', null, null, null);
+    this.sessions.set(session.sessionId, r);
+    return this.view(r);
+  }
+  /**
+   * 저장된 세션을 이어 받는다(SNS 진단평가 재시작·진단평가 컨트롤러의 세션 인계). 모델은 부르지 않는다.
+   * 평가 대기 중이던 세션은 재시도 가능 상태로 두어 RESUME으로 이어 간다.
+   */
+  adopt(session: FeedbackSession, transcript: FeedbackMessage[]): FeedbackWorkbenchView {
+    const r: Runtime = { session: structuredClone(session), evaluationStatus: session.phase === 'AWAITING_EVALUATION' ? 'RETRYABLE_ERROR' : 'IDLE',
+      busy: false, endGeneration: null, evaluation: null, transitions: new Map(), transcript: structuredClone(transcript) };
     this.sessions.set(session.sessionId, r);
     return this.view(r);
   }
@@ -130,7 +142,7 @@ export class ProblemFeedbackController {
           : `${command.type === 'SELECT' ? `${next.source.choices.find(c => c.choiceId === command.choiceId)!.position}번 선택\n` : ''}${command.rationale.mode === 'PROVIDED' ? command.rationale.text : '근거 미제출'}`;
         transcript.push({ id: `student-${request.transitionId}`, role: 'STUDENT', text, phase: r.session.phase });
       }
-      if (command.type === 'SELECT' && command.rationale.mode === 'PROVIDED' && next.phase === 'AWAITING_EVALUATION') {
+      if (command.type === 'SELECT' && command.rationale.mode === 'PROVIDED' && next.phase === 'AWAITING_EVALUATION' && !this.options.withoutInstantBubble) {
         transcript.push({ id: `instant-${request.transitionId}`, role: 'COACH', phase: next.phase, sequence: 'INSTANT',
           // A wrong reselection is never questioned (it goes straight to the answer), so it must not promise a look at where the thinking went wrong.
           text: command.choiceId === next.source.answerChoiceId ? '정답이야! 근거도 같이 살펴볼게.'
@@ -295,6 +307,7 @@ export class ProblemFeedbackController {
 
 /** Gate sentence before the end explanation; follows the judge's reconstructability, UNCONFIRMED and insufficiencyKind distinctions. */
 function gateNote(s: FeedbackSession, reason: NonNullable<FeedbackSession['pendingEnd']>['endReason'] | undefined, correct: boolean, rationale: 'PROVIDED' | 'OMITTED'): string | null {
+  if (reason === 'SKIPPED') return null;
   const sel = s.assessments.findLast(a => a.mode === 'SELECTION');
   const reconstructable = sel?.reconstructability === 'RECONSTRUCTABLE';
   if (reason === 'RATIONALE_UNVERIFIABLE') {

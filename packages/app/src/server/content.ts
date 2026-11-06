@@ -141,16 +141,27 @@ export function loadProblemSolvingBundle(questionId: string): {
   readonly content: ProblemContentView;
   readonly source: SourceDirectProblemBundle;
 } {
+  return loadBundleFromRoot(PROBLEM_ROOT, SOURCE_DIRECT_REFERENCE_PATH, questionId);
+}
+
+/** 문항 묶음 조립. 본 서비스와 SNS 진단평가(D-0205)가 루트·참조 파일만 달리해 같이 쓴다. */
+export function loadBundleFromRoot(root: string, referencePath: string, questionId: string,
+  /** 읽은 문항 파일을 스키마 검증 전에 손보는 훅(파일은 건드리지 않는다). 본 서비스는 쓰지 않는다. */
+  prepare?: (content: ProblemContentView) => void): {
+  readonly content: ProblemContentView;
+  readonly source: SourceDirectProblemBundle;
+} {
   if (!/^[a-z0-9-]+$/u.test(questionId)) throw new Error('등록되지 않은 문제입니다.');
-  const contentPath = resolve(PROBLEM_ROOT, 'public', `${questionId}.json`);
-  if (!existsSync(contentPath) || !existsSync(SOURCE_DIRECT_REFERENCE_PATH)) {
+  const contentPath = resolve(root, 'public', `${questionId}.json`);
+  if (!existsSync(contentPath) || !existsSync(referencePath)) {
     throw new Error('등록되지 않은 문제입니다.');
   }
   const content = JSON.parse(readFileSync(
     contentPath, 'utf8',
   )) as ProblemContentView;
+  prepare?.(content);
   const catalog = SourceDirectProblemReferenceCatalogSchema.parse(JSON.parse(readFileSync(
-    SOURCE_DIRECT_REFERENCE_PATH, 'utf8',
+    referencePath, 'utf8',
   )));
   const reference = catalog.questions.find((candidate) => candidate.questionId === questionId);
   if (reference === undefined) throw new Error('원문 직접 참조가 등록되지 않은 문제입니다.');
