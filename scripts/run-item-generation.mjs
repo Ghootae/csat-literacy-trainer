@@ -1,6 +1,6 @@
 // D-0206 E1: gold-based item generation on exam passages. Conditions A (passage -> items), A2 (passage -> design -> items), B (passage + frozen map + twist distribution -> design -> items).
 // Keys are loaded only by Node's --env-file-if-exists. Handoff: docs/handoffs/2026-11-06-e1-item-generation-implementation.md
-// Usage: node --env-file-if-exists=.env scripts/run-item-generation.mjs [--dry-run] [--targets <json>] [--out <dir>] [--conditions A,A2,B] [--passages <id,...>] [--max-requests <n>] [--usd-cap <x>]
+// Usage: node --env-file-if-exists=.env scripts/run-item-generation.mjs [--dry-run] [--targets <json>] [--out <dir>] [--conditions A,A2,B] [--passages <id,...>] [--prompt-version v1|v2] [--max-requests <n>] [--usd-cap <x>]
 // Generation requests carry only polarity and scope of each slot (never the exam number or any exam question text). No retries.
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -13,6 +13,10 @@ import { TWIST_TYPES, stemPolarity } from './run-choice-link.mjs';
 export const EXP_DIR = 'docs/experiments/gold-item-generation-2026-11-06';
 export const TARGETS_PATH = `${EXP_DIR}/targets.json`;
 export const PROMPT_PATHS = { A: `${EXP_DIR}/BASELINE-PROMPT-v1.md`, DESIGN_A2: `${EXP_DIR}/DESIGN-PROMPT-A2-v1.md`, DESIGN_B: `${EXP_DIR}/DESIGN-PROMPT-B-v1.md`, WRITE: `${EXP_DIR}/WRITE-PROMPT-v1.md` };
+// v2 (D-0206 보완): relational choices for A2/B and the self-consistent-false-choice / single-negation stem rules in writing. A stays v1.
+export const PROMPT_PATHS_V2 = { ...PROMPT_PATHS, DESIGN_A2: `${EXP_DIR}/DESIGN-PROMPT-A2-v2.md`, DESIGN_B: `${EXP_DIR}/DESIGN-PROMPT-B-v2.md`, WRITE: `${EXP_DIR}/WRITE-PROMPT-v2.md` };
+// Two or more negation markers in one stem (e.g. "일치하지 않는 것으로 적절하지 않은 것은?") make the polarity ambiguous.
+export const stemNegationCount = stem => (stem.match(/않은|않는|아닌|없는/gu) ?? []).length;
 export const FROZEN_DIRS = ['docs/experiments/choice-link-2026-10-22/runs/ui-v5/frozen', 'docs/experiments/sns-diagnostic-gold-2026-11-05/choice-link/frozen'];
 export const CONDITIONS = ['A', 'A2', 'B'];
 export const LIMITS = { maxRequests: 20, usdCap: 5 };
@@ -163,6 +167,7 @@ export function validateItems(items, slots, design) {
     const at = `slot ${it.slot}`, d = design?.slots.find(x => x.slot === want.slot);
     if (it.stemPolarity !== want.stemPolarity) v.push(`${at}: stemPolarity ${it.stemPolarity} != ${want.stemPolarity}`);
     if (stemPolarity(it.stem) !== want.stemPolarity) v.push(`${at}: stem text polarity ${stemPolarity(it.stem)} != ${want.stemPolarity}`);
+    if (stemNegationCount(it.stem) >= 2) v.push(`${at}: stem double negation`);
     if (it.choices.map(c => c.number).join() !== CHOICES.join()) v.push(`${at}: choice numbers ${it.choices.map(c => c.number).join()}`);
     if (!CHOICES.includes(it.answer)) v.push(`${at}: answer ${it.answer} out of range`);
     if (d) {
@@ -303,7 +308,8 @@ export async function main({ dryRun = false, transport, targetsPath = TARGETS_PA
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const argv = process.argv, opt = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; }, num = name => opt(name) ? Number(opt(name)) : undefined;
-  const res = await main({ dryRun: argv.includes('--dry-run'), targetsPath: opt('--targets'), out: opt('--out'), conditions: opt('--conditions')?.split(','), passages: opt('--passages')?.split(','),
+  const pv = opt('--prompt-version') ?? 'v1'; if (!['v1', 'v2'].includes(pv)) throw new Error(`PROMPT_VERSION: ${pv}`);
+  const res = await main({ dryRun: argv.includes('--dry-run'), targetsPath: opt('--targets'), out: opt('--out'), promptPaths: pv === 'v2' ? PROMPT_PATHS_V2 : PROMPT_PATHS, conditions: opt('--conditions')?.split(','), passages: opt('--passages')?.split(','),
     limits: { maxRequests: num('--max-requests') ?? LIMITS.maxRequests, usdCap: num('--usd-cap') ?? LIMITS.usdCap } });
   console.log(JSON.stringify(res.dryRun ? { ...res, rows: undefined } : res, null, 2));
 }

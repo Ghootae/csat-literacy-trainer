@@ -235,3 +235,12 @@ test('B write input resolves map ids to text and twist type names; A2 passes des
   assert.equal('targetIds' in b[1].twist, false);
   assert.deepEqual(writeInput(t, design, 'A2').design, { slots: design.slots });
 });
+
+test('stem double negation is a violation; single negation is not', async () => {
+  const { stemNegationCount, PROMPT_PATHS_V2 } = await import('./run-item-generation.mjs');
+  assert.equal(stemNegationCount('윗글의 내용과 일치하지 않는 것으로 적절하지 않은 것은?'), 2);
+  assert.equal(stemNegationCount('윗글에 대한 이해로 적절하지 않은 것은?'), 1);
+  assert.equal(stemNegationCount('윗글에 대한 이해로 적절한 것은?'), 0);
+  for (const p of Object.values(PROMPT_PATHS_V2)) assert.ok(readFileSync(p, 'utf8').length > 0, p);
+  assert.match(PROMPT_PATHS_V2.A, /BASELINE-PROMPT-v1/);
+});
