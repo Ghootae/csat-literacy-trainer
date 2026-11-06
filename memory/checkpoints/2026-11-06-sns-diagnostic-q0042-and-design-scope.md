@@ -19,3 +19,9 @@
 - [D-0205](../decisions/D-0205-sns-diagnostic-design-issues-2-5.md). 문제점 3은 코드 확인으로 결정 없이 닫음(컨트롤러 주입점).
 - 결과 화면 샘플 캔버스: https://claude.ai/artifact/923cWFBgxxuSS2evZ8SLVX (비공개). 사용자 "일단은 이 안으로 진행".
 - 다음: 위치 보정 원자료 확인 → 백엔드 인계 문서(초안 5절 순서).
+
+## 이어서: 위치 보정 확정 (같은 날)
+
+- 평가원은 문항별 자료 미공개, 메가스터디 역대 등급컷은 표준점수만. 사용자가 종로학원 2026 수능 원점수 컷과 2023~2025 표를 줌.
+- 계산(외부 전송 없음): `docs/experiments/sns-diagnostic-calibration-2026-11-06/`. 기준 시험 하나로 충분, 선택과목은 일관되게 쓰고 평균 → [D-0207](../decisions/D-0207-sns-diagnostic-position-calibration-method.md).
+- 다음: 백엔드 인계 문서.
