@@ -6,14 +6,18 @@ import { join } from 'node:path';
 import { instructionsFrom } from './run-analysis-map-gongsun.mjs';
 import { TWIST_TYPES } from './run-choice-link.mjs';
 import { main, loadGenTargets, twistDistribution, frozenFiles, baselineInput, designInputB, writeInput, slotsOf, validateDesign, validateItems,
-  exampleDesign, exampleItems, SCHEMAS, PROMPT_PATHS, FROZEN_DIRS, DESIGN_TWIST_TYPES } from './run-item-generation.mjs';
+  exampleDesign, exampleItems, SCHEMAS, SCHEMAS_V3, PROMPT_PATHS, PROMPT_PATHS_V3, FROZEN_DIRS, DESIGN_TWIST_TYPES,
+  sentencesOf, unitKeysOf, differentSentences, relationCandidates } from './run-item-generation.mjs';
 
 const PID = 'fixture-passage', REAL_STEM = '실제 기출 발문 문장입니다 적절한 것은?', REAL_CHOICE = '실제 기출 선지 문장입니다 하나';
 const PARAS = ['첫째 문단이다. 법인은 독립된 권리를 가진다. 둘째 문장도 있다.', '둘째 문단이다. 재단 법인은 자산에 법인격이 부여된다.', '셋째 문단이다. 사단 법인은 구성원 단체에 법인격이 부여된다.'];
 const map = { passageId: PID,
-  propositions: [{ id: 'P1-1', paragraphId: `${PID}-p1`, text: '명제1', sourceQuote: 'q', role: 'r' }, { id: 'P2-1', paragraphId: `${PID}-p2`, text: '명제2', sourceQuote: 'q', role: 'r' }],
+  propositions: [{ id: 'P1-1', paragraphId: `${PID}-p1`, text: '명제1', sourceQuote: '법인은 독립된 권리를 가진다.', role: 'r' }, { id: 'P2-1', paragraphId: `${PID}-p2`, text: '명제2', sourceQuote: '재단 법인은 자산에 법인격이 부여된다.', role: 'r' },
+    { id: 'P3-1', paragraphId: `${PID}-p3`, text: '명제3', sourceQuote: '사단 법인은 구성원 단체에 법인격이 부여된다.', role: 'r' }, { id: 'P1-2', paragraphId: `${PID}-p1`, text: '명제4', sourceQuote: '둘째 문장도 있다.', role: 'r' }],
   nodes: [{ id: 'G1', kind: 'PARAGRAPH_GIST', paragraphId: `${PID}-p1`, text: '요지', childIds: ['P1-1'] }, { id: 'TOP', kind: 'TOP', paragraphId: null, text: '최상위', childIds: ['G1'] }],
-  relations: [{ id: 'R1', fromId: 'P2-1', toId: 'P1-1', name: '이름', note: '메모' }] };
+  // R1-R3 are candidates; R4 is an elaboration (excluded by type); R5 has both ends in one sentence (excluded); R6 links two sentences of one paragraph.
+  relations: [{ id: 'R1', fromId: 'P2-1', toId: 'P1-1', name: '이름', note: '메모' }, { id: 'R2', fromId: 'P3-1', toId: 'P2-1', name: '대비', note: '' }, { id: 'R3', fromId: 'P1-2', toId: 'P1-1', name: '근거', note: '' },
+    { id: 'R4', fromId: 'P3-1', toId: 'P1-1', name: '예시', note: '' }, { id: 'R5', fromId: 'P1-1', toId: 'G1', name: '같은 문장', note: '' }] };
 const SLOTS = [{ slot: 1, realNumber: 4710, stemPolarity: 'SELECT_INCORRECT', scope: 'PASSAGE_WIDE' }, { slot: 2, realNumber: 4711, stemPolarity: 'SELECT_CORRECT', scope: 'CONCEPT' }];
 
 function frozenFile(passageId, parts) {
@@ -26,7 +30,7 @@ function fixture() {
   const p = n => join(dir, n);
   writeFileSync(p('map.json'), JSON.stringify(map));
   writeFileSync(p('stance.json'), JSON.stringify({ stances: [{ id: 'P1-1', kind: 'AUTHOR', holder: null, evidence: 'e' }, { id: 'P2-1', kind: 'HOLDER', holder: '갑', evidence: 'e' }] }));
-  writeFileSync(p('classify.json'), JSON.stringify({ items: [{ id: 'R1', type: 'CAUSE' }] }));
+  writeFileSync(p('classify.json'), JSON.stringify({ items: [{ id: 'R1', type: 'CAUSE' }, { id: 'R2', type: 'CONTRAST' }, { id: 'R3', type: 'GROUNDS' }, { id: 'R4', type: 'ELABORATION' }, { id: 'R5', type: 'CAUSE' }] }));
   // Real exam question files exist next to the targets but must never be read by generation.
   writeFileSync(p('real-questions.json'), JSON.stringify({ questions: [{ number: 4710, stem: REAL_STEM, choices: [{ number: 1, text: REAL_CHOICE }] }] }));
   writeFileSync(p('targets.json'), JSON.stringify([{ passageId: PID, passagesDir, mapPath: p('map.json'), stancePath: p('stance.json'), classifyPath: p('classify.json'), setId: 'setx',
@@ -244,3 +248,156 @@ test('stem double negation is a violation; single negation is not', async () => 
   for (const p of Object.values(PROMPT_PATHS_V2)) assert.ok(readFileSync(p, 'utf8').length > 0, p);
   assert.match(PROMPT_PATHS_V2.A, /BASELINE-PROMPT-v1/);
 });
+
+// ---- v3 (D-0206 보완 2): relation-first design ------------------------------------------------------------------------------------
+
+const paragraphsOf = t => t.passage.paragraphs.map(p => p.text);
+
+test('v3 sentence numbering: relations crossing sentences are 22/39, 29/35, 27/37, 18/29 on the real maps; candidates exclude elaboration/definition/development and same-sentence ends', () => {
+  const want = { 'corporate-law': [22, 39], 'surface-tension-laplace': [29, 35], 'audio-perceptual-coding': [27, 37], 'plastic-polymerization': [18, 29] };
+  for (const t of loadGenTargets()) {
+    const sentences = sentencesOf(paragraphsOf(t)), keys = unitKeysOf(t.map, sentences);
+    assert.ok(t.map.propositions.every(p => keys(p.id).size > 0), `${t.passageId}: every sourceQuote maps to a sentence`);
+    const crossing = t.map.relations.filter(r => differentSentences(keys(r.fromId), keys(r.toId)));
+    assert.deepEqual([crossing.length, t.map.relations.length], want[t.passageId], t.passageId);
+    const cands = relationCandidates(t.map, paragraphsOf(t));
+    assert.ok(cands.length > 0 && cands.every(c => !['ELABORATION', 'DEFINITION', 'DEVELOPMENT'].includes(c.relationType)), t.passageId);
+    assert.deepEqual(cands.map(c => c.id), crossing.filter(r => !['ELABORATION', 'DEFINITION', 'DEVELOPMENT'].includes(r.relationType)).map(r => r.id));
+    for (const c of cands) assert.deepEqual(Object.keys(c), ['id', 'fromId', 'toId', 'fromText', 'toText', 'name', 'relationType', 'crossParagraph']);
+  }
+});
+
+test('v3 candidates on the fixture: R4 (elaboration) and R5 (same sentence) dropped; crossParagraph from sentence keys', () => withFixture(f => {
+  const t = target(f), c = relationCandidates(t.map, paragraphsOf(t));
+  assert.deepEqual(c.map(x => [x.id, x.crossParagraph]), [['R1', true], ['R2', true], ['R3', false]]);
+  assert.deepEqual(designInputB(t, twistDistribution(PID, f.frozen), 'v3').relationCandidates, c);
+  assert.deepEqual(designInputB(t, twistDistribution(PID, f.frozen), 'v3').map.relations.length, 5, 'full map.relations stays');
+  assert.ok(!('relationCandidates' in designInputB(t, twistDistribution(PID, f.frozen))), 'v1/v2 input has no candidates');
+}));
+
+test('v3 schemas: plannedRelations before answer and choices, relationRef before basis and twist; names carry v3', () => {
+  for (const [k, planned] of [['designA2', ['key', 'fromQuote', 'toQuote', 'linkName', 'viaQuote']], ['designB', ['key', 'relationIds']]]) {
+    const slot = SCHEMAS_V3[k].json.properties.slots.items, order = Object.keys(slot.properties);
+    assert.ok(order.indexOf('plannedRelations') < order.indexOf('choices') && order.indexOf('plannedRelations') < order.indexOf('answer'), k);
+    assert.deepEqual(Object.keys(slot.properties.plannedRelations.items.properties), planned);
+    assert.deepEqual(slot.required, order, `${k}: strict, all fields required`);
+    const choice = Object.keys(slot.properties.choices.items.properties);
+    assert.ok(choice.indexOf('relationRef') < choice.indexOf('basis') && choice.indexOf('basis') < choice.indexOf('twist'), k);
+    assert.match(SCHEMAS_V3[k].name, /_v3$/u);
+  }
+  assert.equal(SCHEMAS_V3.items, SCHEMAS.items);
+  assert.ok(!('plannedRelations' in SCHEMAS.designB.json.properties.slots.items.properties), 'v1/v2 schema untouched');
+});
+
+const v3check = (t, kind, mutate, version = 'v3') => {
+  const d = structuredClone(exampleDesign(kind, t, 'v3')); mutate(d);
+  return validateDesign(d, kind, slotsOf(t), paragraphsOf(t), kind === 'B' ? t.map : null, version).violations.join(' | ');
+};
+
+test('v3 example designs pass schema and checks (fixture and all real passages); the example write input resolves relations', () => withFixture(f => {
+  for (const t of [target(f), ...loadGenTargets()]) for (const kind of ['A2', 'B']) {
+    const d = SCHEMAS_V3[kind === 'A2' ? 'designA2' : 'designB'].zod.parse(exampleDesign(kind, t, 'v3'));
+    assert.deepEqual(validateDesign(d, kind, slotsOf(t), paragraphsOf(t), kind === 'B' ? t.map : null, 'v3').violations, [], `${t.passageId} ${kind}`);
+    const items = SCHEMAS.items.zod.parse(exampleItems(t, d));
+    assert.deepEqual(validateItems(items, slotsOf(t), d, 'v3').violations, []);
+    const w = writeInput(t, d, kind, 'v3').design.slots[0];
+    assert.ok(!('plannedRelations' in w) && w.choices.every(c => !('relationRef' in c)));
+    assert.deepEqual(w.choices.map(c => c.relation === null), [true, false, false, true, true]);
+  }
+  const t = target(f), b = writeInput(t, exampleDesign('B', t, 'v3'), 'B', 'v3').design.slots[0].choices[1].relation;
+  assert.equal(b.key, 'r1'); assert.deepEqual(b.chain, [{ id: 'R1', name: '이름', typeName: '인과·작용', fromText: '명제2', toText: '명제1' }]);
+  const a = writeInput(t, exampleDesign('A2', t, 'v3'), 'A2', 'v3').design.slots[0].choices[2].relation;
+  assert.deepEqual(Object.keys(a), ['key', 'fromQuote', 'toQuote', 'viaQuote', 'linkName']); assert.equal(a.viaQuote, null);
+}));
+
+test('v3 design checks: each rule has a violation case (B and A2)', () => withFixture(f => {
+  const t = target(f);
+  // 1. at least two relation choices per slot; relationRef must name a planned key
+  assert.match(v3check(t, 'B', d => { d.slots[0].choices[1].relationRef = null; }), /slot 1: 1 choices with relationRef/u);
+  assert.match(v3check(t, 'A2', d => { d.slots[0].choices[1].relationRef = null; }), /slot 1: 1 choices with relationRef/u);
+  assert.match(v3check(t, 'B', d => { d.slots[0].choices[1].relationRef = 'zz'; }), /slot 1#2: relationRef zz not in plannedRelations/u);
+  assert.match(v3check(t, 'B', d => { d.slots[0].plannedRelations.pop(); }), /slot 1: 1 plannedRelations/u);
+  // 2. ends in different sentences
+  assert.match(v3check(t, 'B', d => { d.slots[0].plannedRelations[0].relationIds = ['R5']; }), /plannedRelations r1: ends P1-1 and G1 are not in different sentences/u);
+  assert.match(v3check(t, 'A2', d => { const p = d.slots[0].plannedRelations[0]; p.toQuote = p.fromQuote; }), /plannedRelations r1: fromQuote and toQuote are not in different sentences/u);
+  assert.match(v3check(t, 'A2', d => { d.slots[0].plannedRelations[0].fromQuote = '지문에 없는 구절이다'; }), /plannedRelations r1 fromQuote: not in passage/u);
+  const spaced = structuredClone(exampleDesign('A2', t, 'v3')); spaced.slots[0].plannedRelations[0].fromQuote = spaced.slots[0].plannedRelations[0].fromQuote.replace(' ', '  ');
+  const sp = validateDesign(spaced, 'A2', slotsOf(t), paragraphsOf(t), null, 'v3'); assert.equal(sp.allPass, true); assert.match(sp.info.join(), /fromQuote: matches ignoring whitespace/u);
+  // 3. B: ids in the map, at least one candidate, basis holds both ends
+  assert.match(v3check(t, 'B', d => { d.slots[0].plannedRelations[0].relationIds = ['R9']; }), /relation id R9 not in map/u);
+  assert.match(v3check(t, 'B', d => { d.slots[0].plannedRelations[0].relationIds = ['R4']; }), /no candidate relation in R4/u);
+  assert.equal(v3check(t, 'B', d => { d.slots[0].plannedRelations[0].relationIds = ['R1', 'R4']; }), '', 'a chain with one candidate is fine');
+  assert.match(v3check(t, 'B', d => { d.slots[0].choices[1].basis = ['R1']; }), /slot 1#2: basis lacks relation end P2-1 \| slot 1#2: basis lacks relation end P1-1/u);
+  // 4. FALSE relation choice points at the relation
+  assert.match(v3check(t, 'B', d => { d.slots[0].choices[2].twist.targetIds = ['P1-1']; }), /slot 1#3: FALSE relation choice twist.targetIds names none of/u);
+  assert.match(v3check(t, 'A2', d => { d.slots[0].choices[2].twist.targetQuote = '둘째 문단이다.'; }), /slot 1#3: FALSE relation choice targetQuote overlaps neither/u);
+  // 5. SELECT_CORRECT slot needs a FALSE relation choice; the passage needs one
+  const toTrue = c => { c.truth = 'TRUE'; c.twist = null; };
+  assert.match(v3check(t, 'B', d => { toTrue(d.slots[1].choices[1]); }), /slot 2: SELECT_CORRECT slot has no FALSE relation choice/u);
+  assert.match(v3check(t, 'A2', d => { toTrue(d.slots[1].choices[1]); }), /slot 2: SELECT_CORRECT slot has no FALSE relation choice/u);
+  assert.match(v3check(t, 'B', d => { toTrue(d.slots[0].choices[2]); toTrue(d.slots[1].choices[1]); }), /passage: no FALSE relation choice/u);
+  assert.doesNotMatch(v3check(t, 'B', d => { toTrue(d.slots[0].choices[2]); }), /no FALSE relation choice/u, 'a SELECT_INCORRECT slot needs none while the passage has one');
+  // 6. same relation 3 times
+  assert.match(v3check(t, 'B', d => { for (const s of d.slots) s.plannedRelations[0].relationIds = ['R1']; d.slots[0].plannedRelations[1].relationIds = ['R1']; }), /passage: relation R1 planned 4 times/u);
+  assert.match(v3check(t, 'A2', d => { for (const s of d.slots) for (const p of s.plannedRelations) { p.fromQuote = '법인은 독립된 권리를 가진다.'; p.toQuote = '재단 법인은 자산에 법인격이 부여된다.'; } }), /passage: relation .* planned 4 times/u);
+  assert.match(v3check(t, 'A2', d => { d.slots[0].plannedRelations[0].fromQuote = '법인은  독립된 권리를 가진다.'; d.slots[0].plannedRelations[0].toQuote = '재단 법인은 자산에 법인격이 부여된다.';
+    for (const [i, p] of [[0, 1], [1, 0], [1, 1]]) { d.slots[i].plannedRelations[p].fromQuote = '법인은 독립된 권리를 가진다.'; d.slots[i].plannedRelations[p].toQuote = '재단 법인은 자산에 법인격이 부여된다.'; } }), /planned 4 times/u, 'whitespace-insensitive pair');
+  // v1/v2 validation ignores all of this
+  assert.equal(validateDesign(exampleDesign('B', t), 'B', slotsOf(t), paragraphsOf(t), t.map).allPass, true);
+}));
+
+test('v3 writing check: the answer must not be uniquely longest; a tie for longest passes', () => withFixture(f => {
+  const t = target(f), slots = slotsOf(t), design = exampleDesign('B', t, 'v3');
+  const run = (mutate, version = 'v3') => { const it = structuredClone(exampleItems(t, design)); mutate(it); return validateItems(it, slots, design, version).violations.join(' | '); };
+  assert.match(run(it => { it.items[0].choices[2].text += ' 더 길게 쓴 정답 선지'; }), /slot 1: answer uniquely longest/u);
+  assert.equal(run(it => { it.items[0].choices[2].text += ' 더 길다'; it.items[0].choices[0].text += ' 더 길다'; }), '', 'joint longest is fine');
+  assert.equal(run(it => { it.items[0].choices[2].text += ' 더 길게 쓴 정답 선지'; it.items[0].choices[4].text += ' 더 길게 쓴 정답 선지'; }), '');
+  assert.equal(run(it => { it.items[0].choices[2].text += ' 더 길게 쓴 정답 선지'; }, 'v2'), '', 'only v3 checks it');
+  assert.equal(run(it => { it.items[0].choices[0].text += ' 오답이 더 김'; }), '');
+}));
+
+test('v3 dry-run on the real targets: 16 requests (A2 8, B 8) under 16 requests (reserve total is above $2); A rejected; A2 request has no map or candidates; B request has candidates', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'itemgen-v3-'));
+  try {
+    const r = await main({ dryRun: true, out: dir, promptPaths: PROMPT_PATHS_V3, version: 'v3', limits: { maxRequests: 16, usdCap: 4 } });
+    assert.equal(r.requests, 16); assert.equal(r.externalRequests, 0); assert.equal(r.overCap, false); assert.equal(r.overMaxRequests, false);
+    assert.deepEqual([...new Set(r.rows.map(x => x.condition))], ['A2', 'B']);
+    await assert.rejects(() => main({ dryRun: true, out: dir, promptPaths: PROMPT_PATHS_V3, version: 'v3', conditions: ['A', 'A2'] }), /A is not run in v3/u);
+    const read = (cond, id, stage) => JSON.parse(readFileSync(`${dir}/dry-run/generation/${cond}/${id}/${stage}.request.json`, 'utf8'));
+    const input = req => JSON.parse(req.input[0].content[0].text);
+    for (const t of loadGenTargets()) {
+      const a2 = read('A2', t.passageId, 'design'), s = JSON.stringify(a2);
+      for (const k of ['map', 'relationCandidates', 'twistDistribution', 'stances']) assert.ok(!(k in input(a2)), `A2 has ${k}`);
+      assert.ok(!/relationCandidates|propositions|"relations"/u.test(s) && !/비틂 종류 목록/u.test(a2.instructions));
+      for (const type of TWIST_TYPES) assert.ok(!a2.instructions.includes(type), `A2 v3 instructions name ${type}`);
+      assert.equal(a2.text.format.name, 'item_generation_design_a2_v3');
+      const b = read('B', t.passageId, 'design'), bi = input(b);
+      assert.equal(b.text.format.name, 'item_generation_design_b_v3');
+      assert.ok(bi.relationCandidates.length > 0 && bi.map.relations.length > bi.relationCandidates.length);
+      assert.ok(bi.relationCandidates.every(c => !['ELABORATION', 'DEFINITION', 'DEVELOPMENT'].includes(c.relationType)));
+      assert.ok(b.instructions.includes('relationCandidates') && b.instructions.includes('관계 먼저(v3)') && !b.instructions.includes('관계 선지(v2)'));
+      assert.ok(read('A2', t.passageId, 'items').instructions.includes('v3 변경점') || read('A2', t.passageId, 'items').instructions.includes('`relation`'));
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('v1 and v2 paths do not touch v3 code: no candidates, no relation fields, v1/v2 write input unchanged', () => withFixture(async f => {
+  const t = target(f), d = twistDistribution(PID, f.frozen);
+  assert.equal(JSON.stringify(designInputB(t, d)), JSON.stringify(designInputB(t, d, 'v2')));
+  assert.ok(!JSON.stringify(designInputB(t, d)).includes('relationCandidates'));
+  const design = exampleDesign('B', t);
+  assert.ok(!JSON.stringify(writeInput(t, design, 'B')).includes('"relation"'));
+  assert.deepEqual(writeInput(t, exampleDesign('A2', t), 'A2').design, { slots: exampleDesign('A2', t).slots });
+  assert.equal(JSON.stringify(exampleDesign('B', t)), JSON.stringify(exampleDesign('B', t, 'v2')));
+  assert.equal(validateDesign(design, 'B', slotsOf(t), paragraphsOf(t), t.map).allPass, true);
+  // a v3 fake run: both conditions go design -> items with the v3 schemas
+  const transport = { calls: [], async create(request) {
+    const name = request.text.format.name; this.calls.push(name);
+    const body = name === SCHEMAS_V3.designA2.name ? exampleDesign('A2', t, 'v3') : name === SCHEMAS_V3.designB.name ? exampleDesign('B', t, 'v3') : exampleItems(t, JSON.parse(request.input[0].content[0].text).design ?? null);
+    return { id: 'r', model: 'gpt-6.1-sol', status: 'completed', output_text: JSON.stringify(body), usage: { input_tokens: 1000, output_tokens: 500 } };
+  } };
+  const r = await main({ targetsPath: f.targetsPath, out: f.out, frozen: f.frozen, transport, promptPaths: PROMPT_PATHS_V3, version: 'v3' });
+  assert.equal(r.requests, 4); assert.deepEqual(transport.calls, [SCHEMAS_V3.designA2.name, SCHEMAS.items.name, SCHEMAS_V3.designB.name, SCHEMAS.items.name]);
+  for (const cond of ['A2', 'B']) { assert.equal(JSON.parse(readFileSync(`${f.out}/runs/${cond}/${PID}/design.validation.json`, 'utf8')).validation.allPass, true, cond);
+    assert.equal(JSON.parse(readFileSync(`${f.out}/runs/${cond}/${PID}/items.validation.json`, 'utf8')).validation.allPass, true, cond); }
+}));

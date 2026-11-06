@@ -1,6 +1,6 @@
 // D-0206 E1: gold-based item generation on exam passages. Conditions A (passage -> items), A2 (passage -> design -> items), B (passage + frozen map + twist distribution -> design -> items).
 // Keys are loaded only by Node's --env-file-if-exists. Handoff: docs/handoffs/2026-11-06-e1-item-generation-implementation.md
-// Usage: node --env-file-if-exists=.env scripts/run-item-generation.mjs [--dry-run] [--targets <json>] [--out <dir>] [--conditions A,A2,B] [--passages <id,...>] [--prompt-version v1|v2] [--max-requests <n>] [--usd-cap <x>]
+// Usage: node --env-file-if-exists=.env scripts/run-item-generation.mjs [--dry-run] [--targets <json>] [--out <dir>] [--conditions A,A2,B] [--passages <id,...>] [--prompt-version v1|v2|v3] [--max-requests <n>] [--usd-cap <x>]
 // Generation requests carry only polarity and scope of each slot (never the exam number or any exam question text). No retries.
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -9,6 +9,7 @@ import { z } from 'zod/v4';
 import { loadPassage, buildInput as buildPassageInput, instructionsFrom, usageCost, reserveUsd, hash, MODEL, TIMEOUT_MS } from './run-analysis-map-gongsun.mjs';
 import { isConnectionError } from './run-analysis-judge-gongsun.mjs';
 import { TWIST_TYPES, stemPolarity } from './run-choice-link.mjs';
+import { TYPE_KO } from './run-relation-classify.mjs';
 
 export const EXP_DIR = 'docs/experiments/gold-item-generation-2026-11-06';
 export const TARGETS_PATH = `${EXP_DIR}/targets.json`;
@@ -17,6 +18,8 @@ export const PROMPT_PATHS = { A: `${EXP_DIR}/BASELINE-PROMPT-v1.md`, DESIGN_A2: 
 export const PROMPT_PATHS_V2 = { ...PROMPT_PATHS, DESIGN_A2: `${EXP_DIR}/DESIGN-PROMPT-A2-v2.md`, DESIGN_B: `${EXP_DIR}/DESIGN-PROMPT-B-v2.md`, WRITE: `${EXP_DIR}/WRITE-PROMPT-v2.md` };
 // Two or more negation markers in one stem (e.g. "일치하지 않는 것으로 적절하지 않은 것은?") make the polarity ambiguous.
 export const stemNegationCount = stem => (stem.match(/않은|않는|아닌|없는/gu) ?? []).length;
+// v3 (D-0206 보완 2): relation-first design for A2/B (plannedRelations before choices, relationRef per choice). A is not run in v3.
+export const PROMPT_PATHS_V3 = { ...PROMPT_PATHS_V2, DESIGN_A2: `${EXP_DIR}/DESIGN-PROMPT-A2-v3.md`, DESIGN_B: `${EXP_DIR}/DESIGN-PROMPT-B-v3.md`, WRITE: `${EXP_DIR}/WRITE-PROMPT-v3.md` };
 export const FROZEN_DIRS = ['docs/experiments/choice-link-2026-10-22/runs/ui-v5/frozen', 'docs/experiments/sns-diagnostic-gold-2026-11-05/choice-link/frozen'];
 export const CONDITIONS = ['A', 'A2', 'B'];
 export const LIMITS = { maxRequests: 20, usdCap: 5 };
@@ -30,6 +33,35 @@ const CHOICES = [1, 2, 3, 4, 5];
 const serialize = v => JSON.stringify(v, null, 2) + '\n';
 const readJson = p => JSON.parse(readFileSync(p, 'utf8'));
 const normWs = s => s.replace(/\s+/gu, '');
+
+// ---- sentence keys (v3) ----------------------------------------------------------------------------------------------------------
+
+// Sentences of every paragraph, keyed "<paragraph index>:<sentence index>" (0-based). paragraphs: array of paragraph texts.
+export const sentencesOf = paragraphs => paragraphs.flatMap((p, pi) => p.split(/(?<=[.?!])\s+/u).map((text, si) => ({ key: `${pi}:${si}`, norm: normWs(text) })));
+// A phrase belongs to a sentence when either contains the other (whitespace ignored); a phrase longer than a sentence yields several keys.
+export const quoteKeys = (sentences, quote) => { const q = normWs(quote); return new Set(q === '' ? [] : sentences.filter(s => s.norm !== '' && (s.norm.includes(q) || q.includes(s.norm))).map(s => s.key)); };
+// Sentence keys of a map unit: a proposition by its sourceQuote, a node as the union of its children (recursive).
+export function unitKeysOf(map, sentences) {
+  const props = new Map(map.propositions.map(p => [p.id, p])), nodes = new Map(map.nodes.map(n => [n.id, n]));
+  const keysOf = (id, seen = new Set()) => {
+    if (props.has(id)) return quoteKeys(sentences, props.get(id).sourceQuote);
+    const n = nodes.get(id); if (!n || seen.has(id)) return new Set();
+    seen.add(id);
+    return new Set(n.childIds.flatMap(c => [...keysOf(c, seen)]));
+  };
+  return id => keysOf(id);
+}
+// Different sentences: both key sets are non-empty and share no sentence.
+export const differentSentences = (a, b) => a.size > 0 && b.size > 0 && ![...a].some(k => b.has(k));
+const EXCLUDED_RELATION_TYPES = ['ELABORATION', 'DEFINITION', 'DEVELOPMENT'];
+// Map relations whose ends lie in different sentences and whose type is not elaboration/definition/development.
+export function relationCandidates(map, paragraphs) {
+  const sentences = sentencesOf(paragraphs), keys = unitKeysOf(map, sentences), text = new Map([...map.propositions, ...map.nodes].map(u => [u.id, u.text]));
+  const paras = set => new Set([...set].map(k => k.split(':')[0]));
+  return map.relations.filter(r => !EXCLUDED_RELATION_TYPES.includes(r.relationType) && differentSentences(keys(r.fromId), keys(r.toId))).map(r =>
+    ({ id: r.id, fromId: r.fromId, toId: r.toId, fromText: text.get(r.fromId) ?? null, toText: text.get(r.toId) ?? null, name: r.name, relationType: r.relationType,
+      crossParagraph: differentSentences(paras(keys(r.fromId)), paras(keys(r.toId))) }));
+}
 
 // ---- schemas ---------------------------------------------------------------------------------------------------------------------
 
@@ -46,6 +78,19 @@ export const SCHEMAS = {
   designB: { name: 'item_generation_design_b_v1', zod: DesignSchemaB },
 };
 for (const s of Object.values(SCHEMAS)) s.json = z.toJSONSchema(s.zod);
+
+// v3 design schemas: v2 plus plannedRelations (listed before answer and choices, so the model names the relations first) and relationRef per choice (before basis and twist).
+const designSchemaV3 = (twist, planned) => z.strictObject({ passageId: z.string(), slots: z.array(z.strictObject({ slot: z.number().int(), stemPolarity: z.enum(POLARITIES), scope: z.enum(SCOPES),
+  concept: z.string().nullable(), plannedRelations: z.array(planned), answer: z.number().int(),
+  choices: z.array(z.strictObject({ number: z.number().int(), truth: z.enum(['TRUE', 'FALSE']), relationRef: z.string().nullable(), basis: z.array(z.string()), twist: twist.nullable() })) })) });
+export const SCHEMAS_V3 = {
+  items: SCHEMAS.items,
+  designA2: { name: 'item_generation_design_a2_v3', zod: designSchemaV3(z.strictObject({ label: z.string(), targetQuote: z.string(), change: z.string() }),
+    z.strictObject({ key: z.string(), fromQuote: z.string(), toQuote: z.string(), linkName: z.string(), viaQuote: z.string().nullable() })) },
+  designB: { name: 'item_generation_design_b_v3', zod: designSchemaV3(z.strictObject({ type: z.enum(DESIGN_TWIST_TYPES), targetIds: z.array(z.string()), change: z.string() }),
+    z.strictObject({ key: z.string(), relationIds: z.array(z.string()) })) },
+};
+for (const s of [SCHEMAS_V3.designA2, SCHEMAS_V3.designB]) s.json = z.toJSONSchema(s.zod);
 
 // ---- targets and inputs ----------------------------------------------------------------------------------------------------------
 
@@ -86,26 +131,36 @@ export const slotsOf = t => t.slots.map(({ slot, stemPolarity: p, scope }) => ({
 const passageInput = t => buildPassageInput(t.passage);
 // The A and A2 design inputs are the same: passage and slots only.
 export const baselineInput = t => ({ ...passageInput(t), slots: slotsOf(t) });
-export const designInputB = (t, distribution) => ({ ...passageInput(t), slots: slotsOf(t),
+export const designInputB = (t, distribution, version = 'v1') => ({ ...passageInput(t), slots: slotsOf(t),
   map: { propositions: t.map.propositions.map(p => ({ id: p.id, paragraphId: p.paragraphId, text: p.text })),
     nodes: t.map.nodes.map(n => ({ id: n.id, kind: n.kind, paragraphId: n.paragraphId, text: n.text, childIds: n.childIds })),
     relations: t.map.relations.map(r => ({ id: r.id, fromId: r.fromId, toId: r.toId, name: r.name, note: r.note, relationType: r.relationType })) },
   stances: t.stances.map(s => ({ id: s.id, kind: s.kind, holder: s.holder })),
-  twistDistribution: { totalTwistedParts: distribution.totalTwistedParts, byType: distribution.byType } });
+  twistDistribution: { totalTwistedParts: distribution.totalTwistedParts, byType: distribution.byType },
+  ...(version === 'v3' ? { relationCandidates: relationCandidates(t.map, t.passage.paragraphs.map(p => p.text)) } : {}) });
 // Korean names of design twist types (DESIGN-PROMPT-B-v1.md table), given to the writer with B designs.
 export const TWIST_NAMES_KO = { NEGATION: '긍정·부정 뒤집기', DIRECTION: '방향 뒤집기', SUBSTITUTION: '요소 바꿔치기', CONFLATION: '다른 것을 같은 것으로',
   CAUSE_SWAP: '원인·근거 바꿔치기', WRONG_REASON: '맞는 사실을 엉뚱한 이유로', CONDITION_SHIFT: '조건 옮기기', HOLDER_SWAP: '입장 주인 바꾸기',
   PAIR_SWAP: '대비 쌍 뒤바꾸기', ABSOLUTIZE: '전칭·절대화', SCOPE_EXTEND: '적용 범위 넓히기', DEGREE: '정도 바꾸기', ADDED_CONTENT: '없는 내용 덧붙이기', ADDED_METHOD: '글에 없는 서술 방식' };
 // B designs refer to map units by id; the writer has no map, so ids are resolved to { id, text } and twist types get their Korean name.
 // A2 designs already carry passage quotes and are passed unchanged.
-export function resolveDesignB(design, map) {
+export function resolveDesignB(design, map, v3 = false) {
   const units = new Map([...map.propositions, ...map.nodes].map(u => [u.id, u.text]));
   const relations = new Map(map.relations.map(r => [r.id, `${r.fromId} → ${r.toId} (${r.name}): ${r.note ?? ''}`.trim()]));
   const res = id => ({ id, text: units.get(id) ?? relations.get(id) ?? null });
+  if (v3) {
+    const rel = new Map(map.relations.map(r => [r.id, r])), link = id => { const r = rel.get(id); return { id, name: r?.name ?? null, typeName: r ? (TYPE_KO[r.relationType] ?? r.relationType) : null, fromText: r ? (units.get(r.fromId) ?? null) : null, toText: r ? (units.get(r.toId) ?? null) : null }; };
+    return { slots: design.slots.map(({ plannedRelations, ...s }) => ({ ...s, choices: s.choices.map(({ relationRef, ...c }) => ({ ...c, relation: relationRef === null ? null : { key: relationRef, chain: (plannedRelations.find(p => p.key === relationRef)?.relationIds ?? []).map(link) },
+      basis: c.basis.map(res), twist: c.twist ? { ...c.twist, typeName: TWIST_NAMES_KO[c.twist.type] ?? c.twist.type, targetIds: undefined, targets: c.twist.targetIds.map(res) } : null })) })) };
+  }
   return { slots: design.slots.map(s => ({ ...s, choices: s.choices.map(c => ({ ...c, basis: c.basis.map(res),
     twist: c.twist ? { ...c.twist, typeName: TWIST_NAMES_KO[c.twist.type] ?? c.twist.type, targetIds: undefined, targets: c.twist.targetIds.map(res) } : null })) })) };
 }
-export const writeInput = (t, design, cond = 'A2') => ({ ...passageInput(t), design: cond === 'B' ? JSON.parse(JSON.stringify(resolveDesignB(design, t.map))) : { slots: design.slots } });
+// v3 A2: the planned relation a choice points to is attached to the choice; plannedRelations and relationRef are dropped from the writer's view.
+const attachRelationA2 = design => ({ slots: design.slots.map(({ plannedRelations, ...s }) => ({ ...s, choices: s.choices.map(({ relationRef, ...c }) => ({ ...c,
+  relation: relationRef === null ? null : (({ key, fromQuote, toQuote, viaQuote, linkName }) => ({ key, fromQuote, toQuote, viaQuote, linkName }))(plannedRelations.find(p => p.key === relationRef) ?? {}) })) })) });
+export const writeInput = (t, design, cond = 'A2', version = 'v1') => ({ ...passageInput(t),
+  design: cond === 'B' ? JSON.parse(JSON.stringify(resolveDesignB(design, t.map, version === 'v3'))) : version === 'v3' ? attachRelationA2(design) : { slots: design.slots } });
 
 export function buildRequest(instructions, input, schema) {
   return { model: MODEL, instructions, reasoning: { effort: 'medium' }, max_output_tokens: MAX_OUTPUT_TOKENS,
@@ -120,7 +175,8 @@ const matchKind = (text, quote) => text.includes(quote) ? 'EXACT' : normWs(text)
 const result = (violations, info = []) => ({ allPass: violations.length === 0, violations, info });
 
 // kind: 'A2' | 'B'. A2 basis and targetQuote are passage substrings (whitespace-only differences pass and are listed in info); B ids exist in the map.
-export function validateDesign(design, kind, slots, paragraphs, map = null) {
+// version 'v3' adds the relation-first checks (validateRelationsV3).
+export function validateDesign(design, kind, slots, paragraphs, map = null, version = 'v1') {
   const v = [], info = [], text = paragraphs.join('\n'), ids = map ? new Set([...map.propositions, ...map.nodes, ...map.relations].map(x => x.id)) : null;
   const quote = (at, q) => { const k = matchKind(text, q); if (!k) v.push(`${at}: not in passage "${q.slice(0, 40)}"`); else if (k === 'WHITESPACE') info.push(`${at}: matches ignoring whitespace "${q.slice(0, 40)}"`); };
   if (design.slots.map(s => s.slot).join() !== slots.map(s => s.slot).join()) v.push(`slots ${design.slots.map(s => s.slot).join()} != ${slots.map(s => s.slot).join()}`);
@@ -155,11 +211,64 @@ export function validateDesign(design, kind, slots, paragraphs, map = null) {
     }
     for (const [type, n] of Object.entries(typeCount)) if (n > 2) v.push(`${at}: twist type ${type} used ${n} times (max 2)`);
   }
+  if (version === 'v3') validateRelationsV3(design, kind, slots, paragraphs, map, v, quote);
   return result(v, info);
 }
 
+// v3 relation-first checks. Violations are recorded, never retried.
+function validateRelationsV3(design, kind, slots, paragraphs, map, v, quote) {
+  const sentences = sentencesOf(paragraphs), unitKeys = kind === 'B' ? unitKeysOf(map, sentences) : null, rels = kind === 'B' ? new Map(map.relations.map(r => [r.id, r])) : null;
+  const candidateIds = kind === 'B' ? new Set(relationCandidates(map, paragraphs).map(c => c.id)) : null;
+  const uses = new Map(); let falseRelationChoices = 0;
+  for (const want of slots) {
+    const s = design.slots.find(x => x.slot === want.slot); if (!s) continue;
+    const at = `slot ${s.slot}`, planned = new Map();
+    for (const p of s.plannedRelations) { if (planned.has(p.key)) v.push(`${at}: duplicate plannedRelations key ${p.key}`); planned.set(p.key, p); }
+    if (s.plannedRelations.length < 2) v.push(`${at}: ${s.plannedRelations.length} plannedRelations (want 2 or more)`);
+    for (const p of s.plannedRelations) {
+      const pa = `${at} plannedRelations ${p.key}`;
+      if (kind === 'B') {
+        const ids = p.relationIds, rs = ids.map(id => rels.get(id));
+        if (ids.length === 0) { v.push(`${pa}: empty relationIds`); continue; }
+        ids.forEach((id, i) => { if (!rs[i]) v.push(`${pa}: relation id ${id} not in map`); });
+        if (rs.every(Boolean)) {
+          if (!ids.some(id => candidateIds.has(id))) v.push(`${pa}: no candidate relation in ${ids.join(',')}`);
+          if (!differentSentences(unitKeys(rs[0].fromId), unitKeys(rs[rs.length - 1].toId))) v.push(`${pa}: ends ${rs[0].fromId} and ${rs[rs.length - 1].toId} are not in different sentences`);
+        }
+        for (const id of new Set(ids)) uses.set(id, (uses.get(id) ?? 0) + 1);
+      } else {
+        quote(`${pa} fromQuote`, p.fromQuote); quote(`${pa} toQuote`, p.toQuote);
+        if (p.viaQuote !== null) quote(`${pa} viaQuote`, p.viaQuote);
+        if (matchKind(paragraphs.join('\n'), p.fromQuote) && matchKind(paragraphs.join('\n'), p.toQuote) && !differentSentences(quoteKeys(sentences, p.fromQuote), quoteKeys(sentences, p.toQuote)))
+          v.push(`${pa}: fromQuote and toQuote are not in different sentences`);
+        const pair = `${normWs(p.fromQuote)}|${normWs(p.toQuote)}`; uses.set(pair, (uses.get(pair) ?? 0) + 1);
+      }
+    }
+    let relationChoices = 0, falseRelation = 0;
+    for (const c of s.choices) {
+      if (c.relationRef === null) continue;
+      const ca = `${at}#${c.number}`, p = planned.get(c.relationRef);
+      if (!p) { v.push(`${ca}: relationRef ${c.relationRef} not in plannedRelations`); continue; }
+      relationChoices++;
+      if (c.truth === 'FALSE') { falseRelation++; falseRelationChoices++; }
+      if (kind === 'B') {
+        const rs = p.relationIds.map(id => rels.get(id));
+        if (rs.every(Boolean) && rs.length) for (const end of [rs[0].fromId, rs[rs.length - 1].toId]) if (!c.basis.includes(end)) v.push(`${ca}: basis lacks relation end ${end}`);
+        if (c.truth === 'FALSE' && c.twist && !c.twist.targetIds.some(id => p.relationIds.includes(id))) v.push(`${ca}: FALSE relation choice twist.targetIds names none of ${p.relationIds.join(',')}`);
+      } else if (c.truth === 'FALSE' && c.twist) {
+        const tq = normWs(c.twist.targetQuote), hit = [p.fromQuote, p.toQuote].some(q => { const n = normWs(q); return tq !== '' && n !== '' && (n.includes(tq) || tq.includes(n)); });
+        if (!hit) v.push(`${ca}: FALSE relation choice targetQuote overlaps neither fromQuote nor toQuote`);
+      }
+    }
+    if (relationChoices < 2) v.push(`${at}: ${relationChoices} choices with relationRef (want 2 or more)`);
+    if (want.stemPolarity === 'SELECT_CORRECT' && falseRelation < 1) v.push(`${at}: SELECT_CORRECT slot has no FALSE relation choice`);
+  }
+  if (falseRelationChoices < 1) v.push('passage: no FALSE relation choice');
+  for (const [rel, n] of uses) if (n >= 3) v.push(`passage: relation ${rel.slice(0, 60)} planned ${n} times (max 2)`);
+}
+
 // design: the validated design table (A2/B) or null (A: no table, so the answer can only be range-checked).
-export function validateItems(items, slots, design) {
+export function validateItems(items, slots, design, version = 'v1') {
   const v = [], seen = new Map();
   if (items.items.map(i => i.slot).join() !== slots.map(s => s.slot).join()) v.push(`slots ${items.items.map(i => i.slot).join()} != ${slots.map(s => s.slot).join()}`);
   for (const want of slots) {
@@ -176,6 +285,10 @@ export function validateItems(items, slots, design) {
       if (keyed.length !== 1 || keyed[0].number !== it.answer) v.push(`${at}: answer ${it.answer} does not match the design ${key} choice`);
       if (want.scope === 'CONCEPT' && d.concept && !it.stem.includes(d.concept)) v.push(`${at}: stem does not name concept "${d.concept}"`);
     }
+    if (version === 'v3') {
+      const len = it.choices.map(c => [c.number, normWs(c.text).length]), ans = len.find(([n]) => n === it.answer), others = len.filter(([n]) => n !== it.answer).map(([, l]) => l);
+      if (ans && others.length && ans[1] > Math.max(...others)) v.push(`${at}: answer uniquely longest (${ans[1]} vs ${Math.max(...others)})`);
+    }
     if (SYMBOLS.test(it.stem) || it.choices.some(c => SYMBOLS.test(c.text))) v.push(`${at}: circled symbol in stem or choice`);
     for (const c of it.choices) {
       if (c.text.trim() === '') v.push(`${at}#${c.number}: empty text`);
@@ -189,7 +302,26 @@ export function validateItems(items, slots, design) {
 
 // ---- fake outputs (dry-run and tests): valid against the schemas and the validators ---------------------------------------------
 
-export function exampleDesign(kind, t) {
+// v3 example: two planned relations per slot on choices 2 and 3 (a FALSE relation choice in every slot); each relation is used at most twice.
+function exampleDesignV3(kind, t) {
+  const paragraphs = t.passage.paragraphs.map(p => p.text), sentences = paragraphs.flatMap(p => p.split(/(?<=[.?!])\s+/u));
+  const pairs = kind === 'A2' ? sentences.slice(0, -1).map((a, i) => [a, sentences[i + 1]]) : relationCandidates(t.map, paragraphs);
+  let used = 0;
+  return { passageId: t.passageId, slots: slotsOf(t).map(s => {
+    const key = s.stemPolarity === 'SELECT_INCORRECT' ? 'FALSE' : 'TRUE', answer = 3;
+    const planned = [1, 2].map(i => { const x = pairs[used++ % pairs.length]; return kind === 'A2' ? { key: `r${i}`, fromQuote: x[0], toQuote: x[1], linkName: '예시 관계', viaQuote: null } : { key: `r${i}`, relationIds: [x.id] }; });
+    return { ...s, concept: s.scope === 'CONCEPT' ? '예시 개념' : null, plannedRelations: planned, answer, choices: CHOICES.map(n => {
+      const truth = (n === answer) === (key === 'TRUE') ? 'TRUE' : 'FALSE', ref = n === 2 ? 0 : n === 3 ? 1 : null, p = ref === null ? null : planned[ref];
+      const first = kind === 'A2' ? t.passage.paragraphs[0].text.slice(0, 12) : t.map.propositions[0].id;
+      const rel = p === null ? null : kind === 'A2' ? { basis: [p.fromQuote, p.toQuote], target: p.fromQuote } : { basis: [rels(t, p.relationIds[0]).fromId, rels(t, p.relationIds[0]).toId, p.relationIds[0]], target: p.relationIds[0] };
+      return { number: n, truth, relationRef: p?.key ?? null, basis: rel?.basis ?? [first], twist: truth === 'TRUE' ? null
+        : kind === 'A2' ? { label: '예시 비틂', targetQuote: rel?.target ?? first, change: '예시' } : { type: DESIGN_TWIST_TYPES[n % DESIGN_TWIST_TYPES.length], targetIds: [rel?.target ?? first], change: '예시' } };
+    }) };
+  }) };
+}
+const rels = (t, id) => t.map.relations.find(r => r.id === id);
+export function exampleDesign(kind, t, version = 'v1') {
+  if (version === 'v3') return exampleDesignV3(kind, t);
   const first = kind === 'A2' ? t.passage.paragraphs[0].text.slice(0, 12) : t.map.propositions[0].id;
   return { passageId: t.passageId, slots: slotsOf(t).map(s => {
     const key = s.stemPolarity === 'SELECT_INCORRECT' ? 'FALSE' : 'TRUE', answer = 3;
@@ -211,17 +343,20 @@ export function exampleItems(t, design = null) {
 // ---- run -------------------------------------------------------------------------------------------------------------------------
 
 // Request plan of one (passage, condition): stages in order; a later stage's request is built from the earlier stage's parsed output.
-function stagesOf(cond, t, instr, distribution) {
+function stagesOf(cond, t, instr, distribution, version = 'v1') {
+  const schemas = version === 'v3' ? SCHEMAS_V3 : SCHEMAS;
   if (cond === 'A') return [{ stage: 'items', kind: 'baseline', request: () => buildRequest(instr.A, baselineInput(t), SCHEMAS.items) }];
-  const a2 = cond === 'A2', schema = a2 ? SCHEMAS.designA2 : SCHEMAS.designB;
+  const a2 = cond === 'A2', schema = a2 ? schemas.designA2 : schemas.designB;
   return [
-    { stage: 'design', kind: 'design', schema, exampleDesign: () => exampleDesign(a2 ? 'A2' : 'B', t), request: () => buildRequest(a2 ? instr.DESIGN_A2 : instr.DESIGN_B, a2 ? baselineInput(t) : designInputB(t, distribution), schema) },
-    { stage: 'items', kind: 'write', request: design => buildRequest(instr.WRITE, writeInput(t, design, cond), SCHEMAS.items) },
+    { stage: 'design', kind: 'design', schema, exampleDesign: () => exampleDesign(a2 ? 'A2' : 'B', t, version), request: () => buildRequest(a2 ? instr.DESIGN_A2 : instr.DESIGN_B, a2 ? baselineInput(t) : designInputB(t, distribution, version), schema) },
+    { stage: 'items', kind: 'write', request: design => buildRequest(instr.WRITE, writeInput(t, design, cond, version), SCHEMAS.items) },
   ];
 }
 
-export async function main({ dryRun = false, transport, targetsPath = TARGETS_PATH, out = EXP_DIR, promptPaths = PROMPT_PATHS, conditions = CONDITIONS, passages, limits = LIMITS, frozen = frozenFiles() } = {}) {
+export async function main({ dryRun = false, transport, targetsPath = TARGETS_PATH, out = EXP_DIR, promptPaths = PROMPT_PATHS, version = 'v1', conditions = version === 'v3' ? ['A2', 'B'] : CONDITIONS, passages, limits = LIMITS, frozen = frozenFiles() } = {}) {
   const bad = conditions.filter(c => !CONDITIONS.includes(c)); if (bad.length) throw new Error(`CONDITION: ${bad.join(',')}`);
+  if (version === 'v3' && conditions.includes('A')) throw new Error('CONDITION: A is not run in v3');
+  const schemas = version === 'v3' ? SCHEMAS_V3 : SCHEMAS;
   const targets = loadGenTargets(targetsPath).filter(t => !passages || passages.includes(t.passageId));
   if (!targets.length) throw new Error('NO_TARGETS');
   const promptBytes = Object.fromEntries(Object.entries(promptPaths).map(([k, p]) => [k, readFileSync(p)]));
@@ -229,7 +364,7 @@ export async function main({ dryRun = false, transport, targetsPath = TARGETS_PA
   const distributions = Object.fromEntries(targets.map(t => [t.passageId, twistDistribution(t.passageId, frozen)]));
   mkdirSync(`${out}/inputs`, { recursive: true });
   for (const t of targets) writeFileSync(`${out}/inputs/${t.passageId}.twist-distribution.json`, serialize({ passageId: t.passageId, ...distributions[t.passageId] }));
-  const plan = targets.flatMap(t => conditions.map(cond => ({ t, cond, stages: stagesOf(cond, t, instr, distributions[t.passageId]) })));
+  const plan = targets.flatMap(t => conditions.map(cond => ({ t, cond, stages: stagesOf(cond, t, instr, distributions[t.passageId], version) })));
 
   if (dryRun) {
     const rows = [];
@@ -284,8 +419,8 @@ export async function main({ dryRun = false, transport, targetsPath = TARGETS_PA
           if (response.status !== 'completed') throw new Error(`RESPONSE_STATUS: ${response.status}`);
           parsed = (s.schema ?? SCHEMAS.items).zod.parse(JSON.parse(response.output_text));
           if (parsed.passageId !== t.passageId) throw new Error(`passageId ${parsed.passageId}`);
-          validation = s.stage === 'design' ? validateDesign(parsed, cond, slotsOf(t), t.passage.paragraphs.map(p => p.text), cond === 'B' ? t.map : null)
-            : validateItems(parsed, slotsOf(t), design);
+          validation = s.stage === 'design' ? validateDesign(parsed, cond, slotsOf(t), t.passage.paragraphs.map(p => p.text), cond === 'B' ? t.map : null, version)
+            : validateItems(parsed, slotsOf(t), design, version);
           writeFileSync(`${dir}/${s.stage}.json`, serialize(parsed), { flag: 'wx' }); row.requestStatus = 'PARSED';
         } catch (e) { row.requestStatus = 'FORMAT_ERROR'; row.error = String(e); parsed = null; }
       }
@@ -299,8 +434,8 @@ export async function main({ dryRun = false, transport, targetsPath = TARGETS_PA
   writeFileSync(runPath, serialize({ version: 1, startedAtUtc, finishedAtUtc: new Date().toISOString(), model: MODEL, reasoning: { effort: 'medium' }, maxOutputTokens: MAX_OUTPUT_TOKENS, timeoutMs: TIMEOUT_MS, retries: 0,
     limits, conditions, passages: targets.map(t => t.passageId), targetsFile: targetsPath, targetsHash: hash(readFileSync(targetsPath)),
     promptFiles: promptPaths, promptHashes: Object.fromEntries(Object.entries(promptBytes).map(([k, b]) => [k, hash(b)])), instructionsHashes: Object.fromEntries(Object.entries(instr).map(([k, x]) => [k, hash(x)])),
-    schemaHashes: Object.fromEntries(Object.entries(SCHEMAS).map(([k, s]) => [k, hash(JSON.stringify(s.json))])),
-    inputHashes: Object.fromEntries(plan.map(({ t, cond }) => [`${cond}/${t.passageId}`, hash(JSON.stringify(cond === 'B' ? designInputB(t, distributions[t.passageId]) : baselineInput(t)))])),
+    schemaHashes: Object.fromEntries(Object.entries(schemas).map(([k, s]) => [k, hash(JSON.stringify(s.json))])),
+    inputHashes: Object.fromEntries(plan.map(({ t, cond }) => [`${cond}/${t.passageId}`, hash(JSON.stringify(cond === 'B' ? designInputB(t, distributions[t.passageId], version) : baselineInput(t)))])),
     twistDistributionHashes: Object.fromEntries(targets.map(t => [t.passageId, hash(JSON.stringify(distributions[t.passageId]))])),
     requests, totalCostUsd: spent, stop, protectedFilesUnchanged: protectedUnchanged, protectedFileHashes: { before: protectedBefore, after: protectedAfter }, outcomes }));
   return { requests, totalCostUsd: spent, stop, protectedFilesUnchanged: protectedUnchanged, outcomes };
@@ -308,8 +443,8 @@ export async function main({ dryRun = false, transport, targetsPath = TARGETS_PA
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const argv = process.argv, opt = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; }, num = name => opt(name) ? Number(opt(name)) : undefined;
-  const pv = opt('--prompt-version') ?? 'v1'; if (!['v1', 'v2'].includes(pv)) throw new Error(`PROMPT_VERSION: ${pv}`);
-  const res = await main({ dryRun: argv.includes('--dry-run'), targetsPath: opt('--targets'), out: opt('--out'), promptPaths: pv === 'v2' ? PROMPT_PATHS_V2 : PROMPT_PATHS, conditions: opt('--conditions')?.split(','), passages: opt('--passages')?.split(','),
+  const pv = opt('--prompt-version') ?? 'v1'; if (!['v1', 'v2', 'v3'].includes(pv)) throw new Error(`PROMPT_VERSION: ${pv}`);
+  const res = await main({ dryRun: argv.includes('--dry-run'), targetsPath: opt('--targets'), out: opt('--out'), promptPaths: { v1: PROMPT_PATHS, v2: PROMPT_PATHS_V2, v3: PROMPT_PATHS_V3 }[pv], version: pv, conditions: opt('--conditions')?.split(','), passages: opt('--passages')?.split(','),
     limits: { maxRequests: num('--max-requests') ?? LIMITS.maxRequests, usdCap: num('--usd-cap') ?? LIMITS.usdCap } });
   console.log(JSON.stringify(res.dryRun ? { ...res, rows: undefined } : res, null, 2));
 }
