@@ -79,7 +79,7 @@ export function AnswerScreen({ questions, drafts, save, done }: {
   return <main className="reading-workbench problem-lab-workbench diag-workbench" data-pane={pane}>
     <header className="workbench-header"><div className="lab-strip-lead"><h1 className="diag-header-title">{current.content.title}</h1></div>
       <div className="workbench-actions"><span>문항 {index + 1} / {questions.length}</span></div></header>
-    <nav className="workbench-tabs" aria-label="문제 화면 전환">{[['source', '지문'], ['problem', '문제'], ['chat', '답']].map(([id, title]) =>
+    <nav className="workbench-tabs" aria-label="문제 화면 전환">{[['source', '지문'], ['problem', '문제'], ['chat', '내 답']].map(([id, title]) =>
       <button key={id} aria-pressed={pane === id} onClick={() => setPane(id!)}>{title}</button>)}</nav>
     <div className="workbench-columns">
       <PassagePane question={question} />
