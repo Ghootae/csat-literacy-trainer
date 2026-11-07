@@ -88,13 +88,14 @@
 │  │     학생용 표현 확정(비틂 14종·관계 4갈래, 반말)                        D-0209
 │  │     화면(인계 B) `/diagnostic` 구현·검토 완료(가짜 평가기, 외부 전송 없음)  CP 11-07
 │  │     비용·대기 측정 1차: 1인 $0.5~1.2, 결과 정리 대기 20~70초 추정        CP 11-07
-│  │     다음: 드라이버 수정 뒤 L 재측정(승인), 대기 줄이기 판단. 공개 전: 바뀐 내용 문장·추천 대응표·훈련 서비스 주소·복사 기준
+│  │     L 재측정 보류(사용자). 다음: 대기 줄이기 판단. 공개 전: 바뀐 내용 문장·추천 대응표·훈련 서비스 주소·복사 기준
 │  └─✓ 기본 세트 E 16문항 자료 완성(판정 묶음·분석 골드·선지 연결 동결)     D-0201
 │
 ├─ 골드 기반 문항·지문 생성 실험 — 시중 AI 생성보다 정확한 문항, 기출 대체 지문    D-0206
 │  ├─✓ E1 문항 생성 — 닫음: 정확성 천장, 골드 이점 없음, 깊이 기출의 2/3     D-0206·D-0210
 │  ├─○ E2 지문 대체 생성 — 보류                                           D-0210
-│  └─○ 원리 적용형 선지 생성 — 차후 별도 과제                               D-0210
+│  └─● 원리 적용형 선지 생성 — 설계 시작, E1 v3 작동 방식 사례 정리         D-0210·CP-J
+│        다음: docs/reports/e1-v3-mechanism-walkthrough-2026-11-07.md 5절 논의 재개
 │
 └─○ 문항 골드 — 오프라인 감사·회귀용으로만 보관                              CP-C
 
@@ -152,6 +153,7 @@
 | CP-E | [보여 주기 개발자 모드 첫 사용](./checkpoints/2026-10-15-boundary-show-dev-mode-first-use.md) |
 | CP-F | [K4 판정 재설계 논의](./checkpoints/2026-10-27-k4-judgment-redesign-discussion.md), [논의 메모](../docs/reports/REPORT-k4-v51-judgment-review-human.md) |
 | CP-D | [실모델 확인](./checkpoints/2026-10-11-v5-live-connection-test.md), [48개 세션 기록](./checkpoints/2026-10-12-v5-diverse-48-recorded.md) |
+| CP-J | [원리 적용형 설계 시작](./checkpoints/2026-11-07-principle-application-start.md), [E1 v3 작동 방식 사례](../docs/reports/e1-v3-mechanism-walkthrough-2026-11-07.md) |
 
 ## 갱신 규칙
 
