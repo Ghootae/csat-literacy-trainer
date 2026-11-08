@@ -7,7 +7,7 @@
  * 참가자마다 메모리 상태 하나가 기준이고, 저장은 참가자 단위 직렬 큐로 차례대로 한다(읽기 → await → 쓰기 금지).
  */
 import { randomUUID } from 'node:crypto';
-import { basename, dirname } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { z, ZodError } from 'zod/v4';
 import {
   FeedbackRationaleSchema, combineRound, createFeedbackSession, createOpenAiTransport, diagnoseThought,
@@ -29,7 +29,7 @@ import {
   addCounts, copyOverlap, countParagraph, emptyCounts, judgedUnitIndex, pickTwist, summaryLink,
   type JudgedUnitInfo, type SummaryLink,
 } from './reading.js';
-import { FileDiagnosticStore, isParticipantId, type DiagnosticParticipant, type DiagnosticStore, type ItemAnswer } from './store.js';
+import { FileDiagnosticStore, diagnosticRoot, isParticipantId, type DiagnosticParticipant, type DiagnosticStore, type ItemAnswer } from './store.js';
 
 export class DiagnosticHttpError extends Error {
   constructor(readonly status: 400 | 404 | 409, message: string) { super(message); }
@@ -146,7 +146,8 @@ export class DiagnosticController {
     this.summary = new SimpleDialogueController({
       ...(options.summaryEvaluator === undefined ? {} : { evaluator: options.summaryEvaluator }),
       passages: this.passages,
-      ...(options.summaryLogDirectory === undefined ? {} : { logDirectory: options.summaryLogDirectory }),
+      // 요약 대화 기록은 본 서비스 로그가 아니라 진단 저장 폴더 아래에 둔다(인계 A (6)-1).
+      logDirectory: options.summaryLogDirectory ?? resolve(diagnosticRoot(), 'summary-logs'),
     });
   }
 

@@ -35,6 +35,25 @@ async function settle(c: DiagnosticController) {
 const post = (h: Harness, q: string, body: unknown) => h.c.submitItem(h.id, q, body);
 const selectionCalls = (h: Harness, q: string) => h.fb.calls.filter(call => call.questionId === q && call.mode === 'SELECTION').length;
 
+describe('요약 대화 기록 위치(인계 A (6)-1)', () => {
+  it('summaryLogDirectory를 주지 않으면 진단 저장 폴더 아래 summary-logs에 쓴다', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'diag-root-')); dirs.push(root);
+    const before = process.env['CSAT_DIAGNOSTIC_ROOT'];
+    process.env['CSAT_DIAGNOSTIC_ROOT'] = root;
+    try {
+      const fb = feedbackFake({ behavior: () => 'SUPPORTED' }); const diagnosis = diagnosisFake(); const judge = judgeFake();
+      const c = new DiagnosticController({ store: new MemoryStore(), feedbackEvaluator: fb.evaluator, summaryEvaluator, diagnosisTransport: diagnosis.transport, judgeTransport: judge.transport });
+      const id = c.create().participantId;
+      c.start(id, COG.passageId, { summary: true });
+      await c.summaryRespond(id, COG.passageId, { transitionId: 't1', paragraphIndex: 0, text: '이 문단은 동일론과 기능주의를 소개한다.' });
+      await settle(c);
+      expect(readFileSync(join(root, 'summary-logs', 'sessions.jsonl'), 'utf8')).toContain('동일론과 기능주의');
+    } finally {
+      if (before === undefined) delete process.env['CSAT_DIAGNOSTIC_ROOT']; else process.env['CSAT_DIAGNOSTIC_ROOT'] = before;
+    }
+  });
+});
+
 /** 요약 없이 지문을 시작해 모든 문항 답을 내고 answers-done까지 보낸다. */
 async function answerPassage(h: Harness, passage: typeof COG, answers: Record<string, ReturnType<typeof provided>>) {
   h.c.start(h.id, passage.passageId, { summary: false });

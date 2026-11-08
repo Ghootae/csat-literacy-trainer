@@ -36,6 +36,7 @@ export function FeedbackScreen({ load, send, nextLabel, next }: {
   const first = useRef(true);
   const chat = useRef<HTMLDivElement>(null);
   const response = useRef<HTMLTextAreaElement>(null);
+  const columns = useRef<HTMLDivElement>(null);
 
   function accept(nextView: DiagnosticFeedbackView) {
     if (first.current) { first.current = false; setRevealed(nextView.transcript.length); }   // 처음 열 때의 말풍선은 한 번에 보인다
@@ -67,6 +68,24 @@ export function FeedbackScreen({ load, send, nextLabel, next }: {
     }, 1500);
     return () => { active = false; window.clearInterval(timer); };
   }, [view?.evaluationStatus, busy]);
+  // 칠한 곳으로 그 칸만 스크롤한다(`ProblemLabApp.scrollToHighlight`와 같은 방식).
+  function scrollToHighlight(location: 'PASSAGE' | 'SCENARIO' | undefined) {
+    if (!location) return;
+    const target = columns.current?.querySelector<HTMLElement>(location === 'PASSAGE' ? '.source-pane .lab-highlight' : '.question-pane .lab-highlight');
+    if (!target) return;
+    let region = target.parentElement;
+    while (region && !(region.scrollHeight > region.clientHeight && /auto|scroll/.test(getComputedStyle(region).overflowY))) region = region.parentElement;
+    if (!region || region === document.body || region.clientHeight === 0) return;
+    const box = target.getBoundingClientRect(); const frame = region.getBoundingClientRect();
+    const top = region.scrollTop + box.top - frame.top - (region.clientHeight - box.height) / 2;
+    region.scrollTo({ top: Math.max(0, top), behavior: reducedMotion ? 'instant' : 'smooth' });
+  }
+  const correctionRevealed = !!view && sequence.visibleCount === view.transcript.length;
+  useEffect(() => { if (correctionRevealed) scrollToHighlight(view?.correctionHighlights[0]?.location); }, [view?.revision, pane, reducedMotion, correctionRevealed]);
+  // 마지막 설명 문단 말풍선: 보이는 것 중 가장 최근 문단의 칠할 곳을 지문·<보기>에 칠한다(lab `sectionMarks`와 같은 규칙).
+  const sectionBubble = view?.transcript.slice(0, sequence.visibleCount).findLast(m => m.phase === 'AWAITING_UNDERSTANDING' && m.sequence === 'SECTION' && m.highlights);
+  const sectionMarks = !view?.correctionHighlights.length && view?.phase === 'AWAITING_UNDERSTANDING' ? sectionBubble?.highlights ?? [] : [];
+  useEffect(() => { if (sectionMarks[0]) scrollToHighlight(sectionMarks[0].location); }, [sectionBubble?.id]);
   useEffect(() => {
     if (!waiting && !pending) return;
     const timer = window.setInterval(() => setWaitClock(clock => ({ ...clock, elapsedMs: Date.now() - clock.startedAt })), 1000);
@@ -118,17 +137,17 @@ export function FeedbackScreen({ load, send, nextLabel, next }: {
     <header className="workbench-header"><div className="lab-strip-lead"><h1 className="diag-header-title">{view.title} {view.questionNumber}번</h1></div></header>
     <nav className="workbench-tabs" aria-label="문제 화면 전환">{[['source', '지문'], ['problem', '문제'], ['chat', '대화']].map(([id, title]) =>
       <button key={id} aria-pressed={pane === id} onClick={() => setPane(id!)}>{title}</button>)}</nav>
-    <div className="workbench-columns">
-      <PassagePane question={question} highlights={view.correctionHighlights} />
+    <div className="workbench-columns" ref={columns}>
+      <PassagePane question={question} highlights={[...view.correctionHighlights, ...sectionMarks]} />
       <QuestionPane question={question} selectedId={choice ?? (selection ? null : view.selectedChoiceId)} enabled={view.phase === 'AWAITING_RESELECTION' && !waiting && !pending}
-        onPick={setChoice} highlights={view.correctionHighlights} />
+        onPick={setChoice} highlights={[...view.correctionHighlights, ...sectionMarks]} />
       <section className="workbench-pane chat-pane" aria-label="응답과 피드백">
         <header className="pane-header"><h2>생각을 나누는 공간</h2></header>
         <div className="chat-scroll lab-chat-scroll" ref={chat} aria-label="대화 기록">
           {view.transcript.slice(0, sequence.visibleCount).map(entry => <article className={`chat-message ${entry.role === 'STUDENT' ? 'student' : 'tutor'}${entry.kind === 'WAIT_DONE' ? ' lab-wait-done' : ''}`} key={entry.id}>
             <small>{entry.role === 'STUDENT' ? '나의 응답' : coachLabel(entry)}</small>
             {entry.kind === 'WAIT_DONE' ? <p>{entry.text}</p> : entry.role === 'COACH' ? <Markdown text={entry.text} /> : <p>{entry.text}</p>}
-            {correction && firstHighlight && entry.role === 'COACH' && entry.phase === 'AWAITING_CORRECTION' && entry.id === view.transcript.at(-1)?.id && <button onClick={() => setPane(firstHighlight.location === 'PASSAGE' ? 'source' : 'problem')}>지문에서 보기</button>}
+            {correction && firstHighlight && entry.role === 'COACH' && entry.phase === 'AWAITING_CORRECTION' && entry.id === view.transcript.at(-1)?.id && <button onClick={() => { setPane(firstHighlight.location === 'PASSAGE' ? 'source' : 'problem'); scrollToHighlight(firstHighlight.location); }}>지문에서 보기</button>}
           </article>)}
           {sequence.showDots && <article className="chat-message tutor lab-sequence-waiting" role="status" aria-label="다음 이야기 준비 중"><span className="lab-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></article>}
           {pendingText && !view.transcript.some(m => m.id === `student-${pending?.transitionId}`) && <article className="chat-message student"><small>나의 응답 · 전송 확인 중</small><p>{pendingText}</p></article>}

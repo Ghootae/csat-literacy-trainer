@@ -46,10 +46,12 @@ export interface DiagnosticStore {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 export const isParticipantId = (id: string) => UUID.test(id);
 const DEFAULT_ROOT = 'sessions/diagnostic';
+/** 진단 저장 폴더. 참가자 파일과 요약 대화 기록이 모두 이 아래에 놓인다. */
+export const diagnosticRoot = (): string => resolve(process.env['CSAT_DIAGNOSTIC_ROOT'] ?? resolve(process.cwd(), DEFAULT_ROOT));
 
 export class FileDiagnosticStore implements DiagnosticStore {
   private readonly root: string;
-  constructor(root: string = process.env['CSAT_DIAGNOSTIC_ROOT'] ?? resolve(process.cwd(), DEFAULT_ROOT)) { this.root = resolve(root); }
+  constructor(root: string = diagnosticRoot()) { this.root = resolve(root); }
   private path(participantId: string): string {
     if (!isParticipantId(participantId)) throw new Error('참가자 ID 형식이 올바르지 않습니다.');
     return resolve(this.root, `${participantId}.json`);
