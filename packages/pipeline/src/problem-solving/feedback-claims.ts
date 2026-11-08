@@ -290,8 +290,11 @@ function readingJudgment(assessment: any, options: ClaimsOptions) {
   const touched = claims.filter((c: any) => c.relation !== 'UNTOUCHED');
   const targets = touched.filter((c: any) => judgment.targetClaimIds.includes(c.claimId));
   const groundClaims = (assessment.studentClaims as any[]).filter(c => overlaps(c, ground));
+  // A student's reading of the choice inside the ground quote is not a source claim: only the fact claims must be CONSISTENT,
+  // and at least one fact claim must be there (판정 실험 2026-11-08, 사용자 결정 방안 A).
+  const factClaims = groundClaims.filter(c => c.sourceCheck !== 'CHOICE_READING');
   const claimsOk = negative ? targets.some(fits) : touched.length === claims.length && touched.every(fits);
-  const cellsSupported = ground.kind === 'FACT' && groundClaims.length > 0 && groundClaims.every(c => c.sourceCheck === 'CONSISTENT') && claimsOk && judgment.holds;
+  const cellsSupported = ground.kind === 'FACT' && factClaims.length > 0 && factClaims.every(c => c.sourceCheck === 'CONSISTENT') && claimsOk && judgment.holds;
   const supported = cellsSupported && assessment.contentAssessment !== 'INSUFFICIENT';
   const fitsAny = negative ? targets.some(fits) : false;
   const insufficiencyCase = supported ? null

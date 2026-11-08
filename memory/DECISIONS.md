@@ -270,3 +270,4 @@
 | [`D-0206`](./decisions/D-0206-gold-based-item-generation-experiment-design.md) | accepted | 골드 기반 문항 생성 E1(4지문 10문항 자리, A·A′·B 조건, 주 비교 A′ 대 B, sol 생성·luna·Gemini·DeepSeek Pro 선지별 풀이 검사, 지문 없음 기준선은 기출, 역연결은 관찰, 사용자 블라인드 40문항, 출처 추측 없음)과 E2 기준(원문 회차 간 범위 비교, T1 조합, 출처 묶음 먼저) 확정 | 사용자 "권고대로 진행". 지도 회차 간 천장 측정(b322269f) |
 | [`D-0209`](./decisions/D-0209-sns-diagnostic-student-wording.md) | accepted | SNS 진단 학생용 표현: 비틂 14종 이름·반말 한 줄 설명(6개 이름 변경), 기타는 "그 밖의 함정"으로 숨김, 관계 4갈래 학생용 이름·개수 표현, 바뀐 내용 문장은 한 번 생성·사람 손질 | 사용자 판정(1판 의견 → 2판 "확정") |
 | [`D-0210`](./decisions/D-0210-close-e1-hold-e2.md) | accepted | E1 골드 기반 문항 생성 닫음(정확성 천장, 골드의 문항 수준 이점 없음, 기출 차이는 원리 적용 추론), E2 보류, 원리 적용형 선지 생성은 차후 별도 과제 | 사용자 결정(v3 사전 성립 기준 미달 보고 뒤) |
+| [`D-0211`](./decisions/D-0211-ground-choice-reading-excluded-from-consistent.md) | accepted | 서버 충족 검사: 근거 인용 안 선지 읽기(CHOICE_READING)는 원문 대조 요구에서 빼고, 사실 주장 1개 이상·모두 CONSISTENT만 요구 | 사용자 결정(판정 원인 실험 보고 뒤, 방안 A) |

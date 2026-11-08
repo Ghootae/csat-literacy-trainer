@@ -1476,6 +1476,22 @@ describe('three-cell judgment (v5.3)', () => {
     it('the verdict direction other than the target skips the sufficiency check', () => {
       expect(judge(one('EXACT', 'VALID'), c, { targetVerdict: 'INVALID' })).toBeNull();
     });
+    // 판정 실험 2026-11-08(방안 A): 근거 인용 안의 선지 읽기(CHOICE_READING)는 원문 대조 요구에서 뺀다. 사실 주장은 하나 이상, 모두 CONSISTENT여야 한다.
+    it('a choice reading inside the ground quote does not block SUPPORTED when the fact claims are CONSISTENT (A-horse6)', () => {
+      const withReading = { ground: ground('FACT', '가나다 라마바'), studentClaims: [studentClaim('가나다', 'CHOICE_READING'), studentClaim('라마바')] };
+      expect(judge(one('EXACT', 'VALID', [], withReading), c, { targetVerdict: 'VALID' })).toBeNull();
+      expect(judge(one('WEAKER', 'INVALID', [], withReading), c, { targetVerdict: 'INVALID' })).toBeNull();
+    });
+    it('a ground quote with only choice readings stays INSUFFICIENT', () => {
+      const onlyReading = { ground: ground('FACT', '가나다'), studentClaims: [studentClaim('가나다', 'CHOICE_READING')] };
+      expect(judge(one('EXACT', 'VALID', [], { ...onlyReading, ...insufficient }), c, { targetVerdict: 'VALID' })).toBe('MISSING_LINK');
+      expect(() => judge(one('EXACT', 'VALID', [], onlyReading), c, { targetVerdict: 'VALID' })).toThrow(/SUPPORTED requires the three cells/);
+    });
+    it('a fact claim that is not CONSISTENT still blocks SUPPORTED next to a choice reading', () => {
+      const undetermined = { ground: ground('FACT', '가나다 라마바'), studentClaims: [studentClaim('가나다', 'CHOICE_READING'), studentClaim('라마바', 'UNDETERMINED')] };
+      expect(judge(one('EXACT', 'VALID', [], { ...undetermined, ...insufficient }), c, { targetVerdict: 'VALID' })).toBe('MISSING_LINK');
+      expect(() => judge(one('EXACT', 'VALID', [], undetermined), c, { targetVerdict: 'VALID' })).toThrow(/SUPPORTED requires the three cells/);
+    });
   });
 
   describe('no quote separation (D-0161 inheritance removed)', () => {
