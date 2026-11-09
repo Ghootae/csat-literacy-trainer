@@ -91,8 +91,8 @@
 │  │     판정 과적합 실험 완료, 서버 검사 고침(커밋 7e4b9a8b)               D-0211
 │  │     질문 규칙 방향 확정(인용·보기 출처 두 갈래·"표시한" 제한)          D-0212
 │  │     판정 흐름 (나): 정답의 질 3단계·버튼 둘·정답 sol(진단만)·문항별 열기   D-0213
-│  │     v5.9·v5.10 지시문·서버 규칙 준비(옵션, 기본 v5.8)               D-0214
-│  │     다음: 시험 스크립트 → 전송 승인(v5.9 $4, v5.10 $10)              Q-0044
+│  │     v5.9·v5.10 시험 완료, 채택 후보 v5.10 하나, lab은 v5.8 보류     D-0214·D-0216
+│  │     다음: 질문 블라인드 판정(사용자) → 진단평가 기본값 v5.10        Q-0044
 │  │     L 재측정 보류(사용자). 다음: 대기 줄이기 판단. 공개 전: 바뀐 내용 문장·추천 대응표·훈련 서비스 주소·복사 기준
 │  └─✓ 기본 세트 E 16문항 자료 완성(판정 묶음·분석 골드·선지 연결 동결)     D-0201
 │
@@ -159,6 +159,7 @@
 | CP-F | [K4 판정 재설계 논의](./checkpoints/2026-10-27-k4-judgment-redesign-discussion.md), [논의 메모](../docs/reports/REPORT-k4-v51-judgment-review-human.md) |
 | CP-D | [실모델 확인](./checkpoints/2026-10-11-v5-live-connection-test.md), [48개 세션 기록](./checkpoints/2026-10-12-v5-diverse-48-recorded.md) |
 | CP-J | [원리 적용형 설계 시작](./checkpoints/2026-11-07-principle-application-start.md), [E1 v3 작동 방식 사례](../docs/reports/e1-v3-mechanism-walkthrough-2026-11-07.md) |
+| D-0216 | [v5.10 단일 후보·진단 먼저·lab 보류](./decisions/D-0216-v510-single-candidate-diagnostic-first-lab-held.md) |
 
 ## 갱신 규칙
 
