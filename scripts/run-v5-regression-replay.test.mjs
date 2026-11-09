@@ -141,3 +141,13 @@ test('--incorrect-model: 오답 선택(REPAIR 아님)만 지정 모델, 정답 �
   assert.equal(await plain.evaluate(sess('SELECTION', 'C2')), 'default');
   assert.equal(made.length, 1); assert.ok(!('model' in made[0]) && !('endLayout' in made[0]));
 });
+
+test('--judgment-rules: 모든 평가기 옵션에 judgmentRules가 들어가고, 없으면 키 자체가 없다', async () => {
+  const made = [];
+  class Fake { constructor(o) { this.o = o; made.push(o); } async evaluate() { return 'ok'; } }
+  makeRoutedEvaluator({ promptPath: 'p', promptVersion: 'v', incorrectModel: 'gpt-6.1-sol', judgmentRules: 'v5.10', transport: {} }, Fake);
+  assert.ok(made.length === 2 && made.every(o => o.judgmentRules === 'v5.10'));
+  made.length = 0;
+  makeRoutedEvaluator({ promptPath: 'p', promptVersion: 'v', transport: {} }, Fake);
+  assert.ok(made.length === 1 && !('judgmentRules' in made[0]));
+});

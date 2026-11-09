@@ -5,7 +5,7 @@
 - 실행: executor 하위 에이전트(sonnet)
 - 관련 결정: [`D-0213`](../../memory/decisions/D-0213-diagnostic-judgment-split-option-na.md)(이 작업의 설계 근거), [`D-0204`](../../memory/decisions/D-0204-sns-diagnostic-keeps-service-feedback.md)(진단은 본 서비스 피드백 부품을 그대로 씀), [`D-0209`](../../memory/decisions/D-0209-sns-diagnostic-student-wording.md)(학생용 표현)
 - 배경 문서(읽기만): [`2026-11-09-judgment-split-option-na.md`](./2026-11-09-judgment-split-option-na.md)(웹 인계, 머리의 "검토 반영" 요약이 우선), [경로 트리](../reports/problem-solving-path-tree-2026-11-09.html)
-- 2부(나중, 이 문서 범위 밖): 범주 5(확신 없이 맞힘)의 힌트 흐름. 힌트 규칙과 힌트 뒤 판정 기준이 정해진 뒤 따로 인계한다.
+- 2부(나중, 이 문서 범위 밖): 범주 5(확신 없이 맞힘)의 힌트 흐름. 힌트 규칙과 힌트 뒤 판정 기준이 정해진 뒤 따로 인계한다. **2부 인계에 넣을 것: 힌트 뒤 판정이 판정 불가(UNKNOWN)여도 부족·오류처럼 마지막 설명(정답 설명)을 공개한다(D-0213 추가, 11-09).**
 
 ## 목표
 
