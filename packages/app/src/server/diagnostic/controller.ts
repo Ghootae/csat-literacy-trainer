@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { basename, dirname, resolve } from 'node:path';
 import { z, ZodError } from 'zod/v4';
 import {
-  FeedbackRationaleSchema, combineRound, createFeedbackSession, createOpenAiTransport, diagnoseThought,
+  FeedbackRationaleSchema, OpenAIFeedbackEvaluator, combineRound, createFeedbackSession, createOpenAiTransport, diagnoseThought,
   judgeUnit, loadJudgePrompts, loadPositionData, loadThoughtDiagnosisPrompts, participantPosition, unitsForParagraph,
   type FeedbackEvaluator, type FeedbackTransport, type ParticipantPosition, type SimpleEvaluator,
 } from '@csat/pipeline';
@@ -41,6 +41,8 @@ export const DiagnosticItemRequestSchema = z.object({
   rationale: FeedbackRationaleSchema,
   solveMs: z.number().int().nonnegative(),
   rationaleMs: z.number().int().nonnegative().nullable(),
+  /** 근거를 생략하면 SURE·UNSURE 필수, 근거를 쓰면 null(없으면 null). */
+  confidence: z.enum(['SURE', 'UNSURE']).nullable().default(null),
 }).strict();
 export const DiagnosticStartSchema = z.object({ summary: z.boolean() }).strict();
 export const DiagnosticFeedbackRequestSchema = FeedbackRequestSchema;
@@ -49,6 +51,15 @@ export const ITEM_REVIEW_LINE = '이 문항은 우리가 한 번 더 확인해 �
 export const OMITTED_WRONG_RATIONALE_LINE = '정답이 아니야. 어떻게 판단했는지 적어 주면 같이 볼게. 적기 어려우면 [근거 미제출]을 눌러 줘.';
 const ORDINALS = ['첫', '두', '세', '네', '다섯'];
 const NUMERALS = '①②③④⑤';
+
+/** 진단의 선택 판정 모델(D-0213 6): 정답·오답 모두 sol. 교정 판정(REPAIR)은 평가기 기본값(luna)을 따른다. */
+export const DIAGNOSTIC_SELECTION_MODELS = { correct: 'gpt-6.1-sol', incorrect: 'gpt-6.1-sol' } as const;
+/** 결과 화면 정답의 질 표시 단계(D-0213 2). 2면 범주 1·2를 화면에서 합친다. 기록은 바뀌지 않는다. */
+export const DIAGNOSTIC_CORRECT_QUALITY_TIERS: 3 | 2 = 3;
+
+/** 첫 응답 기준 범주(D-0213). 판정 기록은 늘 세부 값을 남기고, 이 값은 거기서 계산한다. */
+export type AnswerCategory = 'WRONG' | 'SURE_CORRECT' | 'UNSURE_CORRECT' | 'PENDING' | 'CHECKING' | 'UNVERIFIED' | 'ERROR_CORRECT' | 'SUPPORTED_CORRECT' | 'WEAK_CORRECT';
+const ANSWER_CATEGORIES: readonly AnswerCategory[] = ['WRONG', 'SURE_CORRECT', 'UNSURE_CORRECT', 'PENDING', 'CHECKING', 'UNVERIFIED', 'ERROR_CORRECT', 'SUPPORTED_CORRECT', 'WEAK_CORRECT'];
 
 type Participant = DiagnosticParticipant;
 type ItemState = Participant['items'][string];
@@ -87,7 +98,7 @@ export interface DiagnosticControllerOptions {
 export interface DiagnosticItemView {
   questionId: string; questionNumber: number; content: ProblemContentView;
 }
-export type DiagnosticFeedbackView = FeedbackWorkbenchView & { skippable: boolean };
+export type DiagnosticFeedbackView = FeedbackWorkbenchView & { skippable: boolean; judgmentPending?: boolean };
 
 export class DiagnosticController {
   private readonly store: DiagnosticStore;
@@ -139,7 +150,7 @@ export class DiagnosticController {
     this.diagnosisTransport = options.diagnosisTransport ?? createOpenAiTransport();
     this.judgeTransport = options.judgeTransport ?? createOpenAiTransport();
     this.feedback = new ProblemFeedbackController({
-      ...(options.feedbackEvaluator === undefined ? {} : { evaluator: options.feedbackEvaluator }),
+      evaluator: options.feedbackEvaluator ?? new OpenAIFeedbackEvaluator({ selectionModels: DIAGNOSTIC_SELECTION_MODELS }),
       withoutInstantBubble: true,
       save: record => this.onFeedbackRecord(record),
     });
@@ -171,7 +182,7 @@ export class DiagnosticController {
         firstTurns: Object.fromEntries(this.content(passage.passageId).paragraphs.map(q => [q.paragraphId, null])), feedbackCursor: 0 };
       for (const questionId of passage.questionIds) {
         p.items[questionId] = { draft: null, first: null, session: null, transcript: [],
-          firstJudgment: { status: 'NONE', attempts: 0, contentAssessment: null, boundary: null },
+          firstJudgment: { status: 'NONE', attempts: 0, contentAssessment: null, boundary: null, reconstructability: null, consistency: null },
           thoughtDiagnosis: { status: 'NONE', output: null }, reviewFlag: null };
       }
     }
@@ -233,11 +244,11 @@ export class DiagnosticController {
   // ---------- 문항 답 ----------
 
   /** 새로 고침 뒤 이어 가기: 답 입력 중인 지문의 문항과 임시 답. 정오는 없다. */
-  answerDrafts(participantId: string, passageId: string): { questions: DiagnosticItemView[]; drafts: Record<string, { choiceId: string; rationale: ItemAnswer['rationale'] } | null> } {
+  answerDrafts(participantId: string, passageId: string): { questions: DiagnosticItemView[]; drafts: Record<string, { choiceId: string; rationale: ItemAnswer['rationale']; confidence: NonNullable<ItemAnswer['confidence']> | null } | null> } {
     const p = this.require(participantId); const passage = this.passage(passageId); const state = p.passages[passageId]!;
     if (state.status !== 'ANSWERING') fail(409, '지금은 답을 입력하는 지문이 아닙니다.');
     return { questions: this.questions(passage),
-      drafts: Object.fromEntries(passage.questionIds.map(id => { const draft = p.items[id]!.draft; return [id, draft ? { choiceId: draft.choiceId, rationale: draft.rationale } : null]; })) };
+      drafts: Object.fromEntries(passage.questionIds.map(id => { const draft = p.items[id]!.draft; return [id, draft ? { choiceId: draft.choiceId, rationale: draft.rationale, confidence: draft.confidence ?? null } : null]; })) };
   }
 
   /** 답을 draft로 저장만 한다. 풀이 상태도 판정도 만들지 않고, 응답에는 정오·판정이 없다. */
@@ -250,11 +261,13 @@ export class DiagnosticController {
     if (state.status !== 'ANSWERING') fail(409, '지금은 이 문항의 답을 낼 수 없습니다.');
     if (!this.bundle(questionId).source.choices.some(c => c.choiceId === body.choiceId)) fail(400, '존재하지 않는 선지입니다.');
     if (body.rationale.mode === 'OMITTED' && body.rationaleMs !== null) fail(400, '근거를 생략하면 rationaleMs는 null이어야 합니다.');
+    if (body.rationale.mode === 'OMITTED' && body.confidence === null) fail(400, '근거를 생략하면 confidence(SURE·UNSURE)가 필요합니다.');
+    if (body.rationale.mode === 'PROVIDED' && body.confidence !== null) fail(400, '근거를 쓰면 confidence는 null이어야 합니다.');
     const item = p.items[questionId]!;
     const revisionOfDraft = item.draft ? (item.draft as { revision?: number }).revision! + 1 : 0;
     item.draft = { ...body, savedAt: new Date().toISOString(), revision: revisionOfDraft } as ItemState['draft'];
     this.event('ITEM_SUBMITTED', p, { questionId, passageId: passage.passageId, choiceId: body.choiceId, rationale: body.rationale,
-      solveMs: body.solveMs, rationaleMs: body.rationaleMs, revisionOfDraft });
+      solveMs: body.solveMs, rationaleMs: body.rationaleMs, confidence: body.confidence, revisionOfDraft });
     this.requestSave(p);
     return { saved: true };
   }
@@ -278,7 +291,7 @@ export class DiagnosticController {
       this.sessionIndex.set(session.sessionId, { participantId, questionId });
       this.feedback.adopt(session, []);
       const provided = item.first.rationale.mode === 'PROVIDED';
-      if (provided) item.firstJudgment = { status: 'PENDING', attempts: 1, contentAssessment: null, boundary: null };
+      if (provided) item.firstJudgment = { status: 'PENDING', attempts: 1, contentAssessment: null, boundary: null, reconstructability: null, consistency: null };
       void this.feedback.submit(session.sessionId, { transitionId: `${questionId}:select`, expectedRevision: 0,
         command: { type: 'SELECT', choiceId: item.first.choiceId, rationale: item.first.rationale } });
       if (provided) started.push(questionId);
@@ -290,32 +303,29 @@ export class DiagnosticController {
     return { position: this.position(p)! };
   }
 
+  /** "답 입력 마침" 뒤 언제나 ready. 정답 수·위치는 정오만으로 정해져 바로 싣고, 근거 결과는 판정이 끝난 범주부터 채워진다. */
   summaryCard(participantId: string, passageId: string) {
     const p = this.require(participantId); const passage = this.passage(passageId); const state = p.passages[passageId]!;
     if (state.status === 'NOT_STARTED' || state.status === 'SUMMARY' || state.status === 'ANSWERING') fail(409, '아직 답 입력을 마치지 않은 지문입니다.');
     const items = passage.questionIds.map(id => ({ id, item: p.items[id]! }));
-    if (items.some(({ item }) => item.firstJudgment.status === 'PENDING')) return { status: 'pending' as const };
-    let correct = 0; let supported = 0; let denominator = 0; let omitted = 0; let checking = 0;
+    const counts = Object.fromEntries(ANSWER_CATEGORIES.map(category => [category, 0])) as Record<AnswerCategory, number>;
+    let correct = 0;
     const cards = items.map(({ id, item }) => {
       const isCorrect = this.isCorrect(item); if (isCorrect) correct++;
-      let quality: 'SUPPORTED' | 'NOT_SUPPORTED' | 'CHECKING' | null = null;
-      if (item.first!.rationale.mode === 'OMITTED') omitted++;
-      else if (item.firstJudgment.status === 'FAILED' || (item.firstJudgment.boundary !== null && item.firstJudgment.boundary !== 'NONE')) { checking++; quality = 'CHECKING'; }
-      else {
-        denominator++;
-        quality = isCorrect && item.firstJudgment.contentAssessment === 'SUPPORTED' ? 'SUPPORTED' : 'NOT_SUPPORTED';
-        if (quality === 'SUPPORTED') supported++;
-      }
-      return { questionId: id, questionNumber: this.set.items[id]!.questionNumber, correct: isCorrect, rationale: item.first!.rationale.mode, quality };
+      const category = this.answerCategory(item); counts[category]++;
+      return { questionId: id, questionNumber: this.set.items[id]!.questionNumber, correct: isCorrect, rationale: item.first!.rationale.mode, category };
     });
-    return { status: 'ready' as const, correct, total: items.length, supported, rationaleDenominator: denominator, omitted, checking, items: cards, position: this.position(p)! };
+    return { status: 'ready' as const, correct, total: items.length, qualityTiers: DIAGNOSTIC_CORRECT_QUALITY_TIERS, judging: counts.PENDING,
+      firstItemOpen: state.status !== 'AWAITING_JUDGMENT', counts, items: cards, position: this.position(p)! };
   }
 
   // ---------- 문항별 피드백 ----------
 
   feedbackView(participantId: string, questionId: string): DiagnosticFeedbackView {
     const p = this.require(participantId); const { index } = this.feedbackTarget(p, questionId, 'read');
-    return this.itemView(p, questionId, index);
+    const view = this.itemView(p, questionId, index);
+    // 커서 문항의 첫 판정이 아직이면 대기 보기를 돌려준다(학생이 누를 수 있는 명령 없이 판정이 끝나길 기다린다).
+    return this.itemOpen(p, questionId) ? view : { ...view, evaluationStatus: 'PROCESSING', judgmentPending: true };
   }
 
   async feedbackSubmit(participantId: string, questionId: string, raw: unknown): Promise<DiagnosticFeedbackView> {
@@ -343,6 +353,7 @@ export class DiagnosticController {
     for (const item of items) for (const t of item.twist ?? []) twistCounts[t.twistType] = (twistCounts[t.twistType] ?? 0) + 1;
     const position = this.position(p);
     return {
+      qualityTiers: DIAGNOSTIC_CORRECT_QUALITY_TIERS,
       position: position === null ? { status: 'pending' as const }
         : { status: 'ready' as const, answered: position.answered, correct: position.correct, percentile: position.percentile, grade: position.grade, byPassage: this.positionByPassage(p) },
       items,
@@ -543,7 +554,8 @@ export class DiagnosticController {
     if (!item.first || item.first.rationale.mode !== 'PROVIDED' || !item.session) return;
     const first = item.session.assessments[0];
     if (!first || first.mode !== 'SELECTION' || item.firstJudgment.status === 'READY') return;
-    item.firstJudgment = { status: 'READY', attempts: item.firstJudgment.attempts, contentAssessment: first.contentAssessment, boundary: first.boundary };
+    item.firstJudgment = { status: 'READY', attempts: item.firstJudgment.attempts, contentAssessment: first.contentAssessment, boundary: first.boundary,
+      reconstructability: first.reconstructability, consistency: item.session.selectionComparisons[0]?.selectionRationaleConsistency ?? null };
     if (first.boundary !== 'NONE') item.reviewFlag = 'BOUNDARY';
     // 상태기계가 ITEM_REVIEW로 보내는 조건과 같다(오답 + SUPPORTED + 선택-근거 일치). 불일치는 교정 질문으로 가는 정상 경로다.
     else if (!this.isCorrect(item) && first.contentAssessment === 'SUPPORTED' && item.session.selectionComparisons[0]?.selectionRationaleConsistency === 'CONSISTENT') item.reviewFlag = 'WRONG_SUPPORTED';
@@ -612,10 +624,28 @@ export class DiagnosticController {
     this.requestSave(p);
   }
 
+  /** 문항의 피드백이 열리는 조건: 첫 판정이 진행 중이 아니다(근거 생략 문항은 판정이 없어 바로 열림). */
+  private itemOpen(p: Participant, questionId: string): boolean {
+    return p.items[questionId]!.firstJudgment.status !== 'PENDING';
+  }
+
+  /** 범주 표(D-0213, 인계 (4)): 위에서부터 처음 맞는 줄이다. */
+  private answerCategory(item: ItemState): AnswerCategory {
+    if (!this.isCorrect(item)) return 'WRONG';
+    const first = item.first!; const judgment = item.firstJudgment;
+    if (first.rationale.mode === 'OMITTED') return (first.confidence ?? 'SURE') === 'UNSURE' ? 'UNSURE_CORRECT' : 'SURE_CORRECT';
+    if (judgment.status !== 'READY' && judgment.status !== 'FAILED') return 'PENDING';
+    if (judgment.status === 'FAILED' || (judgment.boundary !== null && judgment.boundary !== 'NONE')) return 'CHECKING';
+    // 옛 파일에는 reconstructability가 없다. 판정 불가 판정의 contentAssessment는 UNKNOWN이므로 함께 본다.
+    if (judgment.reconstructability === 'UNKNOWN' || judgment.contentAssessment === 'UNKNOWN') return 'UNVERIFIED';
+    if (judgment.contentAssessment === 'ERROR' || judgment.consistency === 'MISMATCH') return 'ERROR_CORRECT';
+    return judgment.contentAssessment === 'SUPPORTED' ? 'SUPPORTED_CORRECT' : 'WEAK_CORRECT';
+  }
+
   private checkPassageReady(p: Participant, passageId: string): void {
     const state = p.passages[passageId]!;
     if (state.status !== 'AWAITING_JUDGMENT') return;
-    if (this.passage(passageId).questionIds.some(id => p.items[id]!.firstJudgment.status === 'PENDING')) return;
+    if (!this.itemOpen(p, this.passage(passageId).questionIds[0]!)) return;
     state.status = 'FEEDBACK'; state.feedbackCursor = 0;
     this.requestSave(p);
   }
@@ -628,7 +658,10 @@ export class DiagnosticController {
     if (!passage) return fail(404, '등록되지 않은 문항입니다.');
     const state = p.passages[passage.passageId]!; const index = passage.questionIds.indexOf(questionId);
     const readable = (state.status === 'FEEDBACK' || state.status === 'DONE') && index <= (state.status === 'DONE' ? Infinity : state.feedbackCursor);
-    if (state.status === 'FEEDBACK' && index === state.feedbackCursor) return { index };
+    if (state.status === 'FEEDBACK' && index === state.feedbackCursor) {
+      if (mode === 'write' && !this.itemOpen(p, questionId)) fail(409, '이 문항의 판정이 아직 끝나지 않았습니다.');
+      return { index };
+    }
     if (mode === 'read' && readable) return { index };
     return fail(409, '지금은 이 문항의 피드백 차례가 아닙니다.');
   }
@@ -697,7 +730,7 @@ export class DiagnosticController {
       correctRate: meta.megastudy.correctRate };
     const afterFeedback = { corrected: session.correctionSucceeded, skipped: session.result?.skipped === true };
     const base = { questionId, passageId: passage.passageId, questionNumber: meta.questionNumber, chosenPosition: chosen.position,
-      correct, rationale: first.rationale.mode, megastudy, afterFeedback };
+      correct, rationale: first.rationale.mode, category: this.answerCategory(item), megastudy, afterFeedback };
     if (review) {
       return { ...base, review: true as const, answerPosition: null, judgment: { status: 'pending' as Box, contentAssessment: null, boundary: null },
         twist: null, thoughtDiagnosis: null, evidence: null, summaryLink: null };

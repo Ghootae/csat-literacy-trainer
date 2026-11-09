@@ -844,6 +844,36 @@ describe('developer connection contracts', () => {
       expect(() => assess(r, { ...repair(r), coaching: '설명' })).toThrow();
     });
   });
+  const selectionModels = { correct: 'sol-correct', incorrect: 'sol-incorrect' };
+  const selectionRequests = async (choiceId: string, options: { model?: string } = {}) => {
+    const s = selection(choiceId); const a = output(s, { rationaleImpliedVerdict: 'VALID' });
+    const requests: any[] = [];
+    await new OpenAIFeedbackEvaluator({ ...options, selectionModels, transport: { async create(r) {
+      requests.push(r); return response(requests.length === 1 ? withClaims(a, s)
+        : { rationaleImpliedVerdict: 'VALID', studentEvidence: a.studentEvidence, reason: '학생의 판단을 확인했어요.' });
+    } } }).evaluate(s);
+    return requests.map(r => r.model);
+  };
+  it('selectionModels sets the SELECTION model by last choice correctness', async () => {
+    expect(await selectionRequests('C5')).toEqual(['sol-correct', 'sol-correct']);
+    expect(await selectionRequests('C4')).toEqual(['sol-incorrect', 'sol-incorrect']);
+  });
+  it('options.model still wins over selectionModels', async () => {
+    expect(await selectionRequests('C5', { model: 'override' })).toEqual(['override', 'override']);
+  });
+  it('selectionModels sets the correct-choice END_EXPLANATION model', async () => {
+    const s = pending(true, 'COACHING_REQUESTED', true); const requests: any[] = [];
+    await new OpenAIFeedbackEvaluator({ selectionModels, transport: { async create(r) {
+      requests.push(r); return response(sections(s, endText));
+    } } }).evaluate(s);
+    expect(requests.map(r => r.model)).toEqual(['sol-correct']);
+  });
+  it('selectionModels keeps REPAIR on luna', async () => {
+    const s = reply(questioned('C5')); const a = repair(s); a.repairs[0]!.status = 'REMAINING';
+    const requests: any[] = [];
+    await new OpenAIFeedbackEvaluator({ selectionModels, transport: { async create(r) { requests.push(r); return response(a); } } }).evaluate(s);
+    expect(requests.map(r => r.model)).toEqual(['gpt-6-luna']);
+  });
   for (const mode of ['SELECTION', 'REPAIR', 'END_EXPLANATION'] as const) it(`explicit model override applies to ${mode} and retries`, async () => {
     const s = mode === 'SELECTION' ? selection() : mode === 'REPAIR' ? reply(questioned()) : pending();
     const requests: any[] = [];

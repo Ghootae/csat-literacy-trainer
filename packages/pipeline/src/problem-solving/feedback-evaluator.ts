@@ -93,13 +93,13 @@ export const FEEDBACK_REPAIR_MODEL = 'gpt-6-luna';
 
 export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
   private client: OpenAI | undefined;
-  constructor(private readonly options: { model?: string; timeoutMs?: number; maxOutputTokens?: number; maxRetries?: number; transport?: FeedbackTransport; endLayout?: EndExplanationLayout; promptPath?: string; promptVersion?: string } = {}) {}
+  constructor(private readonly options: { model?: string; selectionModels?: { correct: string; incorrect: string }; timeoutMs?: number; maxOutputTokens?: number; maxRetries?: number; transport?: FeedbackTransport; endLayout?: EndExplanationLayout; promptPath?: string; promptVersion?: string } = {}) {}
   async evaluate(s: FeedbackSession): Promise<FeedbackEvaluationCall> {
     const started = performance.now();
     const attempts: NonNullable<FeedbackEvaluationCall['metadata']['attempts']> = [];
     const correct = s.selections.at(-1)?.choiceId === s.source.answerChoiceId;
     const end = s.evaluationMode === 'END_EXPLANATION';
-    const model = this.options.model ?? (s.evaluationMode === 'REPAIR' ? FEEDBACK_REPAIR_MODEL : FEEDBACK_SELECTION_MODELS[correct ? 'correct' : 'incorrect']);
+    const model = this.options.model ?? (s.evaluationMode === 'REPAIR' ? FEEDBACK_REPAIR_MODEL : (this.options.selectionModels ?? FEEDBACK_SELECTION_MODELS)[correct ? 'correct' : 'incorrect']);
     let candidate: unknown = null;
     let validationFeedback: string | null = null;
     const aggregate = (): FeedbackEvaluationCall => ({

@@ -1,27 +1,33 @@
 import { gradeOfPercentile as serverGrade } from '@csat/pipeline';
 import { describe, expect, it } from 'vitest';
 import {
-  answerQuality, branchRows, gradeOfPercentile, hasPending, sourceLocationName, cardStepName, cardTwists, cellState, circledObject, eulReul, focusRationale, gradeText, layerSentence, newTimer, passageResultSentence,
+  answerPayload, answerQuality, branchRows, categoryTally, countCategories, toggleConfidence, gradeOfPercentile, hasPending, sourceLocationName, cardStepName, cardTwists, cellState, circledObject, eulReul, focusRationale, gradeText, layerSentence, newTimer, passageResultSentence,
   rangeBar, recommendationLines, solveStats, startTimer, stepTendency, stopTimer, summaryLinkSentence, sumCounts, timerValues, twistTags, zOfPercentile,
 } from './logic.js';
-import type { ReadingCounts, ResultItem } from './types.js';
+import type { AnswerCategory, ReadingCounts, ResultItem } from './types.js';
 
 const item = (over: Partial<ResultItem> = {}): ResultItem => ({
-  questionId: 'q', passageId: 'p', questionNumber: 12, chosenPosition: 2, correct: true, rationale: 'PROVIDED', megastudy: { chosenPercents: [4, 2], correctRate: [70, 80] },
+  questionId: 'q', passageId: 'p', questionNumber: 12, chosenPosition: 2, correct: true, rationale: 'PROVIDED', category: 'SUPPORTED_CORRECT', megastudy: { chosenPercents: [4, 2], correctRate: [70, 80] },
   afterFeedback: { corrected: false, skipped: false }, review: false, answerPosition: 1,
   judgment: { status: 'ready', contentAssessment: 'SUPPORTED', boundary: 'NONE' }, twist: null, thoughtDiagnosis: null, evidence: null, summaryLink: null, ...over });
 
+const counts = (over: Partial<Record<AnswerCategory, number>> = {}): Record<AnswerCategory, number> => ({ ...countCategories([]), ...over });
 describe('지문 결과 문장', () => {
-  it('기본·근거 문장·괄호(근거 생략·확인 중)를 규칙대로 만든다', () => {
-    const card = { total: 5, correct: 4, rationaleDenominator: 4, supported: 3, omitted: 1, checking: 0 };
-    expect(passageResultSentence(card)).toBe('이 지문의 5문항 중 4개를 맞혔어. 근거를 쓴 4개 중 3개가 적절했어(1개는 근거 생략).');
-    expect(passageResultSentence({ ...card, checking: 2 })).toBe('이 지문의 5문항 중 4개를 맞혔어. 근거를 쓴 4개 중 3개가 적절했어(1개는 근거 생략, 2개는 확인 중이야).');
-    expect(passageResultSentence({ ...card, omitted: 0 })).toBe('이 지문의 5문항 중 4개를 맞혔어. 근거를 쓴 4개 중 3개가 적절했어.');
-    expect(passageResultSentence({ ...card, omitted: 0, checking: 1 })).toBe('이 지문의 5문항 중 4개를 맞혔어. 근거를 쓴 4개 중 3개가 적절했어(1개는 확인 중이야).');
+  const card = { total: 5, correct: 4, qualityTiers: 3 as const, judging: 0, counts: counts({ SUPPORTED_CORRECT: 2, WEAK_CORRECT: 1, SURE_CORRECT: 1, WRONG: 1 }) };
+  it('정답 수를 먼저 말하고 근거를 쓴 정답(범주 1·2·3) 중 근거가 정확한 개수를 센다. 범주 4는 괄호로만 붙는다', () => {
+    expect(passageResultSentence(card)).toBe('이 지문의 5문항 중 4개를 맞혔어. 근거를 쓴 정답 3개 중 2개는 근거도 정확했어(1개는 확실하다고 한 정답).');
   });
-  it('근거를 쓴 문항이 없으면 근거 문장 없이 괄호가 첫 문장에 붙는다', () => {
-    expect(passageResultSentence({ total: 5, correct: 2, rationaleDenominator: 0, supported: 0, omitted: 5, checking: 0 })).toBe('이 지문의 5문항 중 2개를 맞혔어(5개는 근거 생략).');
-    expect(passageResultSentence({ total: 5, correct: 2, rationaleDenominator: 0, supported: 0, omitted: 0, checking: 0 })).toBe('이 지문의 5문항 중 2개를 맞혔어.');
+  it('2단계면 범주 1·2를 합쳐 센다', () => {
+    expect(passageResultSentence({ ...card, qualityTiers: 2 })).toBe('이 지문의 5문항 중 4개를 맞혔어. 근거를 쓴 정답 3개 중 3개는 근거가 확인되는 정답이야(1개는 확실하다고 한 정답).');
+  });
+  it('판정 중이면 한 줄을 붙이고, 판정이 끝난 범주만 센다', () => {
+    expect(passageResultSentence({ ...card, judging: 2, counts: counts({ SUPPORTED_CORRECT: 1, PENDING: 2, WRONG: 2 }), correct: 3 }))
+      .toBe('이 지문의 5문항 중 3개를 맞혔어. 근거를 쓴 정답 1개 중 1개는 근거도 정확했어. 근거는 살펴보는 중이야.');
+    expect(passageResultSentence({ ...card, judging: 5, counts: counts({ PENDING: 5 }), correct: 5 })).toBe('이 지문의 5문항 중 5개를 맞혔어. 근거는 살펴보는 중이야.');
+  });
+  it('확신 없이 맞힘·확인 못 함·확인 중은 괄호로 개수만 붙는다', () => {
+    expect(passageResultSentence({ ...card, counts: counts({ SUPPORTED_CORRECT: 1, UNSURE_CORRECT: 1, UNVERIFIED: 1, CHECKING: 2 }), correct: 5 }))
+      .toBe('이 지문의 5문항 중 5개를 맞혔어. 근거를 쓴 정답 1개 중 1개는 근거도 정확했어(1개는 확신 없이 맞힌 정답, 1개는 근거로 풀이를 확인하지 못했어, 2개는 확인 중이야).');
   });
 });
 
@@ -38,11 +44,26 @@ describe('등급 문구와 위치 막대', () => {
 });
 
 describe('② 숫자·단계·함정', () => {
-  it('근거 분모에서 review·확인 중(판정 중·실패·boundary)·근거 생략을 뺀다', () => {
-    const items = [item(), item({ correct: false }), item({ review: true, correct: false }), item({ rationale: 'OMITTED' }),
-      item({ judgment: { status: 'pending', contentAssessment: null, boundary: null } }), item({ judgment: { status: 'ready', contentAssessment: 'UNKNOWN', boundary: 'MISSING_SOURCE' } }),
-      item({ judgment: { status: 'ready', contentAssessment: 'INSUFFICIENT', boundary: 'NONE' } })];
-    expect(solveStats(items, 16)).toEqual({ correct: 5, total: 16, supported: 1, rationaleDenominator: 3, omitted: 1 });
+  it('정답의 질 분모는 범주 1·2·3만 세고, 범주 4·5·확인 못 함은 개수만 따로 센다(확인 중·판정 중·오답은 어디에도 넣지 않는다)', () => {
+    const items = [item(), item({ category: 'WEAK_CORRECT' }), item({ category: 'ERROR_CORRECT' }), item({ category: 'SURE_CORRECT', rationale: 'OMITTED' }),
+      item({ category: 'UNSURE_CORRECT', rationale: 'OMITTED' }), item({ category: 'UNVERIFIED' }), item({ category: 'CHECKING' }), item({ category: 'PENDING' }),
+      item({ category: 'WRONG', correct: false }), item({ category: 'WRONG', correct: false, review: true })];
+    expect(solveStats(items, 16)).toEqual({ correct: 8, total: 16, accurate: 1, qualityDenominator: 3, sure: 1, unsure: 1, unverified: 1 });
+    expect(solveStats(items, 16, 2)).toEqual({ correct: 8, total: 16, accurate: 2, qualityDenominator: 3, sure: 1, unsure: 1, unverified: 1 });
+  });
+  it('2단계 표시: 범주 1·2는 같은 칸으로 합치고 범주 3은 따로 둔다', () => {
+    const tally = (tiers: 3 | 2) => categoryTally(counts({ SUPPORTED_CORRECT: 2, WEAK_CORRECT: 3, ERROR_CORRECT: 1 }), tiers);
+    expect(tally(3)).toMatchObject({ accurate: 2, weak: 3, error: 1, denominator: 6 });
+    expect(tally(2)).toMatchObject({ accurate: 5, weak: 0, error: 1, denominator: 6 });
+    expect(answerQuality(item({ category: 'SUPPORTED_CORRECT' }), 2)).toBe(answerQuality(item({ category: 'WEAK_CORRECT' }), 2));
+    expect(answerQuality(item({ category: 'SUPPORTED_CORRECT' }), 3)).not.toBe(answerQuality(item({ category: 'WEAK_CORRECT' }), 3));
+  });
+  it('근거 없는 응답 두 버튼은 배타적이고, 저장 요청에 눌린 쪽의 확신 값이 실린다', () => {
+    expect(toggleConfidence(null, 'SURE')).toBe('SURE'); expect(toggleConfidence('SURE', 'UNSURE')).toBe('UNSURE');
+    expect(toggleConfidence('UNSURE', 'UNSURE')).toBeNull(); expect(toggleConfidence('SURE', 'SURE')).toBeNull();
+    expect(answerPayload('UNSURE', '무시되는 글')).toEqual({ rationale: { mode: 'OMITTED' }, confidence: 'UNSURE' });
+    expect(answerPayload('SURE', '')).toEqual({ rationale: { mode: 'OMITTED' }, confidence: 'SURE' });
+    expect(answerPayload(null, '이유')).toEqual({ rationale: { mode: 'PROVIDED', text: '이유' }, confidence: null });
   });
   it('문항 칸 상태', () => {
     expect(cellState(item())).toBe('correct'); expect(cellState(item({ correct: false }))).toBe('wrong'); expect(cellState(item({ review: true, correct: false }))).toBe('review');
@@ -67,8 +88,11 @@ describe('② 숫자·단계·함정', () => {
   it('어긋난 단계 이름과 정답의 질', () => {
     expect(cardStepName(item({ thoughtDiagnosis: { status: 'ready', firstFailedStep: 'S4_INTERPRET', outcomeType: 'ERROR' } }))).toBe('근거 해석');
     expect(cardStepName(item({ thoughtDiagnosis: { status: 'pending', firstFailedStep: null, outcomeType: null } }))).toBeNull(); expect(cardStepName(item())).toBeNull();
-    expect(answerQuality(item())).toBe('근거도 적절했어'); expect(answerQuality(item({ judgment: { status: 'ready', contentAssessment: 'INSUFFICIENT', boundary: 'NONE' } }))).toBe('정답이야. 근거는 조금 더 다듬을 수 있어');
-    expect(answerQuality(item({ rationale: 'OMITTED' }))).toBe('근거 생략');
+    expect(answerQuality(item())).toBe('근거도 정확했어'); expect(answerQuality(item({ category: 'WEAK_CORRECT' }))).toBe('정답이야. 근거는 조금 더 다듬을 수 있어');
+    expect(answerQuality(item({ category: 'ERROR_CORRECT' }))).toBe('정답이지만 근거에 틀린 곳이 있어');
+    expect(answerQuality(item({ category: 'SURE_CORRECT' }))).toBe('확실하다고 한 정답이야'); expect(answerQuality(item({ category: 'UNSURE_CORRECT' }))).toBe('확신 없이 맞힌 정답이야');
+    expect(answerQuality(item({ category: 'UNVERIFIED' }))).toBe('정답이야. 근거로 풀이를 확인하지는 못했어');
+    expect(answerQuality(item({ category: 'PENDING' }))).toBeNull(); expect(answerQuality(item({ category: 'WRONG' }))).toBeNull();
   });
   it('①~⑤ 뒤 조사', () => { expect([1, 2, 3, 4, 5].map(circledObject)).toEqual(['①을', '②를', '③을', '④를', '⑤를']); });
 });

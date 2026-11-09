@@ -8,7 +8,9 @@ import type { FeedbackRationale, FeedbackSession } from '@csat/pipeline';
 import type { FeedbackMessage } from '../../shared/problem-feedback.js';
 
 export type JobStatus = 'NONE' | 'PENDING' | 'READY' | 'FAILED';
-export interface ItemAnswer { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null }
+/** 근거를 생략한 응답의 확신 구분. 옛 파일에는 없을 수 있다(없으면 SURE로 본다). */
+export type AnswerConfidence = 'SURE' | 'UNSURE';
+export interface ItemAnswer { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null; confidence?: AnswerConfidence | null }
 export interface DiagnosticParticipant {
   schemaVersion: 'sns-diagnostic-participant-v1';
   participantId: string;
@@ -28,7 +30,7 @@ export interface DiagnosticParticipant {
     first: (ItemAnswer & { submittedAt: string }) | null;
     session: FeedbackSession | null;
     transcript: FeedbackMessage[];
-    firstJudgment: { status: JobStatus; attempts: number; contentAssessment: string | null; boundary: string | null };
+    firstJudgment: { status: JobStatus; attempts: number; contentAssessment: string | null; boundary: string | null; reconstructability?: string | null; consistency?: string | null };
     thoughtDiagnosis: { status: JobStatus; output: unknown | null };
     reviewFlag: 'WRONG_SUPPORTED' | 'BOUNDARY' | null;
   }>;

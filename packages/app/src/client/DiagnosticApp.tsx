@@ -37,7 +37,7 @@ function MidContainer({ id, passageId, title, number, total, start, error }: { i
     const poll = () => getSummaryCard(id, passageId).then(next => {
       if (!active) return;
       setCard(next); setProblem('');
-      if (next.status === 'pending') timer = window.setTimeout(poll, CARD_POLL_MS);
+      if (next.judging > 0 || !next.firstItemOpen) timer = window.setTimeout(poll, CARD_POLL_MS);
     }).catch((reason: unknown) => { if (active) { setProblem(message(reason)); timer = window.setTimeout(poll, CARD_POLL_MS); } });
     void poll();
     return () => { active = false; window.clearTimeout(timer); };

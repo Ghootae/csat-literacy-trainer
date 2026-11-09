@@ -17,22 +17,29 @@ export interface ProgressView {
   position: PositionView | null;
 }
 export interface QuestionView { questionId: string; questionNumber: number; content: ProblemContentView }
-export interface Draft { choiceId: string; rationale: FeedbackRationale }
+/** 근거를 생략한 응답의 확신 구분. 두 버튼("확실해요" / "잘은 모르겠지만 정답 같음")에 대응한다. */
+export type Confidence = 'SURE' | 'UNSURE';
+/** 첫 응답 기준 범주(서버 `AnswerCategory`와 같다). 정답의 질 3단계는 SUPPORTED_CORRECT·WEAK_CORRECT·ERROR_CORRECT. */
+export type AnswerCategory = 'WRONG' | 'SURE_CORRECT' | 'UNSURE_CORRECT' | 'PENDING' | 'CHECKING' | 'UNVERIFIED' | 'ERROR_CORRECT' | 'SUPPORTED_CORRECT' | 'WEAK_CORRECT';
+export type QualityTiers = 3 | 2;
+export interface Draft { choiceId: string; rationale: FeedbackRationale; confidence: Confidence | null }
 export interface QuestionsView { questions: QuestionView[]; drafts: Record<string, Draft | null> }
-export interface ItemRequest { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null }
+export interface ItemRequest { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null; confidence: Confidence | null }
 
-export type SummaryCardView = { status: 'pending' } | {
-  status: 'ready'; correct: number; total: number; supported: number; rationaleDenominator: number; omitted: number; checking: number;
-  items: { questionId: string; questionNumber: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; quality: 'SUPPORTED' | 'NOT_SUPPORTED' | 'CHECKING' | null }[];
+/** 답 입력을 마친 뒤 언제나 이 모양이다. 근거 결과는 판정이 끝난 범주부터 채워지고(`judging > 0`이면 아직 진행 중), `firstItemOpen`이 켜지면 피드백을 시작할 수 있다. */
+export interface SummaryCardView {
+  status: 'ready'; correct: number; total: number; qualityTiers: QualityTiers; judging: number; firstItemOpen: boolean;
+  counts: Record<AnswerCategory, number>;
+  items: { questionId: string; questionNumber: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; category: AnswerCategory }[];
   position: PositionView;
-};
-export type DiagnosticFeedbackView = FeedbackWorkbenchView & { skippable: boolean };
+}
+export type DiagnosticFeedbackView = FeedbackWorkbenchView & { skippable: boolean; judgmentPending?: boolean };
 
 type Box = 'pending' | 'ready' | 'failed';
 export interface ResultTwist { twistType: string; twistDetail: string; studentText: string | null }
 export interface ResultSummaryLink { status: Box; kind: 'MISREAD' | 'MISSED' | 'CAUGHT'; paragraphs: number[]; paragraphLabel: string }
 export interface ResultItem {
-  questionId: string; passageId: string; questionNumber: number; chosenPosition: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED';
+  questionId: string; passageId: string; questionNumber: number; chosenPosition: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; category: AnswerCategory;
   megastudy: { chosenPercents: [number, number]; correctRate: [number, number] };
   afterFeedback: { corrected: boolean; skipped: boolean };
   review: boolean;
@@ -48,6 +55,7 @@ export interface ReadingCounts {
   branches: Record<'내용' | '논증' | '관점' | '흐름', { caught: number; total: number; wrong: number }>;
 }
 export interface ResultView {
+  qualityTiers: QualityTiers;
   position: { status: 'pending' } | { status: 'ready'; answered: number; correct: number; percentile: PositionView['percentile']; grade: PositionView['grade'];
     byPassage: { passageId: string; low: number; high: number }[] };
   items: ResultItem[];

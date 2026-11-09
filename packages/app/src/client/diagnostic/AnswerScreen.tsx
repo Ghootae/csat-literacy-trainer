@@ -2,16 +2,17 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
 import { RationaleSymbolBar } from '../RationaleSymbolBar.js';
 import { toSubmittedText, type SymbolMark } from '../rationale-tools.js';
-import type { ItemRequest, QuestionsView, QuestionView } from './types.js';
-import { circledObject, focusRationale, newTimer, startTimer, stopTimer, timerValues, type ItemTimer } from './logic.js';
+import type { Confidence, ItemRequest, QuestionsView, QuestionView } from './types.js';
+import { answerPayload, circledObject, focusRationale, newTimer, startTimer, stopTimer, timerValues, toggleConfidence, type ItemTimer } from './logic.js';
 import { PassagePane, QuestionPane, paneFromContent } from './QuestionPanes.js';
 
-interface Answer { choiceId: string | null; text: string; omit: boolean }
+/** `confidence`가 있으면 근거 없는 응답(두 버튼 중 눌린 쪽)이다. */
+interface Answer { choiceId: string | null; text: string; confidence: Confidence | null }
 const initial = (questions: readonly QuestionView[], drafts: QuestionsView['drafts']): Record<string, Answer> => Object.fromEntries(questions.map(q => {
   const draft = drafts[q.questionId];
-  return [q.questionId, { choiceId: draft?.choiceId ?? null, text: draft?.rationale.mode === 'PROVIDED' ? draft.rationale.text : '', omit: draft?.rationale.mode === 'OMITTED' }];
+  return [q.questionId, { choiceId: draft?.choiceId ?? null, text: draft?.rationale.mode === 'PROVIDED' ? draft.rationale.text : '', confidence: draft?.rationale.mode === 'OMITTED' ? draft.confidence ?? 'SURE' : null }];
 }));
-const isValid = (answer: Answer | undefined): answer is Answer & { choiceId: string } => !!answer && answer.choiceId !== null && (answer.omit || answer.text.trim() !== '');
+const isValid = (answer: Answer | undefined): answer is Answer & { choiceId: string } => !!answer && answer.choiceId !== null && (answer.confidence !== null || answer.text.trim() !== '');
 
 export function AnswerScreen({ questions, drafts, save, done }: {
   questions: readonly QuestionView[]; drafts: QuestionsView['drafts'];
@@ -43,11 +44,11 @@ export function AnswerScreen({ questions, drafts, save, done }: {
   async function persist(id: string, force = false): Promise<void> {
     const a = answers[id];
     if (!isValid(a)) return;
-    const text = a.omit ? '' : toSubmittedText(a.text, markRef(id).current).trim();
-    const key = `${a.choiceId}|${a.omit}|${text}`;
+    const text = a.confidence !== null ? '' : toSubmittedText(a.text, markRef(id).current).trim();
+    const key = `${a.choiceId}|${a.confidence ?? ''}|${text}`;
     if (!force && savedKey.current[id] === key) return;
-    const { solveMs, rationaleMs } = timerValues(timer(id), Date.now(), a.omit);
-    await save(id, { choiceId: a.choiceId, rationale: a.omit ? { mode: 'OMITTED' } : { mode: 'PROVIDED', text }, solveMs, rationaleMs });
+    const { solveMs, rationaleMs } = timerValues(timer(id), Date.now(), a.confidence !== null);
+    await save(id, { choiceId: a.choiceId, ...answerPayload(a.confidence, text), solveMs, rationaleMs });
     savedKey.current[id] = key;
   }
   // 답이 바뀐 뒤 잠시 멈추면 임시 저장한다(새로 고침해도 고른 답이 남는다).
@@ -55,7 +56,7 @@ export function AnswerScreen({ questions, drafts, save, done }: {
     if (!isValid(answer)) return;
     const timeout = window.setTimeout(() => { persist(qid).catch(reason => setError(String(reason))); }, 700);
     return () => window.clearTimeout(timeout);
-  }, [qid, answer.choiceId, answer.text, answer.omit]);
+  }, [qid, answer.choiceId, answer.text, answer.confidence]);
 
   const update = (patch: Partial<Answer>) => setAnswers(old => ({ ...old, [qid]: { ...old[qid]!, ...patch } }));
   async function go(next: number) {
@@ -74,6 +75,7 @@ export function AnswerScreen({ questions, drafts, save, done }: {
     finally { setBusy(false); }
   }
   const allValid = questions.every(q => isValid(answers[q.questionId]));
+  const omit = answer.confidence !== null;
   const chosen = current.content.choices.find(c => c.choiceId === answer.choiceId);
   const question = paneFromContent(current.content);
   return <main className="reading-workbench problem-lab-workbench diag-workbench" data-pane={pane}>
@@ -90,12 +92,15 @@ export function AnswerScreen({ questions, drafts, save, done }: {
           data-answered={isValid(answers[q.questionId])} onClick={() => void go(i)}>{q.questionNumber}</button>)}</nav>
         <div className="chat-footer diag-composer">
           <label className="lab-sr-only" htmlFor="diag-rationale">선택한 이유를 적어 줘</label>
-          <textarea ref={box} id="diag-rationale" value={answer.text} disabled={busy || answer.omit} placeholder="이 선지를 고른 이유를 적어 줘."
+          <textarea ref={box} id="diag-rationale" value={answer.text} disabled={busy || omit} placeholder="이 선지를 고른 이유를 적어 줘."
             onChange={e => update({ text: e.target.value })}
             onFocus={() => setTimer(qid, focusRationale(timer(qid), true, Date.now()))}
             onBlur={() => setTimer(qid, focusRationale(timer(qid), false, Date.now()))} />
-          <RationaleSymbolBar key={qid} value={answer.text} onChange={text => update({ text })} input={box} marks={markRef(qid)} disabled={busy || answer.omit} />
-          <button type="button" className="diag-omit" aria-pressed={answer.omit} disabled={busy} onClick={() => update({ omit: !answer.omit })}>근거 미제출</button>
+          <RationaleSymbolBar key={qid} value={answer.text} onChange={text => update({ text })} input={box} marks={markRef(qid)} disabled={busy || omit} />
+          <div className="diag-omit-row">
+            <button type="button" className="diag-omit" aria-pressed={answer.confidence === 'SURE'} disabled={busy} onClick={() => update({ confidence: toggleConfidence(answer.confidence, 'SURE') })}>확실해요</button>
+            <button type="button" className="diag-omit" aria-pressed={answer.confidence === 'UNSURE'} disabled={busy} onClick={() => update({ confidence: toggleConfidence(answer.confidence, 'UNSURE') })}>잘은 모르겠지만 정답 같음</button>
+          </div>
           {error && <p className="err" role="alert">{error}</p>}
           <div className="diag-actions">
             <button type="button" disabled={busy || index === 0} onClick={() => void go(index - 1)}>이전 문항</button>

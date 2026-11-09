@@ -51,7 +51,8 @@ export function FeedbackScreen({ load, send, nextLabel, next }: {
   useEffect(() => {
     if (view && pending && view.evaluationStatus !== 'PROCESSING' && view.revision > pending.expectedRevision) { setPending(null); setDraft(''); setOmit(false); }
   }, [view?.revision, view?.evaluationStatus, pending]);
-  const waiting = busy || view?.evaluationStatus === 'PROCESSING';
+  // 다음 문항의 첫 판정이 아직이면(judgmentPending) 대기 말풍선을 보이며 열릴 때까지 다시 불러온다.
+  const waiting = busy || view?.evaluationStatus === 'PROCESSING' || view?.judgmentPending === true;
   const sequence = sequenceState(view?.transcript ?? [], revealed, reducedMotion, released);
   useEffect(() => {
     if (sequence.visibleCount !== revealed) { setRevealed(sequence.visibleCount); setReleased(false); }
@@ -61,13 +62,13 @@ export function FeedbackScreen({ load, send, nextLabel, next }: {
   }, [view?.transcript.length, revealed, released, sequence.visibleCount, sequence.delayMs]);
   useEffect(() => { chat.current?.scrollTo({ top: chat.current.scrollHeight, behavior: 'auto' }); }, [sequence.visibleCount, sequence.showDots, pending?.transitionId, waiting, view?.phase, view?.transcript.length]);
   useEffect(() => {
-    if (!view || view.evaluationStatus !== 'PROCESSING' || busy) return;
+    if (!view || (view.evaluationStatus !== 'PROCESSING' && !view.judgmentPending) || busy) return;
     let active = true;
     const timer = window.setInterval(() => {
       void load().then(v => { if (active) { accept(v); setError(''); } }).catch(() => { if (active) setError('서버 확인이 늦어지고 있어. 제출한 내용은 서버에서 확인한 뒤 이어서 보여 줄게.'); });
     }, 1500);
     return () => { active = false; window.clearInterval(timer); };
-  }, [view?.evaluationStatus, busy]);
+  }, [view?.evaluationStatus, view?.judgmentPending, busy]);
   // 칠한 곳으로 그 칸만 스크롤한다(`ProblemLabApp.scrollToHighlight`와 같은 방식).
   function scrollToHighlight(location: 'PASSAGE' | 'SCENARIO' | undefined) {
     if (!location) return;

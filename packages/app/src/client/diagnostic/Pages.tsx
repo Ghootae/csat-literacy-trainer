@@ -29,19 +29,19 @@ export function ChoosePage({ title, number, total, busy, error, choose }: {
 export function MidPage({ title, number, total, card, start, error }: {
   title: string; number: number; total: number; card: SummaryCardView | null; start: () => void; error: string;
 }): React.JSX.Element {
-  const ready = card !== null && card.status === 'ready' ? card : null;
+  const ready = card;
   const bar = ready ? rangeBar(ready.position.percentile.low, ready.position.percentile.high) : null;
   return <main className="diag-page"><div className="diag-wrap">
     <header className="diag-heading"><p className="diag-sub">지문 {number}/{total}</p><h1>{title}</h1></header>
     <section className="diag-card" aria-label="이 지문 결과"><span className="diag-label">이 지문 결과</span>
       {ready ? <>
         <p className="diag-sentence" data-testid="passage-result">{passageResultSentence(ready)}</p>
-        <div className="diag-cellrow"><div>{ready.items.map(item => <span key={item.questionId} className="diag-cell" data-state={cellState({ review: false, correct: item.correct })} data-checking={item.quality === 'CHECKING'}>{item.questionNumber}</span>)}</div></div></>
+        <div className="diag-cellrow"><div>{ready.items.map(item => <span key={item.questionId} className="diag-cell" data-state={cellState({ review: false, correct: item.correct })} data-checking={item.category === 'CHECKING'}>{item.questionNumber}</span>)}</div></div></>
         : <p className="diag-muted" role="status">{PENDING_TEXT}</p>}</section>
     {ready && bar && <section className="diag-card" aria-label="이 지문까지의 위치"><div className="diag-card-head"><span className="diag-label">이 지문까지의 위치</span><span className="diag-sub">수능 기준 환산 추정</span></div>
       <p className="diag-big">{gradeText(ready.position.grade)}</p>
       <div className="diag-track"><div style={{ left: `${bar.left}%`, width: `${bar.width}%` }} /></div></section>}
     <section className="diag-card">{error && <p className="err" role="alert">{error}</p>}
-      <div className="diag-buttons"><button type="button" className="diag-primary" disabled={ready === null} onClick={start}>피드백 시작</button></div></section>
+      <div className="diag-buttons"><button type="button" className="diag-primary" disabled={ready === null || !ready.firstItemOpen} onClick={start}>피드백 시작</button></div></section>
   </div></main>;
 }

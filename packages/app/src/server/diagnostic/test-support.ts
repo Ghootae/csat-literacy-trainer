@@ -22,7 +22,7 @@ export class MemoryStore implements DiagnosticStore {
   count(type: string): number { return this.events.filter(e => e.type === type).length; }
 }
 
-export type Behavior = 'SUPPORTED' | 'ERROR' | 'INSUFFICIENT' | 'BOUNDARY' | 'MISMATCH' | 'THROW';
+export type Behavior = 'SUPPORTED' | 'ERROR' | 'INSUFFICIENT' | 'BOUNDARY' | 'MISMATCH' | 'THROW' | 'UNKNOWN_PATH' | 'INSUFFICIENT_MISMATCH';
 export interface Call { questionId: string; mode: string }
 export interface FeedbackFake {
   evaluator: FeedbackEvaluator;
@@ -63,6 +63,16 @@ export function feedbackFake(init: Partial<Pick<FeedbackFake, 'behavior' | 'dela
         // SUPPORTED이지만 근거가 가리키는 판정이 선택과 반대(선택-근거 불일치) → 교정 질문으로 가는 정상 경로
         return { metadata, rawOutput: { ...reconstructed, rationaleImpliedVerdict: s.choiceImpliedVerdict === 'VALID' ? 'INVALID' : 'VALID', errors: [],
           contentAssessment: 'SUPPORTED', insufficiencyKind: 'NONE', selectionMismatchQuestion: '고른 답과 네 근거가 같은 방향인지 다시 볼까?' } };
+      }
+      if (behavior === 'UNKNOWN_PATH') {
+        // boundary는 NONE이지만 학생의 풀이를 재구성하지 못한 판정
+        return { metadata, rawOutput: { ...common, boundary: 'NONE', reconstructability: 'UNKNOWN', reconstructedPath: [], rationaleImpliedVerdict: 'UNKNOWN',
+          contentAssessment: 'UNKNOWN', insufficiencyKind: 'NONE', sourceEvidence, errors: [] } };
+      }
+      if (behavior === 'INSUFFICIENT_MISMATCH') {
+        // 근거가 부족하면서 선택과 반대 방향을 가리킨다(정답이어도 범주 3)
+        return { metadata, rawOutput: { ...reconstructed, rationaleImpliedVerdict: s.choiceImpliedVerdict === 'VALID' ? 'INVALID' : 'VALID', errors: [],
+          contentAssessment: 'INSUFFICIENT', insufficiencyKind: 'MISSING_LINK', selectionMismatchQuestion: '고른 답과 네 근거가 같은 방향인지 다시 볼까?' } };
       }
       if (behavior === 'ERROR') {
         return { metadata, rawOutput: { ...reconstructed, contentAssessment: 'ERROR', insufficiencyKind: 'NONE',
@@ -109,5 +119,5 @@ export const summaryEvaluator: SimpleEvaluator = { async complete(input) {
 export const bundleOf = (questionId: string) => loadDiagnosticBundle(questionId).source;
 export const correctChoice = (questionId: string) => bundleOf(questionId).answerChoiceId;
 export const wrongChoice = (questionId: string) => bundleOf(questionId).choices.find(c => c.choiceId !== correctChoice(questionId))!.choiceId;
-export const provided = (choiceId: string) => ({ choiceId, rationale: { mode: 'PROVIDED', text: RATIONALE }, solveMs: 1000, rationaleMs: 2000 });
-export const omitted = (choiceId: string) => ({ choiceId, rationale: { mode: 'OMITTED' }, solveMs: 1000, rationaleMs: null });
+export const provided = (choiceId: string) => ({ choiceId, rationale: { mode: 'PROVIDED', text: RATIONALE }, solveMs: 1000, rationaleMs: 2000, confidence: null });
+export const omitted = (choiceId: string, confidence: 'SURE' | 'UNSURE' = 'SURE') => ({ choiceId, rationale: { mode: 'OMITTED' }, solveMs: 1000, rationaleMs: null, confidence });

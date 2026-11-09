@@ -35,7 +35,7 @@ const position = (choiceId: string) => Number(/\d+/u.exec(choiceId)![0]);
 const circled = (choiceId: string) => '①②③④⑤'[position(choiceId) - 1]!;
 async function answer(page: Page, choiceId: string, rationale: string | null) {
   await page.getByRole('radio', { name: `${circled(choiceId)}번 선지` }).click();
-  if (rationale === null) await page.getByRole('button', { name: '근거 미제출' }).click();
+  if (rationale === null) await page.getByRole('button', { name: '확실해요' }).click();
   else await page.locator('#diag-rationale').fill(rationale);
 }
 async function answerPassage(page: Page, picks: { choiceId: string; rationale: string | null }[]) {
@@ -116,7 +116,7 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 중간 화면 �
   await page.getByRole('button', { name: '이 지문 답 다 냈어' }).click();
 
   // 지문 끝 중간 화면
-  await expect(page.getByTestId('passage-result')).toHaveText('이 지문의 5문항 중 3개를 맞혔어. 근거를 쓴 3개 중 2개가 적절했어(2개는 근거 생략).', { timeout: 20_000 });
+  await expect(page.getByTestId('passage-result')).toHaveText('이 지문의 5문항 중 3개를 맞혔어. 근거를 쓴 정답 2개 중 2개는 근거도 정확했어(1개는 확실하다고 한 정답).', { timeout: 20_000 });
   await page.screenshot({ path: resolve(shots, '04-mid-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: resolve(shots, '05-mid-390.png'), fullPage: true });

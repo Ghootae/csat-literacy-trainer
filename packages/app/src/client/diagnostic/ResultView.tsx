@@ -40,7 +40,7 @@ function Position({ result }: { result: Result }) {
 
 // ---------- ② 문제 풀이 결과 ----------
 
-function Card({ item, titles, onClose }: { item: ResultItem; titles: Record<string, string>; onClose: () => void }) {
+function Card({ item, titles, tiers, onClose }: { item: ResultItem; titles: Record<string, string>; tiers: Result['qualityTiers']; onClose: () => void }) {
   const title = `${titles[item.passageId] ?? ''} ${item.questionNumber}번`;
   const same = <div className="diag-stats2">
     <div><span>{circledObject(item.chosenPosition)} 고른 비율</span><strong>{percentPair(item.megastudy.chosenPercents)}</strong></div>
@@ -53,7 +53,7 @@ function Card({ item, titles, onClose }: { item: ResultItem; titles: Record<stri
   return <article className="diag-item" id="diag-item-card" aria-label={`${title} 카드`}>
     <div className="diag-item-head"><h3>{title} · {circledObject(item.chosenPosition)} 골랐어</h3><span className={item.correct ? 'diag-right' : 'diag-wrong'}>{item.correct ? '정답' : '오답'}</span>
       <button type="button" className="diag-close" onClick={onClose}>접기</button></div>
-    {item.correct && (item.judgment.status === 'ready' || item.rationale === 'OMITTED' ? <p className="diag-quality">{answerQuality(item)}</p> : <Notice status={item.judgment.status as Exclude<Box, 'ready'>} />)}
+    {item.correct && (item.category === 'PENDING' ? <Notice status="pending" /> : <p className="diag-quality">{answerQuality(item, tiers)}</p>)}
     {same}<p className="diag-muted">{MEGASTUDY_NOTE}</p>
     {!item.correct && twists.map((t, i) => <div key={i} className="diag-twist"><span className="diag-warn">걸린 함정 · {t.name}</span>{t.line && <p>{t.line}</p>}{t.changed && <p>{t.changed}</p>}</div>)}
     {item.thoughtDiagnosis !== null && item.thoughtDiagnosis.status !== 'ready' && <Notice status={item.thoughtDiagnosis.status} />}
@@ -69,13 +69,16 @@ function Solve({ result, set }: { result: Result; set: SetInfo }) {
   const [open, setOpen] = useState<string | null>(null);
   const titles = Object.fromEntries(set.passages.map(p => [p.passageId, p.title]));
   const total = set.passages.reduce((sum, p) => sum + p.questionIds.length, 0);
-  const stats = solveStats(result.items, total); const tendency = stepTendency(result.steps); const tags = twistTags(result.twists.counts);
+  const stats = solveStats(result.items, total, result.qualityTiers); const tendency = stepTendency(result.steps); const tags = twistTags(result.twists.counts);
   const opened = result.items.find(item => item.questionId === open);
   return <>
     <div className="diag-stats3">
       <div><span>정답</span><strong>{stats.correct}<small> / {stats.total}</small></strong></div>
-      <div><span>적절한 근거</span><strong>{stats.supported}<small> / 근거 쓴 {stats.rationaleDenominator}</small></strong></div>
-      <div><span>근거 생략</span><strong>{stats.omitted}<small> 문항</small></strong></div></div>
+      <div><span>{result.qualityTiers === 2 ? '근거가 확인되는 정답' : '근거까지 정확한 정답'}</span>{stats.qualityDenominator > 0
+        ? <strong>{stats.accurate}<small> / 근거를 쓴 정답 {stats.qualityDenominator}</small></strong>
+        : <strong><small>근거를 쓴 정답 없음</small></strong>}</div>
+      <div><span>근거 없이 낸 정답</span><strong>{stats.sure + stats.unsure}<small> 문항 (확실하다고 한 {stats.sure} · 확신 없이 맞힌 {stats.unsure})</small></strong></div></div>
+    {stats.unverified > 0 && <p className="diag-muted">{stats.unverified}개는 정답이지만 근거로 풀이를 확인하지는 못했어.</p>}
     {result.steps.status !== 'ready' ? <Notice status={result.steps.status} />
       : tendency && <div className="diag-block"><h2>어긋난 단계 <small>(경향)</small></h2><p>{tendency.sentence}</p>
         <div className="diag-bars">{tendency.bars.map(bar => <div key={bar.code} className="diag-bar-row"><span>{bar.name}</span>
@@ -91,7 +94,7 @@ function Solve({ result, set }: { result: Result; set: SetInfo }) {
         })}</div></div>;
       })}</div>
       <p className="diag-muted">채운 칸은 정답, 테두리 칸은 오답, 점선 칸은 확인 중이야. 칸을 누르면 아래 카드가 펼쳐져.</p></div>
-    {opened && <Card item={opened} titles={titles} onClose={() => setOpen(null)} />}
+    {opened && <Card item={opened} titles={titles} tiers={result.qualityTiers} onClose={() => setOpen(null)} />}
   </>;
 }
 

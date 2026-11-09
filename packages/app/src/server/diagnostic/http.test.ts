@@ -82,7 +82,7 @@ describe('진단평가 HTTP', () => {
     const resumed = await call(base, 'GET', `${root}/passage/${COG.passageId}/questions`);
     expect(resumed.status).toBe(200);
     const resumedBody = await resumed.json() as { questions: unknown[]; drafts: Record<string, { choiceId: string } | null> };
-    expect(resumedBody.questions).toHaveLength(5); expect(resumedBody.drafts[Q12]).toEqual({ choiceId: correctChoice(Q12), rationale: { mode: 'PROVIDED', text: provided(correctChoice(Q12)).rationale.text } });
+    expect(resumedBody.questions).toHaveLength(5); expect(resumedBody.drafts[Q12]).toEqual({ choiceId: correctChoice(Q12), rationale: { mode: 'PROVIDED', text: provided(correctChoice(Q12)).rationale.text }, confidence: null });
     expect(JSON.stringify(resumedBody)).not.toContain('answerChoiceId');
     expect((await call(base, 'GET', `${root}/passage/${HORSE_ID}/questions`)).status).toBe(409);
     expect((await call(base, 'GET', `${root}/item/${Q12}/feedback`)).status).toBe(409);
@@ -93,7 +93,7 @@ describe('진단평가 HTTP', () => {
     expect((await call(base, 'POST', `${root}/item/${Q12}`, provided(wrongChoice(Q12)))).status).toBe(409);
     await controller.idle(); await new Promise(resolve => setTimeout(resolve, 20)); await controller.idle();
     const card = await (await call(base, 'GET', `${root}/passage/${COG.passageId}/summary-card`)).json() as Record<string, unknown>;
-    expect(card).toMatchObject({ status: 'ready', correct: 3, total: 5, omitted: 2 });
+    expect(card).toMatchObject({ status: 'ready', correct: 3, total: 5, qualityTiers: 3, judging: 0, firstItemOpen: true, counts: { SURE_CORRECT: 1, WRONG: 2 } });
     // 피드백 차례: 커서 문항만, 정답 원출력은 응답에 없다
     expect((await call(base, 'GET', `${root}/item/${Q13}/feedback`)).status).toBe(409);
     const first = await (await call(base, 'GET', `${root}/item/${Q12}/feedback`)).json() as { phase: string; skippable: boolean };

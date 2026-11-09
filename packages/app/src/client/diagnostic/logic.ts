@@ -3,7 +3,7 @@
  * 학생에게 보이는 문장은 반말이다(D-0116). 비틂·관계·단계 이름은 wording.ts에서만 온다.
  */
 import { BRANCH_CODES, BRANCH_WORDING, OTHER_TWIST_NAME, STEP_CODES, STEP_WORDING, TWIST_CODES, TWIST_WORDING, type BranchCode, type TwistCode } from './wording.js';
-import type { ReadingCounts, ResultItem, ResultSummaryLink, ResultView, SummaryCardView } from './types.js';
+import type { AnswerCategory, Confidence, QualityTiers, ReadingCounts, ResultItem, ResultSummaryLink, ResultView, SummaryCardView } from './types.js';
 
 export const CIRCLED = '①②③④⑤';
 /** ①~⑤ 뒤에 붙는 조사(일·이·삼·사·오). 을/를. */
@@ -21,14 +21,30 @@ export function eulReul(word: string): string {
 
 // ---------- 지문 끝 중간 화면 ----------
 
-type ReadyCard = Extract<SummaryCardView, { status: 'ready' }>;
-/** 지문 결과 문장. 예: "이 지문의 5문항 중 4개를 맞혔어. 근거를 쓴 4개 중 3개가 적절했어(1개는 근거 생략)." */
-export function passageResultSentence(card: Pick<ReadyCard, 'total' | 'correct' | 'rationaleDenominator' | 'supported' | 'omitted' | 'checking'>): string {
-  const notes = [card.omitted > 0 ? `${card.omitted}개는 근거 생략` : null, card.checking > 0 ? `${card.checking}개는 확인 중이야` : null].filter((x): x is string => x !== null);
+export const JUDGING_TEXT = '근거는 살펴보는 중이야.';
+/** 범주별 개수를 표시 단계에 맞춰 센다. 2단계면 범주 1·2를 `accurate` 하나로 합치고 `weak`는 0이다. 분모는 범주 1·2·3만 센다. */
+export interface CategoryTally { accurate: number; weak: number; error: number; denominator: number; sure: number; unsure: number; unverified: number; checking: number }
+export function categoryTally(counts: Record<AnswerCategory, number>, tiers: QualityTiers): CategoryTally {
+  const accurate = tiers === 2 ? counts.SUPPORTED_CORRECT + counts.WEAK_CORRECT : counts.SUPPORTED_CORRECT;
+  const weak = tiers === 2 ? 0 : counts.WEAK_CORRECT;
+  return { accurate, weak, error: counts.ERROR_CORRECT, denominator: counts.SUPPORTED_CORRECT + counts.WEAK_CORRECT + counts.ERROR_CORRECT,
+    sure: counts.SURE_CORRECT, unsure: counts.UNSURE_CORRECT, unverified: counts.UNVERIFIED, checking: counts.CHECKING };
+}
+export function countCategories(items: readonly { category: AnswerCategory }[]): Record<AnswerCategory, number> {
+  const counts: Record<AnswerCategory, number> = { WRONG: 0, SURE_CORRECT: 0, UNSURE_CORRECT: 0, PENDING: 0, CHECKING: 0, UNVERIFIED: 0, ERROR_CORRECT: 0, SUPPORTED_CORRECT: 0, WEAK_CORRECT: 0 };
+  for (const item of items) counts[item.category]++;
+  return counts;
+}
+/** 지문 결과 문장. 정답 수를 먼저 말하고, 근거 결과는 판정이 끝난 범주만 센다. 판정 중이면 한 줄을 붙인다. */
+export function passageResultSentence(card: Pick<SummaryCardView, 'total' | 'correct' | 'counts' | 'qualityTiers' | 'judging'>): string {
+  const t = categoryTally(card.counts, card.qualityTiers);
+  const notes = [t.sure > 0 ? `${t.sure}개는 확실하다고 한 정답` : null, t.unsure > 0 ? `${t.unsure}개는 확신 없이 맞힌 정답` : null,
+    t.unverified > 0 ? `${t.unverified}개는 근거로 풀이를 확인하지 못했어` : null, t.checking > 0 ? `${t.checking}개는 확인 중이야` : null].filter((x): x is string => x !== null);
   const parts = [`이 지문의 ${card.total}문항 중 ${card.correct}개를 맞혔어`];
-  if (card.rationaleDenominator > 0) parts.push(`근거를 쓴 ${card.rationaleDenominator}개 중 ${card.supported}개가 적절했어`);
+  if (t.denominator > 0) parts.push(`근거를 쓴 정답 ${t.denominator}개 중 ${t.accurate}개는 ${card.qualityTiers === 2 ? '근거가 확인되는 정답이야' : '근거도 정확했어'}`);
   if (notes.length > 0) parts[parts.length - 1] += `(${notes.join(', ')})`;
-  return parts.map(part => `${part}.`).join(' ');
+  const sentence = parts.map(part => `${part}.`).join(' ');
+  return card.judging > 0 ? `${sentence} ${JUDGING_TEXT}` : sentence;
 }
 
 // ---------- ① 내 위치 ----------
@@ -64,13 +80,11 @@ export const GRADE_EDGES = [0, 4, 11, 23, 40, 60, 77, 89, 96, 100] as const;
 export type CellState = 'correct' | 'wrong' | 'review';
 export const cellState = (item: Pick<ResultItem, 'review' | 'correct'>): CellState => item.review ? 'review' : item.correct ? 'correct' : 'wrong';
 
-export interface SolveStats { correct: number; total: number; supported: number; rationaleDenominator: number; omitted: number }
-/** 숫자 3개. `review` 문항과 확인 중(판정 중·실패·boundary) 문항은 근거 분모에서 뺀다. */
-export function solveStats(items: readonly ResultItem[], total = 16): SolveStats {
-  const counted = items.filter(item => !item.review && item.rationale === 'PROVIDED' && item.judgment.status === 'ready' && (item.judgment.boundary === null || item.judgment.boundary === 'NONE'));
-  return { correct: items.filter(item => item.correct).length, total,
-    supported: counted.filter(item => item.correct && item.judgment.contentAssessment === 'SUPPORTED').length,
-    rationaleDenominator: counted.length, omitted: items.filter(item => item.rationale === 'OMITTED').length };
+export interface SolveStats { correct: number; total: number; accurate: number; qualityDenominator: number; sure: number; unsure: number; unverified: number }
+/** 숫자 칸. 근거까지 정확한 정답(2단계면 근거가 확인되는 정답) / 근거를 쓴 정답(범주 1·2·3)과, 분모에 넣지 않는 범주 4·5·`UNVERIFIED` 개수. */
+export function solveStats(items: readonly ResultItem[], total = 16, tiers: QualityTiers = 3): SolveStats {
+  const t = categoryTally(countCategories(items), tiers);
+  return { correct: items.filter(item => item.correct).length, total, accurate: t.accurate, qualityDenominator: t.denominator, sure: t.sure, unsure: t.unsure, unverified: t.unverified };
 }
 
 export interface StepTendency { sentence: string; bars: { code: string; name: string; count: number; ratio: number }[] }
@@ -104,9 +118,24 @@ export function cardStepName(item: ResultItem): string | null {
   const step = item.thoughtDiagnosis?.status === 'ready' ? item.thoughtDiagnosis.firstFailedStep : null;
   return step !== null && step in STEP_WORDING ? STEP_WORDING[step as keyof typeof STEP_WORDING] : null;
 }
-export function answerQuality(item: Pick<ResultItem, 'rationale' | 'judgment'>): string {
-  if (item.rationale === 'OMITTED') return '근거 생략';
-  return item.judgment.contentAssessment === 'SUPPORTED' ? '근거도 적절했어' : '정답이야. 근거는 조금 더 다듬을 수 있어';
+/** 정답 문항의 질 문구(범주와 표시 단계로 고른다). 판정 중·오답은 null. */
+export function answerQuality(item: Pick<ResultItem, 'category'>, tiers: QualityTiers = 3): string | null {
+  switch (item.category) {
+    case 'SUPPORTED_CORRECT': return tiers === 2 ? '근거가 확인되는 정답이야' : '근거도 정확했어';
+    case 'WEAK_CORRECT': return tiers === 2 ? '근거가 확인되는 정답이야' : '정답이야. 근거는 조금 더 다듬을 수 있어';
+    case 'ERROR_CORRECT': return '정답이지만 근거에 틀린 곳이 있어';
+    case 'SURE_CORRECT': return '확실하다고 한 정답이야';
+    case 'UNSURE_CORRECT': return '확신 없이 맞힌 정답이야';
+    case 'UNVERIFIED': return '정답이야. 근거로 풀이를 확인하지는 못했어';
+    case 'CHECKING': return '확인 중이야';
+    default: return null;
+  }
+}
+/** 근거 없는 응답 버튼 둘은 서로 배타적이다: 이미 눌린 버튼을 다시 누르면 꺼지고, 다른 버튼을 누르면 그쪽으로 바뀐다. */
+export const toggleConfidence = (current: Confidence | null, pressed: Confidence): Confidence | null => current === pressed ? null : pressed;
+/** 답 저장 요청의 근거·확신 부분. 버튼이 눌렸으면 근거 없음 + 그 확신 값, 아니면 근거 + null. */
+export function answerPayload(confidence: Confidence | null, text: string): { rationale: { mode: 'OMITTED' } | { mode: 'PROVIDED'; text: string }; confidence: Confidence | null } {
+  return confidence === null ? { rationale: { mode: 'PROVIDED', text }, confidence: null } : { rationale: { mode: 'OMITTED' }, confidence };
 }
 export const percentPair = (pair: readonly [number, number]): string => `${pair[0]}% · ${pair[1]}%`;
 export const MEGASTUDY_NOTE = '메가스터디 이용자 기준 · 화법과작문 · 언어와매체';
