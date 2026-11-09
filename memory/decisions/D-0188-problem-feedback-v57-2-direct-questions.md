@@ -6,6 +6,8 @@ scope: problem-correction-question
 supersedes: none
 ---
 
+
+> 2번(두 갈래 질문은 TARGET·READING만) 부분은 [D-0212](./D-0212-question-rules-quote-two-way-by-source-no-marked-media.md)로 대체됐다. 1·3·4번은 유지.
 # 문제 판정 지시문 v5.7-2: 내용 오류 교정 질문은 답을 주지 않는 직접 질문
 
 ## 결정

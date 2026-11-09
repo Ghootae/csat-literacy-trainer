@@ -271,3 +271,4 @@
 | [`D-0209`](./decisions/D-0209-sns-diagnostic-student-wording.md) | accepted | SNS 진단 학생용 표현: 비틂 14종 이름·반말 한 줄 설명(6개 이름 변경), 기타는 "그 밖의 함정"으로 숨김, 관계 4갈래 학생용 이름·개수 표현, 바뀐 내용 문장은 한 번 생성·사람 손질 | 사용자 판정(1판 의견 → 2판 "확정") |
 | [`D-0210`](./decisions/D-0210-close-e1-hold-e2.md) | accepted | E1 골드 기반 문항 생성 닫음(정확성 천장, 골드의 문항 수준 이점 없음, 기출 차이는 원리 적용 추론), E2 보류, 원리 적용형 선지 생성은 차후 별도 과제 | 사용자 결정(v3 사전 성립 기준 미달 보고 뒤) |
 | [`D-0211`](./decisions/D-0211-ground-choice-reading-excluded-from-consistent.md) | accepted | 서버 충족 검사: 근거 인용 안 선지 읽기(CHOICE_READING)는 원문 대조 요구에서 빼고, 사실 주장 1개 이상·모두 CONSISTENT만 요구 | 사용자 결정(판정 원인 실험 보고 뒤, 방안 A) |
+| [`D-0212`](./decisions/D-0212-question-rules-quote-two-way-by-source-no-marked-media.md) | accepted | 교정 질문 규칙 방향(v5.9 후보, 기본값 채택은 회귀 뒤) | D-0188 2번 일부 대체: 두 갈래 질문 오류 종류 제한 삭제, 보기는 학생 말·선지·발문의 말에서만, 1·3·4번 유지. 학생 말 인용+틀린 칸 하나(오타 그대로), 그림·표 근거엔 "표시한" 금지(서버는 기록만) |
