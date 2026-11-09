@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>문제 풀이 행위 경로</title>
+<style>
+:root{
+  --bg:#ffffff; --fg:#1d2330; --muted:#5f6878; --line:#c9cfd9; --card:#f6f7f9;
+  --code-bg:#e8eaee; --code-fg:#3a4150;
+  --sol-bg:#fde7d6; --sol-fg:#8a3b06;
+  --luna-bg:#dfeafc; --luna-fg:#1d4f9a;
+  --none-bg:#eef0f3; --none-fg:#6a7282;
+  --new-bg:#e3f5e6; --new-fg:#1f6b2e;
+  --chg-bg:#fbe9f3; --chg-fg:#8c1f5b;
+  --cat:#3b3f99;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15181e; --fg:#e4e7ed; --muted:#9aa3b2; --line:#3a404c; --card:#1d2129;
+    --code-bg:#2c313b; --code-fg:#c9ced8;
+    --sol-bg:#4a2a14; --sol-fg:#ffc59a;
+    --luna-bg:#1d2f4d; --luna-fg:#a9c8ff;
+    --none-bg:#262a32; --none-fg:#a3abb8;
+    --new-bg:#173a20; --new-fg:#9be3ab;
+    --chg-bg:#44182f; --chg-fg:#ffaed6;
+    --cat:#b6b9ff;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15181e; --fg:#e4e7ed; --muted:#9aa3b2; --line:#3a404c; --card:#1d2129;
+  --code-bg:#2c313b; --code-fg:#c9ced8;
+  --sol-bg:#4a2a14; --sol-fg:#ffc59a;
+  --luna-bg:#1d2f4d; --luna-fg:#a9c8ff;
+  --none-bg:#262a32; --none-fg:#a3abb8;
+  --new-bg:#173a20; --new-fg:#9be3ab;
+  --chg-bg:#44182f; --chg-fg:#ffaed6;
+  --cat:#b6b9ff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:22px;margin:0 0 4px}
+h2{font-size:17px;margin:28px 0 8px}
+.sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;background:var(--card);padding:10px 12px;border-radius:8px;font-size:13px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.b{display:inline-block;font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:999px;white-space:nowrap;vertical-align:1px}
+.code{background:var(--code-bg);color:var(--code-fg)}
+.sol{background:var(--sol-bg);color:var(--sol-fg)}
+.luna{background:var(--luna-bg);color:var(--luna-fg)}
+.none{background:var(--none-bg);color:var(--none-fg)}
+.new{background:var(--new-bg);color:var(--new-fg)}
+.chg{background:var(--chg-bg);color:var(--chg-fg)}
+.cat{color:var(--cat);font-weight:700;font-size:13px}
+.task{color:var(--muted);font-size:13.5px}
+ul.tree,ul.tree ul{list-style:none;margin:0;padding:0}
+ul.tree ul{margin-left:14px;padding-left:16px;border-left:1.5px solid var(--line)}
+ul.tree li{position:relative;padding:5px 0 5px 0}
+ul.tree ul>li::before{content:"";position:absolute;left:-16px;top:16px;width:12px;border-top:1.5px solid var(--line)}
+.n{font-weight:600}
+.root>li>.n{font-size:16px}
+.note{background:var(--card);border-radius:8px;padding:12px 14px;font-size:13.5px}
+.note ul{margin:6px 0 0;padding-left:18px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600}
+.wrap{overflow-x:auto}
+</style>
+</head>
+<body>
+<main>
+<h1>문제 풀이 행위 경로</h1>
+<p class="sub">진단 문제 풀이, 문항 하나 기준. 2026-11-09 결정안((나) + 버튼 둘 + 힌트) 반영. 문단 요약은 제외. 상태기계는 작업 브랜치 <code>feedback.ts</code> 기준으로 확인.</p>
+
+<div class="legend">
+  <span><b class="b code">코드</b> 모델 호출 없음, 서버 규칙</span>
+  <span><b class="b sol">sol</b></span>
+  <span><b class="b luna">luna</b></span>
+  <span><b class="b none">호출 없음</b> 학생 행동·표시</span>
+  <span><b class="b chg">luna→sol</b> 이번에 바뀜</span>
+  <span><b class="b new">새</b> 새로 만듦</span>
+  <span class="cat">[범주 n]</span> 결과 화면 범주(첫 응답 기준)
+</div>
+
+<h2>1. 첫 응답</h2>
+<p class="sub">지문의 모든 문항을 입력하고 "답 입력 마침"을 누르면, 아래의 판정, 사고 진단, 힌트 호출이 동시에 뒤에서 시작된다. 지문 판정이 모두 끝나면 1번 문항부터 피드백이 열린다.</p>
+
+<ul class="tree root">
+<li><span class="n">선지 선택 + 근거 방식 선택</span> <b class="b none">학생</b>
+<ul>
+
+  <!-- A -->
+  <li><span class="n">A. 근거 작성</span> → <b class="b code">코드</b> <span class="task">정답/오답 가르기</span>
+  <ul>
+    <li><span class="n">A1. 정답</span> → <b class="b sol">sol</b><b class="b chg">luna→sol</b> <span class="task">선택 판정 (충분 / 부족 / 오류 / 판정 불가) + 교정 질문 생성</span>
+    <ul>
+      <li>충분 → "근거도 정확해" 끝 <b class="b none">호출 없음</b> <span class="cat">[범주 1 근거 있는 정답]</span></li>
+      <li>부족 → 안내 한 줄 → 설명 보기 여부 <b class="b none">학생</b> <span class="cat">[범주 2 근거 약한 정답]</span>
+        <ul>
+          <li>본다 → 마지막 설명 <b class="b sol">sol</b><b class="b chg">luna→sol</b> <span class="task">정답 설명 작성 (미리 생성)</span> → "이해됐어?" <b class="b none">자기 보고</b></li>
+          <li>안 본다 → 끝</li>
+        </ul>
+        <span class="task">사고 진단 <b class="b sol">sol</b> 뒤에서 (충분이 아닌 정답 대상)</span>
+      </li>
+      <li>오류 → <span class="n">리뷰 R</span> (아래 3절) <span class="cat">[범주 3 근거가 틀린 정답]</span></li>
+      <li>판정 불가 → 안내 + 마지막 설명 <b class="b sol">sol</b> <span class="cat">[범주 1로 표시, 기록에 보류 표시 (제안)]</span></li>
+      <li>원자료·정답 기준 문제 → "우리가 확인할게" 다음 문항 <b class="b code">코드</b></li>
+    </ul></li>
+
+    <li><span class="n">A2. 오답</span> → <b class="b sol">sol</b> <span class="task">선택 판정 + 교정 질문 생성</span> + 사고 진단 <b class="b sol">sol</b> 뒤에서 <span class="cat">[범주 6 오답]</span>
+    <ul>
+      <li>오류 있음 → <span class="n">리뷰 R</span> (아래 3절)</li>
+      <li>판정 불가 → 마지막 설명 <b class="b sol">sol</b></li>
+      <li>근거는 타당한데 오답 → 문항 확인 표시 <b class="b code">코드</b></li>
+    </ul></li>
+  </ul></li>
+
+  <!-- B -->
+  <li><span class="n">B. "확실해요"</span> <b class="b new">새</b> → <b class="b code">코드</b> <span class="task">정답/오답 가르기</span>
+  <ul>
+    <li><span class="n">B1. 정답</span> → 끝, 판정 없음 <b class="b none">호출 없음</b> <span class="cat">[범주 4 확신 정답]</span></li>
+    <li><span class="n">B2. 오답</span> → "정답이 아니야, 근거 적어 줄래?" <b class="b none">학생</b> <span class="cat">[범주 6 오답]</span>
+    <ul>
+      <li>근거 작성 → A2와 같음 <b class="b sol">sol</b></li>
+      <li>근거 미제출 → 마지막 설명 <b class="b sol">sol</b></li>
+    </ul></li>
+  </ul></li>
+
+  <!-- C -->
+  <li><span class="n">C. "잘은 모르겠지만 정답 같음"</span> <b class="b new">새</b> → <b class="b code">코드</b> <span class="task">정답/오답 가르기</span>
+  <ul>
+    <li><span class="n">C1. 정답</span> → <b class="b sol">sol</b><b class="b new">새</b> <span class="task">힌트 하나 생성 (짧은 전용 호출, 뒤에서)</span> <span class="cat">[범주 5 확신 없이 맞힘]</span>
+    <ul>
+      <li>힌트 보기 → 근거 작성 <b class="b none">학생</b> → <b class="b sol">sol</b> <span class="task">선택 판정</span>
+        <ul>
+          <li>충분 → 끝</li>
+          <li>부족·오류 → 마지막 설명 <b class="b sol">sol</b> <span class="task">이때만 생성</span></li>
+        </ul></li>
+      <li>건너뛰기 → 마지막 설명 <b class="b sol">sol</b></li>
+    </ul></li>
+    <li><span class="n">C2. 오답</span> → B2와 같음 <span class="cat">[범주 6 오답]</span></li>
+  </ul></li>
+
+</ul></li>
+</ul>
+
+<h2>2. 리뷰 R (교정 대화)</h2>
+<p class="sub">첫 판정의 오류마다 sol이 미리 만든 질문을 차례로 낸다. 오류 순서는 코드가 정한다(대상 → 선지 읽기 → 내용).</p>
+
+<ul class="tree root">
+<li><span class="n">교정 질문 표시</span> <b class="b none">호출 없음</b> <span class="task">(sol이 판정 때 만든 질문)</span>
+<ul>
+  <li>학생 답 → <b class="b luna">luna</b> <span class="task">질문에 대한 답 판정 (오류마다 고침/남음, 새 오류)</span>
+  <ul>
+    <li>남은 오류 있음 → 다음 교정 질문 (반복)</li>
+    <li><span class="n">모두 고침</span>
+    <ul>
+      <li>정답 문항 (A1 오류에서 온 경우) → "설명 볼래?"
+        <ul>
+          <li>본다 → 마지막 설명 <b class="b sol">sol</b><b class="b chg">luna→sol</b></li>
+          <li>그만 → 끝</li>
+        </ul></li>
+      <li>오답 문항 → "다시 골라 볼래?"
+        <ul>
+          <li><span class="n">재선택 (마지막 선택)</span> → <b class="b code">코드</b> 정답/오답
+            <ul>
+              <li>정답 + 근거 → <b class="b sol">sol</b><b class="b chg">luna→sol</b> <span class="task">선택 판정 (질문은 더 없음)</span>
+                <ul>
+                  <li>충분 → 끝</li>
+                  <li>부족·오류 → 마지막 설명 <b class="b sol">sol</b><b class="b chg">luna→sol</b></li>
+                </ul></li>
+              <li>정답 + 근거 없음 → 끝</li>
+              <li>오답 + 근거 → <b class="b sol">sol</b> <span class="task">선택 판정</span> → 마지막 설명 <b class="b sol">sol</b></li>
+              <li>오답 + 근거 없음 → 마지막 설명 <b class="b sol">sol</b></li>
+            </ul></li>
+          <li>설명 요청 → 마지막 설명 <b class="b sol">sol</b></li>
+        </ul></li>
+    </ul></li>
+    <li><span class="n">못 고침</span> → 마지막 설명 <b class="b sol">sol</b> <span class="task">정답 공개·코칭</span></li>
+  </ul></li>
+  <li>건너뛰기 → 마지막 설명 <b class="b sol">sol</b></li>
+</ul></li>
+</ul>
+<p class="sub">마지막 설명 뒤에는 늘 "이해됐어?" <b class="b none">자기 보고</b>로 끝난다.</p>
+
+<h2>3. 호출 종류 한눈에</h2>
+<div class="wrap">
+<table>
+<tr><th>과제</th><th>모델</th><th>언제</th><th>호출당 (11-07 실측 역산, 추정)</th></tr>
+<tr><td>선택 판정 + 교정 질문 생성</td><td><b class="b sol">sol</b></td><td>근거를 쓴 모든 선택 (첫 선택, 재선택, C1 힌트 뒤 근거)</td><td>약 $0.048</td></tr>
+<tr><td>학생 결론 확인</td><td>판정과 같은 모델</td><td>판정기가 읽은 학생 결론이 어긋날 때만</td><td>드묾</td></tr>
+<tr><td>사고 진단</td><td><b class="b sol">sol</b></td><td>오답 + 충분이 아닌 정답 (첫 응답), 뒤에서</td><td>약 $0.012</td></tr>
+<tr><td>힌트 생성 <b class="b new">새</b></td><td><b class="b sol">sol</b></td><td>C1만, 뒤에서</td><td>약 $0.01 (미측정)</td></tr>
+<tr><td>교정 답 판정 ("질문에 맞게 고쳤나")</td><td><b class="b luna">luna</b></td><td>리뷰에서 학생이 답할 때마다</td><td>약 $0.0015</td></tr>
+<tr><td>마지막 설명</td><td><b class="b sol">sol</b></td><td>충분 정답·확신 정답이 아닌 경우 (미리 생성)</td><td>약 $0.020</td></tr>
+<tr><td>정답/오답 가르기, 리뷰 여부, 순서, 종료</td><td><b class="b code">코드</b></td><td>항상</td><td>$0</td></tr>
+</table>
+</div>
+
+<h2>4. 메모</h2>
+<div class="note">
+<ul>
+  <li>luna가 남는 곳은 리뷰 중 교정 답 판정 하나뿐이다.</li>
+  <li>근거가 충분한 정답(범주 1)과 확신 정답(범주 4)은 마지막 설명과 사고 진단을 만들지 않는다. 그래서 앞서 드린 세트당 비용 추정(정답마다 설명을 sol로 만든다고 본 값)은 조금 높게 잡혔다. 실제로는 세트당 약 $0.02~0.05 낮을 수 있다.</li>
+  <li>범주는 첫 응답으로 정한다. 리뷰나 재선택 결과는 범주를 바꾸지 않고, 서비스 반응 자료로 따로 기록한다.</li>
+  <li>미정: 판정 불가 정답 표시(제안: 범주 1 + 보류 표시), C1 힌트 규칙과 힌트 뒤 근거의 판정 기준.</li>
+</ul>
+</div>
+</main>
+</body>
+</html>
