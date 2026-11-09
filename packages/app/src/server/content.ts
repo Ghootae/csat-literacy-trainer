@@ -189,6 +189,7 @@ export function loadBundleFromRoot(root: string, referencePath: string, question
     stemPolarity: reference.stemPolarity,
     answerChoiceId: reference.answerChoiceId,
     officialExplanation: reference.officialExplanation,
+    ...(reference.lenientCorrect === undefined ? {} : { lenientCorrect: structuredClone(reference.lenientCorrect) }),
   });
   return { content: structuredClone(content), source };
 }

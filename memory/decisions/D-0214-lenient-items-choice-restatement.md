@@ -55,3 +55,11 @@ supersedes: D-0189 1번에 좁은 예외 추가(폐기 아님)
   3. 문단만 대면 부족(경마 1문단에는 ① 함정 근거 P1-2도 있어 어느 문장을 확인했는지 알 수 없음). 관대 아닌 문항의 위치만은 부족.
 - 위치 확인을 판정기 말이 아니라 서버의 골드 대조로 하는 것은 D-0189 예외를 넓혀도 판정기 결론을 그대로 믿지 않기 위해서다.
 - 경로: 웹 쪽 검토 의견(사용자가 붙여 넣음)과 코드 에이전트 추천이 같았고, 사용자가 문장 단위·서버 대조 조건을 붙여 확정. 시험 반영은 `docs/experiments/v510-judgment-2026-11-09/DESIGN-DRAFT.md` 3.2(K 위치만 3건)·3.4(H 경마 4 베낌 → 충분)·7절 ④.
+
+## 추가 3 (2026-11-09, 사용자 동의): 형태 칸은 `ground`를 넓혀 쓴다, 참인 선지 서버 검사도 바꾼다
+
+- 형태 칸: 1번의 `evidenceForm`을 따로 만들지 않는다. 기존 `ground.kind`로 표현한다. `SOURCE_ANCHORED` = `FACT`, `CHOICE_RESTATED` = `CONCLUSION_RESTATED`, `NON_DISCRIMINATING` = `FACT` + `judgment.holds=false`. 새로 `LOCATION_ONLY` 값과 `ground.locatedSource`(학생이 가리킨 위치가 문장 하나로 정해지면 그 원문 문장, 아니면 null) 칸만 더한다. 이유: 같은 내용을 두 칸에 적어 서로 어긋날 여지를 없앤다.
+- "되풀이가 선지 주장 전체를 덮는다"(4번)는 판정기 칸이 아니라 서버가 `choiceReading` 조각이 모두 짚였고 선지 글자와 맞는지로 계산한다.
+- 추가 2의 골드 근거 문장: 골드 ID(P1-5·P2-2)는 명제 단위 문장이라 원문과 글자가 다르다. runtime 자료에는 그 명제를 담은 **원문 문장**을 저장한다(경마 4 "경마식 보도는 선거와 정치에 무관심한 유권자들의 선거 참여, 정치 참여를 독려하는 장점이 있다.", 오디오 15 "한 파일 내의 오디오 신호에는 모든 소리 크기에 균일한 개수의 비트가 할당된다."). 짝 맞춤은 코드 에이전트가 함(`docs/experiments/sns-diagnostic-gold-2026-11-05/choice-link/dry-run-rerun-3/*/dry-run.request.json`의 명제 문장과 원문 대조).
+- 함께 확인한 사실: v5.8 171행의 "참인 선지는 모든 주장 지지"는 서버 검사에도 있다(`packages/pipeline/src/problem-solving/feedback-claims.ts` `readingJudgment`의 `touched.length === claims.length`). 11-08 실험의 의식 14 sol 부족 3/3은 모두 `PARTIAL_SUPPORT`였다(`docs/experiments/judge-model-explanation-2026-11-08/runs/A-cog14__S-now__r*.json` `readingSummary`). 그래서 v5.10은 지시문(171행)과 서버(참인 선지는 지지 대상 조각만 검사)를 함께 바꾼다. 서버 변경은 판정기 옵션 `judgmentRules: 'v5.10'`일 때만 작동하고 기본은 v5.8 그대로다.
+- 구현 인계: `docs/handoffs/2026-11-09-v510-sufficiency-and-lenient-raise.md`. 지시문: `packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.10.md`.

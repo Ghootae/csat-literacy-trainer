@@ -1,6 +1,7 @@
 # v5.10 판정 시험 설계 초안: 171행(참인 선지 충분 기준) 수정의 기대 판정
 
-- 날짜: 2026-11-09 · 상태: **초안, 사용자 검토 전**. 외부 전송 없음. 지시문 문장은 아직 쓰지 않았다.
+- 날짜: 2026-11-09 · 상태: 기대 판정·판단 ①~⑤ 사용자 확정. 지시문 작성(`packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.10.md`, v5.9 + 171행 + `LOCATION_ONLY`). 외부 전송 없음.
+- **정정(11-09)**: 처음 초안은 171행을 지시문에서만 고치는 것으로 잡았으나, 같은 규칙이 서버 검사에도 있다(`feedback-claims.ts` `readingJudgment`, 의식 14 sol 부족 3/3이 모두 `PARTIAL_SUPPORT`). v5.10은 서버 검사(참인 선지는 지지 대상 조각만)도 함께 바꾼다. 형태 칸은 `evidenceForm` 대신 `ground.kind`를 넓힌다. 근거: D-0214 추가 3, 인계 `docs/handoffs/2026-11-09-v510-sufficiency-and-lenient-raise.md`.
 - 근거: [D-0213](../../../memory/decisions/D-0213-diagnostic-judgment-split-option-na.md) "추가" 절(v5.10 = v5.9 + 171행 수정, 기대 판정은 v5.9 시험과 병행 준비, 회귀에 오답 판정 lab 6문항·힌트 뒤 근거 포함, 오픈 전 미완이면 2단계 표시).
 - 모델: sol만(D-0213 6번, 진단의 정답 판정 = sol).
 

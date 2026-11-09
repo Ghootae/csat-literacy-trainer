@@ -1218,6 +1218,32 @@ describe('public correction highlights', () => {
   });
 });
 
+describe('question warning: marked without highlight', () => {
+  const imageSource = { ...source, media: [{ mediaId: 'M', url: 'https://example.org/source.png', mimeType: 'image/png', width: 10, height: 10, placement: { scope: 'PASSAGE' as const } }] };
+  const run = (question: string, src: any[]) => {
+    const s = selection('C4', createFeedbackSession('S', imageSource)); const a = output(s);
+    a.errors = [{ ...a.errors[0]!, question, sourceEvidence: src }];
+    return assess(s, a);
+  };
+  const mediaEv = { location: 'PASSAGE', quote: null, mediaId: 'M', visualObservation: '그림의 반복 게시 표시' };
+  const textEv = { location: 'PASSAGE', quote: source.passage, mediaId: null, visualObservation: null };
+  const noPassageQuote = { location: 'EXPLANATION', quote: source.officialExplanation, mediaId: null, visualObservation: null };
+  it('records one warning when 표시한 has nothing to highlight (media-only or no passage quote)', () => {
+    for (const src of [[mediaEv], [noPassageQuote]]) {
+      const s = run('표시한 부분을 다시 읽어 볼래요?', src);
+      expect(s.phase).toBe('AWAITING_CORRECTION');
+      expect(s.questionWarnings).toEqual([{ kind: 'MARKED_WITHOUT_HIGHLIGHT', errorId: 'E1', question: '표시한 부분을 다시 읽어 볼래요?' }]);
+      expect(feedbackPublicView(s)).not.toHaveProperty('questionWarnings');
+    }
+  });
+  it('records nothing when highlights exist or the question lacks 표시한', () => {
+    const ok = run('표시한 부분을 다시 읽어 볼래요?', [textEv]);
+    expect(ok.questionWarnings ?? []).toEqual([]);
+    expect(feedbackPublicView(ok).correctionHighlights).toHaveLength(1);
+    expect(run('표에서 다시 찾아볼래요?', [mediaEv]).questionWarnings ?? []).toEqual([]);
+  });
+});
+
 describe('section closing is chosen by what the section covered', () => {
   const assessed = (changes: Partial<FeedbackSelectionAssessment>, s = selection()) => assess(s, output(s, changes));
   const wrongThought = '네가 어디에서 잘못 생각했었는지 이해됐으면, 이번엔 정답에 대한 설명으로 넘어가 보자.';

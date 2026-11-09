@@ -4,9 +4,10 @@ const QUOTE_REF = { type: 'object', additionalProperties: false,
   properties: { observationId: { type: 'string' }, quote: { type: 'string' } }, required: ['observationId', 'quote'] };
 const RELATIONS = ['UNTOUCHED', 'EXACT', 'BLANK_FILLED', 'WEAKER', 'STRONGER', 'ADDED', 'REVERSED', 'OTHER_TARGET'] as const;
 const GROUND_KINDS = ['FACT', 'CONCLUSION_RESTATED', 'JUDGMENT_METHOD', 'NONE'] as const;
+const GROUND_KINDS_V510 = [...GROUND_KINDS, 'LOCATION_ONLY'] as const;
 const SOURCE_CHECKS = ['CONSISTENT', 'CONTRADICTED', 'OFF_TARGET', 'UNDETERMINED', 'CHOICE_READING'];
 const strictObject = (properties: Record<string, any>) => ({ type: 'object', additionalProperties: false, properties, required: Object.keys(properties) });
-export function extendedSelectionSchema(base: Record<string, any>) {
+export function extendedSelectionSchema(base: Record<string, any>, rules: JudgmentRules = 'v5.8') {
   const schema = structuredClone(base);
   // The three cells (choiceReading, ground, judgment) follow claimConflicts and precede every judgment field, so they go first.
   schema.properties = { claimConflicts: { type: 'array', items: {
@@ -22,7 +23,8 @@ export function extendedSelectionSchema(base: Record<string, any>) {
       cue: { anyOf: [QUOTE_REF, { type: 'null' }] },
     }) },
   }) } }), ground: strictObject({
-    kind: { type: 'string', enum: [...GROUND_KINDS] }, observationId: { type: 'string' }, quote: { type: 'string' },
+    kind: { type: 'string', enum: [...(rules === 'v5.10' ? GROUND_KINDS_V510 : GROUND_KINDS)] }, observationId: { type: 'string' }, quote: { type: 'string' },
+    ...(rules === 'v5.10' ? { locatedSource: { anyOf: [{ type: 'string' }, { type: 'null' }] } } : {}),
   }), judgment: strictObject({
     verdict: { type: 'string', enum: ['VALID', 'INVALID', 'NONE'] }, targetClaimIds: { type: 'array', items: { type: 'string' } },
     contradiction: { type: 'string' }, holds: { type: 'boolean' },
@@ -41,7 +43,14 @@ export function extendedSelectionSchema(base: Record<string, any>) {
 const normalize = (text: string) => text.replace(/\s+/gu, ' ').trim();
 export const overlaps = (a: { observationId: string; quote: string }, b: { observationId: string; quote: string }) => a.observationId === b.observationId && normalize(a.quote) && normalize(b.quote)
   && (normalize(a.quote).includes(normalize(b.quote)) || normalize(b.quote).includes(normalize(a.quote)));
-export interface ClaimsOptions { correctChoice: boolean; targetVerdict: 'VALID' | 'INVALID'; choiceText: string }
+export type JudgmentRules = 'v5.8' | 'v5.10';
+export interface ClaimsOptions { correctChoice: boolean; targetVerdict: 'VALID' | 'INVALID'; choiceText: string;
+  /** Judgment rule set; absent means v5.8. */
+  rules?: JudgmentRules;
+  /** Lenient-item marker (D-0214); only read under v5.10 and never part of the judge input. */
+  lenient?: { supportSentences: string[] };
+  /** Source texts a LOCATION_ONLY locatedSource must be found in (v5.10). */
+  passage?: string; scenario?: string }
 // Three cells decide reconstructability; correct-choice sufficiency is checked from them (supersedes D-0161).
 export function validateClaims(assessment: any, observations: { observationId: string; text: string }[], options: ClaimsOptions) {
   const fail = (reason: string): never => { throw new Error(`CLAIMS_CONTRACT: ${reason}`); };
@@ -144,8 +153,15 @@ function validateCells(assessment: any, observations: { observationId: string; t
     if (c.blanks.length && c.relation === 'EXACT') fail('a claim with blanks cannot be EXACT');
   }
   const ground = assessment.ground;
-  if (!exactKeys(ground, ['kind', 'observationId', 'quote']) || !(GROUND_KINDS as readonly string[]).includes(ground.kind)
-    || typeof ground.observationId !== 'string' || typeof ground.quote !== 'string') fail('invalid ground structure');
+  const v510 = options.rules === 'v5.10';
+  if (!exactKeys(ground, v510 ? ['kind', 'observationId', 'quote', 'locatedSource'] : ['kind', 'observationId', 'quote'])
+    || !((v510 ? GROUND_KINDS_V510 : GROUND_KINDS) as readonly string[]).includes(ground.kind)
+    || typeof ground.observationId !== 'string' || typeof ground.quote !== 'string'
+    || (v510 && ground.locatedSource !== null && typeof ground.locatedSource !== 'string')) fail('invalid ground structure');
+  if (v510 && ground.kind === 'LOCATION_ONLY' && ground.locatedSource !== null) {
+    const located = normalize(ground.locatedSource);
+    if (!located || ![options.passage, options.scenario].some(t => typeof t === 'string' && normalize(t).includes(located))) fail('locatedSource not in the passage or scenario');
+  }
   if (ground.kind === 'NONE' ? ground.observationId !== '' || ground.quote !== '' : !quoteIn(ground)) fail(ground.kind === 'NONE' ? 'ground NONE must have empty observationId and quote' : 'ground quote not in observation');
   const judgment = assessment.judgment;
   if (!exactKeys(judgment, ['verdict', 'targetClaimIds', 'contradiction', 'holds']) || !['VALID', 'INVALID', 'NONE'].includes(judgment.verdict)
@@ -201,6 +217,7 @@ export function normalizeCells(assessment: any, options: ClaimsOptions): { asses
     }
   }
   const g = a.ground;
+  if (options.rules === 'v5.10' && g && typeof g === 'object' && g.kind !== 'LOCATION_ONLY' && (g.locatedSource ?? null) !== null) { g.locatedSource = null; notes.push('cleared locatedSource of a ground that is not LOCATION_ONLY'); }
   if (g?.kind === 'NONE' && (g.observationId !== '' || g.quote !== '')) { g.observationId = ''; g.quote = ''; notes.push('cleared observationId and quote of ground NONE'); }
   if (options.correctChoice && Array.isArray(a.errors) && a.errors.some((e: any) => e?.errorType === 'READING')) {
     a.errors = a.errors.filter((e: any) => e?.errorType !== 'READING'); notes.push('removed READING error from a correct choice');
@@ -269,10 +286,12 @@ export function settleConclusion(assessment: any, observations: { observationId:
   }
   if (options.correctChoice && derived && a.reconstructability === 'RECONSTRUCTABLE' && a.judgment.verdict === options.targetVerdict && noErrors) {
     // The server lowers a model SUPPORTED but never raises a model INSUFFICIENT: the three cells can miss an unsupported step (prob-11, v5.8 P1-r2).
+    // The only exception is the lenient-item raise under v5.10 (D-0214, narrows D-0189), decided in readingJudgment.
     const held = a.contentAssessment === 'INSUFFICIENT';
     const judged = readingJudgment({ ...a, contentAssessment: held ? 'INSUFFICIENT' : 'UNKNOWN' }, options)!;
     const [content, kind] = judged.supported ? ['SUPPORTED', 'NONE'] : ['INSUFFICIENT', judged.insufficiencyKind];
-    if (held && judged.cellsSupported) notes.push('contentAssessment kept INSUFFICIENT: the server does not raise the model conclusion');
+    if (judged.raised && a.contentAssessment !== 'SUPPORTED') notes.push(`contentAssessment raised to SUPPORTED: lenient item (D-0214), ${judged.raised}, model said ${a.contentAssessment}/${a.insufficiencyKind}`);
+    else if (held && judged.cellsSupported) notes.push('contentAssessment kept INSUFFICIENT: the server does not raise the model conclusion');
     if (a.contentAssessment !== content || a.insufficiencyKind !== kind) { a.contentAssessment = content; a.insufficiencyKind = kind; notes.push(`contentAssessment set to ${content} from the three cells`); }
   }
   return { assessment: a, notes };
@@ -293,26 +312,35 @@ function readingJudgment(assessment: any, options: ClaimsOptions) {
   // A student's reading of the choice inside the ground quote is not a source claim: only the fact claims must be CONSISTENT,
   // and at least one fact claim must be there (판정 실험 2026-11-08, 사용자 결정 방안 A).
   const factClaims = groundClaims.filter(c => c.sourceCheck !== 'CHOICE_READING');
-  const claimsOk = negative ? targets.some(fits) : touched.length === claims.length && touched.every(fits);
+  const v510 = options.rules === 'v5.10';
+  // v5.10: a true choice needs only the claims the student's judgment targets to be supported, not every claim of the choice.
+  const claimsOk = negative ? targets.some(fits) : v510 ? targets.length > 0 && targets.every(fits) && touched.every(fits) : touched.length === claims.length && touched.every(fits);
   const cellsSupported = ground.kind === 'FACT' && factClaims.length > 0 && factClaims.every(c => c.sourceCheck === 'CONSISTENT') && claimsOk && judgment.holds;
-  const supported = cellsSupported && assessment.contentAssessment !== 'INSUFFICIENT';
+  // Lenient-item raise (D-0214): the one place the server lifts a model INSUFFICIENT (exception to D-0189).
+  const lenientSentences = v510 ? options.lenient?.supportSentences : undefined;
+  const raised = lenientSentences && !negative && Array.isArray(assessment.errors) && !assessment.errors.length
+    ? ground.kind === 'CONCLUSION_RESTATED' && touched.length === claims.length && touched.every(fits) ? 'RESTATED_WHOLE_CHOICE' as const
+    : ground.kind === 'LOCATION_ONLY' && typeof ground.locatedSource === 'string' && normalize(ground.locatedSource)
+      && lenientSentences.some(x => { const a = normalize(ground.locatedSource), b = normalize(x); return a.includes(b) || b.includes(a); }) ? 'LOCATED_SUPPORT_SENTENCE' as const
+    : null : null;
+  const supported = !!raised || (cellsSupported && assessment.contentAssessment !== 'INSUFFICIENT');
   const fitsAny = negative ? targets.some(fits) : false;
   const insufficiencyCase = supported ? null
-    : ground.kind === 'CONCLUSION_RESTATED' ? 'CONCLUSION_ONLY'
+    : ground.kind === 'CONCLUSION_RESTATED' || (v510 && ground.kind === 'LOCATION_ONLY') ? 'CONCLUSION_ONLY'
     : ground.kind === 'JUDGMENT_METHOD' ? 'JUDGMENT_METHOD'
     : (negative ? !fitsAny && targets.some((c: any) => ['STRONGER', 'ADDED'].includes(c.relation)) : touched.some((c: any) => c.relation === 'WEAKER')) ? 'READING_GAP'
     : (negative ? !fitsAny && targets.some((c: any) => relationOk(c) && !blankOk(c)) : touched.some((c: any) => relationOk(c) && !blankOk(c))) ? 'BLANK_UNSUPPORTED'
-    : !negative && touched.length < claims.length ? 'PARTIAL_SUPPORT'
+    : !negative && !v510 && touched.length < claims.length ? 'PARTIAL_SUPPORT'
     : 'MISSING_LINK';
-  const insufficiencyKind = ['CONCLUSION_RESTATED', 'JUDGMENT_METHOD'].includes(ground.kind) ? 'JUDGMENT_METHOD' : 'MISSING_LINK';
-  return { supported, cellsSupported, insufficiencyCase, insufficiencyKind };
+  const insufficiencyKind = ['CONCLUSION_RESTATED', 'JUDGMENT_METHOD'].includes(ground.kind) || (v510 && ground.kind === 'LOCATION_ONLY') ? 'JUDGMENT_METHOD' : 'MISSING_LINK';
+  return { supported, cellsSupported, insufficiencyCase, insufficiencyKind, raised };
 }
 
 /** What the end explanation keeps of the three cells; stored on the SELECTION assessment, never requested from the model. */
 export function readingSummary(assessment: any, options: ClaimsOptions) {
   return {
     insufficiencyCase: readingJudgment(assessment, options)?.insufficiencyCase ?? null,
-    conclusionOnly: assessment.ground?.kind === 'CONCLUSION_RESTATED',
+    conclusionOnly: assessment.ground?.kind === 'CONCLUSION_RESTATED' || (options.rules === 'v5.10' && assessment.ground?.kind === 'LOCATION_ONLY'),
     judgmentNote: assessment.judgment?.contradiction || null,
     readings: assessment.choiceReading.claims.filter((c: any) => c.relation !== 'UNTOUCHED')
       .map((c: any) => ({ choiceText: c.choiceText, studentReading: c.studentReading, relation: c.relation })),

@@ -141,6 +141,8 @@ export interface FeedbackSession {
   correctionSucceeded: boolean;
   message: string;
   result: FeedbackResult | null;
+  // Server-side log only (never in the public view): a question says "표시한" but nothing can be highlighted.
+  questionWarnings?: { kind: 'MARKED_WITHOUT_HIGHLIGHT'; errorId: string; question: string }[];
 }
 
 export function normalizeFeedbackPolarity(polarity: SourceDirectProblemBundle['stemPolarity']): 'VALID' | 'INVALID' {
@@ -483,7 +485,12 @@ function nextCorrection(s: FeedbackSession) {
     if (e.asked || e.skipped) continue;
     if (e.status === 'REPAIRED') { e.skipped = true; continue; }
     e.asked = true; s.activeErrorId = e.errorId; s.phase = 'AWAITING_CORRECTION';
-    s.evaluationMode = null; s.message = e.question; return true;
+    s.evaluationMode = null; s.message = e.question;
+    if (e.question.includes('표시한') && !correctionHighlightsFor(s, e).length) {
+      s.questionWarnings ??= [];
+      if (!s.questionWarnings.some(w => w.errorId === e.errorId)) s.questionWarnings.push({ kind: 'MARKED_WITHOUT_HIGHLIGHT', errorId: e.errorId, question: e.question });
+    }
+    return true;
   }
   return false;
 }
@@ -550,17 +557,20 @@ export function applyFeedbackAssessment(session: FeedbackSession, raw: unknown):
   return s;
 }
 
+function correctionHighlightsFor(s: FeedbackSession, error: FeedbackError | undefined) {
+  const highlights: { location: 'PASSAGE' | 'SCENARIO'; start: number; end: number; text: string }[] = [];
+  for (const evidence of error?.sourceEvidence ?? []) {
+    if ((evidence.location !== 'PASSAGE' && evidence.location !== 'SCENARIO') || !evidence.quote || evidence.mediaId || evidence.visualObservation) continue;
+    const text = evidence.quote;
+    const start = (evidence.location === 'PASSAGE' ? s.source.passage : s.source.scenario).indexOf(text);
+    if (start >= 0) highlights.push({ location: evidence.location, start, end: start + text.length, text });
+  }
+  return highlights;
+}
+
 /** Deliberately excludes source key, internal assessments, planned questions and error descriptions. */
 export function feedbackPublicView(s: FeedbackSession) {
-  const correctionHighlights: { location: 'PASSAGE' | 'SCENARIO'; start: number; end: number; text: string }[] = [];
-  if (s.phase === 'AWAITING_CORRECTION') {
-    for (const evidence of s.errors.find(e => e.errorId === s.activeErrorId)?.sourceEvidence ?? []) {
-      if ((evidence.location !== 'PASSAGE' && evidence.location !== 'SCENARIO') || !evidence.quote || evidence.mediaId || evidence.visualObservation) continue;
-      const text = evidence.quote;
-      const start = (evidence.location === 'PASSAGE' ? s.source.passage : s.source.scenario).indexOf(text);
-      if (start >= 0) correctionHighlights.push({ location: evidence.location, start, end: start + text.length, text });
-    }
-  }
+  const correctionHighlights = s.phase === 'AWAITING_CORRECTION' ? correctionHighlightsFor(s, s.errors.find(e => e.errorId === s.activeErrorId)) : [];
   return {
     version: s.version, sessionId: s.sessionId, revision: s.revision, phase: s.phase,
     question: { questionId: s.source.questionId, passageText: s.source.passage, stem: s.source.stem,

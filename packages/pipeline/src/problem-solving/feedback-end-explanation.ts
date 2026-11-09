@@ -238,7 +238,7 @@ function endSection(s: FeedbackSession, selectionNumber: 1 | 2) {
 export function feedbackEndExplanationContent(s: FeedbackSession, options: { layout?: EndExplanationLayout | undefined } = {}): Array<Record<string, unknown>> {
   const layoutV1 = options.layout === 'layout-v1' || options.layout === 'layout-v2';
   if (s.phase !== 'AWAITING_EVALUATION' || s.evaluationMode !== 'END_EXPLANATION' || !s.pendingEnd) throw new Error('종료 설명 대기 상태가 아닙니다.');
-  const { stemPolarity: _polarity, media, ...source } = s.source;
+  const { stemPolarity: _polarity, lenientCorrect: _lenient, media, ...source } = s.source;
   const last = s.assessments.filter(a => a.mode === 'REPAIR').at(-1);
   const finalSummary = selectionAssessmentOf(s, s.selections.length)?.readingSummary;
   const position = (choiceId: string) => s.source.choices.find(c => c.choiceId === choiceId)!.position;

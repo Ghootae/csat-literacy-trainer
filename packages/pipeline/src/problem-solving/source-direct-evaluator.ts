@@ -85,6 +85,7 @@ export const SourceDirectProblemReferenceSchema = z.object({
   stemPolarity: z.enum(['SELECT_CORRECT', 'SELECT_INCORRECT']),
   answerChoiceId: z.string().min(1),
   officialExplanation: z.string().min(1),
+  lenientCorrect: z.object({ supportSentences: z.array(z.string().min(1)).min(1) }).strict().optional(),
 }).strict();
 
 export type SourceDirectProblemReference = z.infer<
@@ -132,6 +133,8 @@ export const SourceDirectProblemBundleSchema = z.object({
   choices: z.array(SourceDirectChoiceSchema).min(2),
   answerChoiceId: z.string().min(1),
   officialExplanation: z.string().min(1),
+  // Lenient-item marker (D-0214). Server-only: feedbackEvaluationInput removes it from the judge input.
+  lenientCorrect: z.object({ supportSentences: z.array(z.string().min(1)).min(1) }).strict().optional(),
 }).strict().superRefine((bundle, context) => {
   const annotationKeys = new Set<string>();
   bundle.textAnnotations?.forEach((annotation, index) => {

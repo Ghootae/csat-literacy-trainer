@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import OpenAI from 'openai';
 import { z } from 'zod/v4';
 import { assertNoStructuredProblemGold, SOURCE_TEXT_ANNOTATION_GUIDE } from './source-direct-evaluator.js';
-import { extendedSelectionSchema, normalizeCells, readingSummary, settleConclusion, snapQuotes, validateClaims } from './feedback-claims.js';
+import { extendedSelectionSchema, type JudgmentRules, normalizeCells, readingSummary, settleConclusion, snapQuotes, validateClaims, type ClaimsOptions } from './feedback-claims.js';
 import { feedbackEndExplanationContent, CORRECT_END_INSTRUCTIONS, INCORRECT_END_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V1_INSTRUCTIONS, END_EXPLANATION_LAYOUT_V2_INSTRUCTIONS, type EndExplanationLayout } from './feedback-end-explanation.js';
 import {
   FeedbackRepairAssessmentSchema, FeedbackSelectionAssessmentSchema, PROBLEM_FEEDBACK_SESSION_VERSION,
@@ -32,7 +32,7 @@ export class FeedbackEvaluationError extends Error {
 export function feedbackEvaluationInput(s: FeedbackSession) {
   if (s.phase !== 'AWAITING_EVALUATION') throw new Error('평가 요청 상태가 아닙니다.');
   const source = structuredClone(s.source);
-  const { stemPolarity: _stemPolarity, ...normalizedSource } = source;
+  const { stemPolarity: _stemPolarity, lenientCorrect: _lenientCorrect, ...normalizedSource } = source;
   const input = {
     version: PROBLEM_FEEDBACK_SESSION_VERSION, mode: s.evaluationMode, source: normalizedSource,
     targetVerdict: s.choiceImpliedVerdict,
@@ -93,7 +93,7 @@ export const FEEDBACK_REPAIR_MODEL = 'gpt-6-luna';
 
 export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
   private client: OpenAI | undefined;
-  constructor(private readonly options: { model?: string; selectionModels?: { correct: string; incorrect: string }; timeoutMs?: number; maxOutputTokens?: number; maxRetries?: number; transport?: FeedbackTransport; endLayout?: EndExplanationLayout; promptPath?: string; promptVersion?: string } = {}) {}
+  constructor(private readonly options: { model?: string; selectionModels?: { correct: string; incorrect: string }; timeoutMs?: number; maxOutputTokens?: number; maxRetries?: number; transport?: FeedbackTransport; endLayout?: EndExplanationLayout; judgmentRules?: JudgmentRules; promptPath?: string; promptVersion?: string } = {}) {}
   async evaluate(s: FeedbackSession): Promise<FeedbackEvaluationCall> {
     const started = performance.now();
     const attempts: NonNullable<FeedbackEvaluationCall['metadata']['attempts']> = [];
@@ -117,7 +117,7 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
         model, store: false, reasoning: { effort: 'medium' }, max_output_tokens: this.options.maxOutputTokens ?? 8000,
         instructions, input: [{ role: 'user', content }] as never,
         text: { format: { type: 'json_schema', name: 'problem_feedback_' + kind.toLowerCase(),
-          strict: true, schema: kind === 'ASSESSMENT' && s.evaluationMode === 'SELECTION' ? extendedSelectionSchema(z.toJSONSchema(schema)) : z.toJSONSchema(schema) } },
+          strict: true, schema: kind === 'ASSESSMENT' && s.evaluationMode === 'SELECTION' ? extendedSelectionSchema(z.toJSONSchema(schema), this.options.judgmentRules) : z.toJSONSchema(schema) } },
       }, { timeout: this.options.timeoutMs ?? 60_000, maxRetries: 0 });
       let raw: unknown = response.output_text;
       try { raw = JSON.parse(response.output_text); } catch { /* preserve verbatim */ }
@@ -156,7 +156,9 @@ export class OpenAIFeedbackEvaluator implements FeedbackEvaluator {
           readFileSync(resolve(process.cwd(), this.options.promptPath ?? 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.8.md'), 'utf8'), content);
         if (s.evaluationMode === 'SELECTION') {
           const choice = s.source.choices.find(c => c.choiceId === s.selections.at(-1)?.choiceId)!;
-          const options = { correctChoice: choice.choiceId === s.source.answerChoiceId, targetVerdict: s.choiceImpliedVerdict, choiceText: choice.text };
+          const options: ClaimsOptions = { correctChoice: choice.choiceId === s.source.answerChoiceId, targetVerdict: s.choiceImpliedVerdict, choiceText: choice.text,
+            ...(this.options.judgmentRules === 'v5.10' ? { rules: 'v5.10' as const, passage: s.source.passage, scenario: s.source.scenario,
+              ...(s.source.lenientCorrect ? { lenient: s.source.lenientCorrect } : {}) } : {}) };
           const observations = feedbackEvaluationInput(s).observations.map(o => ({ observationId: o.observationId, text: feedbackObservationText(o) }));
           const normalized = normalizeCells(candidate, options);
           const attempt = attempts.at(-1)!; attempt.normalized = normalized.notes;
