@@ -46,3 +46,30 @@ describe('participantPosition (OUTPUT.md 3절 표)', () => {
     expect(theta.mean).toBeGreaterThan(0); expect(theta.low).toBeLessThan(theta.high);
   });
 });
+
+describe('등급 확률(D-0218)', () => {
+  it.each([0, 4, 8, 12, 16])('정답 %i개: 9칸 합 1, 최빈 등급은 확률 최대 칸', k => {
+    const { grade } = participantPosition(responsesFor(k));
+    expect(grade.probabilities).toHaveLength(9);
+    expect(grade.probabilities.reduce((a, x) => a + x, 0)).toBeCloseTo(1, 9);
+    expect(grade.probabilities[grade.mode - 1]).toBe(Math.max(...grade.probabilities));
+  });
+  it('정답이 많으면 낮은 숫자 등급, 오답이 많으면 높은 숫자 등급', () => {
+    const high = participantPosition(responsesFor(15)).grade; const low = participantPosition(responsesFor(1)).grade;
+    expect(high.mode).toBeLessThanOrEqual(2); expect(low.mode).toBeGreaterThanOrEqual(7);
+    expect(high.mode).toBeLessThan(low.mode);
+  });
+  it('최빈 등급은 최대 칸 중 가장 작은 숫자다', () => {
+    const { grade } = participantPosition([]);
+    expect(grade.probabilities.findIndex(x => x === Math.max(...grade.probabilities)) + 1).toBe(grade.mode);
+  });
+  it('기존 값(mean·best·worst·percentile)은 바뀌지 않는다', () => {
+    const p = participantPosition(responsesFor(8));
+    expect(Math.round(p.percentile.mean)).toBe(61); expect(p.grade.mean).toBe(4); expect(p.grade.best).toBe(3); expect(p.grade.worst).toBe(5);
+  });
+  it('계산 시간을 잰다(참고용)', () => {
+    const started = performance.now(); participantPosition(responsesFor(8)); const ms = performance.now() - started;
+    expect(ms).toBeLessThan(500);
+    console.info(`participantPosition 16문항 ${ms.toFixed(1)}ms`);
+  });
+});

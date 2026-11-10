@@ -1,6 +1,6 @@
-/** 시작 안내·요약 선택·지문 끝 중간 화면(인계 B (4), 샘플 `Passage.dc.html` 배치). */
+/** 시작 안내·요약 선택·지문 결과 화면(인계 B (4), D-0218). */
 import { useState } from 'react';
-import { PENDING_TEXT, cellState, gradeText, passageResultSentence, rangeBar } from './logic.js';
+import { MEGASTUDY_NOTE, PENDING_TEXT, RESULT_GROUP_MARK, devCategoryText, finishHint, gradeShade, resultGroup, resultRow } from './logic.js';
 import type { SummaryCardView } from './types.js';
 
 export function IntroPage({ busy, error, start }: { busy: boolean; error: string; start: () => void }): React.JSX.Element {
@@ -26,22 +26,45 @@ export function ChoosePage({ title, number, total, busy, error, choose }: {
   </div></main>;
 }
 
-export function MidPage({ title, number, total, card, start, error }: {
-  title: string; number: number; total: number; card: SummaryCardView | null; start: () => void; error: string;
+const GRADES = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+/** 지문 결과 화면(D-0218): 문항 줄 목록(결과는 눌러서 하나씩 공개) → 등급 → 다음 지문. */
+export function MidPage({ title, number, total, card, dev, last, busy, error, reveal, review, finish }: {
+  title: string; number: number; total: number; card: SummaryCardView | null; dev: boolean; last: boolean; busy: boolean; error: string;
+  reveal: (questionId: string) => void; review: (questionId: string) => void; finish: () => void;
 }): React.JSX.Element {
-  const ready = card;
-  const bar = ready?.position ? rangeBar(ready.position.percentile.low, ready.position.percentile.high) : null;
+  const hint = card ? finishHint(card) : null;
+  const shade = card?.position ? gradeShade(card.position.grade.probabilities) : null;
   return <main className="diag-page"><div className="diag-wrap">
     <header className="diag-heading"><p className="diag-sub">지문 {number}/{total}</p><h1>{title}</h1></header>
-    <section className="diag-card" aria-label="이 지문 결과"><span className="diag-label">이 지문 결과</span>
-      {ready ? <>
-        <p className="diag-sentence" data-testid="passage-result">{ready.total === 0 ? '답한 문항이 없어.' : passageResultSentence(ready)}</p>
-        <div className="diag-cellrow"><div>{ready.items.map(item => <span key={item.questionId} className="diag-cell" data-state={cellState({ review: false, correct: item.correct })} data-checking={item.category === 'CHECKING'}>{item.questionNumber}</span>)}</div></div></>
-        : <p className="diag-muted" role="status">{PENDING_TEXT}</p>}</section>
-    {ready?.position && bar && <section className="diag-card" aria-label="이 지문까지의 위치"><div className="diag-card-head"><span className="diag-label">이 지문까지의 위치</span><span className="diag-sub">수능 기준 환산 추정</span></div>
-      <p className="diag-big">{gradeText(ready.position.grade)}</p>
-      <div className="diag-track"><div style={{ left: `${bar.left}%`, width: `${bar.width}%` }} /></div></section>}
-    <section className="diag-card">{error && <p className="err" role="alert">{error}</p>}
-      <div className="diag-buttons"><button type="button" className="diag-primary" disabled={ready === null || !ready.firstItemOpen} onClick={start}>피드백 시작</button></div></section>
+    <section className="diag-card" aria-label="이 지문의 문제 풀이 결과"><span className="diag-label">이 지문의 문제 풀이 결과</span>
+      {card ? <>
+        {card.items.length === 0 ? <p className="diag-sentence">답한 문항이 없어.</p>
+          : <><p className="diag-muted">문제 번호를 눌러 결과를 하나씩 열어 봐.</p>
+            <ul className="diag-rows">{card.items.map(item => {
+              const group = resultGroup(item.category); const row = item.revealed ? resultRow(item) : null;
+              const analyzing = item.revealed ? row!.analyzing : item.judging || item.category === 'PENDING' || item.category === 'CHECKING';
+              return <li key={item.questionId} className="diag-row" data-testid={`row-${item.questionNumber}`} data-revealed={item.revealed}>
+                <button type="button" className="diag-qbtn" data-group={group} data-analyzing={analyzing} data-testid={`qbtn-${item.questionNumber}`} disabled={busy && !item.revealed}
+                  aria-label={`문제 ${item.questionNumber}, ${analyzing ? '분석 중' : RESULT_GROUP_MARK[group]}${item.revealed ? '' : ', 눌러서 결과 보기'}`}
+                  onClick={() => { if (!item.revealed) reveal(item.questionId); }}>
+                  <b>문제 {item.questionNumber}</b><small>{analyzing ? '… 분석 중' : RESULT_GROUP_MARK[group]}</small></button>
+                {row ? <>
+                  <p className="diag-rowtext" data-testid={`desc-${item.questionNumber}`}>{row.description}{dev && <span className="diag-devtag"> {devCategoryText(item.category)}</span>}</p>
+                  <button type="button" className="diag-reviewbtn" data-testid={`review-${item.questionNumber}`} data-done={item.reviewDone} disabled={!row.button.enabled} onClick={() => review(item.questionId)}>{row.button.label}</button></>
+                  : <><p className="diag-rowtext diag-rowhidden" data-testid={`desc-${item.questionNumber}`}>결과는 가려져 있어</p><span className="diag-reviewbtn diag-reviewhidden" aria-hidden="true" /></>}
+              </li>;
+            })}</ul>
+            {card.items.some(item => item.revealed) && <p className="diag-muted">정답률과 같은 선지를 고른 비율은 {MEGASTUDY_NOTE}(두 수치는 화작 · 언매 순).</p>}</>}</> : <p className="diag-muted" role="status">{PENDING_TEXT}</p>}</section>
+    <section className="diag-card" aria-label="이 지문까지의 위치"><div className="diag-card-head"><span className="diag-label">이 지문까지의 위치</span><span className="diag-sub">수능 기준 환산 추정</span></div>
+      <p className="diag-big" data-testid="grade-text">{card?.position ? `${card.position.grade.mode}등급` : '나의 현재 등급은?'}</p>
+      <div className="diag-gradebar" data-testid="grade-bar" role="img" aria-label={card?.position ? `등급별 확률: ${GRADES.map(g => `${g}등급 ${Math.round(card.position!.grade.probabilities[g - 1]! * 100)}%`).join(', ')}` : '등급은 모든 문제의 결과를 열면 보여 줘'}>
+        {GRADES.map(g => <span key={g} data-testid={`grade-seg-${g}`} data-mode={card?.position?.grade.mode === g}
+          style={shade ? { opacity: shade[g - 1] } : undefined} title={card?.position ? `${g}등급 ${Math.round(card.position.grade.probabilities[g - 1]! * 100)}%` : undefined} />)}</div>
+      <div className="diag-gradeticks" aria-hidden="true">{GRADES.map(g => <span key={g}>{g}등급</span>)}</div>
+      {!card?.position && <p className="diag-muted">모든 문제의 결과를 열어 보면 등급을 알려 줄게.</p>}</section>
+    <div className="diag-footer">{error && <p className="err" role="alert">{error}</p>}
+      {hint && <p className="diag-muted" role="status" data-testid="finish-hint">{hint}</p>}
+      <button type="button" className="diag-primary" data-testid="finish" disabled={card === null || !card.canFinish || busy} onClick={finish}>{last ? '결과 보기' : '다음 지문'}</button></div>
   </div></main>;
 }

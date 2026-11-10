@@ -49,8 +49,8 @@ describe('개발자 건너뛰기(D-0217)', () => {
     expect(status(h)).toMatchObject({ status: 'ANSWERING', summaryChosen: true, summarySkipped: false });
   });
 
-  it('일부만 답한 ANSWERING → FEEDBACK: 답 있는 문항만 판정하고 커서가 답 없는 문항을 지나친다', async () => {
-    const h = harness();
+  it('일부만 답한 ANSWERING → FEEDBACK: 답 있는 문항만 판정하고 답 없는 문항은 건너뜀으로 둔다', async () => {
+    const h = harness(feedbackFake({ behavior: q => q === Q16 ? 'ERROR' : 'SUPPORTED' }));
     h.c.start(h.id, COG.passageId, { summary: false });
     post(h, Q12, provided(correctChoice(Q12))); post(h, Q14, omitted(correctChoice(Q14))); post(h, Q16, provided(wrongChoice(Q16)));
     skip(h, 'FEEDBACK');
@@ -66,28 +66,14 @@ describe('개발자 건너뛰기(D-0217)', () => {
     // 요약 카드와 결과는 답 있는 문항만 센다
     const card = h.c.summaryCard(h.id, COG.passageId);
     expect(card.total).toBe(3); expect(card.items.map(i => i.questionId)).toEqual([Q12, Q14, Q16]);
-    expect(Object.values(card.counts).reduce((a, b) => a + b, 0)).toBe(3);
-    expect(card.position).not.toBeNull();
+    expect(card.position).toBeNull();   // 등급은 모든 문항 결과를 공개한 뒤에만 나온다
     const result = h.c.result(h.id);
     expect(result.items.map(i => i.questionId)).toEqual([Q12, Q14, Q16]);
     expect(result.position).toMatchObject({ status: 'ready', answered: 3 });
-    // 커서: Q12를 끝내면 Q13을 지나 Q14로 간다
-    h.fb.calls.length = 0;
-    await vi.waitFor(() => expect(h.c.feedbackView(h.id, Q12).phase).toBe('COMPLETED'));
-    expect(status(h).feedbackCursor).toBe(2);
-    await vi.waitFor(() => expect(h.c.feedbackView(h.id, Q14).phase).toBe('COMPLETED'));
-    expect(status(h).feedbackCursor).toBe(4);
-    expect(h.c.feedbackView(h.id, Q16).phase).not.toBe('COMPLETED');
-  });
-
-  it('첫 답 문항이 중간에 있으면 커서가 거기서 시작한다', async () => {
-    const h = harness();
-    h.c.start(h.id, COG.passageId, { summary: false });
-    post(h, Q14, provided(correctChoice(Q14)));
-    skip(h, 'FEEDBACK');
-    await settle(h.c);
-    expect(status(h)).toMatchObject({ status: 'FEEDBACK', feedbackCursor: 2 });
-    expect(h.c.feedbackView(h.id, Q14).questionNumber).toBeGreaterThan(0);
+    // 리뷰 대상은 오답(Q16)뿐이고, 순서와 무관하게 검토할 수 있다
+    expect(status(h).questions.map(q => q.reviewTarget)).toEqual([false, false, false, false, true]);
+    expect(h.c.feedbackView(h.id, Q16).phase).toBe('AWAITING_CORRECTION');
+    expect(httpStatus(() => h.c.feedbackView(h.id, Q12))).toBe(409);
   });
 
   it('draft가 하나도 없으면 ANSWERING → FEEDBACK가 바로 DONE이고 결과 카드는 0문항이다', () => {
@@ -102,18 +88,18 @@ describe('개발자 건너뛰기(D-0217)', () => {
     expect(h.fb.calls).toHaveLength(0);
   });
 
-  it('→ DONE: 남은 피드백 문항을 모두 건너뜀으로 두고 DONE이다(NOT_STARTED에서도 한 번에)', async () => {
+  it('→ DONE: 검토하지 않은 리뷰 대상과 답 없는 문항을 건너뜀으로 두고 DONE이다(NOT_STARTED에서도 한 번에)', async () => {
     const h = harness();
     skip(h, 'DONE');
     expect(status(h)).toMatchObject({ status: 'DONE', summarySkipped: true });
     expect(status(h).questions.every(q => q.skipped)).toBe(true);
-    const g = harness();
+    const g = harness(feedbackFake({ behavior: q => q === Q12 ? 'ERROR' : 'SUPPORTED' }));
     g.c.start(g.id, COG.passageId, { summary: false });
-    post(g, Q12, provided(correctChoice(Q12))); post(g, Q13, provided(correctChoice(Q13)));
+    post(g, Q12, provided(wrongChoice(Q12))); post(g, Q13, provided(correctChoice(Q13)));
     skip(g, 'FEEDBACK'); await settle(g.c);
     skip(g, 'DONE');
     expect(status(g).status).toBe('DONE');
-    expect(status(g).questions.map(q => q.skipped)).toEqual([true, true, true, true, true]);
+    expect(status(g).questions.map(q => q.skipped)).toEqual([true, false, true, true, true]);   // Q12는 검토하지 않은 리뷰 대상, Q13은 대상이 아니다
     expect(g.store.count('PASSAGE_DONE')).toBe(1);
     // 지나온 문항은 읽을 수 있다
     expect(g.c.feedbackView(g.id, Q12).questionNumber).toBeGreaterThan(0);
@@ -123,36 +109,13 @@ describe('개발자 건너뛰기(D-0217)', () => {
     let release = () => {}; const blocked = new Promise<void>(resolve => { release = resolve; });
     const h = harness(feedbackFake({ delay: () => blocked }));
     h.c.start(h.id, COG.passageId, { summary: false });
-    for (const q of COG.questionIds) post(h, q, provided(correctChoice(q)));
+    for (const q of COG.questionIds) post(h, q, provided(q === Q12 ? wrongChoice(q) : correctChoice(q)));
     h.c.answersDone(h.id, COG.passageId);
     expect(status(h).status).toBe('AWAITING_JUDGMENT');
     skip(h, 'FEEDBACK');
-    expect(status(h)).toMatchObject({ status: 'FEEDBACK', feedbackCursor: 0 });
+    expect(status(h)).toMatchObject({ status: 'FEEDBACK' });
     expect(h.c.feedbackView(h.id, Q12)).toMatchObject({ judgmentPending: true });
     release(); await settle(h.c);
-  });
-
-  it('피드백 skip-to: 커서를 앞으로 옮기고 지나친 문항을 skipped로 표시한다', async () => {
-    const h = harness();
-    h.c.start(h.id, COG.passageId, { summary: false });
-    for (const q of COG.questionIds) post(h, q, provided(correctChoice(q)));
-    h.c.answersDone(h.id, COG.passageId);
-    await settle(h.c);
-    expect(h.c.devSkipItem(h.id, Q14)).toEqual({ feedbackCursor: 2 });
-    expect(status(h).questions.map(q => q.skipped)).toEqual([true, true, false, false, false]);
-    expect(h.store.events.filter(e => e.type === 'DEV_SKIP').at(-1)).toMatchObject({ questionId: Q14 });
-    expect(httpStatus(() => h.c.devSkipItem(h.id, Q12))).toBe(409);
-    expect(h.c.feedbackView(h.id, Q12).questionNumber).toBeGreaterThan(0);   // 지나친 문항도 읽을 수 있다
-    expect(httpStatus(() => h.c.devSkipItem(h.id, HORSE.questionIds[0]!))).toBe(409);   // 피드백 중인 지문이 아니다
-  });
-
-  it('답이 없는 문항으로의 skip-to는 409다', async () => {
-    const h = harness();
-    h.c.start(h.id, COG.passageId, { summary: false });
-    post(h, Q12, provided(correctChoice(Q12))); post(h, Q16, provided(correctChoice(Q16)));
-    skip(h, 'FEEDBACK'); await settle(h.c);
-    expect(httpStatus(() => h.c.devSkipItem(h.id, Q14))).toBe(409);
-    expect(status(h).feedbackCursor).toBe(0);
   });
 
   it('뒤로 건너뛰기는 409다', async () => {
@@ -211,7 +174,7 @@ describe('개발자 지문 초기화(D-0217)', () => {
     h.c.devReset(h.id, COG.passageId);
     await settle(h.c);
     const saved = h.store.load(h.id)!;
-    expect(saved.passages[COG.passageId]).toMatchObject({ status: 'NOT_STARTED', summaryChosen: null, summarySessionId: null, feedbackCursor: 0 });
+    expect(saved.passages[COG.passageId]).toMatchObject({ status: 'NOT_STARTED', summaryChosen: null, summarySessionId: null, revealed: [] });
     expect(saved.passages[COG.passageId]!.devSkipped).toBeUndefined();
     expect(saved.analysis).toEqual({});
     for (const q of COG.questionIds) expect(saved.items[q]).toMatchObject({ draft: null, first: null, session: null, transcript: [], reviewFlag: null });

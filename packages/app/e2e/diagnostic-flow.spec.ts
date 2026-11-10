@@ -1,5 +1,5 @@
 /**
- * SNS 진단평가(/diagnostic) 끝까지 한 번(인계 B). 가짜 평가기·가짜 transport만 쓰고 외부 전송은 없다.
+ * SNS 진단평가(/diagnostic) 끝까지 한 번(인계 B, D-0218 지문 결과 화면). 가짜 평가기·가짜 transport만 쓰고 외부 전송은 없다.
  * 실행: CSAT_API_PORT=5474 PLAYWRIGHT_CLIENT_PORT=5473 npx playwright test packages/app/e2e/diagnostic-flow.spec.ts
  * 화면 사진은 DIAGNOSTIC_SCREENSHOT_DIR(기본: 임시 폴더)에 남긴다.
  */
@@ -15,7 +15,7 @@ import { correctChoice, diagnosisFake, feedbackFake, judgeFake, set, summaryEval
 
 const port = Number(process.env['CSAT_API_PORT'] ?? 5374);
 const shots = process.env['DIAGNOSTIC_SCREENSHOT_DIR'] ?? resolve(tmpdir(), 'csat-diagnostic-screens');
-let server: Server; let controller: DiagnosticController; let root: string;
+let server: Server; let controller: DiagnosticController; let root: string; let previousDev: string | undefined;
 const [COG, HORSE, PLASTIC, AUDIO] = set.passages as [typeof set.passages[number], typeof set.passages[number], typeof set.passages[number], typeof set.passages[number]];
 const [Q12, Q13, Q14, Q15, Q16] = COG.questionIds as [string, string, string, string, string];
 const HORSE_WRONG = HORSE.questionIds[2]!;      // 경마식 보도 6번: 오답 + 근거 오류(비틂 꼬리표)
@@ -23,13 +23,17 @@ const PLASTIC_WRONG = PLASTIC.questionIds[1]!;  // 플라스틱 9번: 오답이�
 
 test.beforeAll(async () => {
   root = mkdtempSync(resolve(tmpdir(), 'diagnostic-e2e-')); mkdirSync(shots, { recursive: true });
+  previousDev = process.env['CSAT_DIAGNOSTIC_DEV']; process.env['CSAT_DIAGNOSTIC_DEV'] = '1';   // ?dev=1 확인용(내부 범주 표기·개발자 지도)
   const fb = feedbackFake({ behavior: q => q === Q13 || q === HORSE_WRONG ? 'ERROR' : 'SUPPORTED' });
   controller = new DiagnosticController({ store: new FileDiagnosticStore(resolve(root, 'diagnostic')), feedbackEvaluator: fb.evaluator, summaryEvaluator, summaryLogDirectory: resolve(root, 'summary'),
     diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
   server = createLearningServer({ developerMode: true, diagnosticEnabled: true, diagnosticController: controller, dialogueLogDirectory: resolve(root, 'dialogue'), warmer: () => Promise.resolve(), problemFeedbackSave() {} });
   await new Promise<void>((ready, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', ready); });
 });
-test.afterAll(async () => { await new Promise<void>(done => server.close(() => done())); rmSync(root, { recursive: true, force: true }); });
+test.afterAll(async () => {
+  await new Promise<void>(done => server.close(() => done())); rmSync(root, { recursive: true, force: true });
+  if (previousDev === undefined) delete process.env['CSAT_DIAGNOSTIC_DEV']; else process.env['CSAT_DIAGNOSTIC_DEV'] = previousDev;
+});
 
 const position = (choiceId: string) => Number(/\d+/u.exec(choiceId)![0]);
 const circled = (choiceId: string) => '①②③④⑤'[position(choiceId) - 1]!;
@@ -46,25 +50,40 @@ async function answerPassage(page: Page, picks: { choiceId: string; rationale: s
   await page.getByRole('button', { name: '이 지문 답 다 냈어' }).click();
 }
 const allCorrect = (ids: readonly string[]) => ids.map(q => ({ choiceId: correctChoice(q), rationale: '원문을 읽고 판단한 이유를 적었다.' }));
-/** 한 문항의 피드백을 끝내고 다음 버튼을 누른다(건너뛰기·설명 거절을 쓴다). */
+/** 한 문항의 검토를 끝내고 지문 결과 화면으로 돌아간다(건너뛰기·설명 거절을 쓴다). */
 async function finishFeedback(page: Page) {
   for (let guard = 0; guard < 60; guard++) {
-    const next = page.getByRole('button', { name: /^(다음 문항|다음 지문|결과 보기)$/u });
-    if (await next.isVisible()) { await next.click(); return; }
+    const back = page.getByRole('button', { name: '지문 결과로 돌아가기', exact: true });
+    if (await back.isVisible()) { await back.click(); return; }
     for (const name of ['이 문항 건너뛰기', '아니']) {
       const button = page.getByRole('button', { name, exact: true });
       if (await button.isVisible() && await button.isEnabled()) { await button.click(); break; }
     }
     await page.waitForTimeout(300);
   }
-  throw new Error('피드백이 끝나지 않았다.');
+  throw new Error('검토가 끝나지 않았다.');
+}
+/** 지문 결과 화면: 판정이 끝날 때까지 기다린 뒤 모든 결과를 공개하고, 활성인 검토 버튼을 하나씩 끝내고 다음으로 간다. */
+async function completePassage(page: Page, count: number) {
+  const buttons = page.locator('[data-testid^="qbtn-"]');
+  await expect(buttons).toHaveCount(count, { timeout: 20_000 });
+  await expect(page.locator('[data-testid^="qbtn-"][data-analyzing="true"]')).toHaveCount(0, { timeout: 20_000 });
+  for (let i = 0; i < count; i++) await buttons.nth(i).click();
+  await expect(page.getByTestId('grade-text')).toHaveText(/^[1-9]등급$/u);
+  for (let guard = 0; guard < 10; guard++) {
+    const review = page.locator('.diag-reviewbtn:not([disabled])');
+    if (await review.count() === 0) break;
+    await review.first().click();
+    await finishFeedback(page);
+  }
+  await page.getByTestId('finish').click();
 }
 async function noCodesOnScreen(page: Page) {
   const text = await page.locator('body').innerText();
   expect(text.match(/[A-Z_]{4,}/gu) ?? []).toEqual([]);
 }
 
-test('시작 → 지문 1 요약·답(근거 있음·생략) → 중간 화면 → 피드백·건너뛰기 → 지문 2~4 → 결과, 새로 고침 뒤 이어 가기', async ({ page }) => {
+test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 화면(공개·리뷰 고르기·다음 지문) → 지문 2~4 → 결과, 새로 고침 뒤 이어 가기', async ({ page }) => {
   test.setTimeout(300_000);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/diagnostic');
@@ -115,20 +134,82 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 중간 화면 �
   expect(answerScreenText).not.toMatch(/오답|정답이야|맞혔어/u);
   await page.getByRole('button', { name: '이 지문 답 다 냈어' }).click();
 
-  // 지문 끝 중간 화면
-  await expect(page.getByTestId('passage-result')).toHaveText('이 지문의 5문항 중 3개를 맞혔어. 근거를 쓴 정답 2개 중 2개는 근거도 정확했어(1개는 확실하다고 한 정답).', { timeout: 20_000 });
-  await page.screenshot({ path: resolve(shots, '04-mid-desktop.png'), fullPage: true });
+  // 지문 결과 화면: 결과는 가려져 있고 문제 버튼 색(글자 표시 포함)만 보인다
+  await expect(page.getByTestId('qbtn-12')).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('[data-testid^="qbtn-"][data-analyzing="true"]')).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByTestId('qbtn-13')).toHaveAttribute('data-group', 'wrong');
+  await expect(page.getByTestId('qbtn-12')).toHaveAttribute('data-group', 'good');
+  await expect(page.getByTestId('qbtn-12')).toContainText('✓ 정답'); await expect(page.getByTestId('qbtn-13')).toContainText('✕ 오답');
+  for (const n of [12, 13, 14, 15, 16]) await expect(page.getByTestId(`desc-${n}`)).toHaveText('결과는 가려져 있어');
+  await expect(page.getByTestId('grade-text')).toHaveText('나의 현재 등급은?');
+  await expect(page.getByTestId('finish')).toBeDisabled();
+  expect(await page.locator('body').innerText()).not.toMatch(/정답\(|오답\(/u);
+  await page.screenshot({ path: resolve(shots, '04-result-hidden-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: resolve(shots, '05-mid-390.png'), fullPage: true });
+  await page.screenshot({ path: resolve(shots, '05-result-hidden-390.png'), fullPage: true });
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  // 문항별 피드백(건너뛰기 포함)
-  await page.getByRole('button', { name: '피드백 시작' }).click();
-  for (let i = 0; i < 5; i++) {
-    if (i === 1) await page.screenshot({ path: resolve(shots, '06-feedback-desktop.png'), fullPage: true });
-    await finishFeedback(page);
-  }
+  // 문제 버튼을 눌러 하나씩 공개한다
+  await page.getByTestId('qbtn-12').click();
+  await expect(page.getByTestId('desc-12')).toContainText('정답(정답률');
+  await expect(page.getByTestId('desc-12')).toContainText('근거도 명확했어');
+  await expect(page.getByTestId('review-12')).toBeDisabled();
+  await expect(page.getByTestId('desc-13')).toHaveText('결과는 가려져 있어');
+  await expect(page.getByTestId('grade-text')).toHaveText('나의 현재 등급은?');
+  await page.screenshot({ path: resolve(shots, '06-one-revealed-desktop.png'), fullPage: true });
+  for (const n of [13, 14, 15]) await page.getByTestId(`qbtn-${n}`).click();
+  await expect(page.getByTestId('desc-13')).toContainText('오답(같은 선지를 고른 비율');
+  await expect(page.getByTestId('review-13')).toBeEnabled(); await expect(page.getByTestId('review-13')).toHaveText('아깝지만 정답이 아니야. 다시 검토해 보자.');
+  await expect(page.getByTestId('desc-14')).toContainText('확신을 갖고 풀었어'); await expect(page.getByTestId('review-14')).toBeDisabled();
+  await expect(page.getByTestId('review-15')).toBeEnabled();
+  await expect(page.getByTestId('desc-16')).toHaveText('결과는 가려져 있어');
+  await expect(page.getByTestId('grade-text')).toHaveText('나의 현재 등급은?');   // 한 문항이라도 가려져 있으면 등급은 아직이다
+  // 공개 여부는 서버에 남는다: 새로 고침해도 그대로
+  await page.reload();
+  await expect(page.getByTestId('desc-13')).toContainText('오답(같은 선지를 고른 비율', { timeout: 20_000 });
+  await expect(page.getByTestId('desc-16')).toHaveText('결과는 가려져 있어');
+  await page.getByTestId('qbtn-16').click();
+  await expect(page.getByTestId('grade-text')).toHaveText(/^[1-9]등급$/u);
+  await expect(page.getByTestId('grade-bar')).toHaveAttribute('aria-label', /등급별 확률: 1등급 \d+%/u);
+  await expect(page.locator('[data-testid^="grade-seg-"]')).toHaveCount(9);
+  await noCodesOnScreen(page);   // 학생 화면에는 내부 범주가 없다
+  await page.screenshot({ path: resolve(shots, '07-all-revealed-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: resolve(shots, '08-all-revealed-390.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // ?dev=1: 내부 범주 표기, 개발자 지도의 문항 칸은 리뷰 대상만
+  await page.goto('/diagnostic?dev=1');
+  await expect(page.getByLabel('개발자 지도')).toBeVisible();
+  await page.getByTestId(`dev-cell-${COG.passageId}:mid`).click();
+  await expect(page.getByTestId('desc-12')).toContainText('(SUPPORTED_CORRECT', { timeout: 20_000 });
+  await expect(page.getByTestId('desc-13')).toContainText('(WRONG');
+  await expect(page.getByTestId(`dev-cell-${COG.passageId}:q:${Q13}`)).toBeVisible(); await expect(page.getByTestId(`dev-cell-${COG.passageId}:q:${Q15}`)).toBeVisible();
+  for (const q of [Q12, Q14, Q16]) await expect(page.getByTestId(`dev-cell-${COG.passageId}:q:${q}`)).toHaveCount(0);
+  await page.screenshot({ path: resolve(shots, '09-dev-result-desktop.png'), fullPage: true });
+  await page.goto('/diagnostic');
+  await expect(page.getByTestId('desc-13')).toContainText('오답');
+  expect(await page.locator('body').innerText()).not.toContain('(WRONG');
+
+  // 검토: 마치지 않고 돌아가도 되고, 순서는 자유다(15번 먼저)
+  await page.getByTestId('review-15').click();
+  await expect(page.getByRole('button', { name: '← 결과 목록' })).toBeVisible();
+  await page.screenshot({ path: resolve(shots, '10-review-desktop.png'), fullPage: true });
+  await page.getByRole('button', { name: '← 결과 목록' }).click();
+  await expect(page.getByTestId('review-15')).toBeEnabled();
+  await expect(page.getByTestId('finish')).toBeDisabled(); await expect(page.getByTestId('finish-hint')).toContainText('다시 검토할 문제가 2개 남았어');
+  await page.getByTestId('review-15').click();
+  await finishFeedback(page);
+  await expect(page.getByTestId('review-15')).toHaveText('검토 완료했어. 수고했어'); await expect(page.getByTestId('review-15')).toBeDisabled();
+  await expect(page.getByTestId('finish')).toBeDisabled();
+  await page.getByTestId('review-13').click();
+  await finishFeedback(page);
+  await expect(page.getByTestId('review-13')).toHaveText('검토 완료했어. 수고했어');
+  await expect(page.getByTestId('finish')).toBeEnabled();
   await noCodesOnScreen(page);
+  await page.screenshot({ path: resolve(shots, '11-reviewed-desktop.png'), fullPage: true });
+  await page.getByTestId('finish').click();
 
   // 지문 2~4: 요약 없이
   const rest: [typeof COG, { choiceId: string; rationale: string | null }[]][] = [
@@ -139,9 +220,7 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 중간 화면 �
   for (const [passage, picks] of rest) {
     await page.getByRole('button', { name: '요약 없이 풀기' }).click();
     await answerPassage(page, picks);
-    await expect(page.getByTestId('passage-result')).toBeVisible({ timeout: 20_000 });
-    await page.getByRole('button', { name: '피드백 시작' }).click();
-    for (let i = 0; i < passage.questionIds.length; i++) await finishFeedback(page);
+    await completePassage(page, passage.questionIds.length);
   }
 
   // 결과 화면
@@ -151,7 +230,7 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 중간 화면 �
   await expect(page.getByRole('region', { name: '독해 패턴' })).toContainText('첫 요약만');
   await expect(page.getByRole('region', { name: '독해 패턴' })).toContainText('곳을 잡았어');
   await expect(page.getByRole('region', { name: '추천' })).toContainText('걸린 함정');
-  await expect(page.getByRole('region', { name: '문제 풀이 결과' })).toContainText('근거 생략');
+  await expect(page.getByRole('region', { name: '문제 풀이 결과' })).toContainText('근거 없이 낸 정답');
   await page.getByRole('button', { name: /(^| )6번$/u }).click();       // 경마식 보도 6번: 오답 + 비틂
   const card = page.getByRole('article');
   await expect(card).toContainText('오답');

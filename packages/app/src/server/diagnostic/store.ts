@@ -22,7 +22,10 @@ export interface DiagnosticParticipant {
     summarySessionId: string | null;
     /** paragraphId → 첫 시도의 첫 학생 발화 */
     firstTurns: Record<string, { text: string; at: string; copyOverlap?: { n: 5; windows: number; matched: number; ratio: number } | null } | null>;
-    feedbackCursor: number;
+    /** 옛 파일 호환용. 학생 흐름은 쓰지 않는다(D-0218, 순서 강제 커서 폐지). */
+    feedbackCursor?: number;
+    /** 결과를 공개한 문항 id(D-0218). 옛 파일에는 없다(없으면 빈 목록). */
+    revealed?: string[];
     /** 개발자 이동(D-0217)으로 요약을 건너뛴 지문. 옛 파일에는 없다(없으면 건너뛰지 않은 것). */
     devSkipped?: { summary: boolean };
   }>;

@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { participantPosition, unitsForParagraph } from '@csat/pipeline';
-import { DiagnosticController, DiagnosticHttpError, ITEM_REVIEW_LINE, OMITTED_WRONG_RATIONALE_LINE, type DiagnosticControllerOptions } from './controller.js';
+import { DiagnosticController, DiagnosticHttpError, OMITTED_WRONG_RATIONALE_LINE, isReviewTarget, type DiagnosticControllerOptions } from './controller.js';
 import { loadAnalysisMaps, loadDiagnosticPassages } from './content.js';
 import { FileDiagnosticStore, type DiagnosticParticipant } from './store.js';
 import {
@@ -32,6 +32,8 @@ async function settle(c: DiagnosticController) {
   for (let i = 0; i < 4; i++) { await c.idle(); await new Promise(resolve => setTimeout(resolve, 5)); }
   await c.idle();
 }
+/** 지문 결과 응답의 범주별 문항 수. */
+const categoryCounts = (card: { items: { category: string }[] }) => card.items.reduce<Record<string, number>>((n, i) => ({ ...n, [i.category]: (n[i.category] ?? 0) + 1 }), {});
 const post = (h: Harness, q: string, body: unknown) => h.c.submitItem(h.id, q, body);
 const selectionCalls = (h: Harness, q: string) => h.fb.calls.filter(call => call.questionId === q && call.mode === 'SELECTION').length;
 
@@ -108,26 +110,24 @@ describe('한 지문의 흐름', () => {
     expect(selectionCalls(h, Q12)).toBe(0);
     const done = h.c.answersDone(h.id, COG.passageId);
     expect(Object.keys(done)).toEqual(['position']); expect(done.position.answered).toBe(5);
-    // 판정이 끝나기 전에도 정답 수·위치는 바로 나오고, 근거 쪽은 판정 중으로 센다
-    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ status: 'ready', correct: 3, total: 5, judging: 2, firstItemOpen: false });
-    expect(() => h.c.feedbackView(h.id, Q12)).toThrow(DiagnosticHttpError);
+    // 판정이 끝나기 전에도 정오는 바로 나오고, 근거 쪽은 판정 중으로 센다. 등급은 공개 전이라 없다
+    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ status: 'ready', correct: 3, total: 5, judging: 3, allRevealed: false, canFinish: false, position: null });
     gate.release(); await settle(h.c);
-    const card = h.c.summaryCard(h.id, COG.passageId) as Record<string, any>;
-    expect(card).toMatchObject({ status: 'ready', correct: 3, total: 5, qualityTiers: 3, judging: 0, firstItemOpen: true,
-      counts: { SUPPORTED_CORRECT: 1, WEAK_CORRECT: 1, SURE_CORRECT: 1, WRONG: 2, CHECKING: 0, PENDING: 0 } });
-    expect(JSON.stringify(card)).not.toContain('answerPosition');
-    // 피드백 차례: 이어 주는 말풍선, INSTANT 없음
+    const card = h.c.summaryCard(h.id, COG.passageId);
+    expect(card).toMatchObject({ status: 'ready', correct: 3, total: 5, judging: 0, canFinish: false });
+    expect(categoryCounts(card)).toEqual({ SUPPORTED_CORRECT: 1, WEAK_CORRECT: 1, SURE_CORRECT: 1, WRONG: 2 });
+    expect(card.items.filter(i => i.reviewTarget).map(i => i.questionId)).toEqual([Q13, Q15]);
+    expect(JSON.stringify(card)).not.toContain('answerPosition'); expect(JSON.stringify(card)).not.toContain('probabilities');
+    // 피드백: 순서 없이 리뷰 대상만, 이어 주는 말풍선, INSTANT 없음
     expect(h.c.progress(h.id).passages[0]!.status).toBe('FEEDBACK');
-    expect(h.c.progress(h.id).current).toEqual({ passageId: COG.passageId, questionId: Q12 });
-    expect(() => h.c.feedbackView(h.id, Q13)).toThrow(DiagnosticHttpError);
-    const v12 = h.c.feedbackView(h.id, Q12);
-    const chosen = '①②③④⑤'[bundleChosenPosition(Q12)];
-    expect(v12.transcript[0]!.text).toBe(`첫번째 문항으로 돌아가 볼게. ${chosen}번을 골랐네.`);
-    expect(v12.transcript.some(m => m.sequence === 'INSTANT')).toBe(false);
-    expect(v12.phase).toBe('COMPLETED'); expect(h.c.progress(h.id).current!.questionId).toBe(Q13);
+    expect(h.c.progress(h.id).current).toEqual({ passageId: COG.passageId, questionId: null });
+    expect(() => h.c.feedbackView(h.id, Q12)).toThrow(DiagnosticHttpError);
     const v13 = await finishItem(h, Q13);
-    expect(v13.transcript[0]!.text).toContain('두번째 문항으로 돌아가 볼게.'); expect(v13.transcript.some(m => m.sequence === 'INSTANT')).toBe(false);
-    for (const q of [Q14, Q15, Q16]) await finishItem(h, q);
+    expect(v13.transcript[0]!.text).toContain(`${set.items[Q13]!.questionNumber}번 문제로 돌아가 볼게.`); expect(v13.transcript.some(m => m.sequence === 'INSTANT')).toBe(false);
+    expect(h.c.summaryCard(h.id, COG.passageId).canFinish).toBe(false);
+    await finishItem(h, Q15);
+    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ canFinish: true });
+    expect(h.c.finish(h.id, COG.passageId)).toEqual({ status: 'DONE' });
     expect(h.c.progress(h.id).passages[0]!.status).toBe('DONE');
     expect(h.store.count('PASSAGE_DONE')).toBe(1);
     // 다음 지문
@@ -142,7 +142,8 @@ describe('한 지문의 흐름', () => {
     for (const q of [Q12, Q13, Q16]) expect(selectionCalls(h, q)).toBe(1);
     const diagnosed = h.diagnosis.requests.map(r => JSON.parse(r.input[0].content[0].text).source.questionId).sort();
     expect(diagnosed).toEqual([Q13, Q16].sort());   // 오답(근거 있음)과 SUPPORTED가 아닌 정답만. SUPPORTED 정답(Q12)·생략(Q14·Q15)은 0회
-    await finishItem(h, Q12); await finishItem(h, Q13); await finishItem(h, Q14);
+    await finishItem(h, Q13);
+    for (const q of [Q12, Q14, Q16]) expect(() => h.c.feedbackView(h.id, q)).toThrow(expect.objectContaining({ status: 409 }));   // 리뷰 대상이 아니다
     const v15 = h.c.feedbackView(h.id, Q15);
     expect(v15.phase).toBe('AWAITING_RATIONALE'); expect(v15.skippable).toBe(true);
     expect(v15.message).toBe(OMITTED_WRONG_RATIONALE_LINE);
@@ -157,23 +158,22 @@ describe('한 지문의 흐름', () => {
     expect(result.items.find(i => i.questionId === Q12)!.afterFeedback.skipped).toBe(false);
   });
 
-  it('ITEM_REVIEW 문항은 고정 문장 뒤 다음 문항으로 가고, boundary 문항은 checking, 오답 + SUPPORTED는 reviewFlag다', async () => {
+  it('ITEM_REVIEW(오답 + SUPPORTED)·boundary 문항은 리뷰 대상이 아니고(검토 화면 없음), boundary 문항은 checking, 오답 + SUPPORTED는 reviewFlag다', async () => {
     const h = harness({ [Q12]: 'BOUNDARY', [Q13]: 'SUPPORTED' });   // Q13은 오답 + SUPPORTED
     await answerPassage(h, COG, mixed()); await settle(h.c);
-    const card = h.c.summaryCard(h.id, COG.passageId) as Record<string, any>;
-    expect(card).toMatchObject({ status: 'ready', counts: { CHECKING: 1, SUPPORTED_CORRECT: 1, SURE_CORRECT: 1, WRONG: 2 } });   // Q12 확인 중, Q16 근거 확인
-    expect(card.items.find((i: any) => i.questionId === Q12).category).toBe('CHECKING');
-    expect(card.items.find((i: any) => i.questionId === Q13).category).toBe('WRONG');
+    const card = h.c.summaryCard(h.id, COG.passageId);
+    expect(categoryCounts(card)).toMatchObject({ CHECKING: 1, SUPPORTED_CORRECT: 1, SURE_CORRECT: 1, WRONG: 2 });   // Q12 확인 중, Q16 근거 확인
+    expect(card.items.find(i => i.questionId === Q12)!.category).toBe('CHECKING');
+    expect(card.items.find(i => i.questionId === Q13)!.category).toBe('WRONG');
+    // 오답이어도 ITEM_REVIEW로 끝난 문항(Q13)은 학생이 검토할 대상이 아니다. 근거를 생략한 오답(Q15)만 대상이다.
+    expect(card.items.filter(i => i.reviewTarget).map(i => i.questionId)).toEqual([Q15]);
+    for (const q of [Q12, Q13]) expect(() => h.c.feedbackView(h.id, q)).toThrow(expect.objectContaining({ status: 409 }));
     const stored = h.store.load(h.id)!;
     expect(stored.items[Q12]!.reviewFlag).toBe('BOUNDARY'); expect(stored.items[Q13]!.reviewFlag).toBe('WRONG_SUPPORTED');
     expect(h.store.count('ITEM_REVIEW_FLAGGED')).toBe(2);
     // 문항 검토 문항은 사고 진단을 부르지 않는다(정답 + boundary). Q16(정답 + SUPPORTED)도 0회, 오답(Q13)은 판정 전에 시작해 호출될 수 있다.
     expect(h.diagnosis.requests.map(r => JSON.parse(r.input[0].content[0].text).source.questionId)).not.toContain(Q12);
-    const v12 = h.c.feedbackView(h.id, Q12);
-    expect(v12.phase).toBe('ITEM_REVIEW'); expect(v12.message).toBe(ITEM_REVIEW_LINE);
-    expect(v12.transcript.filter(m => m.phase === 'ITEM_REVIEW').map(m => m.text)).toEqual([ITEM_REVIEW_LINE]);
-    expect(h.c.progress(h.id).current!.questionId).toBe(Q13);
-    expect(JSON.stringify(v12)).not.toContain('"answer":{');
+    expect(h.c.progress(h.id).current!.questionId).toBeNull();
     // 결과 화면에서도 정답·근거 원문이 없다
     const result = h.c.result(h.id);
     for (const q of [Q12, Q13]) {
@@ -183,6 +183,9 @@ describe('한 지문의 흐름', () => {
       expect(JSON.stringify(item.megastudy)).not.toContain('choicePercents');
     }
     expect(result.items.find(i => i.questionId === Q16)).toMatchObject({ review: false });
+    // 리뷰 대상이 Q15뿐이므로 그것만 마치면 다음 지문으로 갈 수 있다
+    await finishItem(h, Q15);
+    expect(h.c.summaryCard(h.id, COG.passageId).canFinish).toBe(true);
   });
 });
 
@@ -200,8 +203,8 @@ describe('오답 문항의 사고 진단 시점과 WRONG_SUPPORTED 범위', () =
     expect(h.store.load(h.id)!.items[Q13]!.reviewFlag).toBeNull();
     expect(h.store.load(h.id)!.items[Q13]!.session!.phase).toBe('AWAITING_CORRECTION');
     expect(h.c.result(h.id).items.find(i => i.questionId === Q13)).toMatchObject({ review: false, answerPosition: set.items[Q13]!.answerPosition });
-    const card = h.c.summaryCard(h.id, COG.passageId) as Record<string, any>;
-    expect(card.items.find((i: any) => i.questionId === Q13).category).toBe('WRONG');
+    const card = h.c.summaryCard(h.id, COG.passageId);
+    expect(card.items.find(i => i.questionId === Q13)!.category).toBe('WRONG');
   });
   it('오답 + SUPPORTED + CONSISTENT는 WRONG_SUPPORTED이고 결과에서 숨겨진다', async () => {
     const h = harness({ [Q13]: 'SUPPORTED' });
@@ -214,41 +217,29 @@ describe('오답 문항의 사고 진단 시점과 WRONG_SUPPORTED 범위', () =
 });
 
 describe('판정 실패와 RESUME', () => {
-  it('실패 → 자동 재시도 2회 → FAILED → checking. 피드백 차례에 RESUME으로 성공하면 READY가 되고 checking에서 빠지며 사고 진단 대상이 다시 정해진다', async () => {
+  it('실패 → 자동 재시도 2회 → FAILED. 오답은 리뷰 대상으로 남아 검토 화면에서 RESUME으로 성공하면 READY가 되고, 정답 문항은 checking이며 리뷰 대상이 아니다', async () => {
     let allowed = false;
-    const fb = feedbackFake({ behavior: q => { if (q === Q16 && !allowed) return 'THROW'; return q === Q16 ? 'INSUFFICIENT' : 'SUPPORTED'; } });
+    const fb = feedbackFake({ behavior: q => { if (q === Q16) return 'THROW'; if (q === Q13) return allowed ? 'ERROR' : 'THROW'; return 'SUPPORTED'; } });
     const h = harness({}, {}, { fb });
     await answerPassage(h, COG, mixed()); await settle(h.c);
-    expect(selectionCalls(h, Q16)).toBe(3);
+    expect(selectionCalls(h, Q16)).toBe(3); expect(selectionCalls(h, Q13)).toBe(3);
     expect(h.store.load(h.id)!.items[Q16]!.firstJudgment).toMatchObject({ status: 'FAILED', attempts: 3 });
-    expect(h.store.count('JUDGMENT_FAILED')).toBe(3);
-    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ status: 'ready', counts: { CHECKING: 1 } });
+    expect(h.store.count('JUDGMENT_FAILED')).toBe(6);
+    const card = h.c.summaryCard(h.id, COG.passageId);
+    expect(card.items.find(i => i.questionId === Q16)).toMatchObject({ category: 'CHECKING', reviewTarget: false, judging: false });
+    expect(card.items.find(i => i.questionId === Q13)).toMatchObject({ category: 'WRONG', reviewTarget: true, judging: false });
+    expect(() => h.c.feedbackView(h.id, Q16)).toThrow(expect.objectContaining({ status: 409 }));
     // 정답 문항은 판정 최종 실패 시 SUPPORTED가 아닌 것으로 보고 사고 진단을 돌린다.
     expect(h.diagnosis.requests.map(r => JSON.parse(r.input[0].content[0].text).source.questionId)).toContain(Q16);
     expect(h.c.result(h.id).items.find(i => i.questionId === Q16)!.judgment.status).toBe('failed');
-    // 피드백 차례까지 간 뒤 RESUME
-    for (const q of [Q12, Q13, Q14, Q15]) await finishItem(h, q);
-    const stuck = h.c.feedbackView(h.id, Q16);
+    // 오답의 검토 화면에서 RESUME
+    const stuck = h.c.feedbackView(h.id, Q13);
     expect(stuck.phase).toBe('AWAITING_EVALUATION'); expect(stuck.evaluationStatus).toBe('RETRYABLE_ERROR');
     allowed = true;
-    await h.c.feedbackSubmit(h.id, Q16, { transitionId: 'resume', expectedRevision: stuck.revision, command: { type: 'RESUME' } });
+    await h.c.feedbackSubmit(h.id, Q13, { transitionId: 'resume', expectedRevision: stuck.revision, command: { type: 'RESUME' } });
     await settle(h.c);
-    expect(h.store.load(h.id)!.items[Q16]!.firstJudgment).toMatchObject({ status: 'READY', contentAssessment: 'INSUFFICIENT', boundary: 'NONE' });
-    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ counts: { CHECKING: 0, WEAK_CORRECT: 1, SUPPORTED_CORRECT: 1 } });
-    expect(h.c.result(h.id).items.find(i => i.questionId === Q16)!.judgment).toMatchObject({ status: 'ready', contentAssessment: 'INSUFFICIENT' });
-  });
-
-  it('RESUME으로 정답 문항이 SUPPORTED로 나오면 사고 진단 결과는 결과 화면에서 제외된다', async () => {
-    let allowed = false;
-    const fb = feedbackFake({ behavior: q => q === Q12 && !allowed ? 'THROW' : 'SUPPORTED' });
-    const h = harness({}, {}, { fb });
-    await answerPassage(h, COG, { ...mixed(), [Q13]: omitted(wrongChoice(Q13)) }); await settle(h.c);
-    expect(h.c.result(h.id).items.find(i => i.questionId === Q12)!.thoughtDiagnosis).toMatchObject({ status: 'ready' });
-    const stuck = h.c.feedbackView(h.id, Q12); allowed = true;
-    await h.c.feedbackSubmit(h.id, Q12, { transitionId: 'resume', expectedRevision: stuck.revision, command: { type: 'RESUME' } });
-    await settle(h.c);
-    expect(h.c.result(h.id).items.find(i => i.questionId === Q12)!.thoughtDiagnosis).toBeNull();
-    expect(h.c.result(h.id).steps.denominator).toBe(0);
+    expect(h.store.load(h.id)!.items[Q13]!.firstJudgment).toMatchObject({ status: 'READY', contentAssessment: 'ERROR', boundary: 'NONE' });
+    expect(h.c.result(h.id).items.find(i => i.questionId === Q13)!.judgment).toMatchObject({ status: 'ready', contentAssessment: 'ERROR' });
   });
 });
 
@@ -349,7 +340,7 @@ describe('저장', () => {
     expect(fb.calls.filter(call => call.mode === 'SELECTION').map(call => call.questionId).sort()).toEqual([Q12, Q13, Q15, Q16].sort());
     expect(saved.items[Q13]!.thoughtDiagnosis.status).toBe('READY');
     expect(saved.passages[COG.passageId]!.status).toBe('FEEDBACK');
-    expect(second.feedbackView(id, Q12).transcript[0]!.text).toContain('돌아가 볼게');   // 세션도 이어 받음
+    expect(second.feedbackView(id, Q13).transcript[0]!.text).toContain('돌아가 볼게');   // 세션도 이어 받음
     expect(second.summaryCard(id, COG.passageId)).toMatchObject({ status: 'ready', total: 5 });
   });
 
@@ -568,10 +559,10 @@ describe('범주 표 (D-0213, 인계 (4))', () => {
     gate.release(); await settle(h.c);
     expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ judging: 0 });
   });
-  it('qualityTiers는 결과 응답에도 실리고 범주 값은 설정과 상관없다', async () => {
+  it('qualityTiers는 결과 응답에 실리고 범주 값은 설정과 상관없다', async () => {
     const h = harness();
     await answerPassage(h, COG, Object.fromEntries(COG.questionIds.map(q => [q, provided(correctChoice(q))]))); await settle(h.c);
-    expect(h.c.result(h.id).qualityTiers).toBe(3); expect(h.c.summaryCard(h.id, COG.passageId).qualityTiers).toBe(3);
+    expect(h.c.result(h.id).qualityTiers).toBe(3);
   });
 });
 
@@ -620,29 +611,31 @@ describe('문항별 피드백 열기 (인계 (7))', () => {
   }
   const allCorrect = () => Object.fromEntries(COG.questionIds.map(q => [q, provided(correctChoice(q))]));
 
-  it('1번 판정만 끝나면 1번 피드백이 열리고, 2번이 PENDING인 채 커서가 2번에 오면 읽기는 대기 보기·쓰기는 409, 판정이 끝나면 열린다', async () => {
-    const { fb, release } = gatedFake(() => 'SUPPORTED', { [Q13]: 0 });
+  /** Q13을 오답(근거 있음)으로 낸다. 나머지는 정답 + 근거. */
+  const q13Wrong = () => ({ ...allCorrect(), [Q13]: provided(wrongChoice(Q13)) });
+
+  it('오답 문항의 판정이 아직이면 읽기는 대기 보기·쓰기는 409·다음 지문은 막히고, 판정이 끝나면 열린다. 정답 문항은 검토 대상이 아니다', async () => {
+    const { fb, release } = gatedFake(q => q === Q13 ? 'ERROR' : 'SUPPORTED', { [Q13]: 0 });
     const h = harness({}, {}, { fb });
-    await answerPassage(h, COG, allCorrect());
+    await answerPassage(h, COG, q13Wrong());
     await vi.waitFor(() => expect(h.c.progress(h.id).passages[0]!.status).toBe('FEEDBACK'));
-    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ firstItemOpen: true, judging: 1 });
-    expect(h.c.feedbackView(h.id, Q12).phase).toBe('COMPLETED');
-    expect(h.c.progress(h.id).current).toEqual({ passageId: COG.passageId, questionId: Q13 });
+    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ judging: 1, canFinish: false });
+    expect(h.c.summaryCard(h.id, COG.passageId).items.find(i => i.questionId === Q13)).toMatchObject({ reviewTarget: true, judging: true });
+    expect(h.c.progress(h.id).current).toEqual({ passageId: COG.passageId, questionId: null });
     const waiting = h.c.feedbackView(h.id, Q13);
     expect(waiting).toMatchObject({ judgmentPending: true, evaluationStatus: 'PROCESSING' });
     await expect(h.c.feedbackSubmit(h.id, Q13, { transitionId: 'x', expectedRevision: waiting.revision, command: { type: 'SKIP' } })).rejects.toMatchObject({ status: 409 });
-    expect(h.c.progress(h.id).passages[0]!.feedbackCursor).toBe(1);
+    expect(() => h.c.finish(h.id, COG.passageId)).toThrow(expect.objectContaining({ status: 409 }));
     release(Q13); await settle(h.c);
     const opened = h.c.feedbackView(h.id, Q13);
-    expect(opened.judgmentPending).toBeUndefined(); expect(opened.phase).toBe('COMPLETED');
+    expect(opened.judgmentPending).toBeUndefined(); expect(opened.phase).toBe('AWAITING_CORRECTION');
+    expect(() => h.c.feedbackView(h.id, Q12)).toThrow(expect.objectContaining({ status: 409 }));
   });
 
-  it('피드백 차례 문항의 판정 재시도가 도는 동안 학생 명령(RESUME 포함)이 끼어들지 않는다', async () => {
-    const { fb, release, entered } = gatedFake((q, index) => q === Q13 && index === 0 ? 'THROW' : 'SUPPORTED', { [Q13]: 1 });
+  it('오답 문항의 판정 재시도가 도는 동안 학생 명령(RESUME 포함)이 끼어들지 않는다', async () => {
+    const { fb, release, entered } = gatedFake((q, index) => q === Q13 ? (index === 0 ? 'THROW' : 'ERROR') : 'SUPPORTED', { [Q13]: 1 });
     const h = harness({}, {}, { fb });
-    await answerPassage(h, COG, allCorrect());
-    await vi.waitFor(() => expect(h.c.progress(h.id).passages[0]!.status).toBe('FEEDBACK'));
-    expect(h.c.feedbackView(h.id, Q12).phase).toBe('COMPLETED');
+    await answerPassage(h, COG, q13Wrong());
     await vi.waitFor(() => expect(entered(Q13)).toBe(2));   // 자동 재시도가 평가 호출에서 잡힌 상태
     const waiting = h.c.feedbackView(h.id, Q13);
     expect(waiting.judgmentPending).toBe(true);
@@ -653,12 +646,123 @@ describe('문항별 피드백 열기 (인계 (7))', () => {
     expect(h.c.feedbackView(h.id, Q13).judgmentPending).toBeUndefined();
   });
 
-  it('1번 문항이 근거 생략이면 판정 없이 바로 피드백이 열린다', async () => {
+  it('근거를 생략한 오답은 판정 없이 바로 검토가 열리고, 다른 문항 판정이 진행 중이어도 상관없다', async () => {
     const { fb } = gatedFake(() => 'SUPPORTED', { [Q13]: 0, [Q14]: 0, [Q15]: 0, [Q16]: 0 });
     const h = harness({}, {}, { fb });
-    await answerPassage(h, COG, { ...allCorrect(), [Q12]: omitted(correctChoice(Q12)) });
+    await answerPassage(h, COG, { ...allCorrect(), [Q12]: omitted(wrongChoice(Q12)) });
     expect(h.c.progress(h.id).passages[0]!.status).toBe('FEEDBACK');
-    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ firstItemOpen: true, judging: 4 });
-    expect(h.c.feedbackView(h.id, Q12).phase).toBe('COMPLETED');
+    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ judging: 4 });
+    expect(h.c.summaryCard(h.id, COG.passageId).items.find(i => i.questionId === Q12)).toMatchObject({ reviewTarget: true, judging: false });
+    expect(h.c.feedbackView(h.id, Q12).phase).toBe('AWAITING_RATIONALE');
+  });
+});
+
+// ---------- D-0218: 지문 결과 화면(공개·리뷰 대상·다음 지문) ----------
+
+describe('지문 결과 화면 (D-0218)', () => {
+  it('리뷰 대상은 오답과 근거가 틀린 정답이고, 잘 모르겠지만 정답은 아직 아니다', () => {
+    for (const category of ['WRONG', 'ERROR_CORRECT'] as const) expect(isReviewTarget(category)).toBe(true);
+    for (const category of ['SUPPORTED_CORRECT', 'WEAK_CORRECT', 'SURE_CORRECT', 'UNSURE_CORRECT', 'UNVERIFIED', 'PENDING', 'CHECKING'] as const) expect(isReviewTarget(category)).toBe(false);
+  });
+
+  /** Q12 근거 오류 정답, Q13 오답(ERROR), Q14 잘 모르겠지만 정답, Q15 오답 생략, Q16 정답 + 근거(SUPPORTED). */
+  async function reviewHarness(extra: Partial<DiagnosticControllerOptions> = {}, store?: MemoryStore) {
+    const h = harness({ [Q12]: 'ERROR', [Q13]: 'ERROR' }, extra, store ? { store } : {});
+    await answerPassage(h, COG, { ...mixed(), [Q14]: omitted(correctChoice(Q14), 'UNSURE') }); await settle(h.c);
+    return h;
+  }
+
+  it('범주별 리뷰 대상: 근거 오류 정답·오답만 대상이고, 잘 모르겠지만 정답과 SUPPORTED 정답은 아니다', async () => {
+    const h = await reviewHarness();
+    const items = h.c.summaryCard(h.id, COG.passageId).items;
+    expect(items.map(i => [i.category, i.reviewTarget, i.reviewDone])).toEqual([
+      ['ERROR_CORRECT', true, false], ['WRONG', true, false], ['UNSURE_CORRECT', false, false], ['WRONG', true, false], ['SUPPORTED_CORRECT', false, false]]);
+    expect(items[0]!.megastudy).toEqual({ correctRate: set.items[Q12]!.megastudy.correctRate, chosenPercents: expect.any(Array) });
+  });
+
+  it('검토 순서는 자유다: 뒤 문항을 먼저 검토해도 되고, 건너뛰기도 검토 완료다. 대상이 아닌 문항은 읽기·쓰기 모두 409다', async () => {
+    const h = await reviewHarness();
+    await finishItem(h, Q15);   // 근거 생략 오답을 먼저(건너뛰기로 끝남)
+    expect(h.store.count('ITEM_SKIPPED')).toBe(1);
+    let items = h.c.summaryCard(h.id, COG.passageId).items;
+    expect(items.map(i => i.reviewDone)).toEqual([false, false, false, true, false]);
+    for (const q of [Q14, Q16]) {
+      expect(() => h.c.feedbackView(h.id, q)).toThrow(expect.objectContaining({ status: 409 }));
+      await expect(h.c.feedbackSubmit(h.id, q, { transitionId: 'x', expectedRevision: 0, command: { type: 'SKIP' } })).rejects.toMatchObject({ status: 409 });
+    }
+    await finishItem(h, Q13); await finishItem(h, Q12);
+    items = h.c.summaryCard(h.id, COG.passageId).items;
+    expect(items.map(i => i.reviewDone)).toEqual([true, true, false, true, false]);
+    expect(h.c.summaryCard(h.id, COG.passageId).canFinish).toBe(true);
+  });
+
+  it('공개: 서버에 남고(다른 컨트롤러로 이어 가도 유지) 되돌리지 않으며, 모두 공개하기 전에는 등급·확률이 응답에 없다', async () => {
+    const store = new MemoryStore();
+    const h = await reviewHarness({}, store);
+    expect(h.c.summaryCard(h.id, COG.passageId).items.every(i => !i.revealed)).toBe(true);
+    const first = h.c.reveal(h.id, COG.passageId, { questionId: Q12 });
+    h.c.reveal(h.id, COG.passageId, { questionId: Q12 });   // 같은 문항 다시: 중복 기록 없음
+    expect(h.store.count('ITEM_REVEALED')).toBe(1);
+    expect(first.items.map(i => i.revealed)).toEqual([true, false, false, false, false]);
+    for (const q of [Q13, Q14, Q15]) h.c.reveal(h.id, COG.passageId, { questionId: q });
+    const nearly = h.c.summaryCard(h.id, COG.passageId);
+    expect(nearly).toMatchObject({ allRevealed: false, position: null });
+    for (const text of [JSON.stringify(nearly), JSON.stringify(h.c.reveal(h.id, COG.passageId, { questionId: Q15 }))]) { expect(text).not.toContain('probabilities'); expect(text).not.toContain('"mode"'); }
+    // 저장 파일에서 이어 가기
+    await settle(h.c);
+    const second = new DiagnosticController({ store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-reveal-')),
+      diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
+    expect(second.summaryCard(h.id, COG.passageId).items.map(i => i.revealed)).toEqual([true, true, true, true, false]);
+    const started = performance.now();
+    const all = second.reveal(h.id, COG.passageId, { questionId: Q16 });   // 등급 확률 계산을 포함한 응답
+    const ms = performance.now() - started;
+    expect(ms).toBeLessThan(500); console.info(`reveal(등급 확률 포함) ${ms.toFixed(1)}ms`);
+    expect(all.allRevealed).toBe(true);
+    const grade = all.position!.grade;
+    expect(grade.probabilities).toHaveLength(9); expect(grade.probabilities.reduce((a, x) => a + x, 0)).toBeCloseTo(1, 9);
+    expect(grade.probabilities[grade.mode - 1]).toBe(Math.max(...grade.probabilities));
+    expect(all.position).toMatchObject({ answered: 5, correct: 3 });
+    await settle(second);
+  });
+
+  it('공개 요청 검사: 다른 지문의 문항은 400, 답 없는 문항·시작 전 지문은 409, 본문이 틀리면 400', async () => {
+    const h = await reviewHarness();
+    expect(() => h.c.reveal(h.id, COG.passageId, { questionId: HORSE.questionIds[0] })).toThrow(expect.objectContaining({ status: 400 }));
+    expect(() => h.c.reveal(h.id, COG.passageId, {})).toThrow();
+    expect(() => h.c.reveal(h.id, HORSE.passageId, { questionId: HORSE.questionIds[0] })).toThrow(expect.objectContaining({ status: 409 }));
+  });
+
+  it('옛 참가자 파일(revealed·feedbackCursor 없음)도 불러오고 공개 목록은 비어 있다', async () => {
+    const store = new MemoryStore();
+    const h = await reviewHarness({}, store);
+    const old = JSON.parse(store.files.get(h.id)!) as DiagnosticParticipant;
+    for (const state of Object.values(old.passages)) { delete state.revealed; state.feedbackCursor = 0; }
+    store.files.set(h.id, JSON.stringify(old));
+    const second = new DiagnosticController({ store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-old-')),
+      diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
+    expect(second.summaryCard(h.id, COG.passageId)).toMatchObject({ allRevealed: false, position: null });
+    expect(second.summaryCard(h.id, COG.passageId).items.every(i => !i.revealed)).toBe(true);
+    await settle(second);
+  });
+
+  it('다음 지문: 리뷰 대상을 모두 검토해야 하고 아니면 409, 끝나면 DONE이며 한 번 더 누르면 409다', async () => {
+    const h = await reviewHarness();
+    expect(() => h.c.finish(h.id, COG.passageId)).toThrow(expect.objectContaining({ status: 409 }));
+    await finishItem(h, Q12); await finishItem(h, Q13);
+    expect(() => h.c.finish(h.id, COG.passageId)).toThrow(expect.objectContaining({ status: 409 }));   // Q15가 남았다
+    await finishItem(h, Q15);
+    expect(h.c.finish(h.id, COG.passageId)).toEqual({ status: 'DONE' });
+    expect(h.store.count('PASSAGE_DONE')).toBe(1);
+    expect(() => h.c.finish(h.id, COG.passageId)).toThrow(expect.objectContaining({ status: 409 }));
+    await settle(h.c);
+  });
+
+  it('리뷰 대상이 없으면 판정이 모두 끝나는 즉시 다음 지문으로 갈 수 있고, 공개 여부와 상관없다', async () => {
+    const h = harness({ [Q12]: 'SUPPORTED' });
+    await answerPassage(h, COG, Object.fromEntries(COG.questionIds.map(q => [q, provided(correctChoice(q))])));
+    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ canFinish: false, judging: 5 });
+    await settle(h.c);
+    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ canFinish: true, allRevealed: false });
+    expect(h.c.finish(h.id, COG.passageId)).toEqual({ status: 'DONE' });
   });
 });

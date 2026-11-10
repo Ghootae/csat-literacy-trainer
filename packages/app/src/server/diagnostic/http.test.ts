@@ -50,7 +50,7 @@ describe('진단평가 HTTP', () => {
     }
   });
 
-  it('표의 요청이 동작하고, 정오는 숨기며, 피드백 차례가 아니면 409다', async () => {
+  it('표의 요청이 동작하고, 정오는 숨기며, 리뷰 대상이 아니면 409이고, 공개·다음 지문이 동작한다', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'diag-http-')); dirs.push(dir);
     const fb = feedbackFake({ behavior: q => q === Q13 ? 'ERROR' : 'SUPPORTED' });
     const controller = new DiagnosticController({ store: new MemoryStore(), feedbackEvaluator: fb.evaluator, summaryEvaluator, summaryLogDirectory: dir,
@@ -93,17 +93,35 @@ describe('진단평가 HTTP', () => {
     expect((await call(base, 'POST', `${root}/item/${Q12}`, provided(wrongChoice(Q12)))).status).toBe(409);
     await controller.idle(); await new Promise(resolve => setTimeout(resolve, 20)); await controller.idle();
     const card = await (await call(base, 'GET', `${root}/passage/${COG.passageId}/summary-card`)).json() as Record<string, unknown>;
-    expect(card).toMatchObject({ status: 'ready', correct: 3, total: 5, qualityTiers: 3, judging: 0, firstItemOpen: true, counts: { SURE_CORRECT: 1, WRONG: 2 } });
-    // 피드백 차례: 커서 문항만, 정답 원출력은 응답에 없다
-    expect((await call(base, 'GET', `${root}/item/${Q13}/feedback`)).status).toBe(409);
-    const first = await (await call(base, 'GET', `${root}/item/${Q12}/feedback`)).json() as { phase: string; skippable: boolean };
-    expect(first.phase).toBe('COMPLETED'); expect(first.skippable).toBe(false);
+    expect(card).toMatchObject({ status: 'ready', correct: 3, total: 5, judging: 0, allRevealed: false, canFinish: false, position: null });
+    expect(JSON.stringify(card)).not.toContain('probabilities');
+    // 피드백: 리뷰 대상(오답)만, 정답 원출력은 응답에 없다
+    expect((await call(base, 'GET', `${root}/item/${Q12}/feedback`)).status).toBe(409);
+    expect((await call(base, 'POST', `${root}/passage/${COG.passageId}/finish`)).status).toBe(409);
+    const first = await (await call(base, 'GET', `${root}/item/${Q15}/feedback`)).json() as { phase: string; skippable: boolean };
+    expect(first).toMatchObject({ phase: 'AWAITING_RATIONALE', skippable: true });
     expect((await call(base, 'POST', `${root}/item/${Q13}/feedback`, { transitionId: 'x', expectedRevision: 0, command: { type: 'NOPE' } })).status).toBe(400);
     const second = await (await call(base, 'GET', `${root}/item/${Q13}/feedback`)).json() as { phase: string; revision: number; skippable: boolean };
     expect(second).toMatchObject({ phase: 'AWAITING_CORRECTION', skippable: true });
     const skipped = await call(base, 'POST', `${root}/item/${Q13}/feedback`, { transitionId: 'skip', expectedRevision: second.revision, command: { type: 'SKIP' } });
     expect(skipped.status).toBe(200); expect((await skipped.json() as { phase: string }).phase).toBe('AWAITING_END_START');
     expect((await call(base, 'POST', `${root}/item/${Q13}/feedback`, { transitionId: 'stale', expectedRevision: 0, command: { type: 'END_START', accept: false } })).status).toBe(409);
+    // 공개: 모두 공개하면 등급이 온다. 잘못된 본문은 400
+    expect((await call(base, 'POST', `${root}/passage/${COG.passageId}/reveal`, {})).status).toBe(400);
+    let revealed: { allRevealed: boolean; position: { grade: { mode: number; probabilities: number[] } } | null } | null = null;
+    for (const q of COG.questionIds) revealed = await (await call(base, 'POST', `${root}/passage/${COG.passageId}/reveal`, { questionId: q })).json() as typeof revealed;
+    expect(revealed!.allRevealed).toBe(true); expect(revealed!.position!.grade.probabilities).toHaveLength(9);
+    // 다음 지문: Q13은 교정 질문 단계, Q15는 근거 요청 단계라 둘 다 건너뛰어 끝낸다
+    const fifteen = await (await call(base, 'GET', `${root}/item/${Q15}/feedback`)).json() as { revision: number };
+    expect((await call(base, 'POST', `${root}/passage/${COG.passageId}/finish`)).status).toBe(409);
+    const skip15 = await (await call(base, 'POST', `${root}/item/${Q15}/feedback`, { transitionId: 'q15-skip', expectedRevision: fifteen.revision, command: { type: 'SKIP' } })).json() as { revision: number };
+    const end15 = await (await call(base, 'POST', `${root}/item/${Q15}/feedback`, { transitionId: 'q15-end', expectedRevision: skip15.revision, command: { type: 'END_START', accept: false } })).json() as { phase: string };
+    expect(end15.phase).toBe('COMPLETED');
+    const thirteen = await (await call(base, 'GET', `${root}/item/${Q13}/feedback`)).json() as { revision: number };
+    const end13 = await (await call(base, 'POST', `${root}/item/${Q13}/feedback`, { transitionId: 'q13-end', expectedRevision: thirteen.revision, command: { type: 'END_START', accept: false } })).json() as { phase: string };
+    expect(end13.phase).toBe('COMPLETED');
+    expect(await (await call(base, 'POST', `${root}/passage/${COG.passageId}/finish`)).json()).toEqual({ status: 'DONE' });
+    expect((await call(base, 'POST', `${root}/passage/${COG.passageId}/finish`)).status).toBe(409);
     const serialized = JSON.stringify(first) + JSON.stringify(second);
     expect(serialized).not.toContain('answerChoiceId'); expect(serialized).not.toContain('officialExplanation'); expect(serialized).not.toContain('assessments');
     // 결과
@@ -126,7 +144,7 @@ describe('진단평가 HTTP', () => {
     try {
       delete process.env['CSAT_DIAGNOSTIC_DEV'];
       for (const [method, path] of [['GET', 'dev/map'], ['GET', `dev/passage/${COG.passageId}/summary`], ['GET', `dev/passage/${COG.passageId}/answers`],
-        ['POST', `dev/passage/${COG.passageId}/skip`], ['POST', `dev/passage/${COG.passageId}/reset`], ['POST', `dev/item/${Q12}/skip-to`]] as const) {
+        ['POST', `dev/passage/${COG.passageId}/skip`], ['POST', `dev/passage/${COG.passageId}/reset`]] as const) {
         expect((await call(base, method, `${root}/${path}`, method === 'POST' ? { to: 'ANSWERING' } : undefined)).status).toBe(404);
       }
       process.env['CSAT_DIAGNOSTIC_DEV'] = '1';
@@ -141,8 +159,7 @@ describe('진단평가 HTTP', () => {
       const answers = await (await call(base, 'GET', `${root}/dev/passage/${COG.passageId}/answers`)).json() as { answers: Record<string, { source: string } | null> };
       expect(answers.answers[Q12]).toMatchObject({ source: 'draft' }); expect(answers.answers[Q13]).toBeNull();
       expect((await call(base, 'POST', `${root}/dev/passage/${COG.passageId}/skip`, { to: 'FEEDBACK' })).status).toBe(200);
-      expect((await call(base, 'POST', `${root}/dev/item/${Q13}/skip-to`)).status).toBe(409);
-      expect((await call(base, 'POST', `${root}/dev/item/${Q12}/skip-to`)).status).toBe(200);
+      expect((await call(base, 'POST', `${root}/dev/item/${Q12}/skip-to`)).status).toBe(404);   // 순서 강제가 없어져 이 API는 없다(D-0218)
       expect(await (await call(base, 'POST', `${root}/dev/passage/${COG.passageId}/reset`)).json()).toEqual({ status: 'NOT_STARTED' });
       expect((await call(base, 'GET', `${root}/dev/nothing`)).status).toBe(404);
       await controller.idle();

@@ -46,12 +46,12 @@ export const DiagnosticItemRequestSchema = z.object({
 }).strict();
 export const DiagnosticStartSchema = z.object({ summary: z.boolean() }).strict();
 export const DiagnosticFeedbackRequestSchema = FeedbackRequestSchema;
+export const DiagnosticRevealSchema = z.object({ questionId: z.string().trim().min(1) }).strict();
 export const DiagnosticDevSkipSchema = z.object({ to: z.enum(['ANSWERING', 'FEEDBACK', 'DONE']) }).strict();
 const STATUS_RANK = { NOT_STARTED: 0, SUMMARY: 1, ANSWERING: 2, AWAITING_JUDGMENT: 3, FEEDBACK: 4, DONE: 5 } as const;
 
 export const ITEM_REVIEW_LINE = '이 문항은 우리가 한 번 더 확인해 볼게. 다음 문항으로 넘어갈게.';
 export const OMITTED_WRONG_RATIONALE_LINE = '정답이 아니야. 어떻게 판단했는지 적어 주면 같이 볼게. 적기 어려우면 [근거 미제출]을 눌러 줘.';
-const ORDINALS = ['첫', '두', '세', '네', '다섯'];
 const NUMERALS = '①②③④⑤';
 
 /** 진단의 선택 판정 모델(D-0213 6): 정답·오답 모두 sol. 교정 판정(REPAIR)은 평가기 기본값(luna)을 따른다. */
@@ -68,6 +68,9 @@ export const DIAGNOSTIC_CORRECT_QUALITY_TIERS: 3 | 2 = 3;
 /** 첫 응답 기준 범주(D-0213). 판정 기록은 늘 세부 값을 남기고, 이 값은 거기서 계산한다. */
 export type AnswerCategory = 'WRONG' | 'SURE_CORRECT' | 'UNSURE_CORRECT' | 'PENDING' | 'CHECKING' | 'UNVERIFIED' | 'ERROR_CORRECT' | 'SUPPORTED_CORRECT' | 'WEAK_CORRECT';
 const ANSWER_CATEGORIES: readonly AnswerCategory[] = ['WRONG', 'SURE_CORRECT', 'UNSURE_CORRECT', 'PENDING', 'CHECKING', 'UNVERIFIED', 'ERROR_CORRECT', 'SUPPORTED_CORRECT', 'WEAK_CORRECT'];
+
+/** 리뷰 대상 범주(D-0213 7, D-0218): 오답, 근거가 틀린 정답. 힌트 흐름을 구현하면 UNSURE_CORRECT를 더한다. */
+export const isReviewTarget = (category: AnswerCategory): boolean => category === 'WRONG' || category === 'ERROR_CORRECT';
 
 type Participant = DiagnosticParticipant;
 type ItemState = Participant['items'][string];
@@ -198,7 +201,7 @@ export class DiagnosticController {
   /** 지문·문항의 시작 전 초기값. create()와 개발자 지문 초기화(D-0217)가 함께 쓴다. */
   private freshPassage(passageId: string): Participant['passages'][string] {
     return { status: 'NOT_STARTED', summaryChosen: null, summarySessionId: null,
-      firstTurns: Object.fromEntries(this.content(passageId).paragraphs.map(q => [q.paragraphId, null])), feedbackCursor: 0 };
+      firstTurns: Object.fromEntries(this.content(passageId).paragraphs.map(q => [q.paragraphId, null])), revealed: [] };
   }
   private freshItem(): ItemState {
     return { draft: null, first: null, session: null, transcript: [],
@@ -209,12 +212,12 @@ export class DiagnosticController {
   progress(participantId: string) {
     const p = this.require(participantId);
     const passages = this.set.passages.map(passage => ({ passageId: passage.passageId, status: p.passages[passage.passageId]!.status,
-      summaryChosen: p.passages[passage.passageId]!.summaryChosen, feedbackCursor: p.passages[passage.passageId]!.feedbackCursor }));
+      summaryChosen: p.passages[passage.passageId]!.summaryChosen }));
     const active = this.set.passages.find(passage => p.passages[passage.passageId]!.status !== 'DONE');
     const state = active ? p.passages[active.passageId]! : null;
     return { participantId, passages,
       set: { passages: this.set.passages.map(passage => ({ passageId: passage.passageId, title: this.content(passage.passageId).title, questionIds: [...passage.questionIds] })) },
-      current: active && state ? { passageId: active.passageId, questionId: state.status === 'FEEDBACK' ? active.questionIds[state.feedbackCursor] ?? null : null } : null,
+      current: active && state ? { passageId: active.passageId, questionId: null } : null,
       position: this.position(p) };
   }
 
@@ -328,40 +331,78 @@ export class DiagnosticController {
     this.requestSave(p);
   }
 
-  /** "답 입력 마침" 뒤 언제나 ready. 정답 수·위치는 정오만으로 정해져 바로 싣고, 근거 결과는 판정이 끝난 범주부터 채워진다. */
+  /**
+   * 지문 결과 화면(D-0218). "답 입력 마침" 뒤 언제나 ready. 정오·범주는 바로 싣고(문제 버튼 색), 등급·확률은 모든 문항 결과를 공개한 뒤에만 싣는다.
+   * 공개 여부는 서버가 기억한다. 리뷰 대상·검토 완료는 범주와 피드백 세션 phase에서 계산한다.
+   */
   summaryCard(participantId: string, passageId: string) {
     const p = this.require(participantId); const passage = this.passage(passageId); const state = p.passages[passageId]!;
     if (state.status === 'NOT_STARTED' || state.status === 'SUMMARY' || state.status === 'ANSWERING') fail(409, '아직 답 입력을 마치지 않은 지문입니다.');
     const items = passage.questionIds.map(id => ({ id, item: p.items[id]! })).filter(({ item }) => item.first !== null);
-    const counts = Object.fromEntries(ANSWER_CATEGORIES.map(category => [category, 0])) as Record<AnswerCategory, number>;
-    let correct = 0;
+    const revealed = new Set(state.revealed ?? []);
+    let correct = 0; let judging = 0;
     const cards = items.map(({ id, item }) => {
       const isCorrect = this.isCorrect(item); if (isCorrect) correct++;
-      const category = this.answerCategory(item); counts[category]++;
-      return { questionId: id, questionNumber: this.set.items[id]!.questionNumber, correct: isCorrect, rationale: item.first!.rationale.mode, category };
+      const category = this.answerCategory(item); const pending = item.firstJudgment.status === 'PENDING'; if (pending) judging++;
+      const target = this.reviewTarget(item, category);
+      const meta = this.set.items[id]!; const chosen = item.session!.source.choices.find(c => c.choiceId === item.first!.choiceId)!;
+      return { questionId: id, questionNumber: meta.questionNumber, correct: isCorrect, rationale: item.first!.rationale.mode, category,
+        megastudy: { correctRate: meta.megastudy.correctRate,
+          chosenPercents: [meta.megastudy.choicePercents[0][chosen.position - 1]!, meta.megastudy.choicePercents[1][chosen.position - 1]!] as [number, number] },
+        judging: pending, reviewTarget: target, reviewDone: target && this.feedback.get(item.session!.sessionId).phase === 'COMPLETED', revealed: revealed.has(id) };
     });
-    return { status: 'ready' as const, correct, total: items.length, qualityTiers: DIAGNOSTIC_CORRECT_QUALITY_TIERS, judging: counts.PENDING,
-      firstItemOpen: state.status !== 'AWAITING_JUDGMENT', counts, items: cards, position: this.position(p) };
+    const allRevealed = cards.length > 0 && cards.every(card => card.revealed);
+    const canFinish = judging === 0 && cards.every(card => !card.reviewTarget || card.reviewDone);
+    const position = allRevealed ? this.position(p) : null;
+    return { status: 'ready' as const, correct, total: cards.length, judging, items: cards, allRevealed, canFinish,
+      position: position === null ? null : { answered: position.answered, correct: position.correct, grade: { mode: position.grade.mode, probabilities: position.grade.probabilities } } };
+  }
+
+  /** 문항 결과를 공개한 것으로 기록한다(되돌리지 않는다). 갱신된 지문 결과를 돌려준다. */
+  reveal(participantId: string, passageId: string, raw: unknown) {
+    const p = this.require(participantId); const passage = this.passage(passageId); const state = p.passages[passageId]!;
+    const { questionId } = DiagnosticRevealSchema.parse(raw);
+    if (!passage.questionIds.includes(questionId)) fail(400, '이 지문의 문항이 아닙니다.');
+    if (p.items[questionId]!.first === null) fail(409, '답이 없는 문항입니다.');
+    if (state.status === 'NOT_STARTED' || state.status === 'SUMMARY' || state.status === 'ANSWERING') fail(409, '아직 답 입력을 마치지 않은 지문입니다.');
+    state.revealed ??= [];
+    if (!state.revealed.includes(questionId)) {
+      state.revealed.push(questionId);
+      this.event('ITEM_REVEALED', p, { passageId, questionId });
+      this.requestSave(p);
+    }
+    return this.summaryCard(participantId, passageId);
+  }
+
+  /** "다음 지문": 리뷰 대상을 모두 검토하고 판정 중인 문항이 없을 때만 지문을 끝낸다. */
+  finish(participantId: string, passageId: string): { status: 'DONE' } {
+    const p = this.require(participantId); this.passage(passageId); const state = p.passages[passageId]!;
+    if (state.status === 'DONE') fail(409, '이미 끝난 지문입니다.');
+    if (!this.summaryCard(participantId, passageId).canFinish) fail(409, '아직 검토할 문항이 남았거나 판정이 끝나지 않았습니다.');
+    state.status = 'DONE';
+    this.event('PASSAGE_DONE', p, { passageId });
+    this.requestSave(p);
+    return { status: 'DONE' };
   }
 
   // ---------- 문항별 피드백 ----------
 
   feedbackView(participantId: string, questionId: string): DiagnosticFeedbackView {
-    const p = this.require(participantId); const { index } = this.feedbackTarget(p, questionId, 'read');
-    const view = this.itemView(p, questionId, index);
-    // 커서 문항의 첫 판정이 아직이면 대기 보기를 돌려준다(학생이 누를 수 있는 명령 없이 판정이 끝나길 기다린다).
+    const p = this.require(participantId); this.feedbackTarget(p, questionId, 'read');
+    const view = this.itemView(p, questionId);
+    // 이 문항의 첫 판정이 아직이면 대기 보기를 돌려준다(학생이 누를 수 있는 명령 없이 판정이 끝나길 기다린다).
     return this.itemOpen(p, questionId) ? view : { ...view, evaluationStatus: 'PROCESSING', judgmentPending: true };
   }
 
   async feedbackSubmit(participantId: string, questionId: string, raw: unknown): Promise<DiagnosticFeedbackView> {
-    const p = this.require(participantId); const { index } = this.feedbackTarget(p, questionId, 'write');
+    const p = this.require(participantId); this.feedbackTarget(p, questionId, 'write');
     const request = DiagnosticFeedbackRequestSchema.parse(raw);
     const item = p.items[questionId]!;
     try { await this.feedback.submit(item.session!.sessionId, request); }
     catch (error) { if (error instanceof ZodError) throw error; fail(409, error instanceof Error ? error.message : String(error)); }
     this.event('FEEDBACK_COMMAND', p, { questionId, transitionId: request.transitionId, command: request.command });
     if (request.command.type === 'SKIP') this.event('ITEM_SKIPPED', p, { questionId });
-    return this.itemView(p, questionId, index);
+    return this.itemView(p, questionId);
   }
 
   // ---------- 결과 ----------
@@ -398,12 +439,14 @@ export class DiagnosticController {
     const passages = this.set.passages.map(passage => {
       const state = p.passages[passage.passageId]!; const content = this.content(passage.passageId);
       return { passageId: passage.passageId, title: content.title, status: state.status, summaryChosen: state.summaryChosen,
-        summarySkipped: state.devSkipped?.summary === true, feedbackCursor: state.feedbackCursor,
+        summarySkipped: state.devSkipped?.summary === true,
         paragraphs: content.paragraphs.map(q => ({ paragraphId: q.paragraphId, position: q.position, answered: state.firstTurns[q.paragraphId] != null })),
         questions: passage.questionIds.map(questionId => {
-          const item = p.items[questionId]!;
+          const item = p.items[questionId]!; const phase = item.session ? this.feedback.get(item.session.sessionId).phase : null;
+          // 리뷰 대상은 첫 판정이 끝나야 정해지는 범주가 있어, 답이 있는 문항만 계산한다(정답·판정 원출력은 넣지 않는다).
+          const target = item.first !== null && this.reviewTarget(item, this.answerCategory(item));
           return { questionId, questionNumber: this.set.items[questionId]!.questionNumber, answered: item.first !== null, draft: item.draft !== null,
-            firstJudgment: item.firstJudgment.status, feedbackPhase: item.session ? this.feedback.get(item.session.sessionId).phase : null, skipped: item.skipped === true };
+            firstJudgment: item.firstJudgment.status, feedbackPhase: phase, skipped: item.skipped === true, reviewTarget: target, reviewDone: target && phase === 'COMPLETED' };
         }) };
     });
     return { passages, resultAvailable: this.answeredPassages(p).length > 0 };
@@ -440,32 +483,19 @@ export class DiagnosticController {
     if (target >= STATUS_RANK.FEEDBACK && state.status === 'ANSWERING') this.confirmAnswers(p, passage);
     if (target >= STATUS_RANK.FEEDBACK && state.status === 'AWAITING_JUDGMENT') {
       // 판정을 기다리지 않고 피드백으로 둔다. 판정 중인 문항의 피드백은 대기 보기를 보인다.
-      state.status = 'FEEDBACK'; state.feedbackCursor = Math.max(0, passage.questionIds.findIndex(id => p.items[id]!.first !== null));
+      state.status = 'FEEDBACK';
     }
     if (to === 'DONE' && state.status === 'FEEDBACK') {
-      passage.questionIds.forEach((id, i) => { if (i >= state.feedbackCursor) p.items[id]!.skipped = true; });
+      for (const id of passage.questionIds) {
+        const item = p.items[id]!;
+        if (item.first !== null && this.reviewTarget(item, this.answerCategory(item)) && this.feedback.get(item.session!.sessionId).phase !== 'COMPLETED') item.skipped = true;
+      }
       state.status = 'DONE';
       this.event('PASSAGE_DONE', p, { passageId });
     }
     this.event('DEV_SKIP', p, { passageId, from, to });
     this.requestSave(p);
     return { status: state.status };
-  }
-
-  /** 피드백 중인 지문의 커서를 그 문항까지 앞으로 옮긴다. 지나친 문항은 skipped로 표시한다. */
-  devSkipItem(participantId: string, questionId: string): { feedbackCursor: number } {
-    const p = this.require(participantId);
-    const passage = this.set.passages.find(candidate => candidate.questionIds.includes(questionId));
-    if (!passage) return fail(404, '등록되지 않은 문항입니다.');
-    const state = p.passages[passage.passageId]!; const index = passage.questionIds.indexOf(questionId);
-    if (state.status !== 'FEEDBACK') fail(409, '피드백 중인 지문이 아닙니다.');
-    if (index < state.feedbackCursor) fail(409, '앞으로만 건너뛸 수 있습니다.');
-    if (p.items[questionId]!.first === null) fail(409, '답이 없는 문항입니다.');
-    for (let i = state.feedbackCursor; i < index; i++) p.items[passage.questionIds[i]!]!.skipped = true;
-    state.feedbackCursor = index;
-    this.event('DEV_SKIP', p, { questionId });
-    this.requestSave(p);
-    return { feedbackCursor: index };
   }
 
   /** 지문을 시작 전으로 되돌린다. 진행 중인 백그라운드 작업은 옛 객체를 쥐고 있으므로(객체가 바뀌면 멈춘다) 새 상태에 쓰지 못한다. 이벤트 기록은 지우지 않는다. */
@@ -771,31 +801,34 @@ export class DiagnosticController {
   private checkPassageReady(p: Participant, passageId: string): void {
     const state = p.passages[passageId]!;
     if (state.status !== 'AWAITING_JUDGMENT') return;
-    // 커서는 답이 있는 첫 문항에서 시작한다(학생 흐름에서는 0).
     const first = this.passage(passageId).questionIds.findIndex(id => p.items[id]!.first !== null);
     if (first < 0 || !this.itemOpen(p, this.passage(passageId).questionIds[first]!)) return;
-    state.status = 'FEEDBACK'; state.feedbackCursor = first;
+    state.status = 'FEEDBACK';
     this.requestSave(p);
   }
 
   // ---------- 내부: 문항별 피드백 ----------
 
-  /** 피드백 요청은 그 지문이 FEEDBACK 상태이고 커서가 그 문항일 때만 받는다. 이미 지나온 문항은 읽기만 된다. */
-  private feedbackTarget(p: Participant, questionId: string, mode: 'read' | 'write'): { index: number } {
-    const passage = this.set.passages.find(candidate => candidate.questionIds.includes(questionId));
-    if (!passage) return fail(404, '등록되지 않은 문항입니다.');
-    const state = p.passages[passage.passageId]!; const index = passage.questionIds.indexOf(questionId);
-    if (p.items[questionId]!.first === null) fail(409, '답이 없는 문항입니다.');
-    const readable = (state.status === 'FEEDBACK' || state.status === 'DONE') && index <= (state.status === 'DONE' ? Infinity : state.feedbackCursor);
-    if (state.status === 'FEEDBACK' && index === state.feedbackCursor) {
-      if (mode === 'write' && !this.itemOpen(p, questionId)) fail(409, '이 문항의 판정이 아직 끝나지 않았습니다.');
-      return { index };
-    }
-    if (mode === 'read' && readable) return { index };
-    return fail(409, '지금은 이 문항의 피드백 차례가 아닙니다.');
+  /** 리뷰 대상: 범주가 대상이고 판정이 문항 검토(ITEM_REVIEW)로 끝나지 않은 문항. 문항 검토는 학생이 풀어 갈 검토가 아니라 우리가 확인할 문항이다(D-0218). */
+  private reviewTarget(item: ItemState, category: AnswerCategory): boolean {
+    return isReviewTarget(category) && item.session !== null && this.feedback.get(item.session.sessionId).phase !== 'ITEM_REVIEW';
   }
 
-  private itemView(p: Participant, questionId: string, index: number): DiagnosticFeedbackView {
+  /** 피드백은 답 입력을 마친 지문의 리뷰 대상 문항만, 순서와 무관하게 읽고 쓴다. 쓰기는 그 문항의 첫 판정이 끝난 뒤에만 된다. */
+  private feedbackTarget(p: Participant, questionId: string, mode: 'read' | 'write'): void {
+    const passage = this.set.passages.find(candidate => candidate.questionIds.includes(questionId));
+    if (!passage) return fail(404, '등록되지 않은 문항입니다.');
+    const state = p.passages[passage.passageId]!; const item = p.items[questionId]!;
+    if (item.first === null) fail(409, '답이 없는 문항입니다.');
+    if (state.status === 'NOT_STARTED' || state.status === 'SUMMARY' || state.status === 'ANSWERING') fail(409, '아직 답 입력을 마치지 않은 지문입니다.');
+    if (!this.reviewTarget(item, this.answerCategory(item))) fail(409, '이 문항은 검토 대상이 아닙니다.');
+    if (mode === 'write') {
+      if (state.status === 'DONE') fail(409, '이미 끝난 지문입니다.');
+      if (!this.itemOpen(p, questionId)) fail(409, '이 문항의 판정이 아직 끝나지 않았습니다.');
+    }
+  }
+
+  private itemView(p: Participant, questionId: string): DiagnosticFeedbackView {
     const item = p.items[questionId]!; const session = item.session!;
     const base = this.feedback.get(session.sessionId);
     const review = base.phase === 'ITEM_REVIEW';
@@ -807,26 +840,13 @@ export class DiagnosticController {
     };
     const chosen = session.source.choices.find(c => c.choiceId === item.first!.choiceId)!;
     const intro: FeedbackMessage = { id: `diag-intro-${questionId}`, role: 'COACH', phase: 'AWAITING_SELECTION',
-      text: `${ORDINALS[index] ?? String(index + 1)}번째 문항으로 돌아가 볼게. ${NUMERALS[chosen.position - 1]}번을 골랐네.` };
+      text: `${this.set.items[questionId]!.questionNumber}번 문제로 돌아가 볼게. ${NUMERALS[chosen.position - 1]}번을 골랐네.` };
     const view: DiagnosticFeedbackView = { ...base,
       message: review ? ITEM_REVIEW_LINE : base.phase === 'AWAITING_RATIONALE' ? OMITTED_WRONG_RATIONALE_LINE : base.message,
       // 지문 답 입력 뒤 백그라운드로 돈 판정의 "끝났어" 말풍선은 피드백 차례에 맞지 않아 뺀다(차례 안에서 학생이 누른 RESUME의 것은 남긴다).
       transcript: [intro, ...base.transcript.filter(m => !m.id.startsWith(`done-${questionId}:`)).map(messageFor)],
       skippable: base.phase === 'AWAITING_RATIONALE' || base.phase === 'AWAITING_CORRECTION' || base.phase === 'AWAITING_RESELECTION' };
-    // 끝난 문항(또는 문항 검토 문항)이 커서 문항이면 보여 준 직후 다음 문항으로 넘어간다.
-    const state = p.passages[this.passageOfQuestion(questionId).passageId]!;
-    if (state.status === 'FEEDBACK' && state.feedbackCursor === index && (base.phase === 'COMPLETED' || review)) this.advanceCursor(p, questionId);
     return structuredClone(view);
-  }
-  private advanceCursor(p: Participant, questionId: string): void {
-    const passage = this.passageOfQuestion(questionId); const state = p.passages[passage.passageId]!;
-    state.feedbackCursor++;
-    while (state.feedbackCursor < passage.questionIds.length && p.items[passage.questionIds[state.feedbackCursor]!]!.first === null) state.feedbackCursor++;
-    if (state.feedbackCursor >= passage.questionIds.length) {
-      state.status = 'DONE';
-      this.event('PASSAGE_DONE', p, { passageId: passage.passageId });
-    }
-    this.requestSave(p);
   }
 
   // ---------- 내부: 위치·결과 ----------

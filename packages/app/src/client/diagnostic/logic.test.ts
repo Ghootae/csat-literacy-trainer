@@ -1,10 +1,10 @@
 import { gradeOfPercentile as serverGrade } from '@csat/pipeline';
 import { describe, expect, it } from 'vitest';
 import {
-  answerPayload, answerQuality, branchRows, categoryTally, countCategories, toggleConfidence, gradeOfPercentile, hasPending, sourceLocationName, cardStepName, cardTwists, cellState, circledObject, eulReul, focusRationale, gradeText, layerSentence, newTimer, passageResultSentence,
-  rangeBar, recommendationLines, solveStats, startTimer, stepTendency, stopTimer, summaryLinkSentence, sumCounts, timerValues, twistTags, zOfPercentile,
+  answerPayload, answerQuality, branchRows, categoryTally, countCategories, toggleConfidence, gradeOfPercentile, hasPending, sourceLocationName, cardStepName, cardTwists, cellState, circledObject, eulReul, focusRationale, gradeText, layerSentence, newTimer,
+  rangeBar, recommendationLines, resultGroup, resultRow, devCategoryText, finishHint, gradeShade, solveStats, startTimer, stepTendency, stopTimer, summaryLinkSentence, sumCounts, timerValues, twistTags, zOfPercentile,
 } from './logic.js';
-import type { AnswerCategory, ReadingCounts, ResultItem } from './types.js';
+import type { AnswerCategory, ReadingCounts, ResultItem, SummaryCardItem } from './types.js';
 
 const item = (over: Partial<ResultItem> = {}): ResultItem => ({
   questionId: 'q', passageId: 'p', questionNumber: 12, chosenPosition: 2, correct: true, rationale: 'PROVIDED', category: 'SUPPORTED_CORRECT', megastudy: { chosenPercents: [4, 2], correctRate: [70, 80] },
@@ -12,22 +12,44 @@ const item = (over: Partial<ResultItem> = {}): ResultItem => ({
   judgment: { status: 'ready', contentAssessment: 'SUPPORTED', boundary: 'NONE' }, twist: null, thoughtDiagnosis: null, evidence: null, summaryLink: null, ...over });
 
 const counts = (over: Partial<Record<AnswerCategory, number>> = {}): Record<AnswerCategory, number> => ({ ...countCategories([]), ...over });
-describe('지문 결과 문장', () => {
-  const card = { total: 5, correct: 4, qualityTiers: 3 as const, judging: 0, counts: counts({ SUPPORTED_CORRECT: 2, WEAK_CORRECT: 1, SURE_CORRECT: 1, WRONG: 1 }) };
-  it('정답 수를 먼저 말하고 근거를 쓴 정답(범주 1·2·3) 중 근거가 정확한 개수를 센다. 범주 4는 괄호로만 붙는다', () => {
-    expect(passageResultSentence(card)).toBe('이 지문의 5문항 중 4개를 맞혔어. 근거를 쓴 정답 3개 중 2개는 근거도 정확했어(1개는 확실하다고 한 정답).');
+const card = (over: Partial<SummaryCardItem> = {}): SummaryCardItem => ({ questionId: 'q', questionNumber: 12, correct: true, rationale: 'PROVIDED', category: 'SUPPORTED_CORRECT',
+  megastudy: { correctRate: [30, 40], chosenPercents: [25, 35] }, judging: false, reviewTarget: false, reviewDone: false, revealed: true, ...over });
+describe('지문 결과 줄(D-0218)', () => {
+  it('문제 버튼 색 무리: 근거 문제없음 · 근거 다시 볼 것 · 오답', () => {
+    for (const category of ['SUPPORTED_CORRECT', 'WEAK_CORRECT', 'SURE_CORRECT', 'UNVERIFIED', 'UNSURE_CORRECT', 'PENDING', 'CHECKING'] as const) expect(resultGroup(category)).toBe('good');
+    expect(resultGroup('ERROR_CORRECT')).toBe('check'); expect(resultGroup('WRONG')).toBe('wrong');
   });
-  it('2단계면 범주 1·2를 합쳐 센다', () => {
-    expect(passageResultSentence({ ...card, qualityTiers: 2 })).toBe('이 지문의 5문항 중 4개를 맞혔어. 근거를 쓴 정답 3개 중 3개는 근거가 확인되는 정답이야(1개는 확실하다고 한 정답).');
+  it('정답 범주별 설명과 비활성 칭찬, 정답률이 낮으면 어려운 문제 칭찬', () => {
+    expect(resultRow(card())).toMatchObject({ description: '정답(정답률 30% · 40%). 근거도 명확했어.', button: { label: '잘했어!', enabled: false } });
+    expect(resultRow(card({ megastudy: { correctRate: [12, 18], chosenPercents: [1, 1] } })).button.label).toBe('어려운 문제인데 정말 잘했어!');
+    expect(resultRow(card({ category: 'WEAK_CORRECT' })).description).toBe('정답(정답률 30% · 40%). 근거에 문제가 없었어.');
+    expect(resultRow(card({ category: 'UNVERIFIED' })).button.label).toBe('잘했어!');
+    expect(resultRow(card({ category: 'SURE_CORRECT' }))).toMatchObject({ description: '정답(정답률 30% · 40%). 확신을 갖고 풀었어.', button: { label: '확신을 갖고 풀었구나. 대단해!', enabled: false } });
+    expect(resultRow(card({ category: 'UNSURE_CORRECT' }))).toMatchObject({ description: '정답(정답률 30% · 40%). 근거는 없었어.', button: { label: '맞혔어!', enabled: false } });
   });
-  it('판정 중이면 한 줄을 붙이고, 판정이 끝난 범주만 센다', () => {
-    expect(passageResultSentence({ ...card, judging: 2, counts: counts({ SUPPORTED_CORRECT: 1, PENDING: 2, WRONG: 2 }), correct: 3 }))
-      .toBe('이 지문의 5문항 중 3개를 맞혔어. 근거를 쓴 정답 1개 중 1개는 근거도 정확했어. 근거는 살펴보는 중이야.');
-    expect(passageResultSentence({ ...card, judging: 5, counts: counts({ PENDING: 5 }), correct: 5 })).toBe('이 지문의 5문항 중 5개를 맞혔어. 근거는 살펴보는 중이야.');
+  it('리뷰 대상은 활성 버튼이고 검토를 마치면 완료 문구로 비활성이 된다', () => {
+    expect(resultRow(card({ category: 'ERROR_CORRECT', reviewTarget: true })).button).toEqual({ label: '근거를 다시 검토해 보자', enabled: true });
+    expect(resultRow(card({ category: 'ERROR_CORRECT', reviewTarget: true, reviewDone: true })).button).toEqual({ label: '검토 완료했어. 수고했어', enabled: false });
+    const wrong = card({ correct: false, category: 'WRONG', reviewTarget: true });
+    expect(resultRow(wrong)).toMatchObject({ description: '오답(같은 선지를 고른 비율 25% · 35%).', button: { label: '아깝지만 정답이 아니야. 다시 검토해 보자.', enabled: true } });
+    expect(resultRow({ ...wrong, reviewDone: true }).button).toEqual({ label: '검토 완료했어. 수고했어', enabled: false });
   });
-  it('확신 없이 맞힘·확인 못 함·확인 중은 괄호로 개수만 붙는다', () => {
-    expect(passageResultSentence({ ...card, counts: counts({ SUPPORTED_CORRECT: 1, UNSURE_CORRECT: 1, UNVERIFIED: 1, CHECKING: 2 }), correct: 5 }))
-      .toBe('이 지문의 5문항 중 5개를 맞혔어. 근거를 쓴 정답 1개 중 1개는 근거도 정확했어(1개는 확신 없이 맞힌 정답, 1개는 근거로 풀이를 확인하지 못했어, 2개는 확인 중이야).');
+  it('판정 중이면 분석 중으로 비활성(오답도 같다), 문항 검토 오답은 비활성이다', () => {
+    expect(resultRow(card({ category: 'PENDING' }))).toMatchObject({ description: '정답(정답률 30% · 40%). 아직 분석 중이야.', button: { label: '분석 중', enabled: false }, analyzing: true });
+    expect(resultRow(card({ correct: false, category: 'WRONG', reviewTarget: true, judging: true })).button).toEqual({ label: '분석 중', enabled: false });
+    expect(resultRow(card({ category: 'CHECKING' })).description).toBe('정답(정답률 30% · 40%). 근거는 한 번 더 확인해 볼게.');
+    expect(resultRow(card({ correct: false, category: 'WRONG', reviewTarget: false })).button.enabled).toBe(false);
+  });
+  it('힌트 흐름 전에는 잘 모르겠지만 정답이 리뷰 대상이 아니다(서버 isReviewTarget)', () => {
+    expect(resultRow(card({ category: 'UNSURE_CORRECT' })).button.enabled).toBe(false);
+  });
+  it('개발자 표기와 다음 지문이 꺼진 이유, 등급 띠 진하기', () => {
+    expect(devCategoryText('SUPPORTED_CORRECT')).toBe('(SUPPORTED_CORRECT · 근거 명확 정답)');
+    const items = [card({ reviewTarget: true }), card({ reviewTarget: true, reviewDone: true })];
+    expect(finishHint({ canFinish: false, judging: 0, items })).toBe('다시 검토할 문제가 1개 남았어.');
+    expect(finishHint({ canFinish: false, judging: 1, items })).toBe('분석이 끝나면 넘어갈 수 있어.');
+    expect(finishHint({ canFinish: true, judging: 0, items })).toBeNull();
+    expect(gradeShade([0, 0.5, 0.25])).toEqual([0.08, 1, 0.5]);
   });
 });
 

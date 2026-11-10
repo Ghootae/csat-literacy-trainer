@@ -3,7 +3,7 @@
  * 학생에게 보이는 문장은 반말이다(D-0116). 비틂·관계·단계 이름은 wording.ts에서만 온다.
  */
 import { BRANCH_CODES, BRANCH_WORDING, OTHER_TWIST_NAME, STEP_CODES, STEP_WORDING, TWIST_CODES, TWIST_WORDING, type BranchCode, type TwistCode } from './wording.js';
-import type { AnswerCategory, Confidence, QualityTiers, ReadingCounts, ResultItem, ResultSummaryLink, ResultView, SummaryCardView } from './types.js';
+import type { AnswerCategory, Confidence, QualityTiers, ReadingCounts, ResultItem, ResultSummaryLink, ResultView, SummaryCardItem, SummaryCardView } from './types.js';
 
 export const CIRCLED = '①②③④⑤';
 /** ①~⑤ 뒤에 붙는 조사(일·이·삼·사·오). 을/를. */
@@ -19,9 +19,8 @@ export function eulReul(word: string): string {
   return (code - 0xac00) % 28 === 0 ? '를' : '을';
 }
 
-// ---------- 지문 끝 중간 화면 ----------
+// ---------- 범주 집계 ----------
 
-export const JUDGING_TEXT = '근거는 살펴보는 중이야.';
 /** 범주별 개수를 표시 단계에 맞춰 센다. 2단계면 범주 1·2를 `accurate` 하나로 합치고 `weak`는 0이다. 분모는 범주 1·2·3만 센다. */
 export interface CategoryTally { accurate: number; weak: number; error: number; denominator: number; sure: number; unsure: number; unverified: number; checking: number }
 export function categoryTally(counts: Record<AnswerCategory, number>, tiers: QualityTiers): CategoryTally {
@@ -35,16 +34,62 @@ export function countCategories(items: readonly { category: AnswerCategory }[]):
   for (const item of items) counts[item.category]++;
   return counts;
 }
-/** 지문 결과 문장. 정답 수를 먼저 말하고, 근거 결과는 판정이 끝난 범주만 센다. 판정 중이면 한 줄을 붙인다. */
-export function passageResultSentence(card: Pick<SummaryCardView, 'total' | 'correct' | 'counts' | 'qualityTiers' | 'judging'>): string {
-  const t = categoryTally(card.counts, card.qualityTiers);
-  const notes = [t.sure > 0 ? `${t.sure}개는 확실하다고 한 정답` : null, t.unsure > 0 ? `${t.unsure}개는 확신 없이 맞힌 정답` : null,
-    t.unverified > 0 ? `${t.unverified}개는 근거로 풀이를 확인하지 못했어` : null, t.checking > 0 ? `${t.checking}개는 확인 중이야` : null].filter((x): x is string => x !== null);
-  const parts = [`이 지문의 ${card.total}문항 중 ${card.correct}개를 맞혔어`];
-  if (t.denominator > 0) parts.push(`근거를 쓴 정답 ${t.denominator}개 중 ${t.accurate}개는 ${card.qualityTiers === 2 ? '근거가 확인되는 정답이야' : '근거도 정확했어'}`);
-  if (notes.length > 0) parts[parts.length - 1] += `(${notes.join(', ')})`;
-  const sentence = parts.map(part => `${part}.`).join(' ');
-  return card.judging > 0 ? `${sentence} ${JUDGING_TEXT}` : sentence;
+// ---------- 지문 결과 화면(D-0218) ----------
+
+/** 문제 버튼 색 무리. 색만으로 구분하지 않도록 `RESULT_GROUP_MARK`의 글자 표시를 함께 보인다. */
+export type ResultGroup = 'good' | 'check' | 'wrong';
+export function resultGroup(category: AnswerCategory): ResultGroup {
+  return category === 'WRONG' ? 'wrong' : category === 'ERROR_CORRECT' ? 'check' : 'good';
+}
+export const RESULT_GROUP_MARK: Record<ResultGroup, string> = { good: '✓ 정답', check: '! 근거 확인', wrong: '✕ 오답' };
+/** 정답률이 이보다 낮은 문제를 맞히면 "어려운 문제" 칭찬을 한다(두 선택과목 평균). */
+export const HARD_CORRECT_RATE = 20;
+const CATEGORY_NAME: Record<AnswerCategory, string> = { WRONG: '오답', SURE_CORRECT: '확신 정답', UNSURE_CORRECT: '잘 모르겠지만 정답', PENDING: '판정 중', CHECKING: '확인 중',
+  UNVERIFIED: '판정 불가 정답', ERROR_CORRECT: '근거 오류 정답', SUPPORTED_CORRECT: '근거 명확 정답', WEAK_CORRECT: '근거 약한 정답' };
+
+export interface ResultRow { description: string; button: { label: string; enabled: boolean }; analyzing: boolean }
+/** 공개한 문항 한 줄의 결과 설명과 검토 버튼. 정답률은 메가스터디 수치, 오답은 같은 선지를 고른 비율이다(두 수치는 `percentPair`로). */
+export function resultRow(item: SummaryCardItem): ResultRow {
+  const rate = `정답률 ${percentPair(item.megastudy.correctRate)}`;
+  if (item.category === 'WRONG') {
+    const head = `오답(같은 선지를 고른 비율 ${percentPair(item.megastudy.chosenPercents)}).`;
+    if (item.judging) return { description: head, button: { label: '분석 중', enabled: false }, analyzing: true };
+    if (item.reviewDone) return { description: head, button: { label: '검토 완료했어. 수고했어', enabled: false }, analyzing: false };
+    if (!item.reviewTarget) return { description: `${head} 이 문항은 우리가 한 번 더 확인해 볼게.`, button: { label: '확인해 볼게', enabled: false }, analyzing: false };
+    return { description: head, button: { label: '아깝지만 정답이 아니야. 다시 검토해 보자.', enabled: true }, analyzing: false };
+  }
+  const head = `정답(${rate}).`;
+  const done = { label: '검토 완료했어. 수고했어', enabled: false };
+  const praise = (label: string) => ({ label, enabled: false });
+  switch (item.category) {
+    case 'SUPPORTED_CORRECT': {
+      const hard = (item.megastudy.correctRate[0] + item.megastudy.correctRate[1]) / 2 < HARD_CORRECT_RATE;
+      return { description: `${head} 근거도 명확했어.`, button: praise(hard ? '어려운 문제인데 정말 잘했어!' : '잘했어!'), analyzing: false };
+    }
+    case 'WEAK_CORRECT': case 'UNVERIFIED': return { description: `${head} 근거에 문제가 없었어.`, button: praise('잘했어!'), analyzing: false };
+    case 'SURE_CORRECT': return { description: `${head} 확신을 갖고 풀었어.`, button: praise('확신을 갖고 풀었구나. 대단해!'), analyzing: false };
+    case 'UNSURE_CORRECT': return { description: `${head} 근거는 없었어.`, button: praise('맞혔어!'), analyzing: false };
+    case 'ERROR_CORRECT':
+      return { description: `${head} 근거에 문제가 있었어.`, button: item.reviewDone ? done : { label: '근거를 다시 검토해 보자', enabled: item.reviewTarget }, analyzing: false };
+    case 'CHECKING': return { description: `${head} 근거는 한 번 더 확인해 볼게.`, button: { label: '확인 중', enabled: false }, analyzing: true };
+    default: return { description: `${head} 아직 분석 중이야.`, button: { label: '분석 중', enabled: false }, analyzing: true };
+  }
+}
+/** 개발자 모드(`?dev=1`)에서 줄 끝에 붙이는 내부 범주 표기. */
+export const devCategoryText = (category: AnswerCategory): string => `(${category} · ${CATEGORY_NAME[category]})`;
+
+/** "다음 지문" 버튼이 꺼져 있을 때 이유 한 줄. 켜져 있으면 null. */
+export function finishHint(card: Pick<SummaryCardView, 'canFinish' | 'judging' | 'items'>): string | null {
+  if (card.canFinish) return null;
+  if (card.judging > 0) return '분석이 끝나면 넘어갈 수 있어.';
+  const left = card.items.filter(item => item.reviewTarget && !item.reviewDone).length;
+  return left > 0 ? `다시 검토할 문제가 ${left}개 남았어.` : null;
+}
+
+/** 등급 띠 한 칸의 진하기(0.08~1). 가장 높은 확률 칸이 가장 진하다. */
+export function gradeShade(probabilities: readonly number[]): number[] {
+  const max = Math.max(...probabilities, 1e-9);
+  return probabilities.map(x => Math.max(0.08, x / max));
 }
 
 // ---------- ① 내 위치 ----------

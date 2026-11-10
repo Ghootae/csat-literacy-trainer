@@ -31,9 +31,9 @@ export async function handleDiagnosticRequest(controller: DiagnosticController, 
     if (rest === '' && method === 'GET') return send(res, 200, controller.progress(id));
     if (rest === 'result' && method === 'GET') return send(res, 200, controller.result(id));
     if (dev && rest.startsWith('dev/')) {
-      const devRoute = /^dev\/(?:(map)|passage\/([^/]+)\/(summary|answers|skip|reset)|item\/([^/]+)\/(skip-to))$/u.exec(rest);
+      const devRoute = /^dev\/(?:(map)|passage\/([^/]+)\/(summary|answers|skip|reset))$/u.exec(rest);
       if (devRoute) {
-        const [, isMap, passageId, passageAction, questionId] = devRoute;
+        const [, isMap, passageId, passageAction] = devRoute;
         if (method === 'GET' && isMap) return send(res, 200, controller.devMap(id));
         if (method === 'GET' && passageAction === 'summary') {
           const index = Number(new URL(req.url ?? '', 'http://localhost').searchParams.get('paragraph') ?? '0');
@@ -42,11 +42,10 @@ export async function handleDiagnosticRequest(controller: DiagnosticController, 
         if (method === 'GET' && passageAction === 'answers') return send(res, 200, controller.devAnswers(id, passageId!));
         if (method === 'POST' && passageAction === 'skip') return send(res, 200, controller.devSkipPassage(id, passageId!, await body()));
         if (method === 'POST' && passageAction === 'reset') return send(res, 200, controller.devReset(id, passageId!));
-        if (method === 'POST' && questionId) return send(res, 200, controller.devSkipItem(id, questionId));
       }
       return send(res, 404, { error: '등록되지 않은 진단평가 API입니다.' });
     }
-    const passage = /^passage\/([^/]+)\/(start|answers-done|summary-card|questions|summary\/(?:respond|navigate|finish))$/u.exec(rest);
+    const passage = /^passage\/([^/]+)\/(start|answers-done|summary-card|reveal|finish|questions|summary\/(?:respond|navigate|finish))$/u.exec(rest);
     if (passage) {
       const [, passageId, action] = passage as unknown as [string, string, string];
       if (method === 'POST' && action === 'start') return send(res, 200, controller.start(id, passageId, await body()));
@@ -55,6 +54,8 @@ export async function handleDiagnosticRequest(controller: DiagnosticController, 
       if (method === 'POST' && action === 'summary/finish') return send(res, 200, controller.summaryFinish(id, passageId));
       if (method === 'POST' && action === 'answers-done') return send(res, 200, controller.answersDone(id, passageId));
       if (method === 'GET' && action === 'questions') return send(res, 200, controller.answerDrafts(id, passageId));
+      if (method === 'POST' && action === 'reveal') return send(res, 200, controller.reveal(id, passageId, await body()));
+      if (method === 'POST' && action === 'finish') return send(res, 200, controller.finish(id, passageId));
       if (method === 'GET' && action === 'summary-card') return send(res, 200, controller.summaryCard(id, passageId));
     }
     const item = /^item\/([^/]+)(\/feedback)?$/u.exec(rest);

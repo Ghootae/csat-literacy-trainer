@@ -7,7 +7,7 @@ import type { SimpleDialogueView } from '../../shared/dialogue-simple.js';
 import { answersDone, getFeedback, getQuestions, postFeedback, startPassage, submitItem, summaryFinish, summaryNavigate, summaryRespond } from './api.js';
 import { AnswerScreen } from './AnswerScreen.js';
 import { MidContainer, ResultContainer, message } from './Containers.js';
-import { devResetPassage, devSkipItem, devSkipPassage, getDevAnswers, getDevMap, getDevSummary, type DevAnswersView, type DevMapView } from './dev-api.js';
+import { devResetPassage, devSkipPassage, getDevAnswers, getDevMap, getDevSummary, type DevAnswersView, type DevMapView } from './dev-api.js';
 import { buildFlow, neighbor, resolveKey, resultKey, statusRank, type Cell } from './dev-flow.js';
 import { DevMap } from './DevMap.js';
 import { FeedbackScreen } from './FeedbackScreen.js';
@@ -95,11 +95,11 @@ export function DevDiagnostic({ id, set }: { id: string; set: SetInfo }): React.
       case 'question': {
         if (rank < statusRank('FEEDBACK')) await skipTo('FEEDBACK');
         const now = m.passages.find(p => p.passageId === passageId)!;
-        const index = now.questions.findIndex(q => q.questionId === cell.questionId);
-        if (!now.questions[index]!.answered) { setView({ name: 'note', text: '이 문항은 답이 없어 판정·피드백 없이 건너뜀.' }); break; }
-        if (now.status === 'FEEDBACK' && index > now.feedbackCursor) { await devSkipItem(id, cell.questionId!); m = await refresh(); }
-        const after = m.passages.find(p => p.passageId === passageId)!;
-        setView({ name: 'feedback', passageId, questionId: cell.questionId!, readOnly: after.status === 'DONE' || index < after.feedbackCursor });
+        const question = now.questions.find(q => q.questionId === cell.questionId)!;
+        if (!question.answered) { setView({ name: 'note', text: '이 문항은 답이 없어 판정·피드백 없이 건너뜀.' }); break; }
+        // 리뷰 대상이 아니면 검토 화면이 없으므로 지문 결과 화면으로 간다(D-0218).
+        if (!question.reviewTarget) { setView({ name: 'mid', passageId }); break; }
+        setView({ name: 'feedback', passageId, questionId: cell.questionId!, readOnly: now.status === 'DONE' });
         break;
       }
       default: setView({ name: 'result' });
@@ -168,14 +168,21 @@ export function DevDiagnostic({ id, set }: { id: string; set: SetInfo }): React.
       case 'mid': {
         const { passageId } = view;
         return <MidContainer key={passageId} id={id} passageId={passageId} title={titleOf(passageId)} number={numberOf(passageId)} total={total} error={error}
-          start={() => void step(1)} />;
+          last={numberOf(passageId) >= total} dev
+          review={questionId => { const cell = flow.find(c => c.key === `${passageId}:q:${questionId}`); if (cell) void go(cell); }}
+          finished={() => void guarded(async () => {
+            // 이 지문의 칸 바로 다음 칸(다음 지문의 첫 칸 또는 결과)으로 간다.
+            const next = await refresh(); const nextFlow = buildFlow(next);
+            const lastIndex = nextFlow.reduce((found, c, i) => c.passageId === passageId ? i : found, -1);
+            const target = nextFlow[lastIndex + 1];
+            if (target) await openCell(target);
+          })} />;
       }
       case 'feedback': {
         const { passageId, questionId, readOnly } = view;
-        const passage = set.passages.find(p => p.passageId === passageId)!;
-        const index = passage.questionIds.indexOf(questionId); const lastQuestion = index + 1 >= passage.questionIds.length;
+        const backToResult = () => void go({ key: `${passageId}:mid`, kind: 'mid', passageId, label: '지문 결과', status: 'DONE' });
         return <FeedbackScreen key={`${questionId}:${readOnly}`} readOnly={readOnly} load={() => getFeedback(id, questionId)} send={request => postFeedback(id, questionId, request).then(next => { void afterChange(); return next; })}
-          nextLabel={!lastQuestion ? '다음 문항' : numberOf(passageId) >= set.passages.length ? '결과 보기' : '다음 지문'} next={() => void step(1)} />;
+          nextLabel="지문 결과로 돌아가기" next={backToResult} back={readOnly ? undefined : backToResult} />;
       }
       default: return <ResultContainer id={id} set={set} />;
     }

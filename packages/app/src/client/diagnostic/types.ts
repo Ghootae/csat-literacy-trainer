@@ -7,11 +7,11 @@ export type PassageStatus = 'NOT_STARTED' | 'SUMMARY' | 'ANSWERING' | 'AWAITING_
 export interface PositionView {
   answered: number; correct: number;
   percentile: { mean: number; low: number; high: number };
-  grade: { mean: number; best: number; worst: number };
+  grade: { mean: number; best: number; worst: number; probabilities: number[]; mode: number };
 }
 export interface ProgressView {
   participantId: string;
-  passages: { passageId: string; status: PassageStatus; summaryChosen: boolean | null; feedbackCursor: number }[];
+  passages: { passageId: string; status: PassageStatus; summaryChosen: boolean | null }[];
   set: SetInfo;
   current: { passageId: string; questionId: string | null } | null;
   position: PositionView | null;
@@ -26,13 +26,20 @@ export interface Draft { choiceId: string; rationale: FeedbackRationale; confide
 export interface QuestionsView { questions: QuestionView[]; drafts: Record<string, Draft | null> }
 export interface ItemRequest { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null; confidence: Confidence | null }
 
-/** 답 입력을 마친 뒤 언제나 이 모양이다. 근거 결과는 판정이 끝난 범주부터 채워지고(`judging > 0`이면 아직 진행 중), `firstItemOpen`이 켜지면 피드백을 시작할 수 있다. */
+/** 지문 결과 화면 자료(D-0218). 정오·범주는 바로 오고(문제 버튼 색), 등급(`position`)은 모든 문항 결과를 공개한 뒤에만 온다. */
+export interface SummaryCardItem {
+  questionId: string; questionNumber: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; category: AnswerCategory;
+  megastudy: { correctRate: [number, number]; chosenPercents: [number, number] };
+  /** 첫 선택 판정이 진행 중이다. */
+  judging: boolean;
+  reviewTarget: boolean; reviewDone: boolean; revealed: boolean;
+}
 export interface SummaryCardView {
-  status: 'ready'; correct: number; total: number; qualityTiers: QualityTiers; judging: number; firstItemOpen: boolean;
-  counts: Record<AnswerCategory, number>;
-  items: { questionId: string; questionNumber: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; category: AnswerCategory }[];
-  /** 답한 문항이 없으면(개발자 건너뛰기) null. */
-  position: PositionView | null;
+  status: 'ready'; correct: number; total: number; judging: number;
+  items: SummaryCardItem[];
+  allRevealed: boolean; canFinish: boolean;
+  /** 모든 문항을 공개하기 전, 또는 답한 문항이 없으면 null. `grade.probabilities`는 1~9등급 확률(합 1), `mode`는 확률 최대 등급. */
+  position: { answered: number; correct: number; grade: { mode: number; probabilities: number[] } } | null;
 }
 export type DiagnosticFeedbackView = FeedbackWorkbenchView & { skippable: boolean; judgmentPending?: boolean };
 

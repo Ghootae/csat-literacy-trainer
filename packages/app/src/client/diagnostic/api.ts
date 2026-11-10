@@ -27,6 +27,8 @@ export const getQuestions = (id: string, passageId: string) => request<Questions
 export const submitItem = (id: string, questionId: string, body: ItemRequest) => request<{ saved: true }>(at(id, `/item/${encodeURIComponent(questionId)}`), 'POST', body);
 export const answersDone = (id: string, passageId: string) => request<unknown>(at(id, passagePath(passageId, 'answers-done')), 'POST');
 export const getSummaryCard = (id: string, passageId: string) => request<SummaryCardView>(at(id, passagePath(passageId, 'summary-card')));
+export const revealItem = (id: string, passageId: string, questionId: string) => request<SummaryCardView>(at(id, passagePath(passageId, 'reveal')), 'POST', { questionId });
+export const finishPassage = (id: string, passageId: string) => request<{ status: 'DONE' }>(at(id, passagePath(passageId, 'finish')), 'POST');
 export const getFeedback = (id: string, questionId: string) => request<DiagnosticFeedbackView>(at(id, `/item/${encodeURIComponent(questionId)}/feedback`));
 export const postFeedback = (id: string, questionId: string, body: DiagnosticFeedbackRequest) => request<DiagnosticFeedbackView>(at(id, `/item/${encodeURIComponent(questionId)}/feedback`), 'POST', body);
 export const getResult = (id: string) => request<ResultView>(at(id, '/result'));

@@ -7,9 +7,11 @@ import type { Confidence, PassageStatus, QuestionView } from './types.js';
 export interface DevMapQuestion {
   questionId: string; questionNumber: number; answered: boolean; draft: boolean;
   firstJudgment: 'NONE' | 'PENDING' | 'READY' | 'FAILED'; feedbackPhase: string | null; skipped: boolean;
+  /** 학생 지문 결과 화면의 리뷰 대상(D-0218)과 검토 완료 여부. */
+  reviewTarget: boolean; reviewDone: boolean;
 }
 export interface DevMapPassage {
-  passageId: string; title: string; status: PassageStatus; summaryChosen: boolean | null; summarySkipped: boolean; feedbackCursor: number;
+  passageId: string; title: string; status: PassageStatus; summaryChosen: boolean | null; summarySkipped: boolean;
   paragraphs: { paragraphId: string; position: number; answered: boolean }[];
   questions: DevMapQuestion[];
 }
@@ -27,5 +29,4 @@ export const getDevSummary = (id: string, passageId: string, paragraphIndex: num
 export const getDevAnswers = (id: string, passageId: string) => request<DevAnswersView>(passageDev(id, passageId, 'answers'));
 export const devSkipPassage = (id: string, passageId: string, to: 'ANSWERING' | 'FEEDBACK' | 'DONE') =>
   request<{ status: PassageStatus }>(passageDev(id, passageId, 'skip'), 'POST', { to });
-export const devSkipItem = (id: string, questionId: string) => request<{ feedbackCursor: number }>(devPath(id, `item/${encodeURIComponent(questionId)}/skip-to`), 'POST');
 export const devResetPassage = (id: string, passageId: string) => request<{ status: 'NOT_STARTED' }>(passageDev(id, passageId, 'reset'), 'POST');

@@ -1,4 +1,4 @@
-/** SNS 진단평가 화면(`/diagnostic`, 인계 B). 시작 안내 → 지문마다 (요약 선택 → 요약 대화) → 문항 답 → 지문 끝 중간 화면 → 문항별 피드백 → 결과. 브라우저에는 참가자 id만 둔다. */
+/** SNS 진단평가 화면(`/diagnostic`, 인계 B). 시작 안내 → 지문마다 (요약 선택 → 요약 대화) → 문항 답 → 지문 결과 화면(결과 공개·리뷰할 문항 고르기) ↔ 문항 검토 → 결과. 브라우저에는 참가자 id만 둔다. */
 import { useEffect, useRef, useState } from 'react';
 import type { SimpleDialogueView } from '../shared/dialogue-simple.js';
 import {
@@ -46,13 +46,12 @@ export function DiagnosticApp(): React.JSX.Element {
     setSet(state.set);
     if (DEV) { setScreen({ name: 'dev' }); return; }
     if (!state.current) { setScreen({ name: 'result' }); return; }
-    const { passageId, questionId } = state.current;
+    const { passageId } = state.current;
     const passage = state.passages.find(p => p.passageId === passageId)!;
     switch (passage.status) {
       case 'NOT_STARTED': setScreen({ name: 'choose', passageId }); break;
       case 'SUMMARY': setScreen({ name: 'summary', passageId, view: await summaryNavigate(participantId, passageId, 0) }); break;
       case 'ANSWERING': setScreen({ name: 'answer', passageId, data: await getQuestions(participantId, passageId) }); break;
-      case 'FEEDBACK': setScreen(passage.feedbackCursor > 0 && questionId ? { name: 'feedback', passageId, questionId } : { name: 'mid', passageId }); break;
       default: setScreen({ name: 'mid', passageId });
     }
   }
@@ -115,21 +114,15 @@ export function DiagnosticApp(): React.JSX.Element {
   if (screen.name === 'mid') {
     const { passageId } = screen;
     return <MidContainer key={passageId} id={participantId} passageId={passageId} title={titleOf(passageId)} number={numberOf(passageId)} total={total} error={error}
-      start={() => void guarded(async () => {
-        const progress = await getProgress(participantId);
-        const questionId = progress.current?.questionId;
-        if (!questionId) throw new Error('아직 피드백을 시작할 수 없어. 잠시 뒤에 다시 눌러 줘.');
-        setScreen({ name: 'feedback', passageId, questionId });
-      })} />;
+      last={numberOf(passageId) >= total} dev={DEV}
+      review={questionId => setScreen({ name: 'feedback', passageId, questionId })}
+      finished={() => void guarded(() => route(participantId))} />;
   }
   if (screen.name === 'feedback') {
     const { passageId, questionId } = screen;
-    const passage = set.passages.find(p => p.passageId === passageId)!;
-    const index = passage.questionIds.indexOf(questionId); const lastQuestion = index + 1 >= passage.questionIds.length;
-    const lastPassage = numberOf(passageId) >= total;
+    const backToResult = () => setScreen({ name: 'mid', passageId });
     return <FeedbackScreen key={questionId} load={() => getFeedback(participantId, questionId)} send={request => postFeedback(participantId, questionId, request)}
-      nextLabel={!lastQuestion ? '다음 문항' : lastPassage ? '결과 보기' : '다음 지문'}
-      next={() => { if (!lastQuestion) setScreen({ name: 'feedback', passageId, questionId: passage.questionIds[index + 1]! }); else void guarded(() => route(participantId)); }} />;
+      nextLabel="지문 결과로 돌아가기" next={backToResult} back={backToResult} />;
   }
   return <ResultContainer id={participantId} set={set} />;
 }

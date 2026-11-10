@@ -82,3 +82,10 @@ base_commit: 199ebd28
   - 판정이 끝나지 않은 문제의 줄: "정답(20%). 아직 분석 중이야" 형식.
   - 등급 그래프: 범위(예: 2~4등급)가 아니라 **확률이 가장 높은 등급 하나**("3등급")로 쓰고, 1~9등급 눈금 위에 등급별 확률을 진하기로 칠한 띠(시안 그림 3).
 - 코드 확인: 위치 추정(`packages/pipeline/src/diagnostic-position/position.ts` `estimateAbility`)은 능력값 사후분포를 격자 401점으로 이미 계산하고 평균·10%·90% 지점만 돌려준다. 등급별 확률은 격자 점마다 등급을 매겨(`nationalPosition` → `gradeOfPercentile`) 가중치를 더하면 새 외부 자료 없이 얻을 수 있다. 두 선택과목(평균 내는 방식)의 합치기 규칙은 정해야 한다.
+
+## (구현) 지문 결과 화면 개편 — D-0218
+
+- 인계 `docs/handoffs/2026-11-10-diagnostic-passage-result-review-select.md`를 executor(sonnet)가 구현, 코드 에이전트가 화면 사진(`docs/review/diagnostic-passage-result-screens-2026-11-10/`)·시험으로 검토. 빌드 통과, 진단·화면·위치 259 통과, Playwright 3(가짜 평가기).
+- 실행자 판단(수용): 오답이지만 판정이 충분·일치라 상태기계가 문항 검토(`ITEM_REVIEW`)로 가는 문항은 리뷰 대상에서 빼고 "한 번 더 확인해 볼게"(비활성)로 둠. 이 경우 검토 화면이 `COMPLETED`에 이르지 못해 다음 지문이 막히기 때문. 판단은 서버 `reviewTarget()` 한 곳.
+- 정답 판정 실패(`CHECKING`)는 리뷰 대상이 아니라 학생이 검토 화면에서 판정 재시도(`RESUME`)할 길이 없어짐(배경 자동 재시도는 그대로).
+- 남은 것: 공개 전 등급 숨김은 지문 결과 응답에만 적용, `/progress`·`result` 응답에는 등급이 실림(API 직접 열면 보임). 최종 결과 화면 위치 표시는 범위 그대로.

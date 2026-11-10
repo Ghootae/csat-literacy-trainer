@@ -12,10 +12,12 @@ const coachLabel = (entry: FeedbackMessage) => entry.kind === 'WAIT_DONE' ? '진
   : entry.sequence === 'GATE' ? '설명 시작' : entry.sequence === 'CONNECTOR' || entry.sequence === 'SECTION' ? '선지별 설명'
   : entry.sequence === 'QUESTION' ? '이해 확인' : entry.sequence === 'CLOSING' ? '마무리' : '판정 결과';
 
-export function FeedbackScreen({ load, send, nextLabel, next, readOnly = false }: {
+export function FeedbackScreen({ load, send, nextLabel, next, back, readOnly = false }: {
   load: () => Promise<DiagnosticFeedbackView>; send: (request: DiagnosticFeedbackRequest) => Promise<DiagnosticFeedbackView>;
-  /** 이 문항이 끝난 뒤 보이는 버튼 이름(다음 문항·다음 지문·결과 보기). */
+  /** 이 문항의 검토가 끝난 뒤 보이는 버튼 이름과 동작(지문 결과 화면으로 돌아가기). */
   nextLabel: string; next: () => void;
+  /** 검토를 마치지 않고 지문 결과 화면으로 돌아간다(진행은 서버에 남아 있어 나중에 이어 갈 수 있다). 없으면 버튼을 두지 않는다. */
+  back?: (() => void) | undefined;
   /** 개발자 이동으로 돌아온 화면(D-0217): 입력·명령을 막고 지나온 대화만 보인다. */
   readOnly?: boolean;
 }): React.JSX.Element {
@@ -53,7 +55,7 @@ export function FeedbackScreen({ load, send, nextLabel, next, readOnly = false }
   useEffect(() => {
     if (view && pending && view.evaluationStatus !== 'PROCESSING' && view.revision > pending.expectedRevision) { setPending(null); setDraft(''); setOmit(false); }
   }, [view?.revision, view?.evaluationStatus, pending]);
-  // 다음 문항의 첫 판정이 아직이면(judgmentPending) 대기 말풍선을 보이며 열릴 때까지 다시 불러온다.
+  // 이 문항의 첫 판정이 아직이면(judgmentPending) 대기 말풍선을 보이며 열릴 때까지 다시 불러온다.
   const waiting = busy || view?.evaluationStatus === 'PROCESSING' || view?.judgmentPending === true;
   const sequence = sequenceState(view?.transcript ?? [], revealed, reducedMotion, released);
   useEffect(() => {
@@ -137,7 +139,8 @@ export function FeedbackScreen({ load, send, nextLabel, next, readOnly = false }
   }
   const question = paneFromFeedback(view);
   return <main className="reading-workbench problem-lab-workbench diag-workbench" data-pane={pane}>
-    <header className="workbench-header"><div className="lab-strip-lead"><h1 className="diag-header-title">{view.title} {view.questionNumber}번</h1></div></header>
+    <header className="workbench-header"><div className="lab-strip-lead"><h1 className="diag-header-title">{view.title} {view.questionNumber}번</h1></div>
+      {back && !finished && <div className="workbench-actions"><button type="button" data-testid="back-to-result" onClick={back}>← 결과 목록</button></div>}</header>
     <nav className="workbench-tabs" aria-label="문제 화면 전환">{[['source', '지문'], ['problem', '문제'], ['chat', '대화']].map(([id, title]) =>
       <button key={id} aria-pressed={pane === id} onClick={() => setPane(id!)}>{title}</button>)}</nav>
     <div className="workbench-columns" ref={columns}>

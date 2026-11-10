@@ -22,7 +22,8 @@ export interface ParticipantPosition {
   answered: number;
   correct: number;
   percentile: PositionRange;
-  grade: { mean: number; best: number; worst: number };
+  /** probabilities: 1~9등급 확률(합 1), mode: 확률 최대 등급(같으면 더 높은 등급 = 작은 숫자). */
+  grade: { mean: number; best: number; worst: number; probabilities: number[]; mode: number };
   bySubject: Record<PositionSubject, { percentile: PositionRange }>;
 }
 
@@ -51,18 +52,24 @@ export function itemDifficultyFor(data: PositionData, seq: string, questionNumbe
   return itemDifficulty(item.correctRate / 100, sigma);
 }
 
-/** 사전분포 N(0, σ²), 격자 -4~4 401점. 평균과 누적 0.1·0.9 지점(80% 구간). */
-export function estimateAbility(responses: { b: number; correct: boolean }[], sigma: number): { mean: number; low: number; high: number } {
-  const grid = Array.from({ length: 401 }, (_, j) => -4 + 8 * j / 400);
-  const lp = grid.map(t => -t * t / (2 * sigma * sigma)
+const GRID = Array.from({ length: 401 }, (_, j) => -4 + 8 * j / 400);
+/** 사전분포 N(0, σ²), 격자 -4~4 401점의 사후 가중치(합 1). */
+function abilityPosterior(responses: { b: number; correct: boolean }[], sigma: number): number[] {
+  const lp = GRID.map(t => -t * t / (2 * sigma * sigma)
     + responses.reduce((sum, { b, correct }) => sum + Math.log(correct ? logistic(t - b) : 1 - logistic(t - b)), 0));
   const m = Math.max(...lp);
   const w = lp.map(x => Math.exp(x - m));
   const s = w.reduce((a, x) => a + x, 0);
-  const mean = grid.reduce((a, g, i) => a + g * w[i]!, 0) / s;
+  return w.map(x => x / s);
+}
+
+/** 평균과 누적 0.1·0.9 지점(80% 구간). */
+export function estimateAbility(responses: { b: number; correct: boolean }[], sigma: number): { mean: number; low: number; high: number } {
+  const w = abilityPosterior(responses, sigma);
+  const mean = GRID.reduce((a, g, i) => a + g * w[i]!, 0);
   let cdf = 0; let low: number | null = null; let high: number | null = null;
-  grid.forEach((g, i) => {
-    cdf += w[i]! / s;
+  GRID.forEach((g, i) => {
+    cdf += w[i]!;
     if (low === null && cdf >= 0.1) low = g;
     if (high === null && cdf >= 0.9) high = g;
   });
@@ -91,11 +98,25 @@ export function nationalPosition(theta: number, subject: PositionSubject, sigma 
   return percentOfRaw(data, raw, REFERENCE_EXAM_SEQ, subject);
 }
 
+/** 선택과목 하나의 사후분포 격자 점마다 능력값 → 전국 백분위 → 등급을 매기고 가중치를 더한 등급 분포(1~9등급, 합 1). */
+function gradeProbabilities(posterior: number[], subject: PositionSubject, data: PositionData): number[] {
+  const probabilities = new Array<number>(9).fill(0);
+  GRID.forEach((theta, i) => {
+    if (posterior[i]! < 1e-12) return;
+    probabilities[gradeOfPercentile(nationalPosition(theta, subject, POSITION_SIGMA, data)) - 1]! += posterior[i]!;
+  });
+  return probabilities;
+}
+
 /** 지금까지 답한 문항의 정오로 두 선택과목을 각각 계산하고 백분위를 평균한다. σ = 1. */
 export function participantPosition(responses: PositionResponse[], data = loadPositionData()): ParticipantPosition {
   const bySubject = {} as ParticipantPosition['bySubject'];
+  const probabilities = new Array<number>(9).fill(0);
   for (const subject of POSITION_SUBJECTS) {
-    const theta = estimateAbility(responses.map(r => ({ b: itemDifficultyFor(data, r.seq, r.questionNumber, subject), correct: r.correct })), POSITION_SIGMA);
+    const scored = responses.map(r => ({ b: itemDifficultyFor(data, r.seq, r.questionNumber, subject), correct: r.correct }));
+    const theta = estimateAbility(scored, POSITION_SIGMA);
+    // 두 선택과목의 등급 분포는 산술 평균한다(백분위를 두 과목 평균하는 것과 같은 취지, D-0218).
+    gradeProbabilities(abilityPosterior(scored, POSITION_SIGMA), subject, data).forEach((x, i) => { probabilities[i]! += x / POSITION_SUBJECTS.length; });
     bySubject[subject] = { percentile: {
       mean: nationalPosition(theta.mean, subject, POSITION_SIGMA, data),
       low: nationalPosition(theta.low, subject, POSITION_SIGMA, data),
@@ -104,5 +125,6 @@ export function participantPosition(responses: PositionResponse[], data = loadPo
   const avg = (key: keyof PositionRange) => POSITION_SUBJECTS.reduce((a, s) => a + bySubject[s].percentile[key], 0) / POSITION_SUBJECTS.length;
   const percentile = { mean: avg('mean'), low: avg('low'), high: avg('high') };
   return { answered: responses.length, correct: responses.filter(r => r.correct).length, percentile,
-    grade: { mean: gradeOfPercentile(percentile.mean), best: gradeOfPercentile(percentile.high), worst: gradeOfPercentile(percentile.low) }, bySubject };
+    grade: { mean: gradeOfPercentile(percentile.mean), best: gradeOfPercentile(percentile.high), worst: gradeOfPercentile(percentile.low),
+      probabilities, mode: probabilities.reduce((best, x, i) => x > probabilities[best]! ? i : best, 0) + 1 }, bySubject };
 }

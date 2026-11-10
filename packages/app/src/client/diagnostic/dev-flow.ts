@@ -28,11 +28,11 @@ export function passageCells(passage: DevMapPassage): Cell[] {
       paragraph.answered ? 'DONE' : status === 'SUMMARY' ? 'CURRENT' : 'SKIPPED', { paragraphIndex: index }));
   } else cell('summary', 'summary', '요약', 'SKIPPED');
   cell('answer', 'answer', '답 입력', rank < RANK.ANSWERING ? 'NOT_YET' : status === 'ANSWERING' ? 'CURRENT' : anyAnswered ? 'DONE' : 'SKIPPED');
-  cell('mid', 'mid', '중간', rank < RANK.AWAITING_JUDGMENT ? 'NOT_YET' : status === 'AWAITING_JUDGMENT' ? 'JUDGING' : anyAnswered ? 'DONE' : 'SKIPPED');
-  passage.questions.forEach((q, index) => {
+  cell('mid', 'mid', '지문 결과', rank < RANK.AWAITING_JUDGMENT ? 'NOT_YET' : status === 'AWAITING_JUDGMENT' ? 'JUDGING' : anyAnswered ? 'DONE' : 'SKIPPED');
+  // 문항 칸은 리뷰 대상(오답, 근거가 틀린 정답)만 둔다(D-0218). 순서를 강제하지 않으므로 검토 전 칸은 미진행이다.
+  passage.questions.filter(q => q.reviewTarget).forEach(q => {
     const state: CellStatus = q.skipped ? 'SKIPPED' : q.firstJudgment === 'FAILED' ? 'FAILED' : q.firstJudgment === 'PENDING' && rank >= RANK.AWAITING_JUDGMENT ? 'JUDGING'
-      : status === 'DONE' || (status === 'FEEDBACK' && index < passage.feedbackCursor) || q.feedbackPhase === 'COMPLETED' ? (q.answered ? 'DONE' : 'SKIPPED')
-      : status === 'FEEDBACK' && index === passage.feedbackCursor ? 'CURRENT' : 'NOT_YET';
+      : q.reviewDone || q.feedbackPhase === 'COMPLETED' ? 'DONE' : 'NOT_YET';
     cell('question', `q:${q.questionId}`, `${q.questionNumber}번`, state, { questionId: q.questionId });
   });
   return cells;
