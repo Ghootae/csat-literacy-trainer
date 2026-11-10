@@ -31,7 +31,8 @@ export interface SummaryCardView {
   status: 'ready'; correct: number; total: number; qualityTiers: QualityTiers; judging: number; firstItemOpen: boolean;
   counts: Record<AnswerCategory, number>;
   items: { questionId: string; questionNumber: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; category: AnswerCategory }[];
-  position: PositionView;
+  /** 답한 문항이 없으면(개발자 건너뛰기) null. */
+  position: PositionView | null;
 }
 export type DiagnosticFeedbackView = FeedbackWorkbenchView & { skippable: boolean; judgmentPending?: boolean };
 

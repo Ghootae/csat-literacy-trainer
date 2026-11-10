@@ -114,4 +114,40 @@ describe('진단평가 HTTP', () => {
     expect((await call(base, 'GET', '/api/diagnostic/participant/123e4567-e89b-12d3-a456-426614174000')).status).toBe(404);
     expect((await call(base, 'POST', `${root}/passage/unknown/start`, { summary: false })).status).toBe(404);
   });
+  it('개발자 이동 API(dev/*)는 CSAT_DIAGNOSTIC_DEV=1이 없으면 404이고, 있으면 표대로 동작한다(D-0217)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'diag-http-dev-')); dirs.push(dir);
+    const fb = feedbackFake();
+    const controller = new DiagnosticController({ store: new MemoryStore(), feedbackEvaluator: fb.evaluator, summaryEvaluator, summaryLogDirectory: dir,
+      diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
+    const base = await listen({ diagnosticEnabled: true, diagnosticController: controller });
+    const created = await (await call(base, 'POST', '/api/diagnostic/participant')).json() as { participantId: string };
+    const root = `/api/diagnostic/participant/${created.participantId}`;
+    const previous = process.env['CSAT_DIAGNOSTIC_DEV'];
+    try {
+      delete process.env['CSAT_DIAGNOSTIC_DEV'];
+      for (const [method, path] of [['GET', 'dev/map'], ['GET', `dev/passage/${COG.passageId}/summary`], ['GET', `dev/passage/${COG.passageId}/answers`],
+        ['POST', `dev/passage/${COG.passageId}/skip`], ['POST', `dev/passage/${COG.passageId}/reset`], ['POST', `dev/item/${Q12}/skip-to`]] as const) {
+        expect((await call(base, method, `${root}/${path}`, method === 'POST' ? { to: 'ANSWERING' } : undefined)).status).toBe(404);
+      }
+      process.env['CSAT_DIAGNOSTIC_DEV'] = '1';
+      const map = await (await call(base, 'GET', `${root}/dev/map`)).json() as { passages: { passageId: string; status: string; questions: unknown[] }[]; resultAvailable: boolean };
+      expect(map.passages).toHaveLength(4); expect(map.passages[0]).toMatchObject({ passageId: COG.passageId, status: 'NOT_STARTED' }); expect(map.resultAvailable).toBe(false);
+      expect(JSON.stringify(map)).not.toContain('answerChoiceId');
+      expect((await call(base, 'GET', `${root}/dev/passage/${COG.passageId}/summary`)).status).toBe(409);
+      expect(await (await call(base, 'POST', `${root}/dev/passage/${COG.passageId}/skip`, { to: 'ANSWERING' })).json()).toEqual({ status: 'ANSWERING' });
+      expect((await call(base, 'POST', `${root}/dev/passage/${COG.passageId}/skip`, { to: 'ANSWERING' })).status).toBe(409);
+      expect((await call(base, 'POST', `${root}/dev/passage/${COG.passageId}/skip`, { to: 'NOPE' })).status).toBe(400);
+      await call(base, 'POST', `${root}/item/${Q12}`, provided(correctChoice(Q12)));
+      const answers = await (await call(base, 'GET', `${root}/dev/passage/${COG.passageId}/answers`)).json() as { answers: Record<string, { source: string } | null> };
+      expect(answers.answers[Q12]).toMatchObject({ source: 'draft' }); expect(answers.answers[Q13]).toBeNull();
+      expect((await call(base, 'POST', `${root}/dev/passage/${COG.passageId}/skip`, { to: 'FEEDBACK' })).status).toBe(200);
+      expect((await call(base, 'POST', `${root}/dev/item/${Q13}/skip-to`)).status).toBe(409);
+      expect((await call(base, 'POST', `${root}/dev/item/${Q12}/skip-to`)).status).toBe(200);
+      expect(await (await call(base, 'POST', `${root}/dev/passage/${COG.passageId}/reset`)).json()).toEqual({ status: 'NOT_STARTED' });
+      expect((await call(base, 'GET', `${root}/dev/nothing`)).status).toBe(404);
+      await controller.idle();
+    } finally {
+      if (previous === undefined) delete process.env['CSAT_DIAGNOSTIC_DEV']; else process.env['CSAT_DIAGNOSTIC_DEV'] = previous;
+    }
+  });
 });

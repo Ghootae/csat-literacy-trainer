@@ -9,10 +9,12 @@ import { simpleWaitingText } from '../simple-waiting.js';
 import { SimpleBubble } from '../SimpleDialogueDrawer.js';
 import '../simple-dialogue.css';
 
-export function SummaryDialogue({ view, busy, error, respond, go, finish }: {
+export function SummaryDialogue({ view, busy, error, respond, go, finish, readOnly = false }: {
   view: SimpleDialogueView; busy: boolean; error: string;
   respond: (body: { transitionId: string; paragraphIndex: number; text: string }) => Promise<SimpleDialogueView>;
   go: (index: number) => void; finish: () => void;
+  /** 개발자 이동으로 돌아온 화면(D-0217): 입력·마침 버튼 없이 대화 기록만 보인다. */
+  readOnly?: boolean;
 }): React.JSX.Element {
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [mobilePane, setMobilePane] = useState('chat');
@@ -63,7 +65,7 @@ export function SummaryDialogue({ view, busy, error, respond, go, finish }: {
   return <main className="reading-workbench simple-workbench diag-workbench" data-pane={mobilePane}>
     <header className="workbench-header"><div className="simple-strip-lead"><h1 className="diag-header-title">{view.title}</h1></div>
       <div className="workbench-actions"><span>문단 {current.index + 1} / {view.paragraphs.length}</span>
-        <button className="primary" disabled={busy} onClick={finish}>요약 마치고 문제 풀기</button></div>
+        {!readOnly && <button className="primary" disabled={busy} onClick={finish}>요약 마치고 문제 풀기</button>}</div>
     </header>
     <nav className="workbench-tabs" aria-label="화면 전환">{[['source', '원문'], ['chat', '대화']].map(([id, label]) =>
       <button key={id} aria-pressed={mobilePane === id} onClick={() => setMobilePane(id!)}>{label}</button>)}</nav>
@@ -93,7 +95,7 @@ export function SummaryDialogue({ view, busy, error, respond, go, finish }: {
           {current.evaluationError && <p role="alert" className="chat-notice">{current.evaluationError}</p>}
         </div>
         <footer className="chat-footer">{error && <p className="err" role="alert">{error}</p>}
-          {current.done ? !sequenceDone ? null : <div className="chat-progress-actions"><p>이 문단은 끝났어.</p><div>
+          {readOnly ? <p className="diag-muted" role="status">읽기 전용(지나온 화면)</p> : current.done ? !sequenceDone ? null : <div className="chat-progress-actions"><p>이 문단은 끝났어.</p><div>
             {!last && <button className="primary" disabled={busy} onClick={() => go(current.index + 1)}>다음 문단</button>}</div></div>
             : <div className="dialogue-compose"><label className="simple-sr-only" htmlFor="diag-summary-response">이 문단의 중심 내용과 관계를 설명해 줘.</label>
               <textarea ref={responseBox} id="diag-summary-response" value={draft} disabled={locked} placeholder="내 생각을 적어 봐…"

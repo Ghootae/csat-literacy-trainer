@@ -2,23 +2,23 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SimpleDialogueView } from '../shared/dialogue-simple.js';
 import {
-  ApiError, answersDone, createParticipant, getFeedback, getProgress, getQuestions, getResult, getSummaryCard, postFeedback, startPassage, submitItem,
+  ApiError, answersDone, createParticipant, getFeedback, getProgress, getQuestions, postFeedback, startPassage, submitItem,
   summaryFinish, summaryNavigate, summaryRespond,
 } from './diagnostic/api.js';
 import { AnswerScreen } from './diagnostic/AnswerScreen.js';
 import { FeedbackScreen } from './diagnostic/FeedbackScreen.js';
-import { hasPending } from './diagnostic/logic.js';
-import { ChoosePage, IntroPage, MidPage } from './diagnostic/Pages.js';
-import { ResultView } from './diagnostic/ResultView.js';
+import { MidContainer, ResultContainer, message } from './diagnostic/Containers.js';
+import { ChoosePage, IntroPage } from './diagnostic/Pages.js';
+import { DevDiagnostic } from './diagnostic/DevDiagnostic.js';
 import { SummaryDialogue } from './diagnostic/SummaryDialogue.js';
-import type { ProgressView, QuestionsView, ResultView as Result, SetInfo, SummaryCardView } from './diagnostic/types.js';
+import type { ProgressView, QuestionsView, SetInfo } from './diagnostic/types.js';
 import './diagnostic/diagnostic.css';
 
+/** `/diagnostic?dev=1`: 개발자 이동 지도(D-0217). 없으면 학생 화면 그대로다. */
+const DEV = new URLSearchParams(window.location.search).get('dev') === '1';
 const STORAGE_KEY = 'csat-diagnostic-participant';
 const readId = (): string | null => { try { return window.localStorage.getItem(STORAGE_KEY); } catch { return null; } };
 const writeId = (id: string | null) => { try { if (id === null) window.localStorage.removeItem(STORAGE_KEY); else window.localStorage.setItem(STORAGE_KEY, id); } catch { /* 저장하지 못하면 새로 고침 때 새 참가자로 시작한다. */ } };
-const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
-const RESULT_POLL_MS = 3000; const RESULT_POLL_LIMIT_MS = 10 * 60 * 1000; const CARD_POLL_MS = 2000;
 
 type Screen =
   | { name: 'loading' } | { name: 'fatal'; message: string } | { name: 'intro' }
@@ -27,40 +27,7 @@ type Screen =
   | { name: 'answer'; passageId: string; data: QuestionsView }
   | { name: 'mid'; passageId: string }
   | { name: 'feedback'; passageId: string; questionId: string }
-  | { name: 'result' };
-
-function MidContainer({ id, passageId, title, number, total, start, error }: { id: string; passageId: string; title: string; number: number; total: number; start: () => void; error: string }) {
-  const [card, setCard] = useState<SummaryCardView | null>(null);
-  const [problem, setProblem] = useState('');
-  useEffect(() => {
-    let active = true; let timer: number | undefined;
-    const poll = () => getSummaryCard(id, passageId).then(next => {
-      if (!active) return;
-      setCard(next); setProblem('');
-      if (next.judging > 0 || !next.firstItemOpen) timer = window.setTimeout(poll, CARD_POLL_MS);
-    }).catch((reason: unknown) => { if (active) { setProblem(message(reason)); timer = window.setTimeout(poll, CARD_POLL_MS); } });
-    void poll();
-    return () => { active = false; window.clearTimeout(timer); };
-  }, [id, passageId]);
-  return <MidPage title={title} number={number} total={total} card={card} start={start} error={error || problem} />;
-}
-
-function ResultContainer({ id, set }: { id: string; set: SetInfo }) {
-  const [result, setResult] = useState<Result | null>(null);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    let active = true; let timer: number | undefined; const startedAt = Date.now();
-    const load = () => getResult(id).then(next => {
-      if (!active) return;
-      setResult(next); setError('');
-      if (hasPending(next) && Date.now() - startedAt < RESULT_POLL_LIMIT_MS) timer = window.setTimeout(load, RESULT_POLL_MS);
-    }).catch((reason: unknown) => { if (active) { setError(message(reason)); timer = window.setTimeout(load, RESULT_POLL_MS); } });
-    void load();
-    return () => { active = false; window.clearTimeout(timer); };
-  }, [id]);
-  if (!result) return <main className="diag-page"><div className="diag-wrap"><p className="diag-muted" role={error ? 'alert' : 'status'}>{error || '불러오는 중…'}</p></div></main>;
-  return <ResultView result={result} set={set} />;
-}
+  | { name: 'result' } | { name: 'dev' };
 
 export function DiagnosticApp(): React.JSX.Element {
   const [screen, setScreen] = useState<Screen>({ name: 'loading' });
@@ -77,6 +44,7 @@ export function DiagnosticApp(): React.JSX.Element {
   async function route(participantId: string, progress?: ProgressView) {
     const state = progress ?? await getProgress(participantId);
     setSet(state.set);
+    if (DEV) { setScreen({ name: 'dev' }); return; }
     if (!state.current) { setScreen({ name: 'result' }); return; }
     const { passageId, questionId } = state.current;
     const passage = state.passages.find(p => p.passageId === passageId)!;
@@ -112,6 +80,7 @@ export function DiagnosticApp(): React.JSX.Element {
   const start = () => guarded(async () => {
     const created = await createParticipant();
     writeId(created.participantId); setId(created.participantId); setSet(created.set);
+    if (DEV) { setScreen({ name: 'dev' }); return; }
     setScreen({ name: 'choose', passageId: created.set.passages[0]!.passageId });
   });
 
@@ -120,6 +89,8 @@ export function DiagnosticApp(): React.JSX.Element {
   if (screen.name === 'intro') return <IntroPage busy={busy} error={error} start={() => void start()} />;
   const participantId = id!;
   const total = set.passages.length;
+
+  if (screen.name === 'dev') return <DevDiagnostic id={participantId} set={set} />;
 
   if (screen.name === 'choose') {
     const { passageId } = screen;

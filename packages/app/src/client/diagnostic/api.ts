@@ -3,7 +3,7 @@ import type { DiagnosticFeedbackRequest, DiagnosticFeedbackView, ItemRequest, Pr
 
 const root = '/api/diagnostic/participant';
 export class ApiError extends Error { constructor(readonly status: number, message: string) { super(message); } }
-async function request<T>(url: string, method: 'GET' | 'POST' = 'GET', body?: unknown): Promise<T> {
+export async function request<T>(url: string, method: 'GET' | 'POST' = 'GET', body?: unknown): Promise<T> {
   const response = await fetch(url, body === undefined && method === 'GET' ? undefined : {
     method, headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
@@ -13,7 +13,7 @@ async function request<T>(url: string, method: 'GET' | 'POST' = 'GET', body?: un
   }
   return response.json() as Promise<T>;
 }
-const at = (id: string, path = '') => `${root}/${encodeURIComponent(id)}${path}`;
+export const at = (id: string, path = '') => `${root}/${encodeURIComponent(id)}${path}`;
 const passagePath = (passageId: string, action: string) => `/passage/${encodeURIComponent(passageId)}/${action}`;
 
 export const createParticipant = () => request<{ participantId: string; set: SetInfo }>(root, 'POST');

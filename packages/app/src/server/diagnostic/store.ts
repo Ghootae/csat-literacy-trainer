@@ -23,6 +23,8 @@ export interface DiagnosticParticipant {
     /** paragraphId → 첫 시도의 첫 학생 발화 */
     firstTurns: Record<string, { text: string; at: string; copyOverlap?: { n: 5; windows: number; matched: number; ratio: number } | null } | null>;
     feedbackCursor: number;
+    /** 개발자 이동(D-0217)으로 요약을 건너뛴 지문. 옛 파일에는 없다(없으면 건너뛰지 않은 것). */
+    devSkipped?: { summary: boolean };
   }>;
   items: Record<string, {
     /** answers-done 전 임시 답 */
@@ -33,6 +35,8 @@ export interface DiagnosticParticipant {
     firstJudgment: { status: JobStatus; attempts: number; contentAssessment: string | null; boundary: string | null; reconstructability?: string | null; consistency?: string | null };
     thoughtDiagnosis: { status: JobStatus; output: unknown | null };
     reviewFlag: 'WRONG_SUPPORTED' | 'BOUNDARY' | null;
+    /** 개발자 이동(D-0217)으로 답 없이 지나친 문항. 옛 파일에는 없다(없으면 false). */
+    skipped?: boolean;
   }>;
   /** paragraphId 단위. judgments는 단위(노드·관계) id별 결과 */
   analysis: Record<string, { status: JobStatus; judgments: Record<string, unknown> }>;

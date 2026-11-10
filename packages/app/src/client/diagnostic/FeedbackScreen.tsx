@@ -12,10 +12,12 @@ const coachLabel = (entry: FeedbackMessage) => entry.kind === 'WAIT_DONE' ? '진
   : entry.sequence === 'GATE' ? '설명 시작' : entry.sequence === 'CONNECTOR' || entry.sequence === 'SECTION' ? '선지별 설명'
   : entry.sequence === 'QUESTION' ? '이해 확인' : entry.sequence === 'CLOSING' ? '마무리' : '판정 결과';
 
-export function FeedbackScreen({ load, send, nextLabel, next }: {
+export function FeedbackScreen({ load, send, nextLabel, next, readOnly = false }: {
   load: () => Promise<DiagnosticFeedbackView>; send: (request: DiagnosticFeedbackRequest) => Promise<DiagnosticFeedbackView>;
   /** 이 문항이 끝난 뒤 보이는 버튼 이름(다음 문항·다음 지문·결과 보기). */
   nextLabel: string; next: () => void;
+  /** 개발자 이동으로 돌아온 화면(D-0217): 입력·명령을 막고 지나온 대화만 보인다. */
+  readOnly?: boolean;
 }): React.JSX.Element {
   const [view, setView] = useState<DiagnosticFeedbackView | null>(null);
   const [choice, setChoice] = useState<string | null>(null);
@@ -140,7 +142,7 @@ export function FeedbackScreen({ load, send, nextLabel, next }: {
       <button key={id} aria-pressed={pane === id} onClick={() => setPane(id!)}>{title}</button>)}</nav>
     <div className="workbench-columns" ref={columns}>
       <PassagePane question={question} highlights={[...view.correctionHighlights, ...sectionMarks]} />
-      <QuestionPane question={question} selectedId={choice ?? (selection ? null : view.selectedChoiceId)} enabled={view.phase === 'AWAITING_RESELECTION' && !waiting && !pending}
+      <QuestionPane question={question} selectedId={choice ?? (selection ? null : view.selectedChoiceId)} enabled={!readOnly && view.phase === 'AWAITING_RESELECTION' && !waiting && !pending}
         onPick={setChoice} highlights={[...view.correctionHighlights, ...sectionMarks]} />
       <section className="workbench-pane chat-pane" aria-label="응답과 피드백">
         <header className="pane-header"><h2>생각을 나누는 공간</h2></header>
@@ -156,7 +158,7 @@ export function FeedbackScreen({ load, send, nextLabel, next }: {
             <p>{waitingText(waitClock.kind, waitClock.elapsedMs, pending?.transitionId ?? view.sessionId)}<span className="lab-waiting-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></p></article>}
           {view.result?.answerRevealed && view.result.answer && <article className="lab-answer-reveal"><h3>정답 {view.result.answer.position}번</h3><p>{view.result.answer.text}</p></article>}
         </div>
-        <div className="chat-footer diag-composer">
+        {readOnly ? <div className="chat-footer diag-composer"><p className="diag-muted" role="status">읽기 전용(지나온 화면)</p></div> : <div className="chat-footer diag-composer">
           <div className="diag-composer-top"><div role={composer.notice.kind === 'error' ? 'alert' : 'status'} className="lab-composer-notice">{noticeText}</div>
             {composer.actions.check && <button type="button" className="diag-omit" aria-pressed={omit} disabled={composer.actions.checkDisabled} onClick={() => setOmit(old => !old)}>근거 미제출</button>}</div>
           {!finished && <><label className="lab-sr-only" htmlFor="diag-feedback-response">{composer.input.label}</label>
@@ -174,7 +176,7 @@ export function FeedbackScreen({ load, send, nextLabel, next }: {
             }}>{button.label}</button>)}
             {finished && sequence.complete && <button type="button" className="primary" onClick={next}>{nextLabel}</button>}
           </div>
-        </div>
+        </div>}
       </section>
     </div>
   </main>;

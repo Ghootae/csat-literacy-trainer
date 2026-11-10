@@ -46,6 +46,8 @@ export const DiagnosticItemRequestSchema = z.object({
 }).strict();
 export const DiagnosticStartSchema = z.object({ summary: z.boolean() }).strict();
 export const DiagnosticFeedbackRequestSchema = FeedbackRequestSchema;
+export const DiagnosticDevSkipSchema = z.object({ to: z.enum(['ANSWERING', 'FEEDBACK', 'DONE']) }).strict();
+const STATUS_RANK = { NOT_STARTED: 0, SUMMARY: 1, ANSWERING: 2, AWAITING_JUDGMENT: 3, FEEDBACK: 4, DONE: 5 } as const;
 
 export const ITEM_REVIEW_LINE = '이 문항은 우리가 한 번 더 확인해 볼게. 다음 문항으로 넘어갈게.';
 export const OMITTED_WRONG_RATIONALE_LINE = '정답이 아니야. 어떻게 판단했는지 적어 주면 같이 볼게. 적기 어려우면 [근거 미제출]을 눌러 줘.';
@@ -184,18 +186,24 @@ export class DiagnosticController {
     const p: Participant = { schemaVersion: 'sns-diagnostic-participant-v1', participantId, setId: 'set-e', createdAt: new Date().toISOString(),
       passages: {}, items: {}, analysis: {} };
     for (const passage of this.set.passages) {
-      p.passages[passage.passageId] = { status: 'NOT_STARTED', summaryChosen: null, summarySessionId: null,
-        firstTurns: Object.fromEntries(this.content(passage.passageId).paragraphs.map(q => [q.paragraphId, null])), feedbackCursor: 0 };
-      for (const questionId of passage.questionIds) {
-        p.items[questionId] = { draft: null, first: null, session: null, transcript: [],
-          firstJudgment: { status: 'NONE', attempts: 0, contentAssessment: null, boundary: null, reconstructability: null, consistency: null },
-          thoughtDiagnosis: { status: 'NONE', output: null }, reviewFlag: null };
-      }
+      p.passages[passage.passageId] = this.freshPassage(passage.passageId);
+      for (const questionId of passage.questionIds) p.items[questionId] = this.freshItem();
     }
     this.participants.set(participantId, p);
     this.event('PARTICIPANT_CREATED', p, {});
     this.requestSave(p);
     return { participantId, set: { passages: this.set.passages.map(passage => ({ passageId: passage.passageId, title: this.content(passage.passageId).title, questionIds: [...passage.questionIds] })) } };
+  }
+
+  /** 지문·문항의 시작 전 초기값. create()와 개발자 지문 초기화(D-0217)가 함께 쓴다. */
+  private freshPassage(passageId: string): Participant['passages'][string] {
+    return { status: 'NOT_STARTED', summaryChosen: null, summarySessionId: null,
+      firstTurns: Object.fromEntries(this.content(passageId).paragraphs.map(q => [q.paragraphId, null])), feedbackCursor: 0 };
+  }
+  private freshItem(): ItemState {
+    return { draft: null, first: null, session: null, transcript: [],
+      firstJudgment: { status: 'NONE', attempts: 0, contentAssessment: null, boundary: null, reconstructability: null, consistency: null },
+      thoughtDiagnosis: { status: 'NONE', output: null }, reviewFlag: null };
   }
 
   progress(participantId: string) {
@@ -230,7 +238,8 @@ export class DiagnosticController {
     const request = SimpleRespondSchema.parse(raw);
     const sessionId = this.summarySession(p, passageId);
     const view = await this.summary.respond(sessionId, request);
-    this.recordFirstTurn(p, passageId, sessionId, request.paragraphIndex);
+    // 응답을 기다리는 사이 개발자 지문 초기화가 있었다면 옛 세션의 첫 발화는 기록하지 않는다.
+    if (p.passages[passageId]!.summarySessionId === sessionId) this.recordFirstTurn(p, passageId, sessionId, request.paragraphIndex);
     return this.summaryView(view);
   }
 
@@ -284,36 +293,46 @@ export class DiagnosticController {
     if (state.status !== 'ANSWERING') fail(409, '이미 답 입력을 마쳤거나 아직 시작하지 않은 지문입니다.');
     const missing = passage.questionIds.filter(id => p.items[id]!.draft === null);
     if (missing.length > 0) fail(400, `아직 답하지 않은 문항이 있습니다: ${missing.join(', ')}`);
+    this.confirmAnswers(p, passage);
+    return { position: this.position(p)! };
+  }
+
+  /** draft가 있는 문항만 첫 응답으로 확정하고 판정을 시작한다. draft가 없는 문항은 첫 응답 없이 건너뜀으로 둔다(학생 흐름에는 없다). 모두 비면 바로 DONE. */
+  private confirmAnswers(p: Participant, passage: DiagnosticSetPassage): void {
+    const passageId = passage.passageId; const state = p.passages[passageId]!;
     state.status = 'AWAITING_JUDGMENT';
     const submittedAt = new Date().toISOString();
-    const started: string[] = [];
+    const started: string[] = []; const answered: string[] = [];
     for (const questionId of passage.questionIds) {
-      const item = p.items[questionId]!; const draft = item.draft!;
+      const item = p.items[questionId]!;
+      if (item.draft === null) { item.skipped = true; continue; }
+      const draft = item.draft;
       const { savedAt: _savedAt, ...answer } = draft as typeof draft & { revision?: number };
       const { revision: _revision, ...firstAnswer } = answer as typeof answer & { revision?: number };
       item.first = { ...firstAnswer, submittedAt }; item.draft = null;
       const session = createFeedbackSession(randomUUID(), this.bundle(questionId).source);
       item.session = session; item.transcript = [];
-      this.sessionIndex.set(session.sessionId, { participantId, questionId });
+      this.sessionIndex.set(session.sessionId, { participantId: p.participantId, questionId });
       this.feedback.adopt(session, []);
       const provided = item.first.rationale.mode === 'PROVIDED';
       if (provided) item.firstJudgment = { status: 'PENDING', attempts: 1, contentAssessment: null, boundary: null, reconstructability: null, consistency: null };
       void this.feedback.submit(session.sessionId, { transitionId: `${questionId}:select`, expectedRevision: 0,
         command: { type: 'SELECT', choiceId: item.first.choiceId, rationale: item.first.rationale } });
+      answered.push(questionId);
       if (provided) started.push(questionId);
     }
-    this.event('ANSWERS_DONE', p, { passageId, questionIds: passage.questionIds });
+    this.event('ANSWERS_DONE', p, { passageId, questionIds: answered });
     for (const questionId of started) this.track(this.runFirstJudgment(p, questionId, false));
-    this.checkPassageReady(p, passageId);
+    if (answered.length === 0) { state.status = 'DONE'; this.event('PASSAGE_DONE', p, { passageId }); }
+    else this.checkPassageReady(p, passageId);
     this.requestSave(p);
-    return { position: this.position(p)! };
   }
 
   /** "답 입력 마침" 뒤 언제나 ready. 정답 수·위치는 정오만으로 정해져 바로 싣고, 근거 결과는 판정이 끝난 범주부터 채워진다. */
   summaryCard(participantId: string, passageId: string) {
     const p = this.require(participantId); const passage = this.passage(passageId); const state = p.passages[passageId]!;
     if (state.status === 'NOT_STARTED' || state.status === 'SUMMARY' || state.status === 'ANSWERING') fail(409, '아직 답 입력을 마치지 않은 지문입니다.');
-    const items = passage.questionIds.map(id => ({ id, item: p.items[id]! }));
+    const items = passage.questionIds.map(id => ({ id, item: p.items[id]! })).filter(({ item }) => item.first !== null);
     const counts = Object.fromEntries(ANSWER_CATEGORIES.map(category => [category, 0])) as Record<AnswerCategory, number>;
     let correct = 0;
     const cards = items.map(({ id, item }) => {
@@ -322,7 +341,7 @@ export class DiagnosticController {
       return { questionId: id, questionNumber: this.set.items[id]!.questionNumber, correct: isCorrect, rationale: item.first!.rationale.mode, category };
     });
     return { status: 'ready' as const, correct, total: items.length, qualityTiers: DIAGNOSTIC_CORRECT_QUALITY_TIERS, judging: counts.PENDING,
-      firstItemOpen: state.status !== 'AWAITING_JUDGMENT', counts, items: cards, position: this.position(p)! };
+      firstItemOpen: state.status !== 'AWAITING_JUDGMENT', counts, items: cards, position: this.position(p) };
   }
 
   // ---------- 문항별 피드백 ----------
@@ -349,8 +368,8 @@ export class DiagnosticController {
 
   result(participantId: string) {
     const p = this.require(participantId);
-    const answered = this.set.passages.filter(passage => passage.questionIds.every(id => p.items[id]!.first !== null));
-    const items = answered.flatMap(passage => passage.questionIds.map(id => this.resultItem(p, passage, id)));
+    const answered = this.answeredPassages(p);
+    const items = answered.flatMap(passage => passage.questionIds.filter(id => p.items[id]!.first !== null).map(id => this.resultItem(p, passage, id)));
     const diagnosed = items.filter(item => item.thoughtDiagnosis?.status === 'ready');
     const eligible = items.filter(item => item.thoughtDiagnosis !== null);
     const stepCounts: Record<string, number> = {};
@@ -369,6 +388,99 @@ export class DiagnosticController {
       recommendation: this.recommendation(twistCounts),
       reading: this.set.passages.filter(passage => p.passages[passage.passageId]!.summaryChosen === true).map(passage => this.resultReading(p, passage)),
     };
+  }
+
+  // ---------- 개발자 이동(D-0217): CSAT_DIAGNOSTIC_DEV=1일 때만 http.ts가 연결한다 ----------
+
+  /** 개발자 지도 자료. 정답·판정 원출력은 넣지 않는다. */
+  devMap(participantId: string) {
+    const p = this.require(participantId);
+    const passages = this.set.passages.map(passage => {
+      const state = p.passages[passage.passageId]!; const content = this.content(passage.passageId);
+      return { passageId: passage.passageId, title: content.title, status: state.status, summaryChosen: state.summaryChosen,
+        summarySkipped: state.devSkipped?.summary === true, feedbackCursor: state.feedbackCursor,
+        paragraphs: content.paragraphs.map(q => ({ paragraphId: q.paragraphId, position: q.position, answered: state.firstTurns[q.paragraphId] != null })),
+        questions: passage.questionIds.map(questionId => {
+          const item = p.items[questionId]!;
+          return { questionId, questionNumber: this.set.items[questionId]!.questionNumber, answered: item.first !== null, draft: item.draft !== null,
+            firstJudgment: item.firstJudgment.status, feedbackPhase: item.session ? this.feedback.get(item.session.sessionId).phase : null, skipped: item.skipped === true };
+        }) };
+    });
+    return { passages, resultAvailable: this.answeredPassages(p).length > 0 };
+  }
+
+  /** 요약 대화 읽기(상태와 무관). 요약 세션은 메모리에만 있어 서버를 다시 켠 뒤에는 불러올 수 없다. */
+  devSummary(participantId: string, passageId: string, paragraphIndex: number): SimpleDialogueView {
+    const p = this.require(participantId); this.passage(passageId);
+    const sessionId = p.passages[passageId]!.summarySessionId;
+    if (!sessionId) return fail(409, '요약 기록을 불러올 수 없음');
+    try { this.summary.get(sessionId); } catch { return fail(409, '요약 기록을 불러올 수 없음'); }
+    try { return this.summaryView(this.summary.navigate(sessionId, { paragraphIndex })); } catch { return fail(400, '문단 번호가 올바르지 않습니다.'); }
+  }
+
+  /** 낸 첫 응답(없으면 draft)을 읽기 전용으로. 정답은 넣지 않는다. */
+  devAnswers(participantId: string, passageId: string) {
+    const p = this.require(participantId); const passage = this.passage(passageId);
+    const answers = Object.fromEntries(passage.questionIds.map(id => {
+      const item = p.items[id]!; const answer = item.first ?? item.draft;
+      return [id, answer ? { source: item.first ? 'first' as const : 'draft' as const, choiceId: answer.choiceId, rationale: answer.rationale, confidence: answer.confidence ?? null } : null];
+    }));
+    return { questions: this.questions(passage), answers };
+  }
+
+  /** 앞으로만 건너뛴다. 건너뛴 단계는 비워 두고 가짜 답·판정을 채우지 않는다. */
+  devSkipPassage(participantId: string, passageId: string, raw: unknown): { status: Participant['passages'][string]['status'] } {
+    const p = this.require(participantId); const passage = this.passage(passageId); const state = p.passages[passageId]!;
+    const { to } = DiagnosticDevSkipSchema.parse(raw);
+    const from = state.status;
+    const target = to === 'ANSWERING' ? STATUS_RANK.ANSWERING : to === 'FEEDBACK' ? STATUS_RANK.FEEDBACK : STATUS_RANK.DONE;
+    if (STATUS_RANK[from] >= target) fail(409, '앞으로만 건너뛸 수 있습니다.');
+    if (state.status === 'NOT_STARTED') { state.devSkipped = { summary: true }; state.status = 'ANSWERING'; }
+    else if (state.status === 'SUMMARY') state.status = 'ANSWERING';
+    if (target >= STATUS_RANK.FEEDBACK && state.status === 'ANSWERING') this.confirmAnswers(p, passage);
+    if (target >= STATUS_RANK.FEEDBACK && state.status === 'AWAITING_JUDGMENT') {
+      // 판정을 기다리지 않고 피드백으로 둔다. 판정 중인 문항의 피드백은 대기 보기를 보인다.
+      state.status = 'FEEDBACK'; state.feedbackCursor = Math.max(0, passage.questionIds.findIndex(id => p.items[id]!.first !== null));
+    }
+    if (to === 'DONE' && state.status === 'FEEDBACK') {
+      passage.questionIds.forEach((id, i) => { if (i >= state.feedbackCursor) p.items[id]!.skipped = true; });
+      state.status = 'DONE';
+      this.event('PASSAGE_DONE', p, { passageId });
+    }
+    this.event('DEV_SKIP', p, { passageId, from, to });
+    this.requestSave(p);
+    return { status: state.status };
+  }
+
+  /** 피드백 중인 지문의 커서를 그 문항까지 앞으로 옮긴다. 지나친 문항은 skipped로 표시한다. */
+  devSkipItem(participantId: string, questionId: string): { feedbackCursor: number } {
+    const p = this.require(participantId);
+    const passage = this.set.passages.find(candidate => candidate.questionIds.includes(questionId));
+    if (!passage) return fail(404, '등록되지 않은 문항입니다.');
+    const state = p.passages[passage.passageId]!; const index = passage.questionIds.indexOf(questionId);
+    if (state.status !== 'FEEDBACK') fail(409, '피드백 중인 지문이 아닙니다.');
+    if (index < state.feedbackCursor) fail(409, '앞으로만 건너뛸 수 있습니다.');
+    if (p.items[questionId]!.first === null) fail(409, '답이 없는 문항입니다.');
+    for (let i = state.feedbackCursor; i < index; i++) p.items[passage.questionIds[i]!]!.skipped = true;
+    state.feedbackCursor = index;
+    this.event('DEV_SKIP', p, { questionId });
+    this.requestSave(p);
+    return { feedbackCursor: index };
+  }
+
+  /** 지문을 시작 전으로 되돌린다. 진행 중인 백그라운드 작업은 옛 객체를 쥐고 있으므로(객체가 바뀌면 멈춘다) 새 상태에 쓰지 못한다. 이벤트 기록은 지우지 않는다. */
+  devReset(participantId: string, passageId: string): { status: 'NOT_STARTED' } {
+    const p = this.require(participantId); const passage = this.passage(passageId);
+    for (const questionId of passage.questionIds) {
+      const session = p.items[questionId]!.session;
+      if (session) this.sessionIndex.delete(session.sessionId);
+      p.items[questionId] = this.freshItem();
+    }
+    for (const paragraph of this.content(passageId).paragraphs) delete p.analysis[paragraph.paragraphId];
+    p.passages[passageId] = this.freshPassage(passageId);
+    this.event('DEV_RESET', p, { passageId });
+    this.requestSave(p);
+    return { status: 'NOT_STARTED' };
   }
 
   // ---------- 내부: 추천 ----------
@@ -515,18 +627,22 @@ export class DiagnosticController {
     await Promise.all(todo.map(({ unit, kind }) => this.limited(async () => {
       let lastError = '';
       for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+        if (p.analysis[paragraphId] !== analysis) return;   // 개발자 지문 초기화
         try {
           const result = await judgeUnit(this.judgeTransport, prompts, round, kind, unit, loaded.stances);
+          if (p.analysis[paragraphId] !== analysis) return;
           analysis.judgments[unit.id] = { status: 'OK', unitKind: kind, ...result.judgment, ...result.checked };
           this.event('ANALYSIS_DONE', p, { paragraphId, unitId: unit.id, unitKind: kind, attempts: attempt, judgment: result.judgment, metadata: result.metadata });
           this.requestSave(p);
           return;
         } catch (error) { lastError = error instanceof Error ? error.message : String(error); }
       }
+      if (p.analysis[paragraphId] !== analysis) return;
       analysis.judgments[unit.id] = { status: 'FAILED', unitKind: kind, error: lastError };
       this.event('ANALYSIS_FAILED', p, { paragraphId, unitId: unit.id, unitKind: kind, attempts: this.maxAttempts, error: lastError });
       this.requestSave(p);
     })));
+    if (p.analysis[paragraphId] !== analysis) return;
     const all = [...units.nodes, ...units.relations];
     analysis.status = all.every(unit => (analysis.judgments[unit.id] as { status?: string } | undefined)?.status === 'OK') ? 'READY' : 'FAILED';
     this.requestSave(p);
@@ -587,6 +703,7 @@ export class DiagnosticController {
     if (resume) retry();
     for (;;) {
       await this.feedback.settled(sessionId);
+      if (p.items[questionId] !== item) return;   // 개발자 지문 초기화로 이 문항이 새로 바뀌었다
       if (item.firstJudgment.status === 'READY') return;
       if (attempts >= this.maxAttempts) {
         item.firstJudgment.status = 'FAILED';
@@ -616,15 +733,18 @@ export class DiagnosticController {
     this.diagnosisInstructions ??= loadThoughtDiagnosisPrompts().instructions;
     let lastError = '';
     for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+      if (p.items[questionId] !== item) return;   // 개발자 지문 초기화
       try {
         const call = await diagnoseThought(this.diagnosisTransport, item.session!.source,
           { caseId: `${p.participantId}:${questionId}`, choiceId: first.choiceId, rationale: first.rationale.text }, this.diagnosisInstructions);
+        if (p.items[questionId] !== item) return;
         item.thoughtDiagnosis = { status: 'READY', output: call.output };
         this.event('THOUGHT_DIAGNOSIS_DONE', p, { questionId, attempts: attempt, output: call.output, metadata: call.metadata });
         this.requestSave(p);
         return;
       } catch (error) { lastError = error instanceof Error ? error.message : String(error); }
     }
+    if (p.items[questionId] !== item) return;
     item.thoughtDiagnosis = { status: 'FAILED', output: null };
     this.event('THOUGHT_DIAGNOSIS_FAILED', p, { questionId, attempts: this.maxAttempts, error: lastError });
     this.requestSave(p);
@@ -651,8 +771,10 @@ export class DiagnosticController {
   private checkPassageReady(p: Participant, passageId: string): void {
     const state = p.passages[passageId]!;
     if (state.status !== 'AWAITING_JUDGMENT') return;
-    if (!this.itemOpen(p, this.passage(passageId).questionIds[0]!)) return;
-    state.status = 'FEEDBACK'; state.feedbackCursor = 0;
+    // 커서는 답이 있는 첫 문항에서 시작한다(학생 흐름에서는 0).
+    const first = this.passage(passageId).questionIds.findIndex(id => p.items[id]!.first !== null);
+    if (first < 0 || !this.itemOpen(p, this.passage(passageId).questionIds[first]!)) return;
+    state.status = 'FEEDBACK'; state.feedbackCursor = first;
     this.requestSave(p);
   }
 
@@ -663,6 +785,7 @@ export class DiagnosticController {
     const passage = this.set.passages.find(candidate => candidate.questionIds.includes(questionId));
     if (!passage) return fail(404, '등록되지 않은 문항입니다.');
     const state = p.passages[passage.passageId]!; const index = passage.questionIds.indexOf(questionId);
+    if (p.items[questionId]!.first === null) fail(409, '답이 없는 문항입니다.');
     const readable = (state.status === 'FEEDBACK' || state.status === 'DONE') && index <= (state.status === 'DONE' ? Infinity : state.feedbackCursor);
     if (state.status === 'FEEDBACK' && index === state.feedbackCursor) {
       if (mode === 'write' && !this.itemOpen(p, questionId)) fail(409, '이 문항의 판정이 아직 끝나지 않았습니다.');
@@ -698,6 +821,7 @@ export class DiagnosticController {
   private advanceCursor(p: Participant, questionId: string): void {
     const passage = this.passageOfQuestion(questionId); const state = p.passages[passage.passageId]!;
     state.feedbackCursor++;
+    while (state.feedbackCursor < passage.questionIds.length && p.items[passage.questionIds[state.feedbackCursor]!]!.first === null) state.feedbackCursor++;
     if (state.feedbackCursor >= passage.questionIds.length) {
       state.status = 'DONE';
       this.event('PASSAGE_DONE', p, { passageId: passage.passageId });
@@ -714,7 +838,7 @@ export class DiagnosticController {
     }));
   }
   private answeredPassages(p: Participant): DiagnosticSetPassage[] {
-    return this.set.passages.filter(passage => passage.questionIds.every(id => p.items[id]!.first !== null));
+    return this.set.passages.filter(passage => passage.questionIds.some(id => p.items[id]!.first !== null));
   }
   private position(p: Participant): ParticipantPosition | null {
     const answered = this.answeredPassages(p);

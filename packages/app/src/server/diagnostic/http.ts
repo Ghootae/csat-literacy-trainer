@@ -18,7 +18,9 @@ export function isDiagnosticPath(pathname: string): boolean { return pathname.st
 
 /** 처리했으면 true. 오류는 상태 코드(400·404·409)로 바꿔 응답한다. */
 export async function handleDiagnosticRequest(controller: DiagnosticController, req: IncomingMessage, res: ServerResponse,
-  pathname: string, readBody: (req: IncomingMessage) => Promise<unknown>): Promise<void> {
+  pathname: string, readBody: (req: IncomingMessage) => Promise<unknown>,
+  /** 개발자 이동 API(D-0217) 사용 여부. 없으면 환경 변수 CSAT_DIAGNOSTIC_DEV=1. */
+  dev: boolean = process.env['CSAT_DIAGNOSTIC_DEV'] === '1'): Promise<void> {
   try {
     const body = async (): Promise<unknown> => { try { return await readBody(req); } catch { throw new DiagnosticHttpError(400, '요청 본문이 올바른 JSON이 아닙니다.'); } };
     const method = req.method ?? 'GET';
@@ -28,6 +30,22 @@ export async function handleDiagnosticRequest(controller: DiagnosticController, 
     const id = match[1]!; const rest = match[2] ?? '';
     if (rest === '' && method === 'GET') return send(res, 200, controller.progress(id));
     if (rest === 'result' && method === 'GET') return send(res, 200, controller.result(id));
+    if (dev && rest.startsWith('dev/')) {
+      const devRoute = /^dev\/(?:(map)|passage\/([^/]+)\/(summary|answers|skip|reset)|item\/([^/]+)\/(skip-to))$/u.exec(rest);
+      if (devRoute) {
+        const [, isMap, passageId, passageAction, questionId] = devRoute;
+        if (method === 'GET' && isMap) return send(res, 200, controller.devMap(id));
+        if (method === 'GET' && passageAction === 'summary') {
+          const index = Number(new URL(req.url ?? '', 'http://localhost').searchParams.get('paragraph') ?? '0');
+          return send(res, 200, controller.devSummary(id, passageId!, Number.isInteger(index) ? index : -1));
+        }
+        if (method === 'GET' && passageAction === 'answers') return send(res, 200, controller.devAnswers(id, passageId!));
+        if (method === 'POST' && passageAction === 'skip') return send(res, 200, controller.devSkipPassage(id, passageId!, await body()));
+        if (method === 'POST' && passageAction === 'reset') return send(res, 200, controller.devReset(id, passageId!));
+        if (method === 'POST' && questionId) return send(res, 200, controller.devSkipItem(id, questionId));
+      }
+      return send(res, 404, { error: '등록되지 않은 진단평가 API입니다.' });
+    }
     const passage = /^passage\/([^/]+)\/(start|answers-done|summary-card|questions|summary\/(?:respond|navigate|finish))$/u.exec(rest);
     if (passage) {
       const [, passageId, action] = passage as unknown as [string, string, string];
