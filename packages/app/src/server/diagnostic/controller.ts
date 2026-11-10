@@ -355,7 +355,7 @@ export class DiagnosticController {
     const canFinish = judging === 0 && cards.every(card => !card.reviewTarget || card.reviewDone);
     const position = allRevealed ? this.position(p) : null;
     return { status: 'ready' as const, correct, total: cards.length, judging, items: cards, allRevealed, canFinish,
-      position: position === null ? null : { answered: position.answered, correct: position.correct, grade: { mode: position.grade.mode, probabilities: position.grade.probabilities } } };
+      position: position === null ? null : { answered: position.answered, correct: position.correct, grade: { mode: position.grade.mode, probabilities: position.grade.probabilities, density: position.grade.density } } };
   }
 
   /** 문항 결과를 공개한 것으로 기록한다(되돌리지 않는다). 갱신된 지문 결과를 돌려준다. */

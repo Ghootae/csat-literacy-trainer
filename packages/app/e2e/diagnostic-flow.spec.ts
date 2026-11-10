@@ -170,8 +170,11 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await expect(page.getByTestId('desc-16')).toHaveText('결과는 가려져 있어');
   await page.getByTestId('qbtn-16').click();
   await expect(page.getByTestId('grade-text')).toHaveText(/^[1-9]등급$/u);
+  await expect(page.getByTestId('grade-sentence')).toHaveText(/^[1-9]등급(.*)일 확률이 (각각 )?\d+%로 가장 높아$/u);
   await expect(page.getByTestId('grade-bar')).toHaveAttribute('aria-label', /등급별 확률: 1등급 \d+%/u);
-  await expect(page.locator('[data-testid^="grade-seg-"]')).toHaveCount(9);
+  await expect(page.getByTestId('grade-bar')).toHaveCSS('background-image', /linear-gradient/u);
+  await page.getByTestId('grade-bar').hover({ position: { x: 5, y: 7 } });
+  await expect(page.getByTestId('grade-tip')).toHaveText(/^1등급일 확률 \d+%$/u);
   await noCodesOnScreen(page);   // 학생 화면에는 내부 범주가 없다
   await page.screenshot({ path: resolve(shots, '07-all-revealed-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

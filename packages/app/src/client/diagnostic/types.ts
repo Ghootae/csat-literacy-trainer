@@ -38,8 +38,8 @@ export interface SummaryCardView {
   status: 'ready'; correct: number; total: number; judging: number;
   items: SummaryCardItem[];
   allRevealed: boolean; canFinish: boolean;
-  /** 모든 문항을 공개하기 전, 또는 답한 문항이 없으면 null. `grade.probabilities`는 1~9등급 확률(합 1), `mode`는 확률 최대 등급. */
-  position: { answered: number; correct: number; grade: { mode: number; probabilities: number[] } } | null;
+  /** 모든 문항을 공개하기 전, 또는 답한 문항이 없으면 null. `grade.probabilities`는 1~9등급 확률(합 1), `mode`는 확률 최대 등급, `density`는 실수 등급 축의 확률(등급마다 10칸, D-0219). */
+  position: { answered: number; correct: number; grade: { mode: number; probabilities: number[]; density: number[] } } | null;
 }
 export type DiagnosticFeedbackView = FeedbackWorkbenchView & { skippable: boolean; judgmentPending?: boolean };
 

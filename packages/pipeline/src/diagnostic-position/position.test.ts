@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { estimateAbility, gradeOfPercentile, itemDifficulty, participantPosition, type PositionResponse } from './position.js';
+import { GRADE_DENSITY_BINS, continuousGradeOfRaw, pchip, estimateAbility, gradeOfPercentile, itemDifficulty, participantPosition, type PositionResponse } from './position.js';
 
 // 세트 E 16문항(grade-cuts.json setEItems). 기대값은 OUTPUT.md 3절 표다(calibrate.py를 다시 실행하지 않는다).
 const SET_E: [string, number][] = [
@@ -66,6 +66,33 @@ describe('등급 확률(D-0218)', () => {
   it('기존 값(mean·best·worst·percentile)은 바뀌지 않는다', () => {
     const p = participantPosition(responsesFor(8));
     expect(Math.round(p.percentile.mean)).toBe(61); expect(p.grade.mean).toBe(4); expect(p.grade.best).toBe(3); expect(p.grade.worst).toBe(5);
+  });
+});
+
+describe('실수 등급과 등급 축 확률(D-0219)', () => {
+  it('단조 3차 보간은 점을 지나고 단조이며 경계에서 기울기가 이어진다', () => {
+    const f = pchip([0, 1, 3, 4], [10, 7, 6, 2]);
+    expect([0, 1, 3, 4].map(f)).toEqual([10, 7, 6, 2]);
+    const xs = Array.from({ length: 401 }, (_, i) => i / 100); const ys = xs.map(f);
+    ys.slice(1).forEach((y, i) => expect(y).toBeLessThanOrEqual(ys[i]! + 1e-12));
+  });
+  it('원점수 → 실수 등급: 100점 1.0, 등급컷에서 정수, 0점 쪽 10 미만, 1등급컷(화작 90점)에서 기울기가 꺾이지 않는다', () => {
+    expect(continuousGradeOfRaw(100, '1004')).toBe(1);
+    [90, 83, 73, 63, 49, 37, 27, 20].forEach((cut, i) => expect(continuousGradeOfRaw(cut, '1004')).toBeCloseTo(i + 2, 9));
+    expect(continuousGradeOfRaw(0, '1004')).toBeLessThan(10);
+    const e = 0.01; const left = (continuousGradeOfRaw(90, '1004') - continuousGradeOfRaw(90 + e, '1004')) / e;
+    const right = (continuousGradeOfRaw(90 - e, '1004') - continuousGradeOfRaw(90, '1004')) / e;
+    expect(Math.abs(left - right) / left).toBeLessThan(0.01);
+  });
+  it.each([0, 4, 8, 12, 16])('정답 %i개: 칸 수 9×%s, 합 1, 등급별 합은 정수 등급 확률과 가깝다', k => {
+    const { grade } = participantPosition(responsesFor(k));
+    expect(grade.density).toHaveLength(9 * GRADE_DENSITY_BINS);
+    expect(grade.density.reduce((a, x) => a + x, 0)).toBeCloseTo(1, 9);
+    // 펴기(σ 1.5칸) 때문에 경계 근처가 조금 섞인다. 등급별 합이 정수 등급 확률과 0.1 안에서 같다.
+    grade.probabilities.forEach((p, g) => {
+      const sum = grade.density.slice(g * GRADE_DENSITY_BINS, (g + 1) * GRADE_DENSITY_BINS).reduce((a, x) => a + x, 0);
+      expect(Math.abs(sum - p)).toBeLessThan(0.1);
+    });
   });
   it('계산 시간을 잰다(참고용)', () => {
     const started = performance.now(); participantPosition(responsesFor(8)); const ms = performance.now() - started;

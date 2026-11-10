@@ -86,10 +86,39 @@ export function finishHint(card: Pick<SummaryCardView, 'canFinish' | 'judging' |
   return left > 0 ? `다시 검토할 문제가 ${left}개 남았어.` : null;
 }
 
-/** 등급 띠 한 칸의 진하기(0.08~1). 가장 높은 확률 칸이 가장 진하다. */
-export function gradeShade(probabilities: readonly number[]): number[] {
+/**
+ * 등급 띠 그라데이션(D-0219): 9개 등급 확률을 각 등급 칸 가운데의 진하기(최댓값 기준 0.06~1)로 두고,
+ * 이웃 가운데 사이를 코사인 곡선으로 이어 꺾임 없이 잇는다. 칸 가운데의 진하기는 그 등급 확률 그대로이고,
+ * 곡선은 두 값 사이를 벗어나지 않는다. 첫·끝 칸 가운데 바깥은 그 값으로 평평하다.
+ */
+export function gradeGradient(probabilities: readonly number[], rgb = '42, 79, 204', steps = 8): string {
   const max = Math.max(...probabilities, 1e-9);
-  return probabilities.map(x => Math.max(0.08, x / max));
+  const alpha = (p: number) => 0.06 + 0.94 * p / max;
+  const n = probabilities.length;
+  const stop = (a: number, at: number) => `rgba(${rgb}, ${a.toFixed(3)}) ${(at / n * 100).toFixed(2)}%`;
+  const stops: string[] = [stop(alpha(probabilities[0]!), 0.5)];
+  for (let i = 0; i + 1 < n; i++) {
+    const from = alpha(probabilities[i]!); const to = alpha(probabilities[i + 1]!);
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps; const w = (1 - Math.cos(Math.PI * t)) / 2;
+      stops.push(stop(from + (to - from) * w, i + 0.5 + t));
+    }
+  }
+  return `linear-gradient(to right, ${stops.join(', ')})`;
+}
+/** 제목 아래 한 줄: "3등급일 확률이 35%로 가장 높아". 반올림한 퍼센트가 최빈 등급과 같은 등급이 더 있으면 함께 쓴다. */
+export function gradeSentence(probabilities: readonly number[], mode: number): string {
+  const percents = probabilities.map(p => Math.round(p * 100));
+  const top = percents[mode - 1]!;
+  const tied = percents.flatMap((p, i) => (p === top ? [i + 1] : []));
+  if (!tied.includes(mode)) tied.push(mode);
+  tied.sort((a, b) => a - b);
+  if (tied.length === 1) return `${mode}등급일 확률이 ${top}%로 가장 높아`;
+  return `${tied.slice(0, -1).join('등급, ')}등급과 ${tied.at(-1)}등급일 확률이 각각 ${top}%로 가장 높아`;
+}
+/** 띠 위 가로 위치(0~1) → 그 지점이 속한 정수 등급(1~9). */
+export function gradeAtFraction(fraction: number): number {
+  return Math.min(9, Math.max(1, Math.floor(fraction * 9) + 1));
 }
 
 // ---------- ① 내 위치 ----------

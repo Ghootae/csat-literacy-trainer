@@ -2,7 +2,7 @@ import { gradeOfPercentile as serverGrade } from '@csat/pipeline';
 import { describe, expect, it } from 'vitest';
 import {
   answerPayload, answerQuality, branchRows, categoryTally, countCategories, toggleConfidence, gradeOfPercentile, hasPending, sourceLocationName, cardStepName, cardTwists, cellState, circledObject, eulReul, focusRationale, gradeText, layerSentence, newTimer,
-  rangeBar, recommendationLines, resultGroup, resultRow, devCategoryText, finishHint, gradeShade, solveStats, startTimer, stepTendency, stopTimer, summaryLinkSentence, sumCounts, timerValues, twistTags, zOfPercentile,
+  rangeBar, recommendationLines, resultGroup, resultRow, devCategoryText, finishHint, gradeAtFraction, gradeGradient, gradeSentence, solveStats, startTimer, stepTendency, stopTimer, summaryLinkSentence, sumCounts, timerValues, twistTags, zOfPercentile,
 } from './logic.js';
 import type { AnswerCategory, ReadingCounts, ResultItem, SummaryCardItem } from './types.js';
 
@@ -49,7 +49,17 @@ describe('지문 결과 줄(D-0218)', () => {
     expect(finishHint({ canFinish: false, judging: 0, items })).toBe('다시 검토할 문제가 1개 남았어.');
     expect(finishHint({ canFinish: false, judging: 1, items })).toBe('분석이 끝나면 넘어갈 수 있어.');
     expect(finishHint({ canFinish: true, judging: 0, items })).toBeNull();
-    expect(gradeShade([0, 0.5, 0.25])).toEqual([0.08, 1, 0.5]);
+    expect(gradeGradient([0, 0.5, 0.25], undefined, 2)).toBe('linear-gradient(to right, rgba(42, 79, 204, 0.060) 16.67%, rgba(42, 79, 204, 0.530) 33.33%, rgba(42, 79, 204, 1.000) 50.00%, rgba(42, 79, 204, 0.765) 66.67%, rgba(42, 79, 204, 0.530) 83.33%)');
+    // 등급 칸 가운데(9칸이면 (g-0.5)/9)의 진하기 = 그 등급 확률 / 최댓값
+    const probs = [0.02, 0.1, 0.3, 0.4, 0.15, 0.03, 0, 0, 0];
+    const at = (pct: string) => gradeGradient(probs).match(new RegExp(`rgba\\(42, 79, 204, ([\\d.]+)\\) ${pct}%`))?.[1];
+    expect(at('27.78')).toBe((0.06 + 0.94 * 0.3 / 0.4).toFixed(3));   // 3등급 가운데
+    expect(at('38.89')).toBe('1.000');                                // 4등급(최대) 가운데
+    expect([0, 0.11, 0.12, 0.5, 0.999, 1].map(gradeAtFraction)).toEqual([1, 1, 2, 5, 9, 9]);
+    const nine = (xs: number[]) => [...xs, ...Array(9 - xs.length).fill(0)];
+    expect(gradeSentence(nine([0.1, 0.2, 0.35, 0.25, 0.1]), 3)).toBe('3등급일 확률이 35%로 가장 높아');
+    expect(gradeSentence(nine([0.1, 0.341, 0.339, 0.22]), 2)).toBe('2등급과 3등급일 확률이 각각 34%로 가장 높아');
+    expect(gradeSentence(nine([0.3, 0.3, 0.3, 0.1]), 1)).toBe('1등급, 2등급과 3등급일 확률이 각각 30%로 가장 높아');
   });
 });
 
