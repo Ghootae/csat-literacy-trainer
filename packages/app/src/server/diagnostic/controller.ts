@@ -54,6 +54,12 @@ const NUMERALS = '①②③④⑤';
 
 /** 진단의 선택 판정 모델(D-0213 6): 정답·오답 모두 sol. 교정 판정(REPAIR)은 평가기 기본값(luna)을 따른다. */
 export const DIAGNOSTIC_SELECTION_MODELS = { correct: 'gpt-6.1-sol', incorrect: 'gpt-6.1-sol' } as const;
+/** 진단의 판정 지시문·규칙(D-0216): v5.10(v5.9 질문 규칙 + 참인 선지 충분 기준). lab은 v5.8 그대로다. 교정 판정도 같은 지시문을 쓴다. */
+export const DIAGNOSTIC_JUDGMENT = {
+  judgmentRules: 'v5.10',
+  promptPath: 'packages/pipeline/experiments/problem-solving/source-direct-problem-feedback-v5.10.md',
+  promptVersion: 'problem-feedback-v5.10',
+} as const;
 /** 결과 화면 정답의 질 표시 단계(D-0213 2). 2면 범주 1·2를 화면에서 합친다. 기록은 바뀌지 않는다. */
 export const DIAGNOSTIC_CORRECT_QUALITY_TIERS: 3 | 2 = 3;
 
@@ -150,7 +156,7 @@ export class DiagnosticController {
     this.diagnosisTransport = options.diagnosisTransport ?? createOpenAiTransport();
     this.judgeTransport = options.judgeTransport ?? createOpenAiTransport();
     this.feedback = new ProblemFeedbackController({
-      evaluator: options.feedbackEvaluator ?? new OpenAIFeedbackEvaluator({ selectionModels: DIAGNOSTIC_SELECTION_MODELS }),
+      evaluator: options.feedbackEvaluator ?? new OpenAIFeedbackEvaluator({ selectionModels: DIAGNOSTIC_SELECTION_MODELS, ...DIAGNOSTIC_JUDGMENT }),
       withoutInstantBubble: true,
       save: record => this.onFeedbackRecord(record),
     });
