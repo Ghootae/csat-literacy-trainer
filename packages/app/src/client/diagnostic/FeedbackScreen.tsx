@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FeedbackMessage, FeedbackRequest } from '../../shared/problem-feedback.js';
 import { Markdown } from '../markdown.js';
 import { RationaleSymbolBar } from '../RationaleSymbolBar.js';
-import { toSubmittedText, type SymbolMark } from '../rationale-tools.js';
+import { appendConclusion, conclusionText, toSubmittedText, type SymbolMark } from '../rationale-tools.js';
 import { composerState, sequenceState, waitingKind, waitingText, type WaitingKind } from '../problem-composer-state.js';
 import type { DiagnosticFeedbackRequest, DiagnosticFeedbackView } from './types.js';
 import { PassagePane, QuestionPane, paneFromFeedback } from './QuestionPanes.js';
@@ -166,7 +166,14 @@ export function FeedbackScreen({ load, send, nextLabel, next, back, readOnly = f
             {composer.actions.check && <button type="button" className="diag-omit" aria-pressed={omit} disabled={composer.actions.checkDisabled} onClick={() => setOmit(old => !old)}>근거 미제출</button>}</div>
           {!finished && <><label className="lab-sr-only" htmlFor="diag-feedback-response">{composer.input.label}</label>
             <textarea ref={response} id="diag-feedback-response" value={draft} disabled={composer.input.disabled} onChange={e => setDraft(e.target.value)} placeholder={composer.input.placeholder} />
-            <RationaleSymbolBar value={draft} onChange={setDraft} input={response} marks={symbolMarks} disabled={composer.input.disabled} hidden={composer.input.disabled} /></>}
+            <RationaleSymbolBar value={draft} onChange={setDraft} input={response} marks={symbolMarks} disabled={composer.input.disabled} hidden={composer.input.disabled}>{(() => {
+              // 교정 질문 답에는 결론을 만들지 않는다(lab과 같음). 근거 다시 묻기는 이미 고른 선지 기준이다.
+              const picked = selection ? choice : choice ?? view.selectedChoiceId;
+              const position = view.question.choices.find(c => c.choiceId === picked)?.position, conclusion = position && !correction ? conclusionText(view.question.stem, position) : null;
+              return <button type="button" className="rationale-conclusion" data-hint={conclusion ? `→ ${conclusion.replace('따라서 ', '').replace('번은', '')}` : '선지 고른 뒤 결론'} disabled={composer.input.disabled || !conclusion} onClick={() => {
+                const text = appendConclusion(response.current?.value ?? draft, conclusion!); setDraft(text); requestAnimationFrame(() => { response.current?.focus(); response.current?.setSelectionRange(text.length, text.length); });
+              }}>결론</button>;
+            })()}</RationaleSymbolBar></>}
           <div className="diag-actions">
             {view.skippable && <button type="button" disabled={waiting || !!pending} onClick={() => void dispatch({ type: 'SKIP' })}>이 문항 건너뛰기</button>}
             {buttons.map(button => <button key={button.id} data-rationale-submit={button.id === 'SUBMIT' ? '' : undefined} className="primary" disabled={button.disabled} onClick={() => {

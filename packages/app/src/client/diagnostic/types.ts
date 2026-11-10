@@ -17,7 +17,7 @@ export interface ProgressView {
   position: PositionView | null;
 }
 export interface QuestionView { questionId: string; questionNumber: number; content: ProblemContentView }
-/** 근거를 생략한 응답의 확신 구분. 두 버튼("확실해요" / "잘은 모르겠지만 정답 같음")에 대응한다. */
+/** 근거를 생략한 응답의 확신 구분. 두 버튼("근거 미입력(확실)" / "근거 미입력(잘 모르겠음)")에 대응한다. */
 export type Confidence = 'SURE' | 'UNSURE';
 /** 첫 응답 기준 범주(서버 `AnswerCategory`와 같다). 정답의 질 3단계는 SUPPORTED_CORRECT·WEAK_CORRECT·ERROR_CORRECT. */
 export type AnswerCategory = 'WRONG' | 'SURE_CORRECT' | 'UNSURE_CORRECT' | 'PENDING' | 'CHECKING' | 'UNVERIFIED' | 'ERROR_CORRECT' | 'SUPPORTED_CORRECT' | 'WEAK_CORRECT';

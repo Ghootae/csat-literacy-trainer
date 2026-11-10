@@ -282,3 +282,4 @@
 | [`D-0221`](./decisions/D-0221-diagnostic-confirm-each-item-judge-immediately.md) | accepted | 진단 답 입력: 문항마다 답을 내면 확정·바로 판정, 답 고치기 없음(이전 문항 읽기 전용), 순서대로 풀기, 답을 내야 다음 문항. D-0208 4번·D-0213 7번 일부 대체 | 사용자 결정(질문 1~6) |
 | [`D-0222`](./decisions/D-0222-diagnostic-set-result-match-passage-result.md) | accepted | 진단 세트 결과를 지문 결과와 맞춤: 큰 글씨 최빈 등급과 "n등급일 확률이 p%로 가장 높아", 그라데이션 등급 띠 + 작은 전국 분포 곡선(최빈 등급 구간·전국 비율), 지문별 누적 작은 띠, 문항 칸 색 규칙 통일 | 사용자 결정(질문 1~4) |
 | [`D-0225`](./decisions/D-0225-diagnostic-grade-bar-probability-curve.md) | accepted | 진단 등급 띠 위 확률 곡선(선만): 전국 분포 곡선·전국 비율 문장 제거, 지문 결과·세트 결과 큰 띠 모두, 작은 누적 띠 제외. D-0222 2·2-1번 대체(옮김 오류 정정) | 사용자 결정(질문 1~3) |
+| [`D-0226`](./decisions/D-0226-diagnostic-answer-submit-buttons-conclusion.md) | accepted | 진단 답 입력: 입력창 안 [제출]·[근거 미입력(확실)]·[근거 미입력(잘 모르겠음)]으로 바로 확정, "다음 문항"은 제출 뒤 이동만, 마지막 문항은 그 자리에 "이 지문 답 다 냈어", 결론 버튼(교정 답 제외). 소거법 판정은 차후. D-0221 2번 일부 대체 | 사용자 결정(메모 1~4, 질문 1~4) |

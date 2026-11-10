@@ -42,7 +42,7 @@ test('지도에서 지문 2 답 입력으로 건너뛰기 → 이전 화면 → 
   await expect(page.getByTestId(`dev-cell-${HORSE.passageId}:choose`)).toContainText('요약 선택');
   // 지문 2 답 입력으로 건너뛰기(확인 창 없음)
   await page.getByTestId(`dev-cell-${HORSE.passageId}:answer`).click();
-  await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '제출', exact: true })).toBeVisible();
   await expect(page.getByTestId('dev-current')).toContainText('답 입력');
   await expect(page.getByTestId(`dev-cell-${HORSE.passageId}:summary`)).toContainText('건너뜀');
   await page.screenshot({ path: resolve(shots, '1-answer-skipped-ahead.png') });
@@ -57,7 +57,7 @@ test('지도에서 지문 2 답 입력으로 건너뛰기 → 이전 화면 → 
   await page.screenshot({ path: resolve(shots, '3-reset.png') });
   // 다음 화면: 요약 선택 → 답 입력(요약 건너뛰기)
   await page.getByRole('button', { name: '다음 화면' }).click();
-  await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '제출', exact: true })).toBeVisible();
   // ?dev=1이 없으면 학생 화면 그대로다
   await page.goto('/diagnostic');
   await expect(page.getByLabel('개발자 지도')).toHaveCount(0);

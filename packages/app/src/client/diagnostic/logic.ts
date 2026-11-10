@@ -197,9 +197,7 @@ export function answerQuality(item: Pick<ResultItem, 'category'>, tiers: Quality
     default: return null;
   }
 }
-/** 근거 없는 응답 버튼 둘은 서로 배타적이다: 이미 눌린 버튼을 다시 누르면 꺼지고, 다른 버튼을 누르면 그쪽으로 바뀐다. */
-export const toggleConfidence = (current: Confidence | null, pressed: Confidence): Confidence | null => current === pressed ? null : pressed;
-/** 답 저장 요청의 근거·확신 부분. 버튼이 눌렸으면 근거 없음 + 그 확신 값, 아니면 근거 + null. */
+/** 답 저장 요청의 근거·확신 부분. 근거 미입력 버튼의 확신이 있으면 근거 없음 + 그 확신 값, 아니면 근거 + null. */
 export function answerPayload(confidence: Confidence | null, text: string): { rationale: { mode: 'OMITTED' } | { mode: 'PROVIDED'; text: string }; confidence: Confidence | null } {
   return confidence === null ? { rationale: { mode: 'PROVIDED', text }, confidence: null } : { rationale: { mode: 'OMITTED' }, confidence };
 }

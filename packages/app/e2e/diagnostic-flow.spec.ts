@@ -39,8 +39,8 @@ const position = (choiceId: string) => Number(/\d+/u.exec(choiceId)![0]);
 const circled = (choiceId: string) => '①②③④⑤'[position(choiceId) - 1]!;
 async function answer(page: Page, choiceId: string, rationale: string | null) {
   await page.getByRole('radio', { name: `${circled(choiceId)}번 선지` }).click();
-  if (rationale === null) await page.getByRole('button', { name: '확실해요' }).click();
-  else await page.locator('#diag-rationale').fill(rationale);
+  if (rationale === null) await page.getByRole('button', { name: '근거 미입력(확실)' }).click();
+  else { await page.locator('#diag-rationale').fill(rationale); await page.getByRole('button', { name: '제출', exact: true }).click(); }
 }
 async function answerPassage(page: Page, picks: { choiceId: string; rationale: string | null }[]) {
   for (const [i, pick] of picks.entries()) {
@@ -109,11 +109,30 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await page.getByRole('button', { name: '요약 마치고 문제 풀기' }).click();
 
   // 문항 답: 정답+근거, 오답+근거, 정답+생략, 오답+생략, 정답+근거
-  await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toHaveCount(0);   // 마지막 문항이 아니면 없다
+  await expect(page.getByRole('button', { name: '이전 문항' })).toBeDisabled();            // 첫 문항
+  await expect(page.getByRole('button', { name: '다음 문항' })).toBeDisabled();            // 제출 전
+  for (const name of ['제출', '근거 미입력(확실)', '근거 미입력(잘 모르겠음)']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();   // 선지를 고르기 전
+  await expect(page.getByRole('button', { name: '결론', exact: true })).toBeDisabled();
+  await page.getByRole('radio', { name: `${circled(correctChoice(Q12))}번 선지` }).click();
+  await expect(page.getByRole('button', { name: '제출', exact: true })).toBeDisabled();   // 글이 비면 제출 못 한다
+  await expect(page.getByRole('button', { name: '근거 미입력(확실)', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '근거 미입력(잘 모르겠음)', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: '결론', exact: true }).click();                   // 결론 버튼이 고른 선지 문장을 붙인다
+  await expect(page.locator('#diag-rationale')).toHaveValue(/^따라서 ①번은 옳(음|지 않음)$/u);
+  await page.locator('#diag-rationale').fill('');
+  await page.screenshot({ path: resolve(shots, '03a-answer-before-submit-desktop.png'), fullPage: true });
   await answer(page, correctChoice(Q12), '첫 문항의 이유를 적었다.');
+  await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toHaveCount(0);
+  for (const name of ['제출', '근거 미입력(확실)', '근거 미입력(잘 모르겠음)']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();   // 확정한 문항
+  await expect(page.getByText('이미 낸 답이야')).toBeVisible();
+  await page.screenshot({ path: resolve(shots, '03a2-answer-confirmed-desktop.png'), fullPage: true });
   await page.getByRole('button', { name: '다음 문항' }).click();
+  await expect(page.getByRole('button', { name: '이전 문항' })).toBeEnabled();             // 제출 전에도 이전 문항은 켜진다
+  await expect(page.getByRole('button', { name: '다음 문항' })).toBeDisabled();
   await answer(page, wrongChoice(Q13), '둘째 문항의 이유를 적었다.');
   await page.getByRole('button', { name: '다음 문항' }).click();
+  await expect(page.getByRole('button', { name: '다음 문항' })).toBeDisabled();            // 셋째 문항은 아직 제출 전
   await page.screenshot({ path: resolve(shots, '03-answer-desktop.png'), fullPage: true });
 
   // 이전 문항은 읽기 전용: 낸 답이 보이고 고칠 수 없다. 차례가 아닌 문항 번호 칸은 비활성이다(D-0221)
@@ -121,14 +140,13 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await expect(cells.getByRole('button', { name: '12', exact: true })).toBeEnabled();
   await expect(cells.getByRole('button', { name: '14', exact: true })).toBeEnabled();
   for (const n of ['15', '16']) await expect(cells.getByRole('button', { name: n, exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '다음 문항' })).toBeDisabled();   // 빈 답으로는 넘어가지 못한다
-  await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toHaveCount(0);
   await page.getByRole('button', { name: '이전 문항' }).click();
   await expect(page.getByText('이미 낸 답이야')).toBeVisible();
   await expect(page.getByRole('radio', { name: `${circled(wrongChoice(Q13))}번 선지` })).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByRole('radio', { name: `${circled(wrongChoice(Q13))}번 선지` })).toBeDisabled();
   await expect(page.locator('#diag-rationale')).toBeDisabled(); await expect(page.locator('#diag-rationale')).toHaveValue('둘째 문항의 이유를 적었다.');
-  await expect(page.getByRole('button', { name: '확실해요' })).toBeDisabled();
+  for (const name of ['제출', '근거 미입력(확실)', '근거 미입력(잘 모르겠음)']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
   await page.screenshot({ path: resolve(shots, '03b-answer-readonly-desktop.png'), fullPage: true });
   await page.getByRole('button', { name: '다음 문항' }).click();   // 확정한 문항에서는 이동만, 지금 차례 문항까지
 
@@ -145,7 +163,12 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await page.getByRole('button', { name: '다음 문항' }).click();
   await answer(page, wrongChoice(Q15), null);
   await page.getByRole('button', { name: '다음 문항' }).click();
+  await expect(page.getByRole('button', { name: '다음 문항' })).toHaveCount(0);             // 마지막 문항에는 "다음 문항"이 없다
+  await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toBeDisabled();   // 제출 전
+  await page.screenshot({ path: resolve(shots, '03c-answer-last-before-submit-desktop.png'), fullPage: true });
   await answer(page, correctChoice(Q16), '다섯째 문항의 이유를 적었다.');
+  await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toBeEnabled();    // 제출 뒤
+  await page.screenshot({ path: resolve(shots, '03d-answer-last-submitted-desktop.png'), fullPage: true });
   // 정오는 보이지 않는다
   const answerScreenText = await page.locator('body').innerText();
   expect(answerScreenText).not.toMatch(/오답|정답이야|맞혔어/u);

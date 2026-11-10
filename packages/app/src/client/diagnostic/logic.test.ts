@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  answerPayload, answerQuality, branchRows, categoryTally, countCategories, toggleConfidence, hasPending, sourceLocationName, cardStepName, cardTwists, circledObject, eulReul, focusRationale, layerSentence, newTimer,
+  answerPayload, answerQuality, branchRows, categoryTally, countCategories, hasPending, sourceLocationName, cardStepName, cardTwists, circledObject, eulReul, focusRationale, layerSentence, newTimer,
   gradeCurvePath, recommendationLines, resultGroup, resultRow, devCategoryText, finishHint, gradeAtFraction, gradeGradient, gradeSentence, solveStats, startTimer, stepTendency, stopTimer, summaryLinkSentence, sumCounts, timerValues, twistTags,
 } from './logic.js';
 import type { AnswerCategory, ReadingCounts, ResultItem, SummaryCardItem } from './types.js';
@@ -90,9 +90,7 @@ describe('② 숫자·단계·함정', () => {
     expect(answerQuality(item({ category: 'SUPPORTED_CORRECT' }), 2)).toBe(answerQuality(item({ category: 'WEAK_CORRECT' }), 2));
     expect(answerQuality(item({ category: 'SUPPORTED_CORRECT' }), 3)).not.toBe(answerQuality(item({ category: 'WEAK_CORRECT' }), 3));
   });
-  it('근거 없는 응답 두 버튼은 배타적이고, 저장 요청에 눌린 쪽의 확신 값이 실린다', () => {
-    expect(toggleConfidence(null, 'SURE')).toBe('SURE'); expect(toggleConfidence('SURE', 'UNSURE')).toBe('UNSURE');
-    expect(toggleConfidence('UNSURE', 'UNSURE')).toBeNull(); expect(toggleConfidence('SURE', 'SURE')).toBeNull();
+  it('근거 미입력 버튼을 누르면 저장 요청에 그 버튼의 확신 값이 실리고 글은 무시된다', () => {
     expect(answerPayload('UNSURE', '무시되는 글')).toEqual({ rationale: { mode: 'OMITTED' }, confidence: 'UNSURE' });
     expect(answerPayload('SURE', '')).toEqual({ rationale: { mode: 'OMITTED' }, confidence: 'SURE' });
     expect(answerPayload(null, '이유')).toEqual({ rationale: { mode: 'PROVIDED', text: '이유' }, confidence: null });

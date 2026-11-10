@@ -83,7 +83,7 @@
    - **판정 과적합(Q-0044)** [보고](../docs/experiments/judge-model-explanation-2026-11-08/REPORT-human.md): 해설은 주원인 아님, 엄격함 = 서버 검사(고침, D-0211) + luna + 171행(sol에도). [체크포인트](./checkpoints/2026-11-07-feedback-overfitting-candidates.md) 끝 절이 다음 시작점.
    - 판정 흐름 (나) 확정 [D-0213](./decisions/D-0213-diagnostic-judgment-split-option-na.md)(11-09): 정답의 질 3단계·버튼 둘·정답 sol(진단만 시험)·문항별 피드백 열기.
    - v5.9·v5.10 시험([보고](../docs/reports/REPORT-v59-v510-run-human.md)): v5.10 통과. 후보는 v5.10 하나([D-0216](./decisions/D-0216-v510-single-candidate-diagnostic-first-lab-held.md)): 질문 블라인드 판정 4/5 통과, **진단 기본값 v5.10 전환**(11-10, [기록](./checkpoints/2026-11-10-question-rules-blind-result.md)). lab은 v5.8 보류. 오디오 16 경계, Q-0045.
-   - 진단 화면 M4 칠하기·B7 기록 위치는 유지(11-09). `boundary.test.ts` 실패 1건(`student-state.ts`)은 기존 것, V1 정리 때(D-0180).
+   - 진단 화면 M4 칠하기·B7 기록 위치 유지(11-09). 답은 입력창 안 버튼으로 확정([D-0226](./decisions/D-0226-diagnostic-answer-submit-buttons-conclusion.md)), 소거법 판정은 Q-0047.
 5. 골드 기반 문항 생성 E1(D-0206): 닫음([D-0210](./decisions/D-0210-close-e1-hold-e2.md)): 정확성 천장, 골드 이점 없음, 기출 차이는 원리 적용 추론. E2 보류. 원리 적용형 설계 시작: [사례 설명](../docs/reports/e1-v3-mechanism-walkthrough-2026-11-07.md) 5절부터 재개.
 
 ## 금지선
