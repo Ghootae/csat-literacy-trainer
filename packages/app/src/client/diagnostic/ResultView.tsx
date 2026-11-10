@@ -1,9 +1,10 @@
 /** 결과 화면(인계 B (5)). 샘플 `Main.dc.html`의 배치와 순서를 따른다: 한 페이지, ① → ② → ③ → 추천. */
 import { useState } from 'react';
 import type { SetInfo, ResultItem, ResultView as Result } from './types.js';
+import { GradeBar } from './GradeBar.js';
 import {
-  FAILED_TEXT, GRADE_EDGES, MEGASTUDY_NOTE, PENDING_TEXT, POSITION_NOTE, answerQuality, branchRows, cardStepName, cardTwists, cellState, circledObject, gradeOfPercentile, gradeText,
-  layerSentence, percentPair, rangeBar, recommendationLines, solveStats, sourceLocationName, stepTendency, sumCounts, summaryLinkSentence, twistTags, zOfPercentile,
+  FAILED_TEXT, GRADE_EDGES, MEGASTUDY_NOTE, PENDING_TEXT, POSITION_NOTE, RESULT_GROUP_MARK, answerQuality, branchRows, cardStepName, cardTwists, circledObject, gradeSentence, gradeShareText,
+  layerSentence, percentPair, recommendationLines, resultGroup, solveStats, sourceLocationName, stepTendency, sumCounts, summaryLinkSentence, twistTags, zOfPercentile,
 } from './logic.js';
 
 type Box = 'pending' | 'ready' | 'failed';
@@ -15,24 +16,27 @@ function Notice({ status }: { status: Exclude<Box, 'ready'> }) { return <p class
 const X = (percentile: number) => 300 + 100 * Math.min(3, Math.max(-3, zOfPercentile(percentile)));
 function Position({ result }: { result: Result }) {
   if (result.position.status === 'pending') return <Notice status="pending" />;
-  const { grade, percentile, byPassage } = result.position;
+  const { grade, byPassage } = result.position;
   const curve = Array.from({ length: 61 }, (_, i) => { const z = -3 + i / 10; return `${i === 0 ? 'M' : 'L'}${(300 + 100 * z).toFixed(1)},${(150 - 138 * Math.exp(-z * z / 2)).toFixed(1)}`; }).join(' ');
-  const left = X(percentile.low); const right = X(percentile.high);
+  const percentOf = (probabilities: number[], mode: number) => Math.round(probabilities[mode - 1]! * 100);
   return <>
-    <p className="diag-big" data-testid="grade">{gradeText(grade)}</p>
-    <svg viewBox="0 0 600 176" className="diag-curve" aria-hidden="true" focusable="false">
-      {GRADE_EDGES.slice(0, -1).map((edge, i) => <rect key={edge} x={X(edge) - (i === 0 ? 1 : 0)} y="0" width={X(GRADE_EDGES[i + 1]!) - X(edge) + (i === 0 ? 1 : 0)} height="150" fill={i % 2 === 0 ? 'var(--diag-band-a)' : 'var(--diag-band-b)'} />)}
-      <rect x={left} y="0" width={Math.max(2, right - left)} height="150" fill="var(--diag-accent)" fillOpacity="0.18" />
-      <line x1={left} y1="0" x2={left} y2="150" stroke="var(--diag-accent)" strokeWidth="2" /><line x1={right} y1="0" x2={right} y2="150" stroke="var(--diag-accent)" strokeWidth="2" />
-      <path d={curve} fill="none" stroke="var(--diag-ink)" strokeWidth="2" />
-      {GRADE_EDGES.slice(0, -1).map((edge, i) => <text key={edge} x={(X(edge) + X(GRADE_EDGES[i + 1]!)) / 2} y="168" fontSize="12" textAnchor="middle" fill="var(--diag-sub)">{9 - i}{i === 8 ? '등급' : ''}</text>)}
-    </svg>
-    <div className="diag-narrowing"><p className="diag-label2">지문을 풀수록 좁아진 범위</p>
+    <p className="diag-big" data-testid="grade">{grade.mode}등급</p>
+    <p className="diag-gradeline" data-testid="grade-sentence">{gradeSentence(grade.probabilities, grade.mode)}</p>
+    <GradeBar grade={grade} />
+    <div className="diag-narrowing"><p className="diag-label2">전국 분포에서의 위치</p>
+      <svg viewBox="0 0 600 176" className="diag-curve diag-curve-small" aria-hidden="true" focusable="false">
+        {GRADE_EDGES.slice(0, -1).map((edge, i) => <rect key={edge} x={X(edge) - (i === 0 ? 1 : 0)} y="0" width={X(GRADE_EDGES[i + 1]!) - X(edge) + (i === 0 ? 1 : 0)} height="150"
+          fill={9 - i === grade.mode ? 'var(--diag-accent)' : i % 2 === 0 ? 'var(--diag-band-a)' : 'var(--diag-band-b)'} fillOpacity={9 - i === grade.mode ? 0.35 : 1} />)}
+        <path d={curve} fill="none" stroke="var(--diag-ink)" strokeWidth="2" />
+        {GRADE_EDGES.slice(0, -1).map((edge, i) => <text key={edge} x={(X(edge) + X(GRADE_EDGES[i + 1]!)) / 2} y="168" fontSize="12" textAnchor="middle" fill="var(--diag-sub)">{9 - i}{i === 8 ? '등급' : ''}</text>)}
+      </svg>
+      <p className="diag-muted" data-testid="grade-share">{gradeShareText(grade.mode)}</p></div>
+    <div className="diag-narrowing"><p className="diag-label2">지문을 풀수록 또렷해진 위치</p>
       <div className="diag-narrowing-grid">{byPassage.map((p, i) => {
-        const bar = rangeBar(p.low, p.high); const last = i === byPassage.length - 1;
-        return <div key={p.passageId} className="diag-narrowing-row" data-last={last}>
-          <span>지문 {i + 1}</span><div className="diag-track"><div style={{ left: `${bar.left}%`, width: `${bar.width}%` }} /></div>
-          <span>{gradeText({ best: gradeOfPercentile(p.high), worst: gradeOfPercentile(p.low) })}</span></div>;
+        const last = i === byPassage.length - 1;
+        return <div key={p.passageId} className="diag-narrowing-row" data-testid="passage-row" data-last={last}>
+          <span>{i === 0 ? '지문 1' : `지문 1~${i + 1}`}</span><GradeBar grade={p.grade} small />
+          <span>{p.grade.mode}등급 · {percentOf(p.grade.probabilities, p.grade.mode)}%</span></div>;
       })}</div></div>
     <p className="diag-muted">{POSITION_NOTE}</p>
   </>;
@@ -88,12 +92,12 @@ function Solve({ result, set }: { result: Result; set: SetInfo }) {
       <div className="diag-cellgrid">{set.passages.map(passage => {
         const items = result.items.filter(item => item.passageId === passage.passageId);
         return items.length === 0 ? null : <div key={passage.passageId} className="diag-cellrow"><span>{passage.title}</span><div>{items.map(item => {
-          const state = cellState(item);
-          return <button key={item.questionId} type="button" className="diag-cell" data-state={state} aria-expanded={open === item.questionId} aria-controls="diag-item-card"
-            aria-label={`${passage.title} ${item.questionNumber}번`} onClick={() => setOpen(open === item.questionId ? null : item.questionId)}>{item.questionNumber}</button>;
+          const group = resultGroup(item.category); const analyzing = item.category === 'PENDING' || item.category === 'CHECKING';
+          return <button key={item.questionId} type="button" className="diag-cell" data-group={group} data-analyzing={analyzing} aria-expanded={open === item.questionId} aria-controls="diag-item-card"
+            aria-label={`${passage.title} ${item.questionNumber}번, ${analyzing ? '분석 중' : RESULT_GROUP_MARK[group]}`} onClick={() => setOpen(open === item.questionId ? null : item.questionId)}>{item.questionNumber}</button>;
         })}</div></div>;
       })}</div>
-      <p className="diag-muted">채운 칸은 정답, 테두리 칸은 오답, 점선 칸은 확인 중이야. 칸을 누르면 아래 카드가 펼쳐져.</p></div>
+      <p className="diag-muted">초록 칸은 정답, 초록 점선 칸은 정답이지만 근거 확인이 필요한 문항, 빨간 칸은 오답이야. 줄무늬 칸은 분석 중이야. 지문 결과의 문제 버튼과 같은 색이야. 칸을 누르면 아래 카드가 펼쳐져.</p></div>
     {opened && <Card item={opened} titles={titles} tiers={result.qualityTiers} onClose={() => setOpen(null)} />}
   </>;
 }

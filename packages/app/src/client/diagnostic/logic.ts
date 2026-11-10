@@ -123,17 +123,7 @@ export function gradeAtFraction(fraction: number): number {
 
 // ---------- ① 내 위치 ----------
 
-/** "{best}~{worst}등급"(같으면 "{n}등급"). */
-export function gradeText(grade: { best: number; worst: number }): string {
-  return grade.best === grade.worst ? `${grade.best}등급` : `${grade.best}~${grade.worst}등급`;
-}
 export const POSITION_NOTE = '시간 제한 없이 근거를 쓰며 푼 결과를 수능 응시자 분포에 맞춰 환산해 본 추정치야. 문항 난이도는 메가스터디 이용자 정답률로 정했어.';
-/** 백분위 범위를 막대의 왼쪽·너비(%)로 바꾼다. 너비는 최소 1이다. */
-export function rangeBar(low: number, high: number): { left: number; width: number } {
-  const clamp = (x: number) => Math.min(100, Math.max(0, x));
-  const left = clamp(Math.min(low, high));
-  return { left, width: Math.max(1, clamp(Math.max(low, high)) - left) };
-}
 /** 정규분포 역함수(Acklam 근사). 백분위(0~100) → z. 등급 띠·곡선의 가로 위치에 쓴다. */
 export function zOfPercentile(percentile: number): number {
   const p = Math.min(0.9999, Math.max(0.0001, percentile / 100));
@@ -150,9 +140,6 @@ export function zOfPercentile(percentile: number): number {
 export const GRADE_EDGES = [0, 4, 11, 23, 40, 60, 77, 89, 96, 100] as const;
 
 // ---------- ② 문제 풀이 결과 ----------
-
-export type CellState = 'correct' | 'wrong' | 'review';
-export const cellState = (item: Pick<ResultItem, 'review' | 'correct'>): CellState => item.review ? 'review' : item.correct ? 'correct' : 'wrong';
 
 export interface SolveStats { correct: number; total: number; accurate: number; qualityDenominator: number; sure: number; unsure: number; unverified: number }
 /** 숫자 칸. 근거까지 정확한 정답(2단계면 근거가 확인되는 정답) / 근거를 쓴 정답(범주 1·2·3)과, 분모에 넣지 않는 범주 4·5·`UNVERIFIED` 개수. */
@@ -289,9 +276,10 @@ export function timerValues(timer: ItemTimer, now: number, omitted: boolean): { 
 
 /** 등급별 누적 상위 비율(%). 서버 위치 계산(`gradeOfPercentile`)과 같다. */
 const TOP = [4, 11, 23, 40, 60, 77, 89, 96];
-export function gradeOfPercentile(percentile: number): number {
-  const index = TOP.findIndex(limit => 100 - percentile <= limit);
-  return index < 0 ? 9 : index + 1;
+/** 등급의 전국 비율 문구(D-0222): "1등급: 전국 상위 4% 이내", "2등급: 전국 상위 4~11%", "9등급: 전국 상위 96~100%". */
+export function gradeShareText(grade: number): string {
+  const range = grade === 1 ? `${TOP[0]}% 이내` : `${TOP[grade - 2]}~${grade === 9 ? 100 : TOP[grade - 1]}%`;
+  return `${grade}등급: 전국 상위 ${range}`;
 }
 /** 칸 하나라도 분석 중이면 true(결과 화면이 다시 받아 온다). 문항 검토 문항의 판정 칸은 숨겨져 있으므로 보지 않는다. */
 export function hasPending(result: ResultView): boolean {

@@ -246,20 +246,37 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   // 결과 화면
   await expect(page.getByRole('heading', { name: '독해력 진단 결과' })).toBeVisible({ timeout: 20_000 });
   for (const name of ['내 위치', '문제 풀이 결과', '독해 패턴', '추천']) await expect(page.getByRole('region', { name })).toBeVisible();
-  await expect(page.getByTestId('grade')).toContainText('등급');
+  const position = page.getByRole('region', { name: '내 위치' });
+  await expect(page.getByTestId('grade')).toHaveText(/^[1-9]등급$/u);
+  await expect(page.getByTestId('grade-sentence')).toHaveText(/^[1-9]등급(.*)일 확률이 (각각 )?\d+%로 가장 높아$/u);
+  await expect(page.getByTestId('grade-bar')).toHaveCSS('background-image', /linear-gradient/u);
+  await page.getByTestId('grade-bar').hover({ position: { x: 5, y: 7 } });
+  await expect(page.getByTestId('grade-tip')).toHaveText(/^1등급일 확률 \d+%$/u);
+  await expect(page.getByTestId('grade-share')).toHaveText(/^[1-9]등급: 전국 상위 \d+(~\d+%| ?%)/u);
+  await expect(position.getByTestId('passage-row')).toHaveCount(4);
+  await expect(position.getByTestId('passage-row').last()).toContainText(/^지문 1~\d[1-9]등급 · \d+%$/u);
+  for (const row of await position.getByTestId('passage-row').all()) {
+    await expect(row.getByTestId('grade-bar-small')).toHaveCSS('background-image', /linear-gradient/u);
+    await expect(row).toContainText(/[1-9]등급 · \d+%/u);
+  }
+  await expect(position).not.toContainText(/\d~\d등급/u);   // 등급 범위 표기 없음(전국 비율 "4~11%"는 등급 범위가 아니다)
+  const solveCells = page.getByRole('region', { name: '문제 풀이 결과' }).locator('.diag-cell');
+  await expect(solveCells).toHaveCount(16);
+  await expect(page.getByRole('button', { name: /(^| )6번, ✕ 오답$/u })).toHaveAttribute('data-group', 'wrong');
+  await expect(page.getByRole('region', { name: '문제 풀이 결과' }).locator('.diag-cell[data-group="good"]').first()).toHaveCSS('background-color', 'rgb(228, 243, 225)');
   await expect(page.getByRole('region', { name: '독해 패턴' })).toContainText('첫 요약만');
   await expect(page.getByRole('region', { name: '독해 패턴' })).toContainText('곳을 잡았어');
   await expect(page.getByRole('region', { name: '추천' })).toContainText('걸린 함정');
   await expect(page.getByRole('region', { name: '문제 풀이 결과' })).toContainText('근거 없이 낸 정답');
-  await page.getByRole('button', { name: /(^| )6번$/u }).click();       // 경마식 보도 6번: 오답 + 비틂
+  await page.getByRole('button', { name: /(^| )6번(,|$)/u }).click();       // 경마식 보도 6번: 오답 + 비틂
   const card = page.getByRole('article');
   await expect(card).toContainText('오답');
   await expect(card).toContainText('걸린 함정 ·');
   await expect(card).toContainText('이 문항 정답률');
-  await page.getByRole('button', { name: /(^| )9번$/u }).click();       // 플라스틱 9번: 문항 검토
+  await page.getByRole('button', { name: /(^| )9번(,|$)/u }).click();       // 플라스틱 9번: 문항 검토
   await expect(page.getByRole('article')).toContainText('이 문항은 우리가 한 번 더 확인하고 있어.');
   await expect(page.getByRole('article')).not.toContainText('걸린 함정');
-  await page.getByRole('button', { name: /(^| )6번$/u }).click();
+  await page.getByRole('button', { name: /(^| )6번(,|$)/u }).click();
   await noCodesOnScreen(page);
   await page.screenshot({ path: resolve(shots, '07-result-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

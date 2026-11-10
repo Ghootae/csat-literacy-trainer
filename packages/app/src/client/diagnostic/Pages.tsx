@@ -1,6 +1,7 @@
 /** 시작 안내·요약 선택·지문 결과 화면(인계 B (4), D-0218). */
 import { useState } from 'react';
-import { MEGASTUDY_NOTE, PENDING_TEXT, RESULT_GROUP_MARK, devCategoryText, finishHint, gradeAtFraction, gradeGradient, gradeSentence, resultGroup, resultRow } from './logic.js';
+import { MEGASTUDY_NOTE, PENDING_TEXT, RESULT_GROUP_MARK, devCategoryText, finishHint, gradeSentence, resultGroup, resultRow } from './logic.js';
+import { GradeBar } from './GradeBar.js';
 import type { SummaryCardView } from './types.js';
 
 export function IntroPage({ busy, error, start }: { busy: boolean; error: string; start: () => void }): React.JSX.Element {
@@ -26,28 +27,7 @@ export function ChoosePage({ title, number, total, busy, error, choose }: {
   </div></main>;
 }
 
-const GRADES = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-
 /** 지문 결과 화면(D-0218): 문항 줄 목록(결과는 눌러서 하나씩 공개) → 등급 → 다음 지문. */
-/** 등급 띠(D-0219): 9개 등급 확률을 부드럽게 이은 그라데이션으로 칠하고, 커서(또는 누름)가 있는 등급의 확률을 보인다. */
-function GradeBar({ grade }: { grade: { probabilities: number[] } | null }): React.JSX.Element {
-  const [hover, setHover] = useState<{ grade: number; x: number } | null>(null);
-  const percent = (g: number) => Math.round(grade!.probabilities[g - 1]! * 100);
-  const point = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!grade) return;
-    const box = e.currentTarget.getBoundingClientRect();
-    const fraction = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
-    setHover({ grade: gradeAtFraction(fraction), x: fraction * 100 });
-  };
-  return <div className="diag-gradebar-wrap">
-    <div className="diag-gradebar" data-testid="grade-bar" role="img" data-filled={grade !== null}
-      aria-label={grade ? `등급별 확률: ${GRADES.map(g => `${g}등급 ${percent(g)}%`).join(', ')}` : '등급은 모든 문제의 결과를 열면 보여 줘'}
-      style={grade ? { backgroundImage: gradeGradient(grade.probabilities) } : undefined}
-      onPointerMove={point} onPointerDown={point} onPointerLeave={() => setHover(null)} />
-    {grade && hover && <div className="diag-gradetip" role="status" data-testid="grade-tip" style={{ left: `${hover.x}%`, transform: `translateX(${hover.x < 12 ? '0' : hover.x > 88 ? '-100%' : '-50%'})` }}>{hover.grade}등급일 확률 {percent(hover.grade)}%</div>}
-  </div>;
-}
-
 export function MidPage({ title, number, total, card, dev, last, busy, error, reveal, review, finish }: {
   title: string; number: number; total: number; card: SummaryCardView | null; dev: boolean; last: boolean; busy: boolean; error: string;
   reveal: (questionId: string) => void; review: (questionId: string) => void; finish: () => void;
@@ -78,7 +58,6 @@ export function MidPage({ title, number, total, card, dev, last, busy, error, re
       <p className="diag-big" data-testid="grade-text">{card?.position ? `${card.position.grade.mode}등급` : '나의 현재 등급은?'}</p>
       {card?.position && <p className="diag-gradeline" data-testid="grade-sentence">{gradeSentence(card.position.grade.probabilities, card.position.grade.mode)}</p>}
       <GradeBar grade={card?.position?.grade ?? null} />
-      <div className="diag-gradeticks" aria-hidden="true">{GRADES.map(g => <span key={g}>{g}등급</span>)}</div>
       {!card?.position && <p className="diag-muted">모든 문제의 결과를 열어 보면 등급을 알려 줄게.</p>}</section>
     <div className="diag-footer">{error && <p className="err" role="alert">{error}</p>}
       {hint && <p className="diag-muted" role="status" data-testid="finish-hint">{hint}</p>}

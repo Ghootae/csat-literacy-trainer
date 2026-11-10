@@ -1,8 +1,7 @@
-import { gradeOfPercentile as serverGrade } from '@csat/pipeline';
 import { describe, expect, it } from 'vitest';
 import {
-  answerPayload, answerQuality, branchRows, categoryTally, countCategories, toggleConfidence, gradeOfPercentile, hasPending, sourceLocationName, cardStepName, cardTwists, cellState, circledObject, eulReul, focusRationale, gradeText, layerSentence, newTimer,
-  rangeBar, recommendationLines, resultGroup, resultRow, devCategoryText, finishHint, gradeAtFraction, gradeGradient, gradeSentence, solveStats, startTimer, stepTendency, stopTimer, summaryLinkSentence, sumCounts, timerValues, twistTags, zOfPercentile,
+  answerPayload, answerQuality, branchRows, categoryTally, countCategories, toggleConfidence, hasPending, sourceLocationName, cardStepName, cardTwists, circledObject, eulReul, focusRationale, layerSentence, newTimer,
+  gradeShareText, recommendationLines, resultGroup, resultRow, devCategoryText, finishHint, gradeAtFraction, gradeGradient, gradeSentence, solveStats, startTimer, stepTendency, stopTimer, summaryLinkSentence, sumCounts, timerValues, twistTags, zOfPercentile,
 } from './logic.js';
 import type { AnswerCategory, ReadingCounts, ResultItem, SummaryCardItem } from './types.js';
 
@@ -64,11 +63,9 @@ describe('지문 결과 줄(D-0218)', () => {
 });
 
 describe('등급 문구와 위치 막대', () => {
-  it('범위면 best~worst등급, 같으면 n등급이다', () => {
-    expect(gradeText({ best: 2, worst: 4 })).toBe('2~4등급'); expect(gradeText({ best: 3, worst: 3 })).toBe('3등급');
-  });
-  it('범위 막대는 0~100으로 자르고 너비는 최소 1이다', () => {
-    expect(rangeBar(30, 88)).toEqual({ left: 30, width: 58 }); expect(rangeBar(50, 50)).toEqual({ left: 50, width: 1 }); expect(rangeBar(-5, 120)).toEqual({ left: 0, width: 100 });
+  it('등급의 전국 비율 문구', () => {
+    expect(gradeShareText(1)).toBe('1등급: 전국 상위 4% 이내'); expect(gradeShareText(2)).toBe('2등급: 전국 상위 4~11%');
+    expect(gradeShareText(8)).toBe('8등급: 전국 상위 89~96%'); expect(gradeShareText(9)).toBe('9등급: 전국 상위 96~100%');
   });
   it('백분위 → z', () => {
     expect(zOfPercentile(50)).toBeCloseTo(0, 6); expect(zOfPercentile(84.1345)).toBeCloseTo(1, 2); expect(zOfPercentile(2.2750)).toBeCloseTo(-2, 2);
@@ -96,9 +93,6 @@ describe('② 숫자·단계·함정', () => {
     expect(answerPayload('UNSURE', '무시되는 글')).toEqual({ rationale: { mode: 'OMITTED' }, confidence: 'UNSURE' });
     expect(answerPayload('SURE', '')).toEqual({ rationale: { mode: 'OMITTED' }, confidence: 'SURE' });
     expect(answerPayload(null, '이유')).toEqual({ rationale: { mode: 'PROVIDED', text: '이유' }, confidence: null });
-  });
-  it('문항 칸 상태', () => {
-    expect(cellState(item())).toBe('correct'); expect(cellState(item({ correct: false }))).toBe('wrong'); expect(cellState(item({ review: true, correct: false }))).toBe('review');
   });
   it('단계 경향: 가장 많은 단계를 잇고, denominator 0이면 숨긴다', () => {
     expect(stepTendency({ denominator: 5, counts: { S4_INTERPRET: 3, S2_CHOICE: 1, NONE: 1 } })?.sentence).toBe('근거를 살펴본 5문항 중 3개가 근거 해석 단계에서 어긋났어.');
@@ -186,11 +180,6 @@ describe('시간 누적', () => {
 });
 
 describe('결과 화면 보조', () => {
-  it('백분위 → 등급은 서버 규칙(누적 상위 4·11·23·40·60·77·89·96%)과 같다', () => {
-    const samples = [99, 96, 95.9, 89, 77.5, 60, 40.1, 23, 11, 4, 0];
-    expect(samples.map(gradeOfPercentile)).toEqual([1, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9]);
-    expect(samples.map(gradeOfPercentile)).toEqual(samples.map(serverGrade));
-  });
   it('분석 중인 칸이 하나라도 있으면 true이고, 문항 검토 문항의 숨겨진 판정은 보지 않는다', () => {
     const base = { position: { status: 'ready' }, steps: { status: 'ready', counts: {}, denominator: 0 }, twists: { counts: {} }, recommendation: null, reading: [], items: [item()] } as never as import('./types.js').ResultView;
     expect(hasPending(base)).toBe(false);

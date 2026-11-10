@@ -899,7 +899,8 @@ export class DiagnosticController {
     const answered = this.answeredPassages(p);
     return answered.map((passage, i) => {
       const position = participantPosition(this.responsesFor(p, answered.slice(0, i + 1)), loadPositionData());
-      return { passageId: passage.passageId, low: position.percentile.low, high: position.percentile.high };
+      return { passageId: passage.passageId, low: position.percentile.low, high: position.percentile.high,
+        grade: { mode: position.grade.mode, probabilities: position.grade.probabilities } };
     });
   }
 

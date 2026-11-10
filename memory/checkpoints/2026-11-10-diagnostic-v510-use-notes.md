@@ -104,3 +104,10 @@ base_commit: 199ebd28
 - 학생용 응답 점검에서 `progress`·`result`의 위치·문항이 푸는 중 지문의 확정 문항 정오를 담던 것을 막음(`answeredPassages`가 ANSWERING 지문 제외, 개발자 지도만 포함).
 - 시험: `npm test` 1733 통과·기존 실패 2건, Playwright 진단 3건 통과.
 - 남은 점: "이 지문 답 다 냈어"는 마지막 문항 화면에서만 활성(메모 2와 같은 방향). 자동 저장 요청이 확정 요청보다 늦게 도착하면 409 오류가 화면에 뜰 수 있음(드묾, 관찰 대상).
+
+## (구현) 세트 결과를 지문 결과와 맞춤 — D-0222
+
+- 사용자: "세트 완료 결과도 지문별 결과 보고와 맞춰서 수정해야해". 질문 1 (가), 2 (다)·2-1 (나), 3 (가), 4 (가).
+- 인계 `docs/handoffs/2026-11-10-diagnostic-set-result-match.md`, executor(sonnet) 구현, 메인 세션 검토. 검토에서 마지막 줄 이름 "누적"을 "지문 1~4"로 고침(인계 문서 표현이 모호했음).
+- `GradeBar`를 `packages/app/src/client/diagnostic/GradeBar.tsx`로 옮겨 지문 결과·세트 결과가 함께 씀(`small` 옵션). 화면에서 안 쓰게 된 `gradeText`·`rangeBar`·`cellState`·화면용 `gradeOfPercentile`을 지움. 결과 API `byPassage`의 `low`·`high`와 `percentile`은 남김(화면 미사용).
+- 시험: `npm test` 기존 실패 2건 외 통과, Playwright 진단 3건 통과.

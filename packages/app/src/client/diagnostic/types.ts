@@ -66,7 +66,7 @@ export interface ReadingCounts {
 export interface ResultView {
   qualityTiers: QualityTiers;
   position: { status: 'pending' } | { status: 'ready'; answered: number; correct: number; percentile: PositionView['percentile']; grade: PositionView['grade'];
-    byPassage: { passageId: string; low: number; high: number }[] };
+    byPassage: { passageId: string; low: number; high: number; grade: { mode: number; probabilities: number[] } }[] };
   items: ResultItem[];
   steps: { status: Box; counts: Record<string, number>; denominator: number };
   twists: { counts: Record<string, number> };
