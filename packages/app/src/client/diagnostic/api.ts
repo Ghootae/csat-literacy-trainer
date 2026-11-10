@@ -25,6 +25,7 @@ export const summaryNavigate = (id: string, passageId: string, paragraphIndex: n
 export const summaryFinish = (id: string, passageId: string) => request<{ questions: QuestionView[] }>(at(id, passagePath(passageId, 'summary/finish')), 'POST');
 export const getQuestions = (id: string, passageId: string) => request<QuestionsView>(at(id, passagePath(passageId, 'questions')));
 export const submitItem = (id: string, questionId: string, body: ItemRequest) => request<{ saved: true }>(at(id, `/item/${encodeURIComponent(questionId)}`), 'POST', body);
+export const confirmItem = (id: string, questionId: string, body: ItemRequest) => request<{ confirmed: true }>(at(id, `/item/${encodeURIComponent(questionId)}/confirm`), 'POST', body);
 export const answersDone = (id: string, passageId: string) => request<unknown>(at(id, passagePath(passageId, 'answers-done')), 'POST');
 export const getSummaryCard = (id: string, passageId: string) => request<SummaryCardView>(at(id, passagePath(passageId, 'summary-card')));
 export const revealItem = (id: string, passageId: string, questionId: string) => request<SummaryCardView>(at(id, passagePath(passageId, 'reveal')), 'POST', { questionId });

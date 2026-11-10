@@ -279,3 +279,4 @@
 | [`D-0217`](./decisions/D-0217-diagnostic-dev-navigation.md) | accepted | 진단평가 개발자 이동 지도: `?dev=1`·`CSAT_DIAGNOSTIC_DEV=1` 전용, 앞으로 건너뛰기(빈 단계는 비움, 가짜 판정 없음), 지나온 화면 읽기 전용 + 지문 초기화, 이전·다음은 전체 흐름 한 줄, 지도에 위치·상태 | 사용자 결정(질문 1~5) |
 | [`D-0218`](./decisions/D-0218-diagnostic-passage-result-review-select.md) | accepted | 진단 지문 결과 화면: 결과 가려 두고 문제 버튼으로 공개, 정오·근거 강도 색, 리뷰 대상(오답·근거 오류)만 골라 검토·완료 표시, 범주 5는 힌트 흐름 전까지 비대상, 결과를 다 보면 확률 최대 등급과 등급별 확률 띠, 다음 지문은 리뷰 완료 뒤 | 사용자 결정(메모 6·시안). D-0213 7번 순차 피드백 화면 흐름 대체 |
 | [`D-0219`](./decisions/D-0219-diagnostic-grade-continuous-gradient.md) | accepted | 진단 등급 띠: 9개 등급 확률을 부드럽게 이은 그라데이션(같은 날 실수 등급 축에서 변경), 커서를 대면 그 등급의 확률, 큰 글씨는 최빈 등급과 "n등급일 확률이 p%로 가장 높아"(실수 범위 표기 안 함) | 사용자 결정(질문 1~3) |
+| [`D-0221`](./decisions/D-0221-diagnostic-confirm-each-item-judge-immediately.md) | accepted | 진단 답 입력: 문항마다 답을 내면 확정·바로 판정, 답 고치기 없음(이전 문항 읽기 전용), 순서대로 풀기, 답을 내야 다음 문항. D-0208 4번·D-0213 7번 일부 대체 | 사용자 결정(질문 1~6) |

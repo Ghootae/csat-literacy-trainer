@@ -69,24 +69,29 @@ describe('진단평가 HTTP', () => {
     expect((await call(base, 'POST', `${root}/passage/${COG.passageId}/summary/navigate`, { paragraphIndex: 1 })).status).toBe(200);
     const finished = await (await call(base, 'POST', `${root}/passage/${COG.passageId}/summary/finish`)).json() as { questions: unknown[] };
     expect(finished.questions).toHaveLength(5);
-    // 문항 답: 정오 없음, answers-done 전 덮어쓰기
+    // 문항 답: 임시 저장은 덮어쓰기(정오 없음), 확정은 순서대로 한 문항씩
     const answers = { [Q12]: provided(correctChoice(Q12)), [Q13]: provided(wrongChoice(Q13)), [Q14]: omitted(correctChoice(Q14)), [Q15]: omitted(wrongChoice(Q15)), [Q16]: provided(correctChoice(Q16)) };
-    for (const q of COG.questionIds) {
-      const saved = await call(base, 'POST', `${root}/item/${q}`, answers[q]);
-      expect(saved.status).toBe(200); expect(await saved.json()).toEqual({ saved: true });
-    }
     expect((await call(base, 'POST', `${root}/item/${Q12}`, provided(wrongChoice(Q12)))).status).toBe(200);
     expect((await call(base, 'POST', `${root}/item/${Q12}`, { choiceId: 'X' })).status).toBe(400);
     expect((await call(base, 'POST', `${root}/item/${Q12}`, provided(correctChoice(Q12)))).status).toBe(200);
+    expect((await call(base, 'POST', `${root}/item/${Q13}/confirm`, answers[Q13])).status).toBe(409);   // 순서
+    expect((await call(base, 'POST', `${root}/item/${Q12}/confirm`, { choiceId: 'X' })).status).toBe(400);
+    expect((await call(base, 'POST', `${root}/passage/${COG.passageId}/answers-done`)).status).toBe(400);   // 미확정 문항
     // 새로 고침 뒤 이어 가기: 문항과 임시 답(정오 없음)
+    const confirmedFirst = await call(base, 'POST', `${root}/item/${Q12}/confirm`, answers[Q12]);
+    expect(confirmedFirst.status).toBe(200); expect(await confirmedFirst.json()).toEqual({ confirmed: true });
+    expect((await call(base, 'POST', `${root}/item/${Q12}/confirm`, answers[Q12])).status).toBe(409);
+    expect((await call(base, 'POST', `${root}/item/${Q12}`, provided(wrongChoice(Q12)))).status).toBe(409);
     const resumed = await call(base, 'GET', `${root}/passage/${COG.passageId}/questions`);
     expect(resumed.status).toBe(200);
-    const resumedBody = await resumed.json() as { questions: unknown[]; drafts: Record<string, { choiceId: string } | null> };
+    const resumedBody = await resumed.json() as { questions: unknown[]; confirmed: Record<string, boolean>; drafts: Record<string, { choiceId: string } | null> };
     expect(resumedBody.questions).toHaveLength(5); expect(resumedBody.drafts[Q12]).toEqual({ choiceId: correctChoice(Q12), rationale: { mode: 'PROVIDED', text: provided(correctChoice(Q12)).rationale.text }, confidence: null });
+    expect(resumedBody.confirmed[Q12]).toBe(true); expect(resumedBody.confirmed[Q13]).toBe(false);
     expect(JSON.stringify(resumedBody)).not.toContain('answerChoiceId');
     expect((await call(base, 'GET', `${root}/passage/${HORSE_ID}/questions`)).status).toBe(409);
     expect((await call(base, 'GET', `${root}/item/${Q12}/feedback`)).status).toBe(409);
     expect((await call(base, 'GET', `${root}/passage/${COG.passageId}/summary-card`)).status).toBe(409);
+    for (const q of COG.questionIds.slice(1)) expect((await call(base, 'POST', `${root}/item/${q}/confirm`, answers[q])).status).toBe(200);
     const done = await call(base, 'POST', `${root}/passage/${COG.passageId}/answers-done`);
     expect(done.status).toBe(200); expect(Object.keys(await done.json() as object)).toEqual(['position']);
     expect((await call(base, 'GET', `${root}/passage/${COG.passageId}/questions`)).status).toBe(409);

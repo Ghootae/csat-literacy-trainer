@@ -116,14 +116,31 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await page.getByRole('button', { name: '다음 문항' }).click();
   await page.screenshot({ path: resolve(shots, '03-answer-desktop.png'), fullPage: true });
 
-  // 새로 고침: 고른 답이 남아 있다
-  await expect(page.getByRole('button', { name: '이전 문항' })).toBeEnabled();
-  await page.reload();
-  await expect(page.getByRole('radio', { name: `${circled(correctChoice(Q12))}번 선지` })).toHaveAttribute('aria-checked', 'true');
-  await expect(page.locator('#diag-rationale')).toHaveValue('첫 문항의 이유를 적었다.');
-  await page.getByRole('button', { name: '다음 문항' }).click();
+  // 이전 문항은 읽기 전용: 낸 답이 보이고 고칠 수 없다. 차례가 아닌 문항 번호 칸은 비활성이다(D-0221)
+  const cells = page.getByRole('navigation', { name: '문항 이동' });
+  await expect(cells.getByRole('button', { name: '12', exact: true })).toBeEnabled();
+  await expect(cells.getByRole('button', { name: '14', exact: true })).toBeEnabled();
+  for (const n of ['15', '16']) await expect(cells.getByRole('button', { name: n, exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '다음 문항' })).toBeDisabled();   // 빈 답으로는 넘어가지 못한다
+  await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toBeDisabled();
+  await page.getByRole('button', { name: '이전 문항' }).click();
+  await expect(page.getByText('이미 낸 답이야')).toBeVisible();
   await expect(page.getByRole('radio', { name: `${circled(wrongChoice(Q13))}번 선지` })).toHaveAttribute('aria-checked', 'true');
-  await page.getByRole('button', { name: '다음 문항' }).click();
+  await expect(page.getByRole('radio', { name: `${circled(wrongChoice(Q13))}번 선지` })).toBeDisabled();
+  await expect(page.locator('#diag-rationale')).toBeDisabled(); await expect(page.locator('#diag-rationale')).toHaveValue('둘째 문항의 이유를 적었다.');
+  await expect(page.getByRole('button', { name: '확실해요' })).toBeDisabled();
+  await page.screenshot({ path: resolve(shots, '03b-answer-readonly-desktop.png'), fullPage: true });
+  await page.getByRole('button', { name: '다음 문항' }).click();   // 확정한 문항에서는 이동만, 지금 차례 문항까지
+
+  // 새로 고침: 지금 차례 문항(14번)에서 이어 가고, 앞 문항은 확정한 답 그대로 읽기 전용이다
+  await page.reload();
+  await expect(page.getByText('이미 낸 답이야')).toHaveCount(0);
+  await expect(page.getByText('문항 3 / 5')).toBeVisible();
+  await expect(page.locator('#diag-rationale')).toHaveValue('');
+  await page.getByRole('button', { name: '이전 문항' }).click(); await page.getByRole('button', { name: '이전 문항' }).click();
+  await expect(page.getByRole('radio', { name: `${circled(correctChoice(Q12))}번 선지` })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('#diag-rationale')).toHaveValue('첫 문항의 이유를 적었다.'); await expect(page.locator('#diag-rationale')).toBeDisabled();
+  await page.getByRole('button', { name: '다음 문항' }).click(); await page.getByRole('button', { name: '다음 문항' }).click();
   await answer(page, correctChoice(Q14), null);
   await page.getByRole('button', { name: '다음 문항' }).click();
   await answer(page, wrongChoice(Q15), null);

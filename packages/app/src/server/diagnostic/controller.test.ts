@@ -34,7 +34,8 @@ async function settle(c: DiagnosticController) {
 }
 /** 지문 결과 응답의 범주별 문항 수. */
 const categoryCounts = (card: { items: { category: string }[] }) => card.items.reduce<Record<string, number>>((n, i) => ({ ...n, [i.category]: (n[i.category] ?? 0) + 1 }), {});
-const post = (h: Harness, q: string, body: unknown) => h.c.submitItem(h.id, q, body);
+const post = (h: Harness, q: string, body: unknown) => h.c.confirmItem(h.id, q, body);
+const draft = (h: Harness, q: string, body: unknown) => h.c.submitItem(h.id, q, body);
 const selectionCalls = (h: Harness, q: string) => h.fb.calls.filter(call => call.questionId === q && call.mode === 'SELECTION').length;
 
 describe('요약 대화 기록 위치(인계 A (6)-1)', () => {
@@ -106,8 +107,8 @@ describe('한 지문의 흐름', () => {
     expect(h.c.summaryFinish(h.id, COG.passageId).questions).toHaveLength(5);
     // 문항 답: 응답에 정오·판정이 없다
     const answers = mixed();
-    for (const q of COG.questionIds) expect(post(h, q, answers[q]!)).toEqual({ saved: true });
-    expect(selectionCalls(h, Q12)).toBe(0);
+    for (const q of COG.questionIds) expect(post(h, q, answers[q]!)).toEqual({ confirmed: true });
+    expect(selectionCalls(h, Q12)).toBe(1);   // 확정 즉시 그 문항 판정이 시작됐다
     const done = h.c.answersDone(h.id, COG.passageId);
     expect(Object.keys(done)).toEqual(['position']); expect(done.position.answered).toBe(5);
     // 판정이 끝나기 전에도 정오는 바로 나오고, 근거 쪽은 판정 중으로 센다. 등급은 공개 전이라 없다
@@ -243,23 +244,62 @@ describe('판정 실패와 RESUME', () => {
   });
 });
 
-describe('답 고치기', () => {
-  it('answers-done 전 재제출은 덮어쓰기이고 판정 호출 0회. answers-done 때 마지막 답으로 판정이 한꺼번에 시작하고, 뒤의 재제출은 409다', async () => {
+describe('문항마다 확정(D-0221)', () => {
+  it('확정하면 그 문항의 판정이 바로 시작하고(다른 문항은 아직), 응답에 정오·판정이 없다. 임시 저장은 판정을 만들지 않는다', async () => {
     const h = harness();
     h.c.start(h.id, COG.passageId, { summary: false });
-    post(h, Q12, provided(wrongChoice(Q12)));
-    post(h, Q12, provided(correctChoice(Q12)));
-    for (const q of [Q13, Q14, Q15, Q16]) post(h, q, provided(correctChoice(q)));
+    draft(h, Q12, provided(wrongChoice(Q12)));
     await settle(h.c);
     expect(h.fb.calls).toHaveLength(0);
-    expect(h.store.events.filter(e => e.type === 'ITEM_SUBMITTED' && e.questionId === Q12).map(e => e.revisionOfDraft)).toEqual([0, 1]);
-    expect(() => h.c.answersDone(h.id, HORSE.passageId)).toThrow(DiagnosticHttpError);
-    h.c.answersDone(h.id, COG.passageId);
-    expect(h.fb.calls.filter(call => call.mode === 'SELECTION')).toHaveLength(5);   // 한꺼번에 시작(동기 구간에서 모두 호출)
-    expect(h.store.load(h.id)).not.toBeNull();
+    expect(post(h, Q12, provided(correctChoice(Q12)))).toEqual({ confirmed: true });
+    expect(selectionCalls(h, Q12)).toBe(1); expect(selectionCalls(h, Q13)).toBe(0);
     await settle(h.c);
     expect(h.store.load(h.id)!.items[Q12]!.first!.choiceId).toBe(correctChoice(Q12));
+    expect(h.store.load(h.id)!.items[Q12]!.firstJudgment.status).toBe('READY');
+    expect(h.store.load(h.id)!.items[Q13]!.firstJudgment.status).toBe('NONE');
+    expect(h.store.events.filter(e => e.type === 'ITEM_CONFIRMED').map(e => e.questionId)).toEqual([Q12]);
+  });
+  it('확정한 문항의 재확정·임시 저장은 409이고 첫 응답은 그대로다. 순서를 어긴 확정도 409다', async () => {
+    const h = harness();
+    h.c.start(h.id, COG.passageId, { summary: false });
+    expect(() => post(h, Q13, provided(correctChoice(Q13)))).toThrow(expect.objectContaining({ status: 409 }));
+    post(h, Q12, provided(correctChoice(Q12)));
     expect(() => post(h, Q12, provided(wrongChoice(Q12)))).toThrow(expect.objectContaining({ status: 409 }));
+    expect(() => draft(h, Q12, provided(wrongChoice(Q12)))).toThrow(expect.objectContaining({ status: 409 }));
+    expect(() => post(h, Q14, provided(correctChoice(Q14)))).toThrow(expect.objectContaining({ status: 409 }));
+    await settle(h.c);
+    expect(h.store.load(h.id)!.items[Q12]!.first!.choiceId).toBe(correctChoice(Q12));
+    expect(() => h.c.answersDone(h.id, HORSE.passageId)).toThrow(DiagnosticHttpError);
+  });
+  it('푸는 중에 판정이 끝나도 지문 상태는 ANSWERING이고, 확정 문항의 정오·위치가 progress·result·answerDrafts 응답에 없다', async () => {
+    const h = harness();
+    h.c.start(h.id, COG.passageId, { summary: false });
+    post(h, Q12, provided(correctChoice(Q12))); post(h, Q13, provided(wrongChoice(Q13)));
+    await settle(h.c);
+    expect(h.store.load(h.id)!.items[Q12]!.firstJudgment.status).toBe('READY');
+    const progress = h.c.progress(h.id);
+    expect(progress.passages.find(p => p.passageId === COG.passageId)!.status).toBe('ANSWERING');
+    expect(progress.position).toBeNull();
+    expect(h.c.result(h.id)).toMatchObject({ position: { status: 'pending' }, items: [] });
+    expect(() => h.c.summaryCard(h.id, COG.passageId)).toThrow(expect.objectContaining({ status: 409 }));
+    expect(() => h.c.feedbackView(h.id, Q12)).toThrow(expect.objectContaining({ status: 409 }));
+    const view = h.c.answerDrafts(h.id, COG.passageId);
+    expect(view.confirmed).toEqual({ [Q12]: true, [Q13]: true, [Q14]: false, [Q15]: false, [Q16]: false });
+    expect(view.drafts[Q13]).toMatchObject({ choiceId: wrongChoice(Q13) });
+    expect(JSON.stringify(view)).not.toMatch(/answerChoiceId|correct|contentAssessment|boundary/u);
+  });
+  it('answers-done 전에 판정이 모두 끝났으면 answers-done 뒤 바로 FEEDBACK이다(분석 중 없음)', async () => {
+    const h = harness();
+    h.c.start(h.id, COG.passageId, { summary: false });
+    const answers = mixed();
+    for (const q of COG.questionIds) post(h, q, answers[q]!);
+    await settle(h.c);
+    const done = h.c.answersDone(h.id, COG.passageId);
+    expect(done.position.answered).toBe(5);
+    expect(h.c.progress(h.id).passages.find(p => p.passageId === COG.passageId)!.status).toBe('FEEDBACK');
+    expect(h.c.summaryCard(h.id, COG.passageId)).toMatchObject({ judging: 0, total: 5 });
+    expect(h.store.events.filter(e => e.type === 'ANSWERS_DONE')).toHaveLength(1);
+    expect(h.fb.calls.filter(call => call.mode === 'SELECTION')).toHaveLength(3);   // 근거를 쓴 3문항만, answers-done은 판정을 새로 시작하지 않는다
   });
   it('답하지 않은 문항이 있으면 answers-done은 400이다', () => {
     const h = harness();
@@ -290,7 +330,7 @@ describe('저장', () => {
       await c.summaryRespond(id, COG.passageId, { transitionId: `t${index}`, paragraphIndex: index, text });
     }
     c.summaryFinish(id, COG.passageId);
-    for (const q of COG.questionIds) c.submitItem(id, q, q === Q14 || q === Q15 ? omitted(correctChoice(q)) : provided(q === Q13 ? wrongChoice(q) : correctChoice(q)));
+    for (const q of COG.questionIds) c.confirmItem(id, q, q === Q14 || q === Q15 ? omitted(correctChoice(q)) : provided(q === Q13 ? wrongChoice(q) : correctChoice(q)));
     c.answersDone(id, COG.passageId);
     await settle(c);
     const saved = JSON.parse(readFileSync(join(dir, `${id}.json`), 'utf8')) as DiagnosticParticipant;
@@ -318,7 +358,7 @@ describe('저장', () => {
     first.start(id, COG.passageId, { summary: true });
     await first.summaryRespond(id, COG.passageId, { transitionId: 't1', paragraphIndex: 0, text: '첫 문단 요약이다.' });
     first.summaryFinish(id, COG.passageId);
-    for (const q of COG.questionIds) first.submitItem(id, q, q === Q14 ? omitted(correctChoice(q)) : provided(q === Q13 || q === Q15 ? wrongChoice(q) : correctChoice(q)));
+    for (const q of COG.questionIds) first.confirmItem(id, q, q === Q14 ? omitted(correctChoice(q)) : provided(q === Q13 || q === Q15 ? wrongChoice(q) : correctChoice(q)));
     first.answersDone(id, COG.passageId);
     await vi.waitFor(() => {
       const saved = store.load(id)!;
@@ -489,7 +529,7 @@ describe('결과: 독해 패턴 개수·요약 연결·추천·학생용 문장 
     expect(() => h.c.answerDrafts(h.id, COG.passageId)).toThrow(expect.objectContaining({ status: 409 }));
     h.c.start(h.id, COG.passageId, { summary: false });
     expect(Object.values(h.c.answerDrafts(h.id, COG.passageId).drafts).every(d => d === null)).toBe(true);
-    post(h, Q12, provided(choiceId(2))); post(h, Q12, omitted(choiceId(3)));
+    draft(h, Q12, provided(choiceId(2))); draft(h, Q12, omitted(choiceId(3)));
     const view = h.c.answerDrafts(h.id, COG.passageId);
     expect(view.questions.map(q => q.questionId)).toEqual(COG.questionIds);
     expect(view.drafts[Q12]).toEqual({ choiceId: choiceId(3), rationale: { mode: 'OMITTED' }, confidence: 'SURE' });
@@ -549,7 +589,7 @@ describe('범주 표 (D-0213, 인계 (4))', () => {
     await settle(h.c);
     expect([Q12, Q13, Q14, Q15, Q16].map(q => category(h, q))).toEqual(['WRONG', 'SURE_CORRECT', 'UNSURE_CORRECT', 'CHECKING', 'CHECKING']);
     expect(h.store.load(h.id)!.items[Q14]!.first!.confidence).toBe('UNSURE');
-    expect(h.store.events.filter(e => e.type === 'ITEM_SUBMITTED' && e.questionId === Q14).map(e => e['confidence'])).toEqual(['UNSURE']);
+    expect(h.store.events.filter(e => e.type === 'ITEM_CONFIRMED' && e.questionId === Q14).map(e => e['confidence'])).toEqual(['UNSURE']);
   });
   it('정답 + 근거 + 판정이 아직이면 PENDING이고 judging에 센다', async () => {
     const gate = { release: () => {} }; const blocked = new Promise<void>(resolve => { gate.release = resolve; });
@@ -573,8 +613,8 @@ describe('confidence (인계 (3))', () => {
     expect(() => post(h, Q12, noConfidence)).toThrow(expect.objectContaining({ status: 400 }));
     expect(() => post(h, Q12, { ...omitted(correctChoice(Q12)), confidence: null })).toThrow(expect.objectContaining({ status: 400 }));
     expect(() => post(h, Q12, { ...provided(correctChoice(Q12)), confidence: 'SURE' })).toThrow(expect.objectContaining({ status: 400 }));
-    expect(post(h, Q12, omitted(correctChoice(Q12), 'UNSURE'))).toEqual({ saved: true });
-    expect(post(h, Q13, { ...provided(correctChoice(Q13)), confidence: undefined })).toEqual({ saved: true });
+    expect(post(h, Q12, omitted(correctChoice(Q12), 'UNSURE'))).toEqual({ confirmed: true });
+    expect(post(h, Q13, { ...provided(correctChoice(Q13)), confidence: undefined })).toEqual({ confirmed: true });
   });
   it('옛 참가자 파일(confidence·reconstructability·consistency 없음)도 오류 없이 불러오고 근거 생략 정답은 SURE로 본다', async () => {
     const store = new MemoryStore();

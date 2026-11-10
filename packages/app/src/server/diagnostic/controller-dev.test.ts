@@ -49,6 +49,19 @@ describe('개발자 건너뛰기(D-0217)', () => {
     expect(status(h)).toMatchObject({ status: 'ANSWERING', summaryChosen: true, summarySkipped: false });
   });
 
+  it('이미 확정한 문항은 건너뛰기에서 다시 확정·판정하지 않고, 남은 draft만 확정한다', async () => {
+    const h = harness();
+    h.c.start(h.id, COG.passageId, { summary: false });
+    h.c.confirmItem(h.id, Q12, provided(correctChoice(Q12)));
+    post(h, Q13, provided(wrongChoice(Q13)));
+    await settle(h.c);
+    skip(h, 'FEEDBACK');
+    await settle(h.c);
+    expect(selectionCalls(h, Q12)).toBe(1); expect(selectionCalls(h, Q13)).toBe(1);
+    expect(h.store.events.filter(e => e.type === 'ITEM_CONFIRMED')).toHaveLength(1);
+    expect(h.store.events.find(e => e.type === 'ANSWERS_DONE')).toMatchObject({ questionIds: [Q12, Q13] });
+  });
+
   it('일부만 답한 ANSWERING → FEEDBACK: 답 있는 문항만 판정하고 답 없는 문항은 건너뜀으로 둔다', async () => {
     const h = harness(feedbackFake({ behavior: q => q === Q16 ? 'ERROR' : 'SUPPORTED' }));
     h.c.start(h.id, COG.passageId, { summary: false });
@@ -109,7 +122,7 @@ describe('개발자 건너뛰기(D-0217)', () => {
     let release = () => {}; const blocked = new Promise<void>(resolve => { release = resolve; });
     const h = harness(feedbackFake({ delay: () => blocked }));
     h.c.start(h.id, COG.passageId, { summary: false });
-    for (const q of COG.questionIds) post(h, q, provided(q === Q12 ? wrongChoice(q) : correctChoice(q)));
+    for (const q of COG.questionIds) h.c.confirmItem(h.id, q, provided(q === Q12 ? wrongChoice(q) : correctChoice(q)));
     h.c.answersDone(h.id, COG.passageId);
     expect(status(h).status).toBe('AWAITING_JUDGMENT');
     skip(h, 'FEEDBACK');
@@ -188,7 +201,7 @@ describe('개발자 지문 초기화(D-0217)', () => {
     let release = () => {}; const blocked = new Promise<void>(resolve => { release = resolve; });
     const h = harness(feedbackFake({ delay: () => blocked, behavior: () => 'ERROR' }));
     h.c.start(h.id, COG.passageId, { summary: false });
-    for (const q of COG.questionIds) post(h, q, provided(wrongChoice(q)));
+    for (const q of COG.questionIds) h.c.confirmItem(h.id, q, provided(wrongChoice(q)));
     h.c.answersDone(h.id, COG.passageId);
     h.c.devReset(h.id, COG.passageId);
     release(); await settle(h.c);
@@ -200,7 +213,7 @@ describe('개발자 지문 초기화(D-0217)', () => {
     for (const q of COG.questionIds) expect(selectionCalls(h, q)).toBe(1);   // 초기화된 문항의 판정을 다시 시도하지 않는다
     // 초기화된 문항에서 새로 시작한 판정은 정상이다
     h.c.start(h.id, COG.passageId, { summary: false });
-    for (const q of COG.questionIds) post(h, q, provided(correctChoice(q)));
+    for (const q of COG.questionIds) h.c.confirmItem(h.id, q, provided(correctChoice(q)));
     h.c.answersDone(h.id, COG.passageId); await settle(h.c);
     expect(status(h)).toMatchObject({ status: 'FEEDBACK' });
     expect(status(h).questions.every(q => q.firstJudgment === 'READY')).toBe(true);

@@ -23,7 +23,8 @@ export type Confidence = 'SURE' | 'UNSURE';
 export type AnswerCategory = 'WRONG' | 'SURE_CORRECT' | 'UNSURE_CORRECT' | 'PENDING' | 'CHECKING' | 'UNVERIFIED' | 'ERROR_CORRECT' | 'SUPPORTED_CORRECT' | 'WEAK_CORRECT';
 export type QualityTiers = 3 | 2;
 export interface Draft { choiceId: string; rationale: FeedbackRationale; confidence: Confidence | null }
-export interface QuestionsView { questions: QuestionView[]; drafts: Record<string, Draft | null> }
+/** `drafts[qid]`는 확정한 문항이면 확정한 답, 아니면 임시 답. `confirmed`는 확정 여부(D-0221). */
+export interface QuestionsView { questions: QuestionView[]; confirmed: Record<string, boolean>; drafts: Record<string, Draft | null> }
 export interface ItemRequest { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null; confidence: Confidence | null }
 
 /** 지문 결과 화면 자료(D-0218). 정오·범주는 바로 오고(문제 버튼 색), 등급(`position`)은 모든 문항 결과를 공개한 뒤에만 온다. */

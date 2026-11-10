@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { SimpleDialogueView } from '../../shared/dialogue-simple.js';
-import { answersDone, getFeedback, getQuestions, postFeedback, startPassage, submitItem, summaryFinish, summaryNavigate, summaryRespond } from './api.js';
+import { answersDone, confirmItem, getFeedback, getQuestions, postFeedback, startPassage, submitItem, summaryFinish, summaryNavigate, summaryRespond } from './api.js';
 import { AnswerScreen } from './AnswerScreen.js';
 import { MidContainer, ResultContainer, message } from './Containers.js';
 import { devResetPassage, devSkipPassage, getDevAnswers, getDevMap, getDevSummary, type DevAnswersView, type DevMapView } from './dev-api.js';
@@ -141,7 +141,7 @@ export function DevDiagnostic({ id, set }: { id: string; set: SetInfo }): React.
           const started = await startPassage(id, passageId, summary);
           const next = await refresh(); const nextFlow = buildFlow(next);
           if ('sessionId' in started) setView({ name: 'summary', passageId, view: started, readOnly: false });
-          else setView({ name: 'answer', passageId, data: { questions: started.questions, drafts: {} } });
+          else setView({ name: 'answer', passageId, data: { questions: started.questions, drafts: {}, confirmed: {} } });
           setCurrent(nextFlow.find(cell => cell.passageId === passageId && cell.kind === (summary ? 'summary' : 'answer'))?.key ?? current);
         })} />;
       }
@@ -156,12 +156,12 @@ export function DevDiagnostic({ id, set }: { id: string; set: SetInfo }): React.
           })}
           finish={() => void guarded(async () => {
             const finished = await summaryFinish(id, passageId);
-            setView({ name: 'answer', passageId, data: { questions: finished.questions, drafts: {} } }); setCurrent(`${passageId}:answer`); await refresh();
+            setView({ name: 'answer', passageId, data: { questions: finished.questions, drafts: {}, confirmed: {} } }); setCurrent(`${passageId}:answer`); await refresh();
           })} />;
       }
       case 'answer': {
         const { passageId, data } = view;
-        return <AnswerScreen key={passageId} questions={data.questions} drafts={data.drafts} save={(questionId, request) => submitItem(id, questionId, request)}
+        return <AnswerScreen key={passageId} questions={data.questions} drafts={data.drafts} confirmed={data.confirmed} confirm={(questionId, request) => confirmItem(id, questionId, request)} save={(questionId, request) => submitItem(id, questionId, request)}
           done={async () => { await answersDone(id, passageId); setView({ name: 'mid', passageId }); setCurrent(`${passageId}:mid`); await refresh(); }} />;
       }
       case 'answers': return <AnswersReadOnly key={view.passageId} data={view.data} />;

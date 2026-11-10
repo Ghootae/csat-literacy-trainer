@@ -261,26 +261,34 @@ export class DiagnosticController {
 
   // ---------- 문항 답 ----------
 
-  /** 새로 고침 뒤 이어 가기: 답 입력 중인 지문의 문항과 임시 답. 정오는 없다. */
-  answerDrafts(participantId: string, passageId: string): { questions: DiagnosticItemView[]; drafts: Record<string, { choiceId: string; rationale: ItemAnswer['rationale']; confidence: NonNullable<ItemAnswer['confidence']> | null } | null> } {
+  /** 새로 고침 뒤 이어 가기: 답 입력 중인 지문의 문항과 답. 확정한 문항은 확정한 답을, 아니면 임시 답을 준다. 정오·판정은 없다. */
+  answerDrafts(participantId: string, passageId: string): { questions: DiagnosticItemView[]; confirmed: Record<string, boolean>; drafts: Record<string, { choiceId: string; rationale: ItemAnswer['rationale']; confidence: NonNullable<ItemAnswer['confidence']> | null } | null> } {
     const p = this.require(participantId); const passage = this.passage(passageId); const state = p.passages[passageId]!;
     if (state.status !== 'ANSWERING') fail(409, '지금은 답을 입력하는 지문이 아닙니다.');
     return { questions: this.questions(passage),
-      drafts: Object.fromEntries(passage.questionIds.map(id => { const draft = p.items[id]!.draft; return [id, draft ? { choiceId: draft.choiceId, rationale: draft.rationale, confidence: draft.confidence ?? null } : null]; })) };
+      confirmed: Object.fromEntries(passage.questionIds.map(id => [id, p.items[id]!.first !== null])),
+      drafts: Object.fromEntries(passage.questionIds.map(id => { const item = p.items[id]!; const answer = item.first ?? item.draft; return [id, answer ? { choiceId: answer.choiceId, rationale: answer.rationale, confidence: answer.confidence ?? null } : null]; })) };
   }
 
-  /** 답을 draft로 저장만 한다. 풀이 상태도 판정도 만들지 않고, 응답에는 정오·판정이 없다. */
-  submitItem(participantId: string, questionId: string, raw: unknown): { saved: true } {
-    const p = this.require(participantId);
+  /** 답 요청을 검사한다(임시 저장·확정 공통). 문항이 속한 지문과 본문을 돌려준다. */
+  private parseAnswer(p: Participant, questionId: string, raw: unknown) {
     const passage = this.set.passages.find(candidate => candidate.questionIds.includes(questionId));
     if (!passage) return fail(404, '등록되지 않은 문항입니다.');
     const state = p.passages[passage.passageId]!;
     const body = DiagnosticItemRequestSchema.parse(raw);
     if (state.status !== 'ANSWERING') fail(409, '지금은 이 문항의 답을 낼 수 없습니다.');
+    if (p.items[questionId]!.first !== null) fail(409, '이미 낸 답은 고칠 수 없습니다.');
     if (!this.bundle(questionId).source.choices.some(c => c.choiceId === body.choiceId)) fail(400, '존재하지 않는 선지입니다.');
     if (body.rationale.mode === 'OMITTED' && body.rationaleMs !== null) fail(400, '근거를 생략하면 rationaleMs는 null이어야 합니다.');
     if (body.rationale.mode === 'OMITTED' && body.confidence === null) fail(400, '근거를 생략하면 confidence(SURE·UNSURE)가 필요합니다.');
     if (body.rationale.mode === 'PROVIDED' && body.confidence !== null) fail(400, '근거를 쓰면 confidence는 null이어야 합니다.');
+    return { passage, body };
+  }
+
+  /** 답을 draft로 저장만 한다. 풀이 상태도 판정도 만들지 않고, 응답에는 정오·판정이 없다. 확정한 문항은 409. */
+  submitItem(participantId: string, questionId: string, raw: unknown): { saved: true } {
+    const p = this.require(participantId);
+    const { passage, body } = this.parseAnswer(p, questionId, raw);
     const item = p.items[questionId]!;
     const revisionOfDraft = item.draft ? (item.draft as { revision?: number }).revision! + 1 : 0;
     item.draft = { ...body, savedAt: new Date().toISOString(), revision: revisionOfDraft } as ItemState['draft'];
@@ -290,42 +298,64 @@ export class DiagnosticController {
     return { saved: true };
   }
 
-  /** 그 시점의 draft를 첫 응답으로 확정하고 선택 판정을 한꺼번에 시작한다. */
+  /** 한 문항의 답을 첫 응답으로 확정하고(고칠 수 없다) 근거를 썼으면 그 문항의 선택 판정을 바로 시작한다. 순서대로만 확정한다. 응답에 정오·판정은 없다(D-0221). */
+  confirmItem(participantId: string, questionId: string, raw: unknown): { confirmed: true } {
+    const p = this.require(participantId);
+    const { passage, body } = this.parseAnswer(p, questionId, raw);
+    const earlier = passage.questionIds.slice(0, passage.questionIds.indexOf(questionId));
+    if (earlier.some(id => p.items[id]!.first === null)) fail(409, '앞 문항의 답을 먼저 내야 합니다.');
+    this.confirmOne(p, questionId, body, new Date().toISOString());
+    this.event('ITEM_CONFIRMED', p, { questionId, passageId: passage.passageId, choiceId: body.choiceId, rationale: body.rationale,
+      solveMs: body.solveMs, rationaleMs: body.rationaleMs, confidence: body.confidence });
+    this.requestSave(p);
+    return { confirmed: true };
+  }
+
+  /** 모든 문항이 확정돼 있어야 한다. 확정은 하지 않고 판정 대기로 바꾼다(판정이 이미 끝났으면 바로 FEEDBACK). */
   answersDone(participantId: string, passageId: string): { position: ParticipantPosition } {
     const p = this.require(participantId); const passage = this.passage(passageId); const state = p.passages[passageId]!;
     if (state.status !== 'ANSWERING') fail(409, '이미 답 입력을 마쳤거나 아직 시작하지 않은 지문입니다.');
-    const missing = passage.questionIds.filter(id => p.items[id]!.draft === null);
+    const missing = passage.questionIds.filter(id => p.items[id]!.first === null);
     if (missing.length > 0) fail(400, `아직 답하지 않은 문항이 있습니다: ${missing.join(', ')}`);
-    this.confirmAnswers(p, passage);
+    state.status = 'AWAITING_JUDGMENT';
+    this.event('ANSWERS_DONE', p, { passageId, questionIds: [...passage.questionIds] });
+    this.checkPassageReady(p, passageId);
+    this.requestSave(p);
     return { position: this.position(p)! };
   }
 
-  /** draft가 있는 문항만 첫 응답으로 확정하고 판정을 시작한다. draft가 없는 문항은 첫 응답 없이 건너뜀으로 둔다(학생 흐름에는 없다). 모두 비면 바로 DONE. */
+  /** 문항 하나의 확정 처리: 첫 응답 확정, 피드백 세션 생성, 근거가 있으면 판정 시작. */
+  private confirmOne(p: Participant, questionId: string, answer: ItemAnswer, submittedAt: string): void {
+    const item = p.items[questionId]!;
+    const first = { ...answer, submittedAt };
+    item.first = first; item.draft = null;
+    const session = createFeedbackSession(randomUUID(), this.bundle(questionId).source);
+    item.session = session; item.transcript = [];
+    this.sessionIndex.set(session.sessionId, { participantId: p.participantId, questionId });
+    this.feedback.adopt(session, []);
+    const provided = first.rationale.mode === 'PROVIDED';
+    if (provided) item.firstJudgment = { status: 'PENDING', attempts: 1, contentAssessment: null, boundary: null, reconstructability: null, consistency: null };
+    void this.feedback.submit(session.sessionId, { transitionId: `${questionId}:select`, expectedRevision: 0,
+      command: { type: 'SELECT', choiceId: first.choiceId, rationale: first.rationale } });
+    if (provided) this.track(this.runFirstJudgment(p, questionId, false));
+  }
+
+  /** 개발자 건너뛰기용: 아직 확정하지 않은 문항 중 draft가 있는 것만 확정한다. draft도 없으면 건너뜀으로 둔다(학생 흐름에는 없다). 모두 비면 바로 DONE. */
   private confirmAnswers(p: Participant, passage: DiagnosticSetPassage): void {
     const passageId = passage.passageId; const state = p.passages[passageId]!;
     state.status = 'AWAITING_JUDGMENT';
     const submittedAt = new Date().toISOString();
-    const started: string[] = []; const answered: string[] = [];
+    const answered: string[] = [];
     for (const questionId of passage.questionIds) {
       const item = p.items[questionId]!;
-      if (item.draft === null) { item.skipped = true; continue; }
-      const draft = item.draft;
-      const { savedAt: _savedAt, ...answer } = draft as typeof draft & { revision?: number };
-      const { revision: _revision, ...firstAnswer } = answer as typeof answer & { revision?: number };
-      item.first = { ...firstAnswer, submittedAt }; item.draft = null;
-      const session = createFeedbackSession(randomUUID(), this.bundle(questionId).source);
-      item.session = session; item.transcript = [];
-      this.sessionIndex.set(session.sessionId, { participantId: p.participantId, questionId });
-      this.feedback.adopt(session, []);
-      const provided = item.first.rationale.mode === 'PROVIDED';
-      if (provided) item.firstJudgment = { status: 'PENDING', attempts: 1, contentAssessment: null, boundary: null, reconstructability: null, consistency: null };
-      void this.feedback.submit(session.sessionId, { transitionId: `${questionId}:select`, expectedRevision: 0,
-        command: { type: 'SELECT', choiceId: item.first.choiceId, rationale: item.first.rationale } });
+      if (item.first === null) {
+        if (item.draft === null) { item.skipped = true; continue; }
+        const { savedAt: _savedAt, revision: _revision, ...answer } = item.draft as typeof item.draft & { revision?: number };
+        this.confirmOne(p, questionId, answer, submittedAt);
+      }
       answered.push(questionId);
-      if (provided) started.push(questionId);
     }
     this.event('ANSWERS_DONE', p, { passageId, questionIds: answered });
-    for (const questionId of started) this.track(this.runFirstJudgment(p, questionId, false));
     if (answered.length === 0) { state.status = 'DONE'; this.event('PASSAGE_DONE', p, { passageId }); }
     else this.checkPassageReady(p, passageId);
     this.requestSave(p);
@@ -449,7 +479,7 @@ export class DiagnosticController {
             firstJudgment: item.firstJudgment.status, feedbackPhase: phase, skipped: item.skipped === true, reviewTarget: target, reviewDone: target && phase === 'COMPLETED' };
         }) };
     });
-    return { passages, resultAvailable: this.answeredPassages(p).length > 0 };
+    return { passages, resultAvailable: this.answeredPassages(p, true).length > 0 };
   }
 
   /** 요약 대화 읽기(상태와 무관). 요약 세션은 메모리에만 있어 서버를 다시 켠 뒤에는 불러올 수 없다. */
@@ -857,8 +887,9 @@ export class DiagnosticController {
       return item.first ? [{ seq: String(passage.exam.megastudySeq), questionNumber: this.set.items[id]!.questionNumber, correct: this.isCorrect(item) }] : [];
     }));
   }
-  private answeredPassages(p: Participant): DiagnosticSetPassage[] {
-    return this.set.passages.filter(passage => passage.questionIds.some(id => p.items[id]!.first !== null));
+  /** 답이 있는 지문. 푸는 중(ANSWERING)인 지문은 확정한 문항이 있어도 뺀다(정오가 새지 않게, D-0221). 개발자 지도만 포함한다. */
+  private answeredPassages(p: Participant, includeAnswering = false): DiagnosticSetPassage[] {
+    return this.set.passages.filter(passage => (includeAnswering || p.passages[passage.passageId]!.status !== 'ANSWERING') && passage.questionIds.some(id => p.items[id]!.first !== null));
   }
   private position(p: Participant): ParticipantPosition | null {
     const answered = this.answeredPassages(p);

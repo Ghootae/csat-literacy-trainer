@@ -58,12 +58,13 @@ export async function handleDiagnosticRequest(controller: DiagnosticController, 
       if (method === 'POST' && action === 'finish') return send(res, 200, controller.finish(id, passageId));
       if (method === 'GET' && action === 'summary-card') return send(res, 200, controller.summaryCard(id, passageId));
     }
-    const item = /^item\/([^/]+)(\/feedback)?$/u.exec(rest);
+    const item = /^item\/([^/]+)(\/feedback|\/confirm)?$/u.exec(rest);
     if (item) {
       const questionId = item[1]!;
+      if (method === 'POST' && item[2] === '/confirm') return send(res, 200, controller.confirmItem(id, questionId, await body()));
       if (method === 'POST' && !item[2]) return send(res, 200, controller.submitItem(id, questionId, await body()));
-      if (method === 'GET' && item[2]) return send(res, 200, controller.feedbackView(id, questionId));
-      if (method === 'POST' && item[2]) return send(res, 200, await controller.feedbackSubmit(id, questionId, await body()));
+      if (method === 'GET' && item[2] === '/feedback') return send(res, 200, controller.feedbackView(id, questionId));
+      if (method === 'POST' && item[2] === '/feedback') return send(res, 200, await controller.feedbackSubmit(id, questionId, await body()));
     }
     return send(res, 404, { error: '등록되지 않은 진단평가 API입니다.' });
   } catch (error) {

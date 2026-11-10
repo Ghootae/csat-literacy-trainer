@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SimpleDialogueView } from '../shared/dialogue-simple.js';
 import {
-  ApiError, answersDone, createParticipant, getFeedback, getProgress, getQuestions, postFeedback, startPassage, submitItem,
+  ApiError, answersDone, confirmItem, createParticipant, getFeedback, getProgress, getQuestions, postFeedback, startPassage, submitItem,
   summaryFinish, summaryNavigate, summaryRespond,
 } from './diagnostic/api.js';
 import { AnswerScreen } from './diagnostic/AnswerScreen.js';
@@ -96,7 +96,7 @@ export function DiagnosticApp(): React.JSX.Element {
     return <ChoosePage title={titleOf(passageId)} number={numberOf(passageId)} total={total} busy={busy} error={error} choose={summary => void guarded(async () => {
       const started = await startPassage(participantId, passageId, summary);
       if ('sessionId' in started) setScreen({ name: 'summary', passageId, view: started });
-      else setScreen({ name: 'answer', passageId, data: { questions: started.questions, drafts: {} } });
+      else setScreen({ name: 'answer', passageId, data: { questions: started.questions, drafts: {}, confirmed: {} } });
     })} />;
   }
   if (screen.name === 'summary') {
@@ -104,11 +104,11 @@ export function DiagnosticApp(): React.JSX.Element {
     return <SummaryDialogue view={view} busy={busy} error={error}
       respond={async body => { setBusy(true); setError(''); try { const next = await summaryRespond(participantId, passageId, body); setScreen({ name: 'summary', passageId, view: next }); return next; } catch (reason) { setError(message(reason)); throw reason; } finally { setBusy(false); } }}
       go={index => void guarded(async () => setScreen({ name: 'summary', passageId, view: await summaryNavigate(participantId, passageId, index) }))}
-      finish={() => void guarded(async () => { const finished = await summaryFinish(participantId, passageId); setScreen({ name: 'answer', passageId, data: { questions: finished.questions, drafts: {} } }); })} />;
+      finish={() => void guarded(async () => { const finished = await summaryFinish(participantId, passageId); setScreen({ name: 'answer', passageId, data: { questions: finished.questions, drafts: {}, confirmed: {} } }); })} />;
   }
   if (screen.name === 'answer') {
     const { passageId, data } = screen;
-    return <AnswerScreen key={passageId} questions={data.questions} drafts={data.drafts} save={(questionId, body) => submitItem(participantId, questionId, body)}
+    return <AnswerScreen key={passageId} questions={data.questions} drafts={data.drafts} confirmed={data.confirmed} confirm={(questionId, body) => confirmItem(participantId, questionId, body)} save={(questionId, body) => submitItem(participantId, questionId, body)}
       done={async () => { await answersDone(participantId, passageId); setScreen({ name: 'mid', passageId }); }} />;
   }
   if (screen.name === 'mid') {
