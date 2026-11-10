@@ -3,8 +3,8 @@ import { useState } from 'react';
 import type { SetInfo, ResultItem, ResultView as Result } from './types.js';
 import { GradeBar } from './GradeBar.js';
 import {
-  FAILED_TEXT, GRADE_EDGES, MEGASTUDY_NOTE, PENDING_TEXT, POSITION_NOTE, RESULT_GROUP_MARK, answerQuality, branchRows, cardStepName, cardTwists, circledObject, gradeSentence, gradeShareText,
-  layerSentence, percentPair, recommendationLines, resultGroup, solveStats, sourceLocationName, stepTendency, sumCounts, summaryLinkSentence, twistTags, zOfPercentile,
+  FAILED_TEXT, MEGASTUDY_NOTE, PENDING_TEXT, POSITION_NOTE, RESULT_GROUP_MARK, answerQuality, branchRows, cardStepName, cardTwists, circledObject, gradeSentence,
+  layerSentence, percentPair, recommendationLines, resultGroup, solveStats, sourceLocationName, stepTendency, sumCounts, summaryLinkSentence, twistTags,
 } from './logic.js';
 
 type Box = 'pending' | 'ready' | 'failed';
@@ -13,24 +13,14 @@ function Notice({ status }: { status: Exclude<Box, 'ready'> }) { return <p class
 
 // ---------- ① 내 위치 ----------
 
-const X = (percentile: number) => 300 + 100 * Math.min(3, Math.max(-3, zOfPercentile(percentile)));
 function Position({ result }: { result: Result }) {
   if (result.position.status === 'pending') return <Notice status="pending" />;
   const { grade, byPassage } = result.position;
-  const curve = Array.from({ length: 61 }, (_, i) => { const z = -3 + i / 10; return `${i === 0 ? 'M' : 'L'}${(300 + 100 * z).toFixed(1)},${(150 - 138 * Math.exp(-z * z / 2)).toFixed(1)}`; }).join(' ');
   const percentOf = (probabilities: number[], mode: number) => Math.round(probabilities[mode - 1]! * 100);
   return <>
     <p className="diag-big" data-testid="grade">{grade.mode}등급</p>
     <p className="diag-gradeline" data-testid="grade-sentence">{gradeSentence(grade.probabilities, grade.mode)}</p>
     <GradeBar grade={grade} />
-    <div className="diag-narrowing"><p className="diag-label2">전국 분포에서의 위치</p>
-      <svg viewBox="0 0 600 176" className="diag-curve diag-curve-small" aria-hidden="true" focusable="false">
-        {GRADE_EDGES.slice(0, -1).map((edge, i) => <rect key={edge} x={X(edge) - (i === 0 ? 1 : 0)} y="0" width={X(GRADE_EDGES[i + 1]!) - X(edge) + (i === 0 ? 1 : 0)} height="150"
-          fill={9 - i === grade.mode ? 'var(--diag-accent)' : i % 2 === 0 ? 'var(--diag-band-a)' : 'var(--diag-band-b)'} fillOpacity={9 - i === grade.mode ? 0.35 : 1} />)}
-        <path d={curve} fill="none" stroke="var(--diag-ink)" strokeWidth="2" />
-        {GRADE_EDGES.slice(0, -1).map((edge, i) => <text key={edge} x={(X(edge) + X(GRADE_EDGES[i + 1]!)) / 2} y="168" fontSize="12" textAnchor="middle" fill="var(--diag-sub)">{9 - i}{i === 8 ? '등급' : ''}</text>)}
-      </svg>
-      <p className="diag-muted" data-testid="grade-share">{gradeShareText(grade.mode)}</p></div>
     <div className="diag-narrowing"><p className="diag-label2">지문을 풀수록 또렷해진 위치</p>
       <div className="diag-narrowing-grid">{byPassage.map((p, i) => {
         const last = i === byPassage.length - 1;

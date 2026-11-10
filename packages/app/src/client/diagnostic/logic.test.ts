@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   answerPayload, answerQuality, branchRows, categoryTally, countCategories, toggleConfidence, hasPending, sourceLocationName, cardStepName, cardTwists, circledObject, eulReul, focusRationale, layerSentence, newTimer,
-  gradeShareText, recommendationLines, resultGroup, resultRow, devCategoryText, finishHint, gradeAtFraction, gradeGradient, gradeSentence, solveStats, startTimer, stepTendency, stopTimer, summaryLinkSentence, sumCounts, timerValues, twistTags, zOfPercentile,
+  gradeCurvePath, recommendationLines, resultGroup, resultRow, devCategoryText, finishHint, gradeAtFraction, gradeGradient, gradeSentence, solveStats, startTimer, stepTendency, stopTimer, summaryLinkSentence, sumCounts, timerValues, twistTags,
 } from './logic.js';
 import type { AnswerCategory, ReadingCounts, ResultItem, SummaryCardItem } from './types.js';
 
@@ -62,13 +62,16 @@ describe('지문 결과 줄(D-0218)', () => {
   });
 });
 
-describe('등급 문구와 위치 막대', () => {
-  it('등급의 전국 비율 문구', () => {
-    expect(gradeShareText(1)).toBe('1등급: 전국 상위 4% 이내'); expect(gradeShareText(2)).toBe('2등급: 전국 상위 4~11%');
-    expect(gradeShareText(8)).toBe('8등급: 전국 상위 89~96%'); expect(gradeShareText(9)).toBe('9등급: 전국 상위 96~100%');
-  });
-  it('백분위 → z', () => {
-    expect(zOfPercentile(50)).toBeCloseTo(0, 6); expect(zOfPercentile(84.1345)).toBeCloseTo(1, 2); expect(zOfPercentile(2.2750)).toBeCloseTo(-2, 2);
+describe('등급 띠 위 확률 곡선', () => {
+  it('등급 칸 가운데 높이 = 확률(최댓값이 맨 위), 사이는 두 값 안', () => {
+    const probs = [0.02, 0.1, 0.3, 0.4, 0.15, 0.03, 0, 0, 0];
+    const points = gradeCurvePath(probs, 900, 60, 4, 4).split(' ').map(part => part.slice(1).split(',').map(Number) as [number, number]);
+    expect(points).toHaveLength(1 + 8 * 4);
+    const at = (x: number) => points.find(([px]) => Math.abs(px - x) < 0.05)![1];
+    expect(at(50)).toBeCloseTo(60 - 56 * 0.02 / 0.4, 1);   // 1등급 가운데
+    expect(at(350)).toBeCloseTo(4, 1);                      // 4등급(최대) 가운데 = 맨 위
+    expect(at(850)).toBeCloseTo(60, 1);                     // 9등급(0) = 바닥
+    for (const [, py] of points) { expect(py).toBeGreaterThanOrEqual(4 - 1e-9); expect(py).toBeLessThanOrEqual(60 + 1e-9); }
   });
 });
 

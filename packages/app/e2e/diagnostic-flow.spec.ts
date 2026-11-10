@@ -192,6 +192,7 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await expect(page.getByTestId('grade-bar')).toHaveCSS('background-image', /linear-gradient/u);
   await page.getByTestId('grade-bar').hover({ position: { x: 5, y: 7 } });
   await expect(page.getByTestId('grade-tip')).toHaveText(/^1등급일 확률 \d+%$/u);
+  await expect(page.getByTestId('grade-curve')).toBeVisible();
   await noCodesOnScreen(page);   // 학생 화면에는 내부 범주가 없다
   await page.screenshot({ path: resolve(shots, '07-all-revealed-desktop.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -252,7 +253,8 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await expect(page.getByTestId('grade-bar')).toHaveCSS('background-image', /linear-gradient/u);
   await page.getByTestId('grade-bar').hover({ position: { x: 5, y: 7 } });
   await expect(page.getByTestId('grade-tip')).toHaveText(/^1등급일 확률 \d+%$/u);
-  await expect(page.getByTestId('grade-share')).toHaveText(/^[1-9]등급: 전국 상위 \d+(~\d+%| ?%)/u);
+  await expect(page.getByTestId('grade-curve').locator('path')).toHaveAttribute('d', /^M[\d.]+,[\d.]+( L[\d.]+,[\d.]+)+$/u);
+  await expect(position).not.toContainText('전국 분포에서의 위치');
   await expect(position.getByTestId('passage-row')).toHaveCount(4);
   await expect(position.getByTestId('passage-row').last()).toContainText(/^지문 1~\d[1-9]등급 · \d+%$/u);
   for (const row of await position.getByTestId('passage-row').all()) {

@@ -116,6 +116,25 @@ export function gradeSentence(probabilities: readonly number[], mode: number): s
   if (tied.length === 1) return `${mode}등급일 확률이 ${top}%로 가장 높아`;
   return `${tied.slice(0, -1).join('등급, ')}등급과 ${tied.at(-1)}등급일 확률이 각각 ${top}%로 가장 높아`;
 }
+/**
+ * 띠 위 확률 곡선(D-0225): 가로는 띠와 같은 등급 축(0~width), 등급 칸 가운데의 높이 = 그 등급 확률(최댓값이 맨 위),
+ * 이웃 가운데 사이는 띠 진하기와 같은 코사인 곡선으로 잇는다. SVG path `d`를 낸다(y는 아래로 증가, 바닥 = height).
+ */
+export function gradeCurvePath(probabilities: readonly number[], width = 900, height = 60, top = 4, steps = 12): string {
+  const max = Math.max(...probabilities, 1e-9);
+  const n = probabilities.length;
+  const y = (p: number) => height - (height - top) * p / max;
+  const point = (at: number, value: number) => `${(at / n * width).toFixed(1)},${value.toFixed(1)}`;
+  const parts = [`M${point(0.5, y(probabilities[0]!))}`];
+  for (let i = 0; i + 1 < n; i++) {
+    const from = y(probabilities[i]!); const to = y(probabilities[i + 1]!);
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps; const w = (1 - Math.cos(Math.PI * t)) / 2;
+      parts.push(`L${point(i + 0.5 + t, from + (to - from) * w)}`);
+    }
+  }
+  return parts.join(' ');
+}
 /** 띠 위 가로 위치(0~1) → 그 지점이 속한 정수 등급(1~9). */
 export function gradeAtFraction(fraction: number): number {
   return Math.min(9, Math.max(1, Math.floor(fraction * 9) + 1));
@@ -124,20 +143,6 @@ export function gradeAtFraction(fraction: number): number {
 // ---------- ① 내 위치 ----------
 
 export const POSITION_NOTE = '시간 제한 없이 근거를 쓰며 푼 결과를 수능 응시자 분포에 맞춰 환산해 본 추정치야. 문항 난이도는 메가스터디 이용자 정답률로 정했어.';
-/** 정규분포 역함수(Acklam 근사). 백분위(0~100) → z. 등급 띠·곡선의 가로 위치에 쓴다. */
-export function zOfPercentile(percentile: number): number {
-  const p = Math.min(0.9999, Math.max(0.0001, percentile / 100));
-  const a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.357751867269, -30.66479806614716, 2.506628277459239];
-  const b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572];
-  const c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
-  const d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416];
-  if (p < 0.02425) { const q = Math.sqrt(-2 * Math.log(p)); return (((((c[0]! * q + c[1]!) * q + c[2]!) * q + c[3]!) * q + c[4]!) * q + c[5]!) / ((((d[0]! * q + d[1]!) * q + d[2]!) * q + d[3]!) * q + 1); }
-  if (p > 1 - 0.02425) { const q = Math.sqrt(-2 * Math.log(1 - p)); return -(((((c[0]! * q + c[1]!) * q + c[2]!) * q + c[3]!) * q + c[4]!) * q + c[5]!) / ((((d[0]! * q + d[1]!) * q + d[2]!) * q + d[3]!) * q + 1); }
-  const q = p - 0.5; const r = q * q;
-  return (((((a[0]! * r + a[1]!) * r + a[2]!) * r + a[3]!) * r + a[4]!) * r + a[5]!) * q / (((((b[0]! * r + b[1]!) * r + b[2]!) * r + b[3]!) * r + b[4]!) * r + 1);
-}
-/** 등급 경계의 누적 백분위(아래에서부터). 9등급 0~4, …, 1등급 96~100. */
-export const GRADE_EDGES = [0, 4, 11, 23, 40, 60, 77, 89, 96, 100] as const;
 
 // ---------- ② 문제 풀이 결과 ----------
 
@@ -274,13 +279,6 @@ export function timerValues(timer: ItemTimer, now: number, omitted: boolean): { 
 
 // ---------- 결과 화면 보조 ----------
 
-/** 등급별 누적 상위 비율(%). 서버 위치 계산(`gradeOfPercentile`)과 같다. */
-const TOP = [4, 11, 23, 40, 60, 77, 89, 96];
-/** 등급의 전국 비율 문구(D-0222): "1등급: 전국 상위 4% 이내", "2등급: 전국 상위 4~11%", "9등급: 전국 상위 96~100%". */
-export function gradeShareText(grade: number): string {
-  const range = grade === 1 ? `${TOP[0]}% 이내` : `${TOP[grade - 2]}~${grade === 9 ? 100 : TOP[grade - 1]}%`;
-  return `${grade}등급: 전국 상위 ${range}`;
-}
 /** 칸 하나라도 분석 중이면 true(결과 화면이 다시 받아 온다). 문항 검토 문항의 판정 칸은 숨겨져 있으므로 보지 않는다. */
 export function hasPending(result: ResultView): boolean {
   return result.position.status === 'pending' || result.steps.status === 'pending' || result.reading.some(r => r.status === 'pending')
