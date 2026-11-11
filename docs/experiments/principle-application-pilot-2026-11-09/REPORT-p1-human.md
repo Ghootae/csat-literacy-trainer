@@ -1,5 +1,7 @@
 # 원리 적용형 생성 파일럿 P1 결과 (사람용)
 
+> **중단된 실험(2026-11-11, [D-0230](../../../memory/decisions/D-0230-p1-principle-application-generation-stopped.md)).** 상황이 변수·값을 직접 줘 개념으로 옮기는 단계가 빠지고 산수가 되며 a·b가 겹쳐 이 생성 방식을 중단했다. 법인 a만 판정(사용 가능, 품질 중하).
+
 상세는 [Desktop 보고서](./REPORT-p1-desktop.md)에 있다.
 
 ## 1. 개요

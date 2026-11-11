@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-11-10
+갱신: 2026-11-11
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -94,15 +94,19 @@
 │  │     v5.9·v5.10 시험 완료, 채택 후보 v5.10 하나, lab은 v5.8 보류     D-0214·D-0216
 │  │     질문 블라인드 판정 v5.9 4/5 우세 → 진단 기본값 v5.10 전환(11-10)   D-0216
 │  │     다음: 진단 실사용으로 관대 오판 관찰, 뒤에 lab을 진단 방식으로      Q-0044
-│  │     사용 메모 1~4 반영: 입력창 안 제출 확정·결론 버튼, 소거법은 차후   D-0226·Q-0047
-│  │     L 재측정 보류(사용자). 다음: 대기 줄이기 판단. 공개 전: 바뀐 내용 문장·추천 대응표·훈련 서비스 주소·복사 기준
+│  │     사용 메모 1~4 반영: 입력창 안 제출 확정·결론 버튼                  D-0226
+│  │     소거법: [소거법] 버튼·근거 불충분-소거법 기록 구현                   D-0228·Q-0047
+│  │     L 재측정 보류(사용자). 다음: 학생 관점 검토의 결과 표현·집계 논의(Q-0048), 대기 줄이기 판단. 공개 전: 바뀐 내용 문장·추천 대응표·훈련 서비스 주소·복사 기준
 │  └─✓ 기본 세트 E 16문항 자료 완성(판정 묶음·분석 골드·선지 연결 동결)     D-0201
 │
 ├─ 골드 기반 문항·지문 생성 실험 — 시중 AI 생성보다 정확한 문항, 기출 대체 지문    D-0206
 │  ├─✓ E1 문항 생성 — 닫음: 정확성 천장, 골드 이점 없음, 깊이 기출의 2/3     D-0206·D-0210
 │  ├─○ E2 지문 대체 생성 — 보류                                           D-0210
-│  └─● 원리 적용형 선지 생성 — 설계 시작, E1 v3 작동 방식 사례 정리         D-0210·CP-J
-│        다음: docs/reports/e1-v3-mechanism-walkthrough-2026-11-07.md 5절 논의 재개
+│  ├─✗ 원리 적용형 P1 — 중단된 실험: 상황이 값을 직접 줘 산수, a·b 겹침       D-0215·D-0230
+│  ├─● 깊은 〈보기〉 문항 — 출제자 시뮬레이션 규칙 + API 파이프라인          D-0229·D-0230
+│  │     골드 지도 탐색 → 선별 → 〈보기〉 조립 → 풀이 검증, 법인·인문 3지문 시험
+│  │     다음: 계산 양식 규칙 21개 사용자 확인, 과학 지문으로 확인
+│  └─○ 다른 유형 생성기·큰 표본 유형 범주화 — 난이도 축은 Q-0046          D-0220
 │
 └─○ 문항 골드 — 오프라인 감사·회귀용으로만 보관                              CP-C
 
@@ -161,6 +165,8 @@
 | CP-F | [K4 판정 재설계 논의](./checkpoints/2026-10-27-k4-judgment-redesign-discussion.md), [논의 메모](../docs/reports/REPORT-k4-v51-judgment-review-human.md) |
 | CP-D | [실모델 확인](./checkpoints/2026-10-11-v5-live-connection-test.md), [48개 세션 기록](./checkpoints/2026-10-12-v5-diverse-48-recorded.md) |
 | CP-J | [원리 적용형 설계 시작](./checkpoints/2026-11-07-principle-application-start.md), [E1 v3 작동 방식 사례](../docs/reports/e1-v3-mechanism-walkthrough-2026-11-07.md) |
+| D-0229 | [깊은 〈보기〉 문항 생성](./decisions/D-0229-deep-bogi-item-generation-gold-map-search.md), [법인 출제자 시뮬레이션](../docs/handoffs/2026-11-11-examiner-simulation-corporate-law-rules.md), [계산 양식 규칙](../docs/handoffs/2026-11-11-calculation-format-rules.md), [API 법인](../docs/experiments/gold-search-api-2026-11-11/KEY.md), [API 인문 3지문](../docs/experiments/gold-search-api-batch2-2026-11-11/REVIEW.md) |
+| D-0230 | [P1 중단](./decisions/D-0230-p1-principle-application-generation-stopped.md), [P1 결과](../docs/experiments/principle-application-pilot-2026-11-09/REPORT-p1-human.md), [검토본](../docs/experiments/principle-application-pilot-2026-11-09/REVIEW-p1-items.md) |
 | D-0216 | [v5.10 단일 후보·진단 먼저·lab 보류](./decisions/D-0216-v510-single-candidate-diagnostic-first-lab-held.md) |
 
 ## 갱신 규칙
