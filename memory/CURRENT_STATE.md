@@ -85,7 +85,7 @@
    - v5.9·v5.10 시험([보고](../docs/reports/REPORT-v59-v510-run-human.md)): v5.10 통과. 후보는 v5.10 하나([D-0216](./decisions/D-0216-v510-single-candidate-diagnostic-first-lab-held.md)): 질문 블라인드 판정 4/5 통과, **진단 기본값 v5.10 전환**(11-10, [기록](./checkpoints/2026-11-10-question-rules-blind-result.md)). lab은 v5.8 보류. 오디오 16 경계, Q-0045.
    - [학생 관점16문항 검토](../docs/experiments/diagnostic-student-review-2026-11-11/REPORT-student-review-human.md): 확인불가 칭찬·분모 명칭·함정 해석 문제 관측, 수정 미착수(Q-0048).
    - 진단 화면 M4 칠하기·B7 기록 위치 유지(11-09). 답은 입력창 안 버튼으로 확정([D-0226](./decisions/D-0226-diagnostic-answer-submit-buttons-conclusion.md)), 소거법은 [소거법] 버튼(D-0228).
-5. 골드 기반 문항 생성: E1 닫음(D-0210), E2 보류, 원리 적용형 P1 중단([D-0230](./decisions/D-0230-p1-principle-application-generation-stopped.md)). 새 갈래: 출제자 시뮬레이션 규칙(계산 양식 21개는 사용자 확인 전) + 골드 지도 탐색 → 선별 → 〈보기〉 조립 → 풀이 검증 API 파이프라인([D-0229](./decisions/D-0229-deep-bogi-item-generation-gold-map-search.md), 자료는 WORK_TREE).
+5. 골드 기반 문항 생성: E1 닫음(D-0210), E2 보류, 원리 적용형 P1 중단([D-0230](./decisions/D-0230-p1-principle-application-generation-stopped.md)). 확정([D-0231](./decisions/D-0231-deep-item-generation-api-pipeline-confirmed.md), promising): 출제자 시뮬레이션 규칙 → 골드 지도 탐색 → 선별 → 〈보기〉 조립 → 독립 풀이 검증 API 파이프라인. 계산 양식 규칙은 후보. 다음: 지시문 v3 → 새 과학 지문 → 스크립트화.
 
 ## 금지선
 
