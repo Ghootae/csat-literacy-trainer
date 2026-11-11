@@ -635,6 +635,47 @@ describe('confidence (인계 (3))', () => {
   });
 });
 
+describe('소거법 버튼 (D-0228)', () => {
+  it('소거법 정답은 판정 없이 WEAK_CORRECT, 리뷰 대상 아님(피드백 409), 메모와 elimination 표시가 남는다', async () => {
+    const h = harness();
+    await answerPassage(h, COG, { ...Object.fromEntries(COG.questionIds.map(q => [q, provided(correctChoice(q))])), [Q14]: omitted(correctChoice(Q14), 'ELIMINATION', '1번 아니고 3번 아님') });
+    await settle(h.c);
+    expect(selectionCalls(h, Q14)).toBe(0);
+    const items = h.c.summaryCard(h.id, COG.passageId).items;
+    const card = items.find(i => i.questionId === Q14)!;
+    expect(card).toMatchObject({ category: 'WEAK_CORRECT', reviewTarget: false, elimination: true, judging: false });
+    expect(items.filter(i => i.elimination)).toHaveLength(1);
+    expect(() => h.c.feedbackView(h.id, Q14)).toThrow(expect.objectContaining({ status: 409 }));
+    expect(h.store.load(h.id)!.items[Q14]!.first).toMatchObject({ confidence: 'ELIMINATION', eliminationNote: '1번 아니고 3번 아님' });
+    expect(h.store.events.filter(e => e.type === 'ITEM_CONFIRMED' && e.questionId === Q14).map(e => e['eliminationNote'])).toEqual(['1번 아니고 3번 아님']);
+    expect(h.c.result(h.id).items.find(i => i.questionId === Q14)).toMatchObject({ category: 'WEAK_CORRECT', elimination: true });
+    expect(h.c.devAnswers(h.id, COG.passageId).answers[Q14]).toMatchObject({ elimination: true, eliminationNote: '1번 아니고 3번 아님' });
+  });
+  it('소거법 오답은 WRONG이고 근거 요청 단계로 간다', async () => {
+    const h = harness();
+    await answerPassage(h, COG, { ...Object.fromEntries(COG.questionIds.map(q => [q, provided(correctChoice(q))])), [Q15]: omitted(wrongChoice(Q15), 'ELIMINATION') });
+    await settle(h.c);
+    expect(h.c.summaryCard(h.id, COG.passageId).items.find(i => i.questionId === Q15)).toMatchObject({ category: 'WRONG', reviewTarget: true, elimination: true });
+    expect(h.c.feedbackView(h.id, Q15).phase).toBe('AWAITING_RATIONALE');
+    expect(selectionCalls(h, Q15)).toBe(0);
+  });
+  it('eliminationNote는 ELIMINATION일 때만 허용하고(아니면 400), 메모 없이도 된다', async () => {
+    const h = harness(); h.c.start(h.id, COG.passageId, { summary: false });
+    for (const bad of [omitted(correctChoice(Q12), 'SURE', '메모'), omitted(correctChoice(Q12), 'UNSURE', '메모'), { ...provided(correctChoice(Q12)), eliminationNote: '메모' }])
+      expect(() => post(h, Q12, bad as never)).toThrow(expect.objectContaining({ status: 400 }));
+    expect(post(h, Q12, omitted(correctChoice(Q12), 'ELIMINATION'))).toEqual({ confirmed: true });
+    await settle(h.c);
+    expect(h.store.load(h.id)!.items[Q12]!.first!.eliminationNote ?? null).toBeNull();
+  });
+  it('옛 저장 파일(eliminationNote 없음)은 elimination=false로 읽힌다', async () => {
+    const h = harness();
+    await answerPassage(h, COG, { ...Object.fromEntries(COG.questionIds.map(q => [q, provided(correctChoice(q))])), [Q14]: omitted(correctChoice(Q14), 'UNSURE') });
+    await settle(h.c);
+    expect(h.c.summaryCard(h.id, COG.passageId).items.every(i => !i.elimination)).toBe(true);
+    expect(h.c.devAnswers(h.id, COG.passageId).answers[Q14]).toMatchObject({ eliminationNote: null, elimination: false });
+  });
+});
+
 describe('문항별 피드백 열기 (인계 (7))', () => {
   /** 문항별로 평가 호출을 붙잡아 두는 가짜 평가기. */
   function gatedFake(behaviors: (q: string, index: number) => Behavior, holdAfter: Record<string, number> = {}) {

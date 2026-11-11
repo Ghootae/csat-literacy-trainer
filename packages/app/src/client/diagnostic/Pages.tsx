@@ -48,7 +48,7 @@ export function MidPage({ title, number, total, card, dev, last, busy, error, re
                   onClick={() => { if (!item.revealed) reveal(item.questionId); }}>
                   <b>문제 {item.questionNumber}</b><small>{analyzing ? '… 분석 중' : RESULT_GROUP_MARK[group]}</small></button>
                 {row ? <>
-                  <p className="diag-rowtext" data-testid={`desc-${item.questionNumber}`}>{row.description}{dev && <span className="diag-devtag"> {devCategoryText(item.category)}</span>}</p>
+                  <p className="diag-rowtext" data-testid={`desc-${item.questionNumber}`}>{row.description}{dev && <span className="diag-devtag"> {devCategoryText(item.category, item.elimination)}</span>}</p>
                   <button type="button" className="diag-reviewbtn" data-testid={`review-${item.questionNumber}`} data-done={item.reviewDone} disabled={!row.button.enabled} onClick={() => review(item.questionId)}>{row.button.label}</button></>
                   : <><p className="diag-rowtext diag-rowhidden" data-testid={`desc-${item.questionNumber}`}>결과는 가려져 있어</p><span className="diag-reviewbtn diag-reviewhidden" aria-hidden="true" /></>}
               </li>;

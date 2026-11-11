@@ -9,8 +9,8 @@ import type { FeedbackMessage } from '../../shared/problem-feedback.js';
 
 export type JobStatus = 'NONE' | 'PENDING' | 'READY' | 'FAILED';
 /** 근거를 생략한 응답의 확신 구분. 옛 파일에는 없을 수 있다(없으면 SURE로 본다). */
-export type AnswerConfidence = 'SURE' | 'UNSURE';
-export interface ItemAnswer { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null; confidence?: AnswerConfidence | null }
+export type AnswerConfidence = 'SURE' | 'UNSURE' | 'ELIMINATION';
+export interface ItemAnswer { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null; confidence?: AnswerConfidence | null; eliminationNote?: string | null }
 export interface DiagnosticParticipant {
   schemaVersion: 'sns-diagnostic-participant-v1';
   participantId: string;

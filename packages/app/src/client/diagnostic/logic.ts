@@ -76,7 +76,7 @@ export function resultRow(item: SummaryCardItem): ResultRow {
   }
 }
 /** 개발자 모드(`?dev=1`)에서 줄 끝에 붙이는 내부 범주 표기. */
-export const devCategoryText = (category: AnswerCategory): string => `(${category} · ${CATEGORY_NAME[category]})`;
+export const devCategoryText = (category: AnswerCategory, elimination = false): string => `(${category} · ${CATEGORY_NAME[category]}${elimination && category === 'WEAK_CORRECT' ? '-소거법' : ''})`;
 
 /** "다음 지문" 버튼이 꺼져 있을 때 이유 한 줄. 켜져 있으면 null. */
 export function finishHint(card: Pick<SummaryCardView, 'canFinish' | 'judging' | 'items'>): string | null {
@@ -197,9 +197,10 @@ export function answerQuality(item: Pick<ResultItem, 'category'>, tiers: Quality
     default: return null;
   }
 }
-/** 답 저장 요청의 근거·확신 부분. 근거 미입력 버튼의 확신이 있으면 근거 없음 + 그 확신 값, 아니면 근거 + null. */
-export function answerPayload(confidence: Confidence | null, text: string): { rationale: { mode: 'OMITTED' } | { mode: 'PROVIDED'; text: string }; confidence: Confidence | null } {
-  return confidence === null ? { rationale: { mode: 'PROVIDED', text }, confidence: null } : { rationale: { mode: 'OMITTED' }, confidence };
+/** 답 저장 요청의 근거·확신 부분. 근거 미입력 버튼의 확신이 있으면 근거 없음 + 그 확신 값(소거법은 입력창 글을 메모로), 아니면 근거 + null. */
+export function answerPayload(confidence: Confidence | null, text: string, eliminationNote: string | null = null): { rationale: { mode: 'OMITTED' } | { mode: 'PROVIDED'; text: string }; confidence: Confidence | null; eliminationNote?: string | null } {
+  if (confidence === null) return { rationale: { mode: 'PROVIDED', text }, confidence: null };
+  return confidence === 'ELIMINATION' ? { rationale: { mode: 'OMITTED' }, confidence, eliminationNote } : { rationale: { mode: 'OMITTED' }, confidence };
 }
 export const percentPair = (pair: readonly [number, number]): string => `${pair[0]}% · ${pair[1]}%`;
 export const MEGASTUDY_NOTE = '메가스터디 이용자 기준 · 화법과작문 · 언어와매체';

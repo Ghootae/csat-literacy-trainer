@@ -41,8 +41,10 @@ export const DiagnosticItemRequestSchema = z.object({
   rationale: FeedbackRationaleSchema,
   solveMs: z.number().int().nonnegative(),
   rationaleMs: z.number().int().nonnegative().nullable(),
-  /** 근거를 생략하면 SURE·UNSURE 필수, 근거를 쓰면 null(없으면 null). */
-  confidence: z.enum(['SURE', 'UNSURE']).nullable().default(null),
+  /** 근거를 생략하면 SURE·UNSURE·ELIMINATION 필수, 근거를 쓰면 null(없으면 null). */
+  confidence: z.enum(['SURE', 'UNSURE', 'ELIMINATION']).nullable().default(null),
+  /** [소거법] 버튼을 누를 때 입력창에 있던 글(기록 전용, D-0228). ELIMINATION일 때만 허용. */
+  eliminationNote: z.string().trim().min(1).nullable().default(null),
 }).strict();
 export const DiagnosticStartSchema = z.object({ summary: z.boolean() }).strict();
 export const DiagnosticFeedbackRequestSchema = FeedbackRequestSchema;
@@ -280,8 +282,9 @@ export class DiagnosticController {
     if (p.items[questionId]!.first !== null) fail(409, '이미 낸 답은 고칠 수 없습니다.');
     if (!this.bundle(questionId).source.choices.some(c => c.choiceId === body.choiceId)) fail(400, '존재하지 않는 선지입니다.');
     if (body.rationale.mode === 'OMITTED' && body.rationaleMs !== null) fail(400, '근거를 생략하면 rationaleMs는 null이어야 합니다.');
-    if (body.rationale.mode === 'OMITTED' && body.confidence === null) fail(400, '근거를 생략하면 confidence(SURE·UNSURE)가 필요합니다.');
+    if (body.rationale.mode === 'OMITTED' && body.confidence === null) fail(400, '근거를 생략하면 confidence(SURE·UNSURE·ELIMINATION)가 필요합니다.');
     if (body.rationale.mode === 'PROVIDED' && body.confidence !== null) fail(400, '근거를 쓰면 confidence는 null이어야 합니다.');
+    if (body.eliminationNote !== null && body.confidence !== 'ELIMINATION') fail(400, 'eliminationNote는 confidence가 ELIMINATION일 때만 보낼 수 있습니다.');
     return { passage, body };
   }
 
@@ -293,7 +296,7 @@ export class DiagnosticController {
     const revisionOfDraft = item.draft ? (item.draft as { revision?: number }).revision! + 1 : 0;
     item.draft = { ...body, savedAt: new Date().toISOString(), revision: revisionOfDraft } as ItemState['draft'];
     this.event('ITEM_SUBMITTED', p, { questionId, passageId: passage.passageId, choiceId: body.choiceId, rationale: body.rationale,
-      solveMs: body.solveMs, rationaleMs: body.rationaleMs, confidence: body.confidence, revisionOfDraft });
+      solveMs: body.solveMs, rationaleMs: body.rationaleMs, confidence: body.confidence, eliminationNote: body.eliminationNote, revisionOfDraft });
     this.requestSave(p);
     return { saved: true };
   }
@@ -306,7 +309,7 @@ export class DiagnosticController {
     if (earlier.some(id => p.items[id]!.first === null)) fail(409, '앞 문항의 답을 먼저 내야 합니다.');
     this.confirmOne(p, questionId, body, new Date().toISOString());
     this.event('ITEM_CONFIRMED', p, { questionId, passageId: passage.passageId, choiceId: body.choiceId, rationale: body.rationale,
-      solveMs: body.solveMs, rationaleMs: body.rationaleMs, confidence: body.confidence });
+      solveMs: body.solveMs, rationaleMs: body.rationaleMs, confidence: body.confidence, eliminationNote: body.eliminationNote });
     this.requestSave(p);
     return { confirmed: true };
   }
@@ -376,7 +379,7 @@ export class DiagnosticController {
       const category = this.answerCategory(item); const pending = item.firstJudgment.status === 'PENDING'; if (pending) judging++;
       const target = this.reviewTarget(item, category);
       const meta = this.set.items[id]!; const chosen = item.session!.source.choices.find(c => c.choiceId === item.first!.choiceId)!;
-      return { questionId: id, questionNumber: meta.questionNumber, correct: isCorrect, rationale: item.first!.rationale.mode, category,
+      return { questionId: id, questionNumber: meta.questionNumber, correct: isCorrect, rationale: item.first!.rationale.mode, category, elimination: item.first!.confidence === 'ELIMINATION',
         megastudy: { correctRate: meta.megastudy.correctRate,
           chosenPercents: [meta.megastudy.choicePercents[0][chosen.position - 1]!, meta.megastudy.choicePercents[1][chosen.position - 1]!] as [number, number] },
         judging: pending, reviewTarget: target, reviewDone: target && this.feedback.get(item.session!.sessionId).phase === 'COMPLETED', revealed: revealed.has(id) };
@@ -496,7 +499,7 @@ export class DiagnosticController {
     const p = this.require(participantId); const passage = this.passage(passageId);
     const answers = Object.fromEntries(passage.questionIds.map(id => {
       const item = p.items[id]!; const answer = item.first ?? item.draft;
-      return [id, answer ? { source: item.first ? 'first' as const : 'draft' as const, choiceId: answer.choiceId, rationale: answer.rationale, confidence: answer.confidence ?? null } : null];
+      return [id, answer ? { source: item.first ? 'first' as const : 'draft' as const, choiceId: answer.choiceId, rationale: answer.rationale, confidence: answer.confidence ?? null, eliminationNote: answer.eliminationNote ?? null, elimination: answer.confidence === 'ELIMINATION' } : null];
     }));
     return { questions: this.questions(passage), answers };
   }
@@ -819,6 +822,7 @@ export class DiagnosticController {
   private answerCategory(item: ItemState): AnswerCategory {
     if (!this.isCorrect(item)) return 'WRONG';
     const first = item.first!; const judgment = item.firstJudgment;
+    if (first.rationale.mode === 'OMITTED' && first.confidence === 'ELIMINATION') return 'WEAK_CORRECT';
     if (first.rationale.mode === 'OMITTED') return (first.confidence ?? 'SURE') === 'UNSURE' ? 'UNSURE_CORRECT' : 'SURE_CORRECT';
     if (judgment.status !== 'READY' && judgment.status !== 'FAILED') return 'PENDING';
     if (judgment.status === 'FAILED' || (judgment.boundary !== null && judgment.boundary !== 'NONE')) return 'CHECKING';
@@ -912,7 +916,7 @@ export class DiagnosticController {
       correctRate: meta.megastudy.correctRate };
     const afterFeedback = { corrected: session.correctionSucceeded, skipped: session.result?.skipped === true };
     const base = { questionId, passageId: passage.passageId, questionNumber: meta.questionNumber, chosenPosition: chosen.position,
-      correct, rationale: first.rationale.mode, category: this.answerCategory(item), megastudy, afterFeedback };
+      correct, rationale: first.rationale.mode, category: this.answerCategory(item), elimination: first.confidence === 'ELIMINATION', megastudy, afterFeedback };
     if (review) {
       return { ...base, review: true as const, answerPosition: null, judgment: { status: 'pending' as Box, contentAssessment: null, boundary: null },
         twist: null, thoughtDiagnosis: null, evidence: null, summaryLink: null };

@@ -120,4 +120,4 @@ export const bundleOf = (questionId: string) => loadDiagnosticBundle(questionId)
 export const correctChoice = (questionId: string) => bundleOf(questionId).answerChoiceId;
 export const wrongChoice = (questionId: string) => bundleOf(questionId).choices.find(c => c.choiceId !== correctChoice(questionId))!.choiceId;
 export const provided = (choiceId: string) => ({ choiceId, rationale: { mode: 'PROVIDED', text: RATIONALE }, solveMs: 1000, rationaleMs: 2000, confidence: null });
-export const omitted = (choiceId: string, confidence: 'SURE' | 'UNSURE' = 'SURE') => ({ choiceId, rationale: { mode: 'OMITTED' }, solveMs: 1000, rationaleMs: null, confidence });
+export const omitted = (choiceId: string, confidence: 'SURE' | 'UNSURE' | 'ELIMINATION' = 'SURE', eliminationNote?: string) => ({ choiceId, rationale: { mode: 'OMITTED' }, solveMs: 1000, rationaleMs: null, confidence, ...(eliminationNote === undefined ? {} : { eliminationNote }) });

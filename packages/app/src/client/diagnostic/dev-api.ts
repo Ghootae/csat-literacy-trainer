@@ -18,7 +18,7 @@ export interface DevMapPassage {
 export interface DevMapView { passages: DevMapPassage[]; resultAvailable: boolean }
 export interface DevAnswersView {
   questions: QuestionView[];
-  answers: Record<string, { source: 'first' | 'draft'; choiceId: string; rationale: FeedbackRationale; confidence: Confidence | null } | null>;
+  answers: Record<string, { source: 'first' | 'draft'; choiceId: string; rationale: FeedbackRationale; confidence: Confidence | null; eliminationNote: string | null; elimination: boolean } | null>;
 }
 
 const devPath = (id: string, path: string) => at(id, `/dev/${path}`);

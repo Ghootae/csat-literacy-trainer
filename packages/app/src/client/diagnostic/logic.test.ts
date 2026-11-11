@@ -44,6 +44,8 @@ describe('지문 결과 줄(D-0218)', () => {
   });
   it('개발자 표기와 다음 지문이 꺼진 이유, 등급 띠 진하기', () => {
     expect(devCategoryText('SUPPORTED_CORRECT')).toBe('(SUPPORTED_CORRECT · 근거 명확 정답)');
+    expect(devCategoryText('WEAK_CORRECT', true)).toBe('(WEAK_CORRECT · 근거 약한 정답-소거법)');
+    expect(devCategoryText('WRONG', true)).toBe('(WRONG · 오답)');
     const items = [card({ reviewTarget: true }), card({ reviewTarget: true, reviewDone: true })];
     expect(finishHint({ canFinish: false, judging: 0, items })).toBe('다시 검토할 문제가 1개 남았어.');
     expect(finishHint({ canFinish: false, judging: 1, items })).toBe('분석이 끝나면 넘어갈 수 있어.');
@@ -94,6 +96,8 @@ describe('② 숫자·단계·함정', () => {
     expect(answerPayload('UNSURE', '무시되는 글')).toEqual({ rationale: { mode: 'OMITTED' }, confidence: 'UNSURE' });
     expect(answerPayload('SURE', '')).toEqual({ rationale: { mode: 'OMITTED' }, confidence: 'SURE' });
     expect(answerPayload(null, '이유')).toEqual({ rationale: { mode: 'PROVIDED', text: '이유' }, confidence: null });
+    expect(answerPayload('ELIMINATION', '', '메모')).toEqual({ rationale: { mode: 'OMITTED' }, confidence: 'ELIMINATION', eliminationNote: '메모' });
+    expect(answerPayload('ELIMINATION', '')).toEqual({ rationale: { mode: 'OMITTED' }, confidence: 'ELIMINATION', eliminationNote: null });
   });
   it('단계 경향: 가장 많은 단계를 잇고, denominator 0이면 숨긴다', () => {
     expect(stepTendency({ denominator: 5, counts: { S4_INTERPRET: 3, S2_CHOICE: 1, NONE: 1 } })?.sentence).toBe('근거를 살펴본 5문항 중 3개가 근거 해석 단계에서 어긋났어.');

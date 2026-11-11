@@ -53,8 +53,9 @@ export function AnswerScreen({ questions, drafts, confirmed: initialConfirmed, s
     const a = answers[id];
     if (!a || a.choiceId === null || (confidence === null && a.text.trim() === '')) return null;
     const text = confidence !== null ? '' : toSubmittedText(a.text, markRef(id).current).trim();
+    const note = confidence === 'ELIMINATION' ? (toSubmittedText(a.text, markRef(id).current).trim() || null) : null;
     const { solveMs, rationaleMs } = timerValues(timer(id), Date.now(), confidence !== null);
-    return { request: { choiceId: a.choiceId, ...answerPayload(confidence, text), solveMs, rationaleMs }, key: `${a.choiceId}|${confidence ?? ''}|${text}` };
+    return { request: { choiceId: a.choiceId, ...answerPayload(confidence, text, note), solveMs, rationaleMs }, key: `${a.choiceId}|${confidence ?? ''}|${text}` };
   }
   /** 임시 저장. 확정한 문항에는 하지 않는다. */
   async function persist(id: string): Promise<void> {
@@ -126,6 +127,7 @@ export function AnswerScreen({ questions, drafts, confirmed: initialConfirmed, s
               <button type="button" className="primary" data-rationale-submit="" disabled={busy || locked || !isValid(answer)} onClick={() => void confirmCurrent(null)}>제출</button>
               <button type="button" disabled={busy || locked || !answer.choiceId} onClick={() => void confirmCurrent('SURE')}>근거 미입력(확실)</button>
               <button type="button" disabled={busy || locked || !answer.choiceId} onClick={() => void confirmCurrent('UNSURE')}>근거 미입력(잘 모르겠음)</button>
+              <button type="button" disabled={busy || locked || !answer.choiceId} onClick={() => void confirmCurrent('ELIMINATION')}>소거법</button>
             </div>
           </div>
           <RationaleSymbolBar key={qid} value={answer.text} onChange={text => update({ text })} input={box} marks={markRef(qid)} disabled={busy || locked}>

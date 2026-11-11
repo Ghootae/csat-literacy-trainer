@@ -17,19 +17,21 @@ export interface ProgressView {
   position: PositionView | null;
 }
 export interface QuestionView { questionId: string; questionNumber: number; content: ProblemContentView }
-/** 근거를 생략한 응답의 확신 구분. 두 버튼("근거 미입력(확실)" / "근거 미입력(잘 모르겠음)")에 대응한다. */
-export type Confidence = 'SURE' | 'UNSURE';
+/** 근거를 생략한 응답의 확신 구분. 세 버튼("근거 미입력(확실)" / "근거 미입력(잘 모르겠음)" / "소거법")에 대응한다. */
+export type Confidence = 'SURE' | 'UNSURE' | 'ELIMINATION';
 /** 첫 응답 기준 범주(서버 `AnswerCategory`와 같다). 정답의 질 3단계는 SUPPORTED_CORRECT·WEAK_CORRECT·ERROR_CORRECT. */
 export type AnswerCategory = 'WRONG' | 'SURE_CORRECT' | 'UNSURE_CORRECT' | 'PENDING' | 'CHECKING' | 'UNVERIFIED' | 'ERROR_CORRECT' | 'SUPPORTED_CORRECT' | 'WEAK_CORRECT';
 export type QualityTiers = 3 | 2;
-export interface Draft { choiceId: string; rationale: FeedbackRationale; confidence: Confidence | null }
+export interface Draft { choiceId: string; rationale: FeedbackRationale; confidence: Confidence | null; eliminationNote?: string | null }
 /** `drafts[qid]`는 확정한 문항이면 확정한 답, 아니면 임시 답. `confirmed`는 확정 여부(D-0221). */
 export interface QuestionsView { questions: QuestionView[]; confirmed: Record<string, boolean>; drafts: Record<string, Draft | null> }
-export interface ItemRequest { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null; confidence: Confidence | null }
+export interface ItemRequest { choiceId: string; rationale: FeedbackRationale; solveMs: number; rationaleMs: number | null; confidence: Confidence | null; eliminationNote?: string | null }
 
 /** 지문 결과 화면 자료(D-0218). 정오·범주는 바로 오고(문제 버튼 색), 등급(`position`)은 모든 문항 결과를 공개한 뒤에만 온다. */
 export interface SummaryCardItem {
   questionId: string; questionNumber: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; category: AnswerCategory;
+  /** 첫 응답이 [소거법] 버튼(D-0228). 개발자 모드에서만 보인다. */
+  elimination: boolean;
   megastudy: { correctRate: [number, number]; chosenPercents: [number, number] };
   /** 첫 선택 판정이 진행 중이다. */
   judging: boolean;
@@ -48,7 +50,7 @@ type Box = 'pending' | 'ready' | 'failed';
 export interface ResultTwist { twistType: string; twistDetail: string; studentText: string | null }
 export interface ResultSummaryLink { status: Box; kind: 'MISREAD' | 'MISSED' | 'CAUGHT'; paragraphs: number[]; paragraphLabel: string }
 export interface ResultItem {
-  questionId: string; passageId: string; questionNumber: number; chosenPosition: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; category: AnswerCategory;
+  questionId: string; passageId: string; questionNumber: number; chosenPosition: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; category: AnswerCategory; elimination: boolean;
   megastudy: { chosenPercents: [number, number]; correctRate: [number, number] };
   afterFeedback: { corrected: boolean; skipped: boolean };
   review: boolean;

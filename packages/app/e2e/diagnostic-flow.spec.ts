@@ -112,19 +112,20 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toHaveCount(0);   // 마지막 문항이 아니면 없다
   await expect(page.getByRole('button', { name: '이전 문항' })).toBeDisabled();            // 첫 문항
   await expect(page.getByRole('button', { name: '다음 문항' })).toBeDisabled();            // 제출 전
-  for (const name of ['제출', '근거 미입력(확실)', '근거 미입력(잘 모르겠음)']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();   // 선지를 고르기 전
+  for (const name of ['제출', '근거 미입력(확실)', '근거 미입력(잘 모르겠음)', '소거법']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();   // 선지를 고르기 전
   await expect(page.getByRole('button', { name: '결론', exact: true })).toBeDisabled();
   await page.getByRole('radio', { name: `${circled(correctChoice(Q12))}번 선지` }).click();
   await expect(page.getByRole('button', { name: '제출', exact: true })).toBeDisabled();   // 글이 비면 제출 못 한다
   await expect(page.getByRole('button', { name: '근거 미입력(확실)', exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: '근거 미입력(잘 모르겠음)', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '소거법', exact: true })).toBeEnabled();   // 근거 미입력 버튼과 같은 활성 조건
   await page.getByRole('button', { name: '결론', exact: true }).click();                   // 결론 버튼이 고른 선지 문장을 붙인다
   await expect(page.locator('#diag-rationale')).toHaveValue(/^따라서 ①번은 옳(음|지 않음)$/u);
   await page.locator('#diag-rationale').fill('');
   await page.screenshot({ path: resolve(shots, '03a-answer-before-submit-desktop.png'), fullPage: true });
   await answer(page, correctChoice(Q12), '첫 문항의 이유를 적었다.');
   await expect(page.getByRole('button', { name: '이 지문 답 다 냈어' })).toHaveCount(0);
-  for (const name of ['제출', '근거 미입력(확실)', '근거 미입력(잘 모르겠음)']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();   // 확정한 문항
+  for (const name of ['제출', '근거 미입력(확실)', '근거 미입력(잘 모르겠음)', '소거법']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();   // 확정한 문항
   await expect(page.getByText('이미 낸 답이야')).toBeVisible();
   await page.screenshot({ path: resolve(shots, '03a2-answer-confirmed-desktop.png'), fullPage: true });
   await page.getByRole('button', { name: '다음 문항' }).click();
@@ -146,7 +147,7 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await expect(page.getByRole('radio', { name: `${circled(wrongChoice(Q13))}번 선지` })).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByRole('radio', { name: `${circled(wrongChoice(Q13))}번 선지` })).toBeDisabled();
   await expect(page.locator('#diag-rationale')).toBeDisabled(); await expect(page.locator('#diag-rationale')).toHaveValue('둘째 문항의 이유를 적었다.');
-  for (const name of ['제출', '근거 미입력(확실)', '근거 미입력(잘 모르겠음)']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
+  for (const name of ['제출', '근거 미입력(확실)', '근거 미입력(잘 모르겠음)', '소거법']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
   await page.screenshot({ path: resolve(shots, '03b-answer-readonly-desktop.png'), fullPage: true });
   await page.getByRole('button', { name: '다음 문항' }).click();   // 확정한 문항에서는 이동만, 지금 차례 문항까지
 
@@ -159,7 +160,12 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await expect(page.getByRole('radio', { name: `${circled(correctChoice(Q12))}번 선지` })).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('#diag-rationale')).toHaveValue('첫 문항의 이유를 적었다.'); await expect(page.locator('#diag-rationale')).toBeDisabled();
   await page.getByRole('button', { name: '다음 문항' }).click(); await page.getByRole('button', { name: '다음 문항' }).click();
-  await answer(page, correctChoice(Q14), null);
+  await page.getByRole('radio', { name: `${circled(correctChoice(Q14))}번 선지` }).click();   // 14번은 [소거법]으로 확정(입력창 글은 메모로만 남는다)
+  await page.locator('#diag-rationale').fill('나머지 선지를 지워서 골랐다.');
+  await page.screenshot({ path: resolve(shots, '03e-answer-four-buttons-desktop.png'), fullPage: true });
+  await page.getByRole('button', { name: '소거법', exact: true }).click();
+  await expect(page.getByText('이미 낸 답이야')).toBeVisible();
+  for (const name of ['제출', '근거 미입력(확실)', '근거 미입력(잘 모르겠음)', '소거법']) await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
   await page.getByRole('button', { name: '다음 문항' }).click();
   await answer(page, wrongChoice(Q15), null);
   await page.getByRole('button', { name: '다음 문항' }).click();
@@ -200,7 +206,7 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   for (const n of [13, 14, 15]) await page.getByTestId(`qbtn-${n}`).click();
   await expect(page.getByTestId('desc-13')).toContainText('오답(같은 선지를 고른 비율');
   await expect(page.getByTestId('review-13')).toBeEnabled(); await expect(page.getByTestId('review-13')).toHaveText('아깝지만 정답이 아니야. 다시 검토해 보자.');
-  await expect(page.getByTestId('desc-14')).toContainText('확신을 갖고 풀었어'); await expect(page.getByTestId('review-14')).toBeDisabled();
+  await expect(page.getByTestId('desc-14')).toContainText('근거에 문제가 없었어'); expect(await page.getByTestId('desc-14').innerText()).not.toContain('소거법'); await expect(page.getByTestId('review-14')).toBeDisabled();
   await expect(page.getByTestId('review-15')).toBeEnabled();
   await expect(page.getByTestId('desc-16')).toHaveText('결과는 가려져 있어');
   await expect(page.getByTestId('grade-text')).toHaveText('나의 현재 등급은?');   // 한 문항이라도 가려져 있으면 등급은 아직이다
@@ -229,6 +235,7 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await page.getByTestId(`dev-cell-${COG.passageId}:mid`).click();
   await expect(page.getByTestId('desc-12')).toContainText('(SUPPORTED_CORRECT', { timeout: 20_000 });
   await expect(page.getByTestId('desc-13')).toContainText('(WRONG');
+  await expect(page.getByTestId('desc-14')).toContainText('(WEAK_CORRECT · 근거 약한 정답-소거법)');
   await expect(page.getByTestId(`dev-cell-${COG.passageId}:q:${Q13}`)).toBeVisible(); await expect(page.getByTestId(`dev-cell-${COG.passageId}:q:${Q15}`)).toBeVisible();
   for (const q of [Q12, Q14, Q16]) await expect(page.getByTestId(`dev-cell-${COG.passageId}:q:${q}`)).toHaveCount(0);
   await page.screenshot({ path: resolve(shots, '09-dev-result-desktop.png'), fullPage: true });

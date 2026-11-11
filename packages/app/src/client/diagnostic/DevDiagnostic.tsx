@@ -31,7 +31,7 @@ function AnswersReadOnly({ data }: { data: DevAnswersView }): React.JSX.Element 
   const [index, setIndex] = useState(0);
   const question = data.questions[index]!; const answer = data.answers[question.questionId] ?? null;
   const pane = paneFromContent(question.content);
-  const rationale = !answer ? '답이 없어(건너뜀)' : answer.rationale.mode === 'PROVIDED' ? answer.rationale.text : `근거 미제출 · ${answer.confidence === 'UNSURE' ? '근거 미입력(잘 모르겠음)' : '근거 미입력(확실)'}`;
+  const rationale = !answer ? '답이 없어(건너뜀)' : answer.rationale.mode === 'PROVIDED' ? answer.rationale.text : answer.confidence === 'ELIMINATION' ? `근거 미제출 · 소거법${answer.eliminationNote ? ` · 메모: ${answer.eliminationNote}` : ''}` : `근거 미제출 · ${answer.confidence === 'UNSURE' ? '근거 미입력(잘 모르겠음)' : '근거 미입력(확실)'}`;
   return <main className="reading-workbench problem-lab-workbench diag-workbench" data-pane="problem">
     <header className="workbench-header"><div className="lab-strip-lead"><h1 className="diag-header-title">{question.content.title}</h1></div>
       <div className="workbench-actions"><span>문항 {index + 1} / {data.questions.length} · 읽기 전용</span></div></header>
