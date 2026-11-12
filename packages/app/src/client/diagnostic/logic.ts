@@ -149,11 +149,13 @@ export const POSITION_NOTE = '시간 제한 없이 근거를 쓰며 푼 결과�
 
 // ---------- ② 문제 풀이 결과 ----------
 
-export interface SolveStats { correct: number; total: number; accurate: number; qualityDenominator: number; sure: number; unsure: number; unverified: number }
-/** 숫자 칸. 근거까지 정확한 정답(2단계면 근거가 확인되는 정답) / 근거를 쓴 정답(범주 1·2·3)과, 분모에 넣지 않는 범주 4·5·`UNVERIFIED` 개수. */
+export interface SolveStats { correct: number; total: number; accurate: number; qualityDenominator: number; sure: number; unsure: number; unverified: number; eliminated: number }
+/** 숫자 칸. 근거까지 정확한 정답(2단계면 근거가 확인되는 정답) / 근거를 판정한 정답(범주 1·2·3)과, 분모에 넣지 않는 범주 4·5·`UNVERIFIED`·소거법 정답 개수. 소거법 정답은 근거를 쓰지 않았으므로 분자·분모에서 빼고 따로 센다(D-0228 추가 2). */
 export function solveStats(items: readonly ResultItem[], total = 16, tiers: QualityTiers = 3): SolveStats {
-  const t = categoryTally(countCategories(items), tiers);
-  return { correct: items.filter(item => item.correct).length, total, accurate: t.accurate, qualityDenominator: t.denominator, sure: t.sure, unsure: t.unsure, unverified: t.unverified };
+  const isEliminated = (item: ResultItem) => item.category === 'WEAK_CORRECT' && item.elimination;
+  const t = categoryTally(countCategories(items.filter(item => !isEliminated(item))), tiers);
+  return { correct: items.filter(item => item.correct).length, total, accurate: t.accurate, qualityDenominator: t.denominator, sure: t.sure, unsure: t.unsure, unverified: t.unverified,
+    eliminated: items.filter(isEliminated).length };
 }
 
 export interface StepTendency { sentence: string; bars: { code: string; name: string; count: number; ratio: number }[] }

@@ -85,8 +85,13 @@ describe('② 숫자·단계·함정', () => {
     const items = [item(), item({ category: 'WEAK_CORRECT' }), item({ category: 'ERROR_CORRECT' }), item({ category: 'SURE_CORRECT', rationale: 'OMITTED' }),
       item({ category: 'UNSURE_CORRECT', rationale: 'OMITTED' }), item({ category: 'UNVERIFIED' }), item({ category: 'CHECKING' }), item({ category: 'PENDING' }),
       item({ category: 'WRONG', correct: false }), item({ category: 'WRONG', correct: false, review: true })];
-    expect(solveStats(items, 16)).toEqual({ correct: 8, total: 16, accurate: 1, qualityDenominator: 3, sure: 1, unsure: 1, unverified: 1 });
-    expect(solveStats(items, 16, 2)).toEqual({ correct: 8, total: 16, accurate: 2, qualityDenominator: 3, sure: 1, unsure: 1, unverified: 1 });
+    expect(solveStats(items, 16)).toEqual({ correct: 8, total: 16, accurate: 1, qualityDenominator: 3, sure: 1, unsure: 1, unverified: 1, eliminated: 0 });
+    expect(solveStats(items, 16, 2)).toEqual({ correct: 8, total: 16, accurate: 2, qualityDenominator: 3, sure: 1, unsure: 1, unverified: 1, eliminated: 0 });
+  });
+  it('소거법 정답은 분자·분모에서 빼고 따로 센다', () => {
+    const items = [item(), item({ category: 'WEAK_CORRECT' }), item({ category: 'WEAK_CORRECT', elimination: true, rationale: 'OMITTED' })];
+    expect(solveStats(items, 16)).toMatchObject({ accurate: 1, qualityDenominator: 2, eliminated: 1 });
+    expect(solveStats(items, 16, 2)).toMatchObject({ accurate: 2, qualityDenominator: 2, eliminated: 1 });
   });
   it('2단계 표시: 범주 1·2는 같은 칸으로 합치고 범주 3은 따로 둔다', () => {
     const tally = (tiers: 3 | 2) => categoryTally(counts({ SUPPORTED_CORRECT: 2, WEAK_CORRECT: 3, ERROR_CORRECT: 1 }), tiers);

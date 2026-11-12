@@ -303,11 +303,11 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await page.getByRole('button', { name: /(^| )6번(,|$)/u }).click();       // 경마식 보도 6번: 오답 + 비틂
   const card = page.getByRole('article');
   await expect(card).toContainText('오답');
-  await expect(card).toContainText('걸린 함정 ·');
+  await expect(card).toContainText('고른 선지의 함정 ·');
   await expect(card).toContainText('이 문항 정답률');
   await page.getByRole('button', { name: /(^| )9번(,|$)/u }).click();       // 플라스틱 9번: 문항 검토
   await expect(page.getByRole('article')).toContainText('이 문항은 우리가 한 번 더 확인하고 있어.');
-  await expect(page.getByRole('article')).not.toContainText('걸린 함정');
+  await expect(page.getByRole('article')).not.toContainText('고른 선지의 함정');
   await page.getByRole('button', { name: /(^| )6번(,|$)/u }).click();
   await noCodesOnScreen(page);
   await page.screenshot({ path: resolve(shots, '07-result-desktop.png'), fullPage: true });

@@ -49,7 +49,7 @@ function Card({ item, titles, tiers, onClose }: { item: ResultItem; titles: Reco
       <button type="button" className="diag-close" onClick={onClose}>접기</button></div>
     {item.correct && (item.category === 'PENDING' ? <Notice status="pending" /> : <p className="diag-quality">{answerQuality(item, tiers)}</p>)}
     {same}<p className="diag-muted">{MEGASTUDY_NOTE}</p>
-    {!item.correct && twists.map((t, i) => <div key={i} className="diag-twist"><span className="diag-warn">걸린 함정 · {t.name}</span>{t.line && <p>{t.line}</p>}{t.changed && <p>{t.changed}</p>}</div>)}
+    {!item.correct && twists.map((t, i) => <div key={i} className="diag-twist"><span className="diag-warn">고른 선지의 함정 · {t.name}</span>{t.line && <p>{t.line}</p>}{t.changed && <p>{t.changed}</p>}</div>)}
     {item.thoughtDiagnosis !== null && item.thoughtDiagnosis.status !== 'ready' && <Notice status={item.thoughtDiagnosis.status} />}
     {step && <span className="diag-step">어긋난 단계 · {step}</span>}
     {item.evidence !== null && (item.evidence.student !== null || source.length > 0) && <div className="diag-evidence">
@@ -69,15 +69,15 @@ function Solve({ result, set }: { result: Result; set: SetInfo }) {
     <div className="diag-stats3">
       <div><span>정답</span><strong>{stats.correct}<small> / {stats.total}</small></strong></div>
       <div><span>{result.qualityTiers === 2 ? '근거가 확인되는 정답' : '근거까지 정확한 정답'}</span>{stats.qualityDenominator > 0
-        ? <strong>{stats.accurate}<small> / 근거를 쓴 정답 {stats.qualityDenominator}</small></strong>
-        : <strong><small>근거를 쓴 정답 없음</small></strong>}</div>
-      <div><span>근거 없이 낸 정답</span><strong>{stats.sure + stats.unsure}<small> 문항 (확실하다고 한 {stats.sure} · 확신 없이 맞힌 {stats.unsure})</small></strong></div></div>
+        ? <strong>{stats.accurate}<small> / 근거를 판정한 정답 {stats.qualityDenominator}</small></strong>
+        : <strong><small>근거를 판정한 정답 없음</small></strong>}</div>
+      <div><span>근거 없이 낸 정답</span><strong>{stats.sure + stats.unsure + stats.eliminated}<small> 문항 (확실하다고 한 {stats.sure} · 확신 없이 맞힌 {stats.unsure}{stats.eliminated > 0 && ` · 선지를 걸러 푼 ${stats.eliminated}`})</small></strong></div></div>
     {stats.unverified > 0 && <p className="diag-muted">{stats.unverified}개는 정답이지만 근거로 풀이를 확인하지는 못했어.</p>}
     {result.steps.status !== 'ready' ? <Notice status={result.steps.status} />
       : tendency && <div className="diag-block"><h2>어긋난 단계 <small>(경향)</small></h2><p>{tendency.sentence}</p>
         <div className="diag-bars">{tendency.bars.map(bar => <div key={bar.code} className="diag-bar-row"><span>{bar.name}</span>
           <div className="diag-track"><div style={{ width: `${Math.round(bar.ratio * 100)}%` }} data-warn /></div><span>{bar.count}</span></div>)}</div></div>}
-    {tags.length > 0 && <div className="diag-block"><h2>걸린 함정</h2><div className="diag-tags">{tags.map(tag => <span key={tag.name} className="diag-tag">{tag.name} {tag.count}</span>)}</div></div>}
+    {tags.length > 0 && <div className="diag-block"><h2>고른 오답 선지의 함정</h2><div className="diag-tags">{tags.map(tag => <span key={tag.name} className="diag-tag">{tag.name} {tag.count}</span>)}</div></div>}
     <div className="diag-block"><h2>문항별</h2>
       <div className="diag-cellgrid">{set.passages.map(passage => {
         const items = result.items.filter(item => item.passageId === passage.passageId);
