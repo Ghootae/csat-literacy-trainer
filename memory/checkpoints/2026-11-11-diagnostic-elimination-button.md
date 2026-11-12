@@ -12,3 +12,4 @@ base_commit: 336ce4f3
 - 구현: 인계 `docs/handoffs/2026-11-11-diagnostic-elimination-button.md`, executor(sonnet)에 위임.
 - Q-0047은 "입력창 직접 작성분 관찰"로 좁혀 열어 둠.
 - 구현 결과(executor): 빌드 통과, `npm test` 1733 통과·기존 실패 2건, Playwright 진단 3건 통과. 메인 세션 diff 검토 통과(범주 표 ELIMINATION → WEAK_CORRECT, 판정 상태 NONE은 결과 화면에서 ready로 보여 "분석 중"에 머물지 않음). 사진 `docs/review/diagnostic-elimination-button-2026-11-11/`. 데스크톱 폭에서 [소거법]이 입력창 안 둘째 줄로 내려감(표시만의 문제).
+- (2026-11-12) Codex 실사용 시험 검토 뒤 지문 결과 화면 문구를 최종 카드와 맞추고 소거법 정답 문구를 "정답이 아닌 선지들을 잘 걸렀어"로 정함(D-0228 추가). 빌드 통과, `npm test` 1733 통과·기존 실패 2건, Playwright 진단 3건 통과. 미결: 분모 이름, "걸린 함정" 제목.

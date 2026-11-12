@@ -40,7 +40,7 @@ export function MidPage({ title, number, total, card, dev, last, busy, error, re
         {card.items.length === 0 ? <p className="diag-sentence">답한 문항이 없어.</p>
           : <><p className="diag-muted">문제 번호를 눌러 결과를 하나씩 열어 봐.</p>
             <ul className="diag-rows">{card.items.map(item => {
-              const group = resultGroup(item.category); const row = item.revealed ? resultRow(item) : null;
+              const group = resultGroup(item.category); const row = item.revealed ? resultRow(item, card.qualityTiers) : null;
               const analyzing = item.revealed ? row!.analyzing : item.judging || item.category === 'PENDING' || item.category === 'CHECKING';
               return <li key={item.questionId} className="diag-row" data-testid={`row-${item.questionNumber}`} data-revealed={item.revealed}>
                 <button type="button" className="diag-qbtn" data-group={group} data-analyzing={analyzing} data-testid={`qbtn-${item.questionNumber}`} disabled={busy && !item.revealed}

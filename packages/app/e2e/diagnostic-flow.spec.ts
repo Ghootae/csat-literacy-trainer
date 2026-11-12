@@ -206,7 +206,7 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   for (const n of [13, 14, 15]) await page.getByTestId(`qbtn-${n}`).click();
   await expect(page.getByTestId('desc-13')).toContainText('오답(같은 선지를 고른 비율');
   await expect(page.getByTestId('review-13')).toBeEnabled(); await expect(page.getByTestId('review-13')).toHaveText('아깝지만 정답이 아니야. 다시 검토해 보자.');
-  await expect(page.getByTestId('desc-14')).toContainText('근거에 문제가 없었어'); expect(await page.getByTestId('desc-14').innerText()).not.toContain('소거법'); await expect(page.getByTestId('review-14')).toBeDisabled();
+  await expect(page.getByTestId('desc-14')).toContainText('정답이 아닌 선지들을 잘 걸렀어'); expect(await page.getByTestId('desc-14').innerText()).not.toContain('소거법'); await expect(page.getByTestId('review-14')).toBeDisabled();
   await expect(page.getByTestId('review-15')).toBeEnabled();
   await expect(page.getByTestId('desc-16')).toHaveText('결과는 가려져 있어');
   await expect(page.getByTestId('grade-text')).toHaveText('나의 현재 등급은?');   // 한 문항이라도 가려져 있으면 등급은 아직이다

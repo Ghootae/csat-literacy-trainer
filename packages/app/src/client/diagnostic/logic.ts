@@ -47,9 +47,10 @@ export const HARD_CORRECT_RATE = 20;
 const CATEGORY_NAME: Record<AnswerCategory, string> = { WRONG: '오답', SURE_CORRECT: '확신 정답', UNSURE_CORRECT: '잘 모르겠지만 정답', PENDING: '판정 중', CHECKING: '확인 중',
   UNVERIFIED: '판정 불가 정답', ERROR_CORRECT: '근거 오류 정답', SUPPORTED_CORRECT: '근거 명확 정답', WEAK_CORRECT: '근거 약한 정답' };
 
+const ELIMINATION_PRAISE = '정답이 아닌 선지들을 잘 걸렀어.';
 export interface ResultRow { description: string; button: { label: string; enabled: boolean }; analyzing: boolean }
 /** 공개한 문항 한 줄의 결과 설명과 검토 버튼. 정답률은 메가스터디 수치, 오답은 같은 선지를 고른 비율이다(두 수치는 `percentPair`로). */
-export function resultRow(item: SummaryCardItem): ResultRow {
+export function resultRow(item: SummaryCardItem, tiers: QualityTiers = 3): ResultRow {
   const rate = `정답률 ${percentPair(item.megastudy.correctRate)}`;
   if (item.category === 'WRONG') {
     const head = `오답(같은 선지를 고른 비율 ${percentPair(item.megastudy.chosenPercents)}).`;
@@ -66,7 +67,9 @@ export function resultRow(item: SummaryCardItem): ResultRow {
       const hard = (item.megastudy.correctRate[0] + item.megastudy.correctRate[1]) / 2 < HARD_CORRECT_RATE;
       return { description: `${head} 근거도 명확했어.`, button: praise(hard ? '어려운 문제인데 정말 잘했어!' : '잘했어!'), analyzing: false };
     }
-    case 'WEAK_CORRECT': case 'UNVERIFIED': return { description: `${head} 근거에 문제가 없었어.`, button: praise('잘했어!'), analyzing: false };
+    // 최종 카드(`answerQuality`)와 같은 말을 한다. 소거법 정답은 근거를 쓰지 않았으므로 근거를 평가하지 않는다(D-0228 추가).
+    case 'WEAK_CORRECT': return { description: `${head} ${item.elimination ? ELIMINATION_PRAISE : tiers === 2 ? '근거가 확인되는 정답이야.' : '근거는 조금 더 다듬을 수 있어.'}`, button: praise('잘했어!'), analyzing: false };
+    case 'UNVERIFIED': return { description: `${head} 근거로 풀이를 확인하지는 못했어.`, button: praise('잘했어!'), analyzing: false };
     case 'SURE_CORRECT': return { description: `${head} 확신을 갖고 풀었어.`, button: praise('확신을 갖고 풀었구나. 대단해!'), analyzing: false };
     case 'UNSURE_CORRECT': return { description: `${head} 근거는 없었어.`, button: praise('맞혔어!'), analyzing: false };
     case 'ERROR_CORRECT':
@@ -185,7 +188,8 @@ export function cardStepName(item: ResultItem): string | null {
   return step !== null && step in STEP_WORDING ? STEP_WORDING[step as keyof typeof STEP_WORDING] : null;
 }
 /** 정답 문항의 질 문구(범주와 표시 단계로 고른다). 판정 중·오답은 null. */
-export function answerQuality(item: Pick<ResultItem, 'category'>, tiers: QualityTiers = 3): string | null {
+export function answerQuality(item: Pick<ResultItem, 'category'> & { elimination?: boolean }, tiers: QualityTiers = 3): string | null {
+  if (item.category === 'WEAK_CORRECT' && item.elimination === true) return `정답이야. ${ELIMINATION_PRAISE.replace(/\.$/, '')}`;
   switch (item.category) {
     case 'SUPPORTED_CORRECT': return tiers === 2 ? '근거가 확인되는 정답이야' : '근거도 정확했어';
     case 'WEAK_CORRECT': return tiers === 2 ? '근거가 확인되는 정답이야' : '정답이야. 근거는 조금 더 다듬을 수 있어';

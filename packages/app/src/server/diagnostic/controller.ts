@@ -387,7 +387,7 @@ export class DiagnosticController {
     const allRevealed = cards.length > 0 && cards.every(card => card.revealed);
     const canFinish = judging === 0 && cards.every(card => !card.reviewTarget || card.reviewDone);
     const position = allRevealed ? this.position(p) : null;
-    return { status: 'ready' as const, correct, total: cards.length, judging, items: cards, allRevealed, canFinish,
+    return { status: 'ready' as const, correct, total: cards.length, judging, qualityTiers: DIAGNOSTIC_CORRECT_QUALITY_TIERS, items: cards, allRevealed, canFinish,
       position: position === null ? null : { answered: position.answered, correct: position.correct, grade: { mode: position.grade.mode, probabilities: position.grade.probabilities, density: position.grade.density } } };
   }
 

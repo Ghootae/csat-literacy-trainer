@@ -21,7 +21,10 @@ describe('지문 결과 줄(D-0218)', () => {
   it('정답 범주별 설명과 비활성 칭찬, 정답률이 낮으면 어려운 문제 칭찬', () => {
     expect(resultRow(card())).toMatchObject({ description: '정답(정답률 30% · 40%). 근거도 명확했어.', button: { label: '잘했어!', enabled: false } });
     expect(resultRow(card({ megastudy: { correctRate: [12, 18], chosenPercents: [1, 1] } })).button.label).toBe('어려운 문제인데 정말 잘했어!');
-    expect(resultRow(card({ category: 'WEAK_CORRECT' })).description).toBe('정답(정답률 30% · 40%). 근거에 문제가 없었어.');
+    expect(resultRow(card({ category: 'WEAK_CORRECT' })).description).toBe('정답(정답률 30% · 40%). 근거는 조금 더 다듬을 수 있어.');
+    expect(resultRow(card({ category: 'WEAK_CORRECT' }), 2).description).toBe('정답(정답률 30% · 40%). 근거가 확인되는 정답이야.');
+    expect(resultRow(card({ category: 'UNVERIFIED' })).description).toBe('정답(정답률 30% · 40%). 근거로 풀이를 확인하지는 못했어.');
+    for (const tiers of [3, 2] as const) expect(resultRow(card({ category: 'WEAK_CORRECT', elimination: true }), tiers)).toMatchObject({ description: '정답(정답률 30% · 40%). 정답이 아닌 선지들을 잘 걸렀어.', button: { label: '잘했어!', enabled: false } });
     expect(resultRow(card({ category: 'UNVERIFIED' })).button.label).toBe('잘했어!');
     expect(resultRow(card({ category: 'SURE_CORRECT' }))).toMatchObject({ description: '정답(정답률 30% · 40%). 확신을 갖고 풀었어.', button: { label: '확신을 갖고 풀었구나. 대단해!', enabled: false } });
     expect(resultRow(card({ category: 'UNSURE_CORRECT' }))).toMatchObject({ description: '정답(정답률 30% · 40%). 근거는 없었어.', button: { label: '맞혔어!', enabled: false } });
@@ -123,6 +126,7 @@ describe('② 숫자·단계·함정', () => {
     expect(answerQuality(item({ category: 'ERROR_CORRECT' }))).toBe('정답이지만 근거에 틀린 곳이 있어');
     expect(answerQuality(item({ category: 'SURE_CORRECT' }))).toBe('확실하다고 한 정답이야'); expect(answerQuality(item({ category: 'UNSURE_CORRECT' }))).toBe('확신 없이 맞힌 정답이야');
     expect(answerQuality(item({ category: 'UNVERIFIED' }))).toBe('정답이야. 근거로 풀이를 확인하지는 못했어');
+    expect(answerQuality({ category: 'WEAK_CORRECT', elimination: true })).toBe('정답이야. 정답이 아닌 선지들을 잘 걸렀어'); expect(answerQuality({ category: 'WEAK_CORRECT', elimination: true }, 2)).toBe('정답이야. 정답이 아닌 선지들을 잘 걸렀어');
     expect(answerQuality(item({ category: 'PENDING' }))).toBeNull(); expect(answerQuality(item({ category: 'WRONG' }))).toBeNull();
   });
   it('①~⑤ 뒤 조사', () => { expect([1, 2, 3, 4, 5].map(circledObject)).toEqual(['①을', '②를', '③을', '④를', '⑤를']); });

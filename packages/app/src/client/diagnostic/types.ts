@@ -39,6 +39,8 @@ export interface SummaryCardItem {
 }
 export interface SummaryCardView {
   status: 'ready'; correct: number; total: number; judging: number;
+  /** 정답의 질 표시 단계(결과 화면과 같은 값). */
+  qualityTiers: QualityTiers;
   items: SummaryCardItem[];
   allRevealed: boolean; canFinish: boolean;
   /** 모든 문항을 공개하기 전, 또는 답한 문항이 없으면 null. `grade.probabilities`는 1~9등급 확률(합 1), `mode`는 확률 최대 등급, `density`는 실수 등급 축의 확률(등급마다 10칸, D-0219). */
