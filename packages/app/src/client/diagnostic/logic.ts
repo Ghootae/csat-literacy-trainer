@@ -256,7 +256,7 @@ export const RECOMMEND_FALLBACK = '어려운 문항으로 더 풀어 보면 좋�
 export function recommendationLines(recommendation: ResultView['recommendation'], twistCounts: Record<string, number>): string[] {
   if (recommendation === null || !isTwistCode(recommendation.twistType)) return [RECOMMEND_FALLBACK];
   const name = TWIST_WORDING[recommendation.twistType].name; const count = twistCounts[recommendation.twistType] ?? 0;
-  const lines = [count >= 2 ? `자주 걸린 함정: ${name}(${count}번)` : `이번에 걸린 함정: ${name}`];
+  const lines = [count >= 2 ? `자주 고른 오답 선지의 함정: ${name}(${count}번)` : `이번에 고른 오답 선지의 함정: ${name}`];
   if (recommendation.setNames.length > 0) lines.push(`비슷한 구조의 지문으로 ${recommendation.setNames.join(', ')}${eulReul(recommendation.setNames.at(-1)!)} 풀어 보면 좋아.`);
   return lines;
 }

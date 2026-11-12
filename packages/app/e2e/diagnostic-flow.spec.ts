@@ -298,7 +298,7 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await expect(page.getByRole('region', { name: '문제 풀이 결과' }).locator('.diag-cell[data-group="good"]').first()).toHaveCSS('background-color', 'rgb(228, 243, 225)');
   await expect(page.getByRole('region', { name: '독해 패턴' })).toContainText('첫 요약만');
   await expect(page.getByRole('region', { name: '독해 패턴' })).toContainText('곳을 잡았어');
-  await expect(page.getByRole('region', { name: '추천' })).toContainText('걸린 함정');
+  await expect(page.getByRole('region', { name: '추천' })).toContainText('고른 오답 선지의 함정');
   await expect(page.getByRole('region', { name: '문제 풀이 결과' })).toContainText('근거 없이 낸 정답');
   await page.getByRole('button', { name: /(^| )6번(,|$)/u }).click();       // 경마식 보도 6번: 오답 + 비틂
   const card = page.getByRole('article');

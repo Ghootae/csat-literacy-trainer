@@ -165,10 +165,10 @@ describe('③ 독해 패턴', () => {
 });
 
 describe('추천', () => {
-  it('2번 이상이면 자주 걸린 함정, 1번이면 이번에 걸린 함정, 세트 이름은 대응표가 있을 때만', () => {
-    expect(recommendationLines({ twistType: 'PAIR_SWAP', setNames: [] }, { PAIR_SWAP: 2 })).toEqual(['자주 걸린 함정: 두 대상의 특징 맞바꾸기(2번)']);
-    expect(recommendationLines({ twistType: 'PAIR_SWAP', setNames: [] }, { PAIR_SWAP: 1 })).toEqual(['이번에 걸린 함정: 두 대상의 특징 맞바꾸기']);
-    expect(recommendationLines({ twistType: 'DIRECTION', setNames: ['세트 가', '세트 나'] }, { DIRECTION: 1 })).toEqual(['이번에 걸린 함정: 방향 뒤집기', '비슷한 구조의 지문으로 세트 가, 세트 나를 풀어 보면 좋아.']);
+  it('2번 이상이면 자주 고른 오답 선지의 함정, 1번이면 이번에 고른 오답 선지의 함정, 세트 이름은 대응표가 있을 때만', () => {
+    expect(recommendationLines({ twistType: 'PAIR_SWAP', setNames: [] }, { PAIR_SWAP: 2 })).toEqual(['자주 고른 오답 선지의 함정: 두 대상의 특징 맞바꾸기(2번)']);
+    expect(recommendationLines({ twistType: 'PAIR_SWAP', setNames: [] }, { PAIR_SWAP: 1 })).toEqual(['이번에 고른 오답 선지의 함정: 두 대상의 특징 맞바꾸기']);
+    expect(recommendationLines({ twistType: 'DIRECTION', setNames: ['세트 가', '세트 나'] }, { DIRECTION: 1 })).toEqual(['이번에 고른 오답 선지의 함정: 방향 뒤집기', '비슷한 구조의 지문으로 세트 가, 세트 나를 풀어 보면 좋아.']);
     expect(recommendationLines({ twistType: 'DIRECTION', setNames: ['세트 감'] }, { DIRECTION: 1 })[1]).toBe('비슷한 구조의 지문으로 세트 감을 풀어 보면 좋아.');
   });
   it('오답이 없으면 어려운 문항으로 더 풀어 보라고 한다', () => { expect(recommendationLines(null, {})).toEqual(['어려운 문항으로 더 풀어 보면 좋아']); });
