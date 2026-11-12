@@ -29,6 +29,7 @@ supersedes: none (D-0229의 생성 절차와 D-0230의 새 갈래를 블라인�
   - 라 = A-V2(개념 연결 규칙), 다 = B-V1·가 = B-V2(계산 양식 규칙), 나 = A-V1(개념 연결 규칙).
   - 라는 기출 16번보다 깊은 3단계 연결이다. 정답 선지 ⑤가 폐포 사례(계면 활성제 → 표면 장력↓ → 확장 쉬움)의 변수 방향을 잉크의 오네소르게 수 식에 옮기게 한다(표면 장력↓ → 오네소르게 수↑ → 상한 초과에서 더 멀어짐).
   - 네 문항 모두 풀이 답이 출제 정답과 같았고, 풀이자는 복수 정답·〈보기〉와 지문의 모순을 지적하지 않았다.
+- **인문 6문항**(`docs/experiments/gold-search-api-batch2-2026-11-11/REVIEW-open.md`, 정답·출처는 `KEY.md`): 수정 후 실전 사용 가능, 상향 평준화(Ghootae 2026-11-12).
 - 출제자 시뮬레이션 규칙 문서:
   - `docs/handoffs/2026-11-11-examiner-simulation-corporate-law-rules.md`
   - `docs/handoffs/2026-11-11-calculation-format-rules.md`(후보)
