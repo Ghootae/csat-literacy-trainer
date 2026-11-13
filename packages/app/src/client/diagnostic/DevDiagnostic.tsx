@@ -169,7 +169,12 @@ export function DevDiagnostic({ id, set }: { id: string; set: SetInfo }): React.
         const { passageId } = view;
         return <MidContainer key={passageId} id={id} passageId={passageId} title={titleOf(passageId)} number={numberOf(passageId)} total={total} error={error}
           last={numberOf(passageId) >= total} dev
-          review={questionId => { const cell = flow.find(c => c.key === `${passageId}:q:${questionId}`); if (cell) void go(cell); }}
+          review={questionId => void guarded(async () => {
+            // 판정이 화면을 연 뒤에 끝났으면 부모의 map·flow에는 이 문항 칸이 아직 없다. 먼저 새로 받아 그 흐름에서 칸을 찾는다.
+            const key = `${passageId}:q:${questionId}`;
+            const cell = buildFlow(await refresh()).find(c => c.key === key);
+            if (cell) await openCell(cell);
+          })}
           finished={() => void guarded(async () => {
             // 이 지문의 칸 바로 다음 칸(다음 지문의 첫 칸 또는 결과)으로 간다.
             const next = await refresh(); const nextFlow = buildFlow(next);
