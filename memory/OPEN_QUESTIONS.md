@@ -85,6 +85,8 @@ Q-0022 2026-09-29 최종: [자연 응답 shadow](../docs/experiments/jev-v4-natu
 
 Q-0049 후속(2026-11-12): [가독성out-v3 Codex 검토](../docs/experiments/deep-item-v3.1-readability-2026-11-12/REPORT-out-v3-codex-desktop.md)에서 용어복원 개선과 전체 장면추적 부담 증가를 구분했다. 오디오A형 첫 불가청 기록값≠차폐문턱 및 실제 차폐표본≠가능구간전체의 공백, 데이터A-V2의 추론 명시화 관측. hardSentences를 전부 문장결함으로 볼지, 필수추론은 어떻게 보존할지도 검토 대상. 모두 Codex 권고이며 사용자판정·규칙채택·수정 미착수.
 
+Q-0049 후속(2026-11-13): [v4.1 플라스틱4문항 Codex 검토](../docs/experiments/deep-item-v4-2026-11-12/REPORT-v41-codex-desktop.md)에서 지문기준 정답유일성·정오 유지, 가독성양호를 확인. B2전자쌍상쇄 좋은직접경로, A의일부재진술선지·삽입조건은보완후보. 자동중복검사는 동일기초개념과다른오개념을구분해야함. 사용자순위/사용승인·규칙채택미정. 이전음향측정/눈금쟁점의일반해결은아님.
+
 Q-0020 후속: [관계 누락 대조120호출](../docs/experiments/axis-direct-judgment-v2-relational-boundary-2026-09-20/REPORT.md) 뒤 [축 격리60호출](../docs/experiments/axis-context-isolation-v1-2026-09-20/REPORT.md)에서 도파민 과수용3/3→1/3(두 프롬프트), 공손룡 후보의 충분AX2 보류2/3→0/3을 관측했다. 범위 영향은 지지되지만 잔여 과수용·구체 기제·일반화·운영 축별 호출의 총비용과 지연은 미해결이다.
 
 Q-0024 후속 자연 사례: [법인4문단 실제 테스트](../docs/review/corporate-p4-user-session-2026-09-29.md)에서 배당 가능/불가능의 구체적 대조를 말했으나 AX1 OK가 유지되고 '비교적 자유롭게'라는 일반화 뒤 PASS했다. AX2의 실제 누락 연결 보완과 대비된다. AX1 최초 PASS가 더 자연스럽다는 것은 Codex 검토 의견이며 사용자 승인 라벨은 아니다.
