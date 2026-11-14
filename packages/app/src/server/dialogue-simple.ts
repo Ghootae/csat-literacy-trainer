@@ -255,6 +255,7 @@ export class SimpleDialogueController {
       paragraphs: r.passage.paragraphs.map((q, i) => ({ paragraphId: q.paragraphId, position: q.position, text: q.text, done: done[i]! })),
       current: { index: r.currentIndex, messages: p.transcript, done: p.state.done, attemptNumber: p.attemptNumber, attemptCount: paragraph.attempts.length,
         restatedSummary: p.steps.length ? (p.steps.at(-1)!.output as SimpleOutput).restatedSummary : null,
+        restatedCorrections: p.steps.length ? (p.steps.at(-1)!.output as SimpleOutput).errors.map(e => ({ studentQuote: e.studentQuote, correction: e.correction })) : [],
         canStartNewAttempt: p.transcript.some(m => m.role === 'student') && p.status !== 'PROCESSING',
         stage: p.state.stage, highlights, highlightKind,
         canRespond: !p.state.done && p.status !== 'PROCESSING', evaluationStatus: p.status,

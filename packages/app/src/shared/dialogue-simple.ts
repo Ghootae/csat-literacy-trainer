@@ -24,6 +24,8 @@ export interface SimpleDialogueView {
     attemptCount: number;
     /** 현재 시도 마지막 단계의 재구성 요약. 아직 판정이 없으면 null. */
     restatedSummary: string | null;
+    /** 마지막 단계에 핵심 오류가 남아 있을 때 학생이 쓴 틀린 구절과 바로잡은 내용(Q-0050). 없으면 빈 목록. */
+    restatedCorrections: { studentQuote: string; correction: string }[];
     /** 현재 시도에 학생 발화가 있고 평가 중이 아닐 때. */
     canStartNewAttempt: boolean;
     /** 현재 시도의 단계(state.stage). */

@@ -9,6 +9,7 @@ import { SimpleBubble, SimpleDialogueDrawer } from './SimpleDialogueDrawer.js';
 import { getSimple, navigateSimple, newAttemptSimple, respondSimple, startSimple } from './simple-dialogue-api.js';
 import { bubbleDelayMs } from './bubble-pacing.js';
 import { RationaleSymbolBar } from './RationaleSymbolBar.js';
+import { RestatedSummary } from './RestatedSummary.js';
 import { toSubmittedText, type SymbolMark } from './rationale-tools.js';
 import { simpleWaitingText } from './simple-waiting.js';
 import './simple-dialogue.css';
@@ -143,8 +144,7 @@ export function SimpleDialogueApp(): React.JSX.Element {
       <section className="chat-pane workbench-pane" aria-label="응답과 피드백"><header className="pane-header"><h2>생각을 나누는 공간</h2>
         <small>문단 {current.index + 1} · 시도 {current.attemptNumber}</small>
         <button disabled={busy || !current.canStartNewAttempt} onClick={startAttempt}>새 시도</button></header>
-        <section className="simple-restated" aria-label="지금까지 내 요약"><small>지금까지 내 요약</small>
-          <p>{current.restatedSummary === null ? '첫 요약을 보내면 여기에 정리돼.' : current.restatedSummary === '' ? '아직 이 문단에 대한 내용이 없어.' : current.restatedSummary}</p></section>
+        <RestatedSummary current={current} />
         <div className="chat-scroll" ref={chatRef} aria-label="대화 기록" aria-live="polite">
           {!messages.length && <p className="chat-welcome">이 문단의 중심 내용과 관계를 자기 말로 써 보세요.</p>}
           {messages.slice(0, visible).map((m, i) => <div className="chat-round" key={i}>

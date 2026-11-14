@@ -401,6 +401,13 @@ describe('v2: 라벨·재구성 요약', () => {
     expect(q.current.restatedSummary).toBe('빛이 변한다');
     expect((await say(c, q, 'b')).current.restatedSummary).toBe('');
   });
+  it('restatedCorrections는 마지막 단계에 핵심 오류가 남았을 때만 학생 구절과 교정을 싣는다(Q-0050)', async () => {
+    const { controller: c, view } = setup(out({ category: 'ONE_ERROR', errors: [err], action: 'CORRECTION_QUESTION', restatedSummary: '빛을 소금으로 바꾼다' }), out({ ...after, targetErrorResolved: true, restatedSummary: '빛에너지가 화학에너지로 바뀐다' }));
+    expect(view.current.restatedCorrections).toEqual([]);
+    const q = await say(c, view, '빛을 소금으로 바꿔');
+    expect(q.current.restatedCorrections).toEqual([{ studentQuote: err.studentQuote, correction: err.correction }]);
+    expect((await say(c, q, '화학에너지로 바뀐다')).current.restatedCorrections).toEqual([]);
+  });
 });
 
 describe('v4.8: coveredBefore', () => {

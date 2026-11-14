@@ -293,3 +293,4 @@
 | [`D-0231`](./decisions/D-0231-deep-item-generation-api-pipeline-confirmed.md) | accepted | 깊은 문항 생성 방향 확정: 출제자 시뮬레이션 규칙 → 골드 지도 탐색 → 선별 → 〈보기〉 조립 → 독립 풀이 검증 API 파이프라인(판정 promising). 근거: 법인 블라인드(웹·API 차이 없음, 모두 사용 가능), 표면 장력 A/B 블라인드(라>다>가>나, 라는 기출 16번보다 깊은 3단계 연결). 계산 양식 규칙은 후보. 다음: 지시문 v3 → 새 과학 지문 → 스크립트화 | 사용자 결정 |
 | [`D-0232`](./decisions/D-0232-bogi-term-rule-and-readability-guide.md) | accepted | 〈보기〉는 지문 용어를 그대로 쓰고 선지가 붙일 판정 라벨 1~2개만 숨기며, 라벨은 정의문 대신 장면으로 보여 준다(기출 〈보기〉 122문항 검토: 선지 지문 용어 중 〈보기〉에도 나오는 비율 33%). 교정 가이드는 넓은 원칙 + 시험 지문 밖 예시 | 사용자 결정 |
 | [`D-0233`](./decisions/D-0233-passage-gen-pilot-round1-closed.md) | accepted | 지문 생성 파일럿 1차 종료: 인지 강화 지문 v4에서 다듬기 중단, 검토 반복은 정확도만 올림. 다음 검증은 문항 파이프라인(D-0231)으로 | 사용자 결정 |
+| [`D-0234`](./decisions/D-0234-restated-summary-corrections-card.md) | accepted | 오류가 남은 단계의 요약 카드는 "피드백을 반영한 정리"로 표시: 틀린 구절 취소선·교정 목록, 판정 지시문·모델 출력은 불변(Q-0050 방안 B) | 사용자 결정 |
