@@ -83,7 +83,7 @@
    - **판정 과적합(Q-0044)** [보고](../docs/experiments/judge-model-explanation-2026-11-08/REPORT-human.md): 해설은 주원인 아님, 엄격함 = 서버 검사(고침, D-0211) + luna + 171행(sol에도). [체크포인트](./checkpoints/2026-11-07-feedback-overfitting-candidates.md) 끝 절이 다음 시작점.
    - 판정 흐름 (나) 확정 [D-0213](./decisions/D-0213-diagnostic-judgment-split-option-na.md)(11-09): 정답의 질 3단계·버튼 둘·정답 sol(진단만 시험)·문항별 피드백 열기.
    - v5.9·v5.10 시험([보고](../docs/reports/REPORT-v59-v510-run-human.md)): v5.10 통과. 후보는 v5.10 하나([D-0216](./decisions/D-0216-v510-single-candidate-diagnostic-first-lab-held.md)): 질문 블라인드 판정 4/5 통과, **진단 기본값 v5.10 전환**(11-10, [기록](./checkpoints/2026-11-10-question-rules-blind-result.md)). lab은 v5.8 보류. 오디오 16 경계, Q-0045.
-   - [학생 관점16문항 검토](../docs/experiments/diagnostic-student-review-2026-11-11/REPORT-student-review-human.md): 확인불가 칭찬·분모 명칭·함정 해석 문제 관측, 수정 미착수(Q-0048).
+   - [전 구간 가상 검토](../docs/experiments/diagnostic-full-simulation-2026-11-13/REPORT-full-simulation-human.md): 완주. D-0234 구현(화면 확인 대기). 라벨 문구 대기: `docs/handoffs/2026-11-16-diagnostic-result-labels.md`.
    - 진단 화면 M4 칠하기·B7 기록 위치 유지(11-09). 답은 입력창 안 버튼으로 확정([D-0226](./decisions/D-0226-diagnostic-answer-submit-buttons-conclusion.md)), 소거법은 [소거법] 버튼(D-0228).
 5. 골드 기반 문항 생성: E1 종료·E2 보류(D-0210), [P1 중단](./decisions/D-0230-p1-principle-application-generation-stopped.md). API 생성 방향 확정([D-0231](./decisions/D-0231-deep-item-generation-api-pipeline-confirmed.md), promising), 계산 양식 규칙은 후보. 플라스틱 v4.1 4문항 [Codex 검토](./checkpoints/2026-11-13-deep-item-v41-codex-review.md): 정오 유지·가독성 양호, 쉬운 선지·중복 판단 보완 권고. 사용자 판단 대기(Q-0049), 이전 음향·깊이 쟁점 미해결.
 
