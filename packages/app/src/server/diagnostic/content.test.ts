@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildJudgeInput, unitsForParagraph } from '@csat/pipeline';
 import { buildSet, OUT_PATH } from '../../../../../scripts/build-diagnostic-set.mjs';
-import { DIAGNOSTIC_ROOT, loadAnalysisMaps, loadChoiceLinkTwists, loadDiagnosticBundle, loadDiagnosticPassages, loadDiagnosticSet } from './content.js';
+import { DIAGNOSTIC_ROOT, loadAnalysisMaps, loadChoiceLinkTwists, loadDiagnosticBundle, loadDiagnosticPassages, loadDiagnosticSet, loadSymbolGloss } from './content.js';
+import { annotateSymbols } from '../../client/diagnostic/logic.js';
 
 const set = loadDiagnosticSet();
 const cuts = JSON.parse(readFileSync('docs/experiments/sns-diagnostic-calibration-2026-11-06/grade-cuts.json', 'utf8'));
@@ -66,5 +67,39 @@ describe('요약 대화·문단 판정 자료', () => {
     const all = [12, 13, 14, 15, 16].flatMap(n => [1, 2, 3, 4, 5].flatMap(c => twists(n, c)));
     expect(all.length).toBeGreaterThan(0); expect(all.every(t => /^[A-Z_]+$/u.test(t.twistType))).toBe(true);
     expect(twists(99, 1)).toEqual([]);
+  });
+});
+
+describe('결과 카드 자료: 선지 구절·원문 짝, 기호 풀이 사전', () => {
+  it('선지 연결 동결본에서 비튼 구절과 반박 원문을 함께 꺼내고, 지문에 없는 내용을 덧붙인 비틂은 원문이 빈 문자열이다', () => {
+    const plastic = loadChoiceLinkTwists(set.passages[2]!.choiceLinkPath)(8, 4);
+    expect(plastic.map(t => t.twistType)).toEqual(['SUBSTITUTION', 'SUBSTITUTION', 'NEGATION']);
+    expect(plastic[2]).toMatchObject({ choiceQuote: '안정해진다', evidenceQuote: expect.stringContaining('홀로 남은 전자') });
+    const audio = loadChoiceLinkTwists(set.passages[3]!.choiceLinkPath)(14, 3);
+    expect(audio).toEqual([expect.objectContaining({ twistType: 'ADDED_METHOD', choiceQuote: '각각 압축의 변수라고 언급한 점', evidenceQuote: '' })]);
+  });
+  it('세트 E 지문·발문·보기·선지·밑줄 기호가 모두 지문별 기호 풀이 사전에 있다', () => {
+    const symbol = /[\u3260-\u327b\u24d0-\u24e9]|\([가-하]\)/gu;
+    for (const passage of set.passages) {
+      const gloss = loadSymbolGloss(passage.passageId);
+      for (const questionId of passage.questionIds) {
+        const { content } = loadDiagnosticBundle(questionId);
+        const texts = [content.passage, content.stem, content.scenario, ...content.choices.map(c => c.text)];
+        const markers = (content.textAnnotations ?? []).map(a => a.marker ?? '');
+        for (const found of [...texts.join('\n').matchAll(symbol)].map(m => m[0]).concat(markers.filter(m => m !== ''))) {
+          expect(gloss[found], `${passage.passageId} ${questionId} ${found}`).toBeTruthy();
+        }
+      }
+      // 사전의 모든 풀이가 문자열이고 기호가 아닌 글이다
+      for (const meaning of Object.values(gloss)) expect(meaning).not.toMatch(symbol);
+    }
+    expect(loadSymbolGloss('없는-지문')).toEqual({});
+  });
+  it('기호 풀이는 카드 글에서 처음 나올 때만 붙는다(경마식 6번 발문)', () => {
+    const gloss = loadSymbolGloss('horse-race-reporting'); const stem = loadDiagnosticBundle('horse-race-reporting-q6').content.stem;
+    const seen = new Set<string>();
+    const text = annotateSymbols(`${stem} ${stem}`, gloss, seen);
+    for (const sym of ['㉡', 'ⓐ', 'ⓑ']) expect(text.split(`${sym}(`)).toHaveLength(2);
+    expect(text).toContain('ⓑ(후보 초청 제한이 위헌이라는 소수 의견)');
   });
 });

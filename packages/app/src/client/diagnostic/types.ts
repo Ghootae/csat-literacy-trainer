@@ -49,7 +49,9 @@ export interface SummaryCardView {
 export type DiagnosticFeedbackView = FeedbackWorkbenchView & { skippable: boolean; judgmentPending?: boolean };
 
 type Box = 'pending' | 'ready' | 'failed';
-export interface ResultTwist { twistType: string; twistDetail: string; studentText: string | null }
+/** `choiceQuote`: 선지에서 비튼 구절, `evidenceQuote`: 그것을 반박하는 원문 문장(빈 문자열이면 원문에 그 내용이 없거나 짝을 못 만든 것). */
+export interface ResultTwist { twistType: string; twistDetail: string; studentText: string | null; choiceQuote: string; evidenceQuote: string }
+export interface ResultSelfCheck { choice: string; at: string }
 export interface ResultSummaryLink { status: Box; kind: 'MISREAD' | 'MISSED' | 'CAUGHT'; paragraphs: number[]; paragraphLabel: string }
 export interface ResultItem {
   questionId: string; passageId: string; questionNumber: number; chosenPosition: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; category: AnswerCategory; elimination: boolean;
@@ -62,6 +64,20 @@ export interface ResultItem {
   thoughtDiagnosis: { status: Box; firstFailedStep: string | null; outcomeType: string | null } | null;
   evidence: { student: string | null; source: { location: string; quote: string }[] } | null;
   summaryLink: ResultSummaryLink | null;
+  /** 발문 전문, 고른 선지 전문, 오답일 때 정답 선지 전문(검토 중이거나 정답이면 null). */
+  stem: string; chosenText: string; answerText: string | null;
+  stemPolarity: 'SELECT_CORRECT' | 'SELECT_INCORRECT';
+  /** 적절하지 않은 것 고르기에서 틀렸을 때 학생이 놓친 진짜 틀린 선지(정답 선지)의 비틂. */
+  answerTwist: ResultTwist[] | null;
+  selfCheck: ResultSelfCheck | null;
+  /** 이 문항의 출제자 전략 글이 있다. 있을 때만 "출제자 설명 보기" 버튼을 그린다. */
+  strategyAvailable: boolean;
+}
+export type BranchKey = '내용' | '논증' | '관점' | '흐름';
+/** 갈래별 사례: 요약에서 지문과 다르게 이은 곳(CONTRADICTS)이나 빠뜨린 곳(MISSING). `studentText`는 그 문단의 첫 요약 원문이다. */
+export interface ReadingCase {
+  branch: BranchKey; kind: 'CONTRADICTS' | 'MISSING'; paragraphId: string; paragraphPosition: number; paragraphLabel: string; relationType: string;
+  studentText: string; sourceTexts: string[];
 }
 export interface ReadingCounts {
   layers: Record<'요지' | '합성' | '명제', { caught: number; total: number }>;
@@ -75,7 +91,11 @@ export interface ResultView {
   steps: { status: Box; counts: Record<string, number>; denominator: number };
   twists: { counts: Record<string, number> };
   recommendation: { twistType: string; setNames: string[] } | null;
-  reading: { passageId: string; status: Box; counts: ReadingCounts }[];
+  reading: { passageId: string; status: Box; counts: ReadingCounts; cases: ReadingCase[] }[];
+  /** 2단계에서 "두 번 이상 나온 실수" 묶음이 들어올 자리. 지금은 늘 null이다. */
+  summaryGroups: null;
+  /** 지문 id → 기호(㉠·(가)·ⓐ 등) → 최소 풀이. */
+  symbolGloss: Record<string, Record<string, string>>;
 }
 
 /** 본 서비스 명령에 진단평가 전용 건너뛰기(`SKIP`, D-0208 1)를 더한 요청. 공용 계약(`shared`)은 건드리지 않는다. */

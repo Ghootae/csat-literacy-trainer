@@ -65,14 +65,15 @@ export function loadAnalysisMaps(passage: DiagnosticSetPassage): LoadedAnalysisM
   });
 }
 
-export interface ChoiceLinkTwist { readonly twistType: string; readonly twistDetail: string }
-interface ChoiceLinkFile { questions: { number: number; choices: { number: number; parts: { twisted: boolean; twistType: string | null; twistDetail: string }[] }[] }[] }
-/** 선지 연결 동결본에서 그 문항·그 선지의 `twisted: true` 부분의 꼬리표를 모은다. 결과 자료에만 쓴다(판정 입력 아님). */
+/** `choiceQuote`: 선지에서 비튼 구절, `evidenceQuote`: 그것을 반박하는 지문 문장(지문에 없는 내용을 덧붙인 비틂이면 빈 문자열). */
+export interface ChoiceLinkTwist { readonly twistType: string; readonly twistDetail: string; readonly choiceQuote: string; readonly evidenceQuote: string }
+interface ChoiceLinkFile { questions: { number: number; choices: { number: number; parts: { twisted: boolean; twistType: string | null; twistDetail: string; choiceQuote?: string; evidenceQuote?: string }[] }[] }[] }
+/** 선지 연결 동결본에서 그 문항·그 선지의 `twisted: true` 부분의 꼬리표와 선지 구절·지문 문장을 모은다. 결과 자료에만 쓴다(판정 입력 아님). */
 export function loadChoiceLinkTwists(choiceLinkPath: string): (questionNumber: number, choicePosition: number) => ChoiceLinkTwist[] {
   const file = JSON.parse(readFileSync(resolve(process.cwd(), choiceLinkPath), 'utf8')) as ChoiceLinkFile;
   return (questionNumber, choicePosition) => (file.questions.find(q => q.number === questionNumber)?.choices.find(c => c.number === choicePosition)?.parts ?? [])
     .filter(part => part.twisted && part.twistType !== null)
-    .map(part => ({ twistType: part.twistType!, twistDetail: part.twistDetail }));
+    .map(part => ({ twistType: part.twistType!, twistDetail: part.twistDetail, choiceQuote: part.choiceQuote ?? '', evidenceQuote: part.evidenceQuote ?? '' }));
 }
 
 export interface ChoiceLinkTargets { readonly stemPolarity: string; readonly ids: readonly string[] }
@@ -107,4 +108,16 @@ const TwistStudentTextSchema = z.object({ schemaVersion: z.literal('sns-twist-st
 /** "<문항 id>:<선지 번호>" → 그 선지의 n번째 비틂 조각에 붙는 학생용 "바뀐 내용" 문장. 비어 있을 수 있다. */
 export function loadTwistStudentText(): Record<string, string[]> {
   return TwistStudentTextSchema.parse(JSON.parse(readFileSync(resolve(DIAGNOSTIC_ROOT, 'twist-student-text.json'), 'utf8'))).items;
+}
+
+const SYMBOL_GLOSS_DIRECTORY = 'docs/experiments/sns-diagnostic-gold-2026-11-05/symbol-gloss';
+/** 지문의 기호(㉠·(가)·ⓐ 등) → 최소 풀이. 손으로 쓴 사전이고 파일이 없으면 빈 사전이다(기호 풀이만 생략된다). */
+export function loadSymbolGloss(passageId: string): Record<string, string> {
+  try {
+    const parsed = z.record(z.string(), z.string()).parse(JSON.parse(readFileSync(resolve(process.cwd(), SYMBOL_GLOSS_DIRECTORY, `${passageId}.json`), 'utf8')));
+    return parsed;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    throw error;
+  }
 }

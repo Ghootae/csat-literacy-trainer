@@ -1,5 +1,5 @@
 import type { SimpleDialogueView, SimpleRespondRequest } from '../../shared/dialogue-simple.js';
-import type { DiagnosticFeedbackRequest, DiagnosticFeedbackView, ItemRequest, ProgressView, QuestionsView, QuestionView, ResultView, SetInfo, SummaryCardView } from './types.js';
+import type { DiagnosticFeedbackRequest, DiagnosticFeedbackView, ItemRequest, ProgressView, QuestionsView, QuestionView, ResultSelfCheck, ResultView, SetInfo, SummaryCardView } from './types.js';
 
 const root = '/api/diagnostic/participant';
 export class ApiError extends Error { constructor(readonly status: number, message: string) { super(message); } }
@@ -33,3 +33,4 @@ export const finishPassage = (id: string, passageId: string) => request<{ status
 export const getFeedback = (id: string, questionId: string) => request<DiagnosticFeedbackView>(at(id, `/item/${encodeURIComponent(questionId)}/feedback`));
 export const postFeedback = (id: string, questionId: string, body: DiagnosticFeedbackRequest) => request<DiagnosticFeedbackView>(at(id, `/item/${encodeURIComponent(questionId)}/feedback`), 'POST', body);
 export const getResult = (id: string) => request<ResultView>(at(id, '/result'));
+export const postSelfCheck = (id: string, questionId: string, choice: string) => request<{ selfCheck: ResultSelfCheck }>(at(id, `/item/${encodeURIComponent(questionId)}/self-check`), 'POST', { choice });

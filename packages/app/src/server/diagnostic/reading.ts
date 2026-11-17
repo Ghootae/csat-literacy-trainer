@@ -80,6 +80,31 @@ export function countParagraph(map: AnalysisMap, paragraphId: string, judgments:
   return counts;
 }
 
+/** 갈래별 사례: 다르게 이은 곳(CONTRADICTS)과 빠뜨린 곳(MISSING). `sourceTexts`는 관계 양 끝 단위의 골드 원문 문장(중복 없이 지문 순). */
+export interface ReadingCase { branch: Branch; kind: 'CONTRADICTS' | 'MISSING'; paragraphId: string; relationType: string; sourceTexts: string[] }
+/** `countParagraph`와 같은 제외 규칙(문단 넘는 관계, 물려받은 CONTRADICTS, 판정 없음, 기타 갈래)으로 잡지 못한 관계를 사례로 낸다. */
+export function readingCases(map: AnalysisMap, paragraphId: string, judgments: Record<string, { finalLabel: string | null } | undefined>, typeOf: ReadonlyMap<string, string>): ReadingCase[] {
+  const combined = combineRound(map, paragraphId, judgments);
+  const nodes = combined.nodes as Record<string, { label: string | null }>;
+  const relations = combined.relations as Record<string, { label: string | null; crossEndUnchecked: string[] }>;
+  const units = new Map(unitsForParagraph(map, paragraphId).relations.map(unit => [unit.id, unit]));
+  const relationById = new Map(map.relations.map(r => [r.id, r]));
+  const cases: ReadingCase[] = [];
+  for (const [id, relation] of Object.entries(relations)) {
+    if (relation.crossEndUnchecked.length > 0 || relation.label === null || isCaught(relation.label)) continue;
+    const type = typeOf.get(id);
+    if (!type) throw new Error(`classify에 관계 id 없음: ${id}`);
+    const source = relationById.get(id)!;
+    const inherited = relation.label === 'CONTRADICTS' && [source.fromId, source.toId].some(end => nodes[end]?.label === 'CONTRADICTS');
+    const branch = BRANCH_OF[type];
+    const unit = units.get(id);
+    if (inherited || !branch || branch === '기타' || !unit) continue;
+    cases.push({ branch, kind: relation.label === 'CONTRADICTS' ? 'CONTRADICTS' : 'MISSING', paragraphId, relationType: type,
+      sourceTexts: [...new Set([...unit.from.sourceQuotes, ...unit.to.sourceQuotes])] });
+  }
+  return cases;
+}
+
 // ---------- 요약과 틀린 문항 연결(2b) ----------
 
 export interface JudgedUnitInfo { ownerParagraphId: string; endParagraphIds: string[] }

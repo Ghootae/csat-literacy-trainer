@@ -276,7 +276,10 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
 
   // 결과 화면
   await expect(page.getByRole('heading', { name: '독해력 진단 결과' })).toBeVisible({ timeout: 20_000 });
-  for (const name of ['내 위치', '문제 풀이 결과', '독해 패턴', '추천']) await expect(page.getByRole('region', { name })).toBeVisible();
+  for (const name of ['요약', '내 위치', '문제 풀이 결과', '독해 패턴', '추천']) await expect(page.getByRole('region', { name })).toBeVisible();
+  await expect(page.getByTestId('headline')).toHaveText(/^처음 고른 답 기준 정답 \d+ \/ 16 · 근거까지 맞은 정답 \d+ · (추정 [1-9]등급|등급 계산 중)$/u);
+  const tops = await Promise.all(['요약', '내 위치', '문제 풀이 결과', '독해 패턴', '추천'].map(async name => (await page.getByRole('region', { name }).boundingBox())!.y));
+  expect(tops).toEqual([...tops].sort((a, b) => a - b));   // 맨 위 요약 → ① → ② → ③ → 추천
   const position = page.getByRole('region', { name: '내 위치' });
   await expect(page.getByTestId('grade')).toHaveText(/^[1-9]등급$/u);
   await expect(page.getByTestId('grade-sentence')).toHaveText(/^[1-9]등급(.*)일 확률이 (각각 )?\d+%로 가장 높아$/u);
@@ -296,14 +299,17 @@ test('시작 → 지문 1 요약·답(근거 있음·생략) → 지문 결과 �
   await expect(solveCells).toHaveCount(16);
   await expect(page.getByRole('button', { name: /(^| )6번, ✕ 오답$/u })).toHaveAttribute('data-group', 'wrong');
   await expect(page.getByRole('region', { name: '문제 풀이 결과' }).locator('.diag-cell[data-group="good"]').first()).toHaveCSS('background-color', 'rgb(228, 243, 225)');
-  await expect(page.getByRole('region', { name: '독해 패턴' })).toContainText('첫 요약만');
-  await expect(page.getByRole('region', { name: '독해 패턴' })).toContainText('곳을 잡았어');
-  await expect(page.getByRole('region', { name: '추천' })).toContainText('고른 오답 선지의 함정');
+  await expect(page.getByRole('region', { name: '독해 패턴' })).toContainText('처음 쓴 요약 기준');
+  await expect(page.getByRole('region', { name: '독해 패턴' })).toContainText('곳 중 ');
+  await expect(page.getByRole('region', { name: '추천' })).toContainText('매 지문 이런 분석을 받으며 훈련할 수 있어.');
+  await expect(page.getByRole('region', { name: '문제 풀이 결과' })).not.toContainText('어긋난 단계');
+  await expect(page.getByRole('region', { name: '문제 풀이 결과' }).getByTestId('breakdown')).toBeVisible();
   await expect(page.getByRole('region', { name: '문제 풀이 결과' })).toContainText('근거 없이 낸 정답');
   await page.getByRole('button', { name: /(^| )6번(,|$)/u }).click();       // 경마식 보도 6번: 오답 + 비틂
   const card = page.getByRole('article');
   await expect(card).toContainText('오답');
-  await expect(card).toContainText('고른 선지의 함정 ·');
+  await expect(card.getByTestId('twist-pair').first()).toContainText('선지');   // 선지 구절 ↔ 원문 짝(이름만 단독으로 나오지 않는다)
+  await expect(card).not.toContainText('고른 선지의 함정');
   await expect(card).toContainText('이 문항 정답률');
   await page.getByRole('button', { name: /(^| )9번(,|$)/u }).click();       // 플라스틱 9번: 문항 검토
   await expect(page.getByRole('article')).toContainText('이 문항은 우리가 한 번 더 확인하고 있어.');

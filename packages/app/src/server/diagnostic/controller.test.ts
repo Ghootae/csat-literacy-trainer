@@ -847,3 +847,107 @@ describe('지문 결과 화면 (D-0218)', () => {
     expect(h.c.finish(h.id, COG.passageId)).toEqual({ status: 'DONE' });
   });
 });
+
+describe('결과 카드 자료와 자기 점검 (결과 화면 1단계)', () => {
+  it('오답 카드 자료: 발문·선지 전문·함정 짝(선지 구절 ↔ 원문)·적절하지 않은 것 고르기는 놓친 정답 선지와 그 짝', async () => {
+    const h = harness({ [Q13]: 'ERROR' });
+    await answerPassage(h, COG, mixed()); await settle(h.c);
+    const items = h.c.result(h.id).items;
+    const q13 = items.find(i => i.questionId === Q13)!;
+    expect(q13).toMatchObject({ review: false, correct: false, stemPolarity: 'SELECT_INCORRECT', twist: null, selfCheck: null, strategyAvailable: false });
+    expect(q13.stem).toContain('적절하지 않은 것'); expect(q13.chosenText.length).toBeGreaterThan(5);
+    expect(q13.answerText).not.toBe(q13.chosenText);   // 정답 선지 ③ 전문
+    expect(q13.answerTwist).toEqual([expect.objectContaining({ twistType: 'NEGATION', choiceQuote: expect.any(String), evidenceQuote: expect.any(String) })]);
+    expect(q13.answerTwist![0]!.choiceQuote).not.toBe(''); expect(q13.answerTwist![0]!.evidenceQuote).not.toBe('');
+    expect(q13.answerText).toContain(q13.answerTwist![0]!.choiceQuote);   // 비튼 구절은 정답 선지 안에 있다
+    // 정답 문항은 정답 선지 전문·비틂을 내지 않는다. 적절한 것 고르기 오답은 고른 선지의 비틂 짝을 낸다.
+    const q12 = items.find(i => i.questionId === Q12)!;
+    expect(q12).toMatchObject({ correct: true, answerText: null, answerTwist: null, stemPolarity: 'SELECT_CORRECT' });
+    const h2 = harness({ [Q12]: 'ERROR' });
+    await answerPassage(h2, COG, { ...mixed(), [Q12]: provided(choiceId(2)) }); await settle(h2.c);
+    const wrongPick = h2.c.result(h2.id).items.find(i => i.questionId === Q12)!;
+    expect(wrongPick).toMatchObject({ correct: false, stemPolarity: 'SELECT_CORRECT', answerTwist: null });
+    expect(wrongPick.twist!.every(t => t.choiceQuote !== '' && t.evidenceQuote !== '')).toBe(true);
+    expect(wrongPick.answerText).not.toBeNull(); expect(wrongPick.chosenText).toContain(wrongPick.twist![0]!.choiceQuote);
+  });
+
+  it('문항 검토 문항은 정답 선지 전문·비틂을 내지 않고, 출제자 전략 글이 있는 문항만 strategyAvailable이다', async () => {
+    const strategies = new Map([[Q12, [{ position: 1, paragraphs: ['전략 글'] }]]]);
+    const h = harness({ [Q13]: 'BOUNDARY' }, { strategies });
+    await answerPassage(h, COG, mixed()); await settle(h.c);
+    const items = h.c.result(h.id).items;
+    expect(items.find(i => i.questionId === Q13)).toMatchObject({ review: true, answerText: null, answerTwist: null, answerPosition: null, stem: expect.any(String), chosenText: expect.any(String) });
+    expect(items.filter(i => i.strategyAvailable).map(i => i.questionId)).toEqual([Q12]);
+  });
+
+  it('결과 응답: summaryGroups는 null이고 symbolGloss는 지문별 사전이다', async () => {
+    const h = harness();
+    await answerPassage(h, HORSE, Object.fromEntries(HORSE.questionIds.map(q => [q, provided(correctChoice(q))]))); await settle(h.c);
+    const result = h.c.result(h.id);
+    expect(result.summaryGroups).toBeNull();
+    expect(Object.keys(result.symbolGloss)).toEqual(set.passages.map(p => p.passageId));
+    expect(result.symbolGloss[HORSE.passageId]!['ⓑ']).toContain('소수 의견');
+    expect(result.symbolGloss['audio-perceptual-coding']).toEqual({});
+  });
+
+  it('자기 점검: 근거 없이 틀린 문항에만 쓰고 다시 고를 수 있으며, 사건에 남고 결과·새 컨트롤러 이어 가기에서도 유지된다', async () => {
+    const h = harness();
+    await answerPassage(h, COG, mixed()); await settle(h.c);
+    expect(h.c.result(h.id).items.find(i => i.questionId === Q15)).toMatchObject({ correct: false, rationale: 'OMITTED', selfCheck: null });
+    const saved = h.c.selfCheck(h.id, Q15, { choice: '찍었어' });
+    expect(saved.selfCheck).toMatchObject({ choice: '찍었어', at: expect.any(String) });
+    expect(h.c.result(h.id).items.find(i => i.questionId === Q15)!.selfCheck).toEqual(saved.selfCheck);
+    h.c.selfCheck(h.id, Q15, { choice: '선지 내용을 잘못 이해했어' });
+    expect(h.store.events.filter(e => e.type === 'SELF_CHECK').map(e => [e['questionId'], e['choice']])).toEqual([[Q15, '찍었어'], [Q15, '선지 내용을 잘못 이해했어']]);
+    await settle(h.c);
+    const second = new DiagnosticController({ store: h.store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-self-')),
+      diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
+    expect(second.result(h.id).items.find(i => i.questionId === Q15)!.selfCheck).toMatchObject({ choice: '선지 내용을 잘못 이해했어' });
+    await settle(second);
+  });
+
+  it('자기 점검 검사: 정답·근거를 쓴 오답·답이 없는 문항·푸는 중·빈 값·없는 문항은 거절한다. 옛 파일(selfCheck 없음)은 null로 읽힌다', async () => {
+    const h = harness({ [Q13]: 'ERROR' });
+    h.c.start(h.id, COG.passageId, { summary: false });
+    expect(() => h.c.selfCheck(h.id, Q15, { choice: '찍었어' })).toThrow(expect.objectContaining({ status: 409 }));   // 답이 없다
+    for (const q of COG.questionIds) post(h, q, mixed()[q]!);
+    expect(() => h.c.selfCheck(h.id, Q15, { choice: '찍었어' })).toThrow(expect.objectContaining({ status: 409 }));   // 아직 푸는 중
+    h.c.answersDone(h.id, COG.passageId); await settle(h.c);
+    expect(() => h.c.selfCheck(h.id, Q14, { choice: '찍었어' })).toThrow(expect.objectContaining({ status: 409 }));   // 정답
+    expect(() => h.c.selfCheck(h.id, Q13, { choice: '찍었어' })).toThrow(expect.objectContaining({ status: 409 }));   // 근거를 쓴 오답
+    expect(() => h.c.selfCheck(h.id, Q15, { choice: '  ' })).toThrow();
+    expect(() => h.c.selfCheck(h.id, Q15, { choice: '찍었어', extra: 1 })).toThrow();
+    expect(() => h.c.selfCheck(h.id, 'no-such-q', { choice: '찍었어' })).toThrow(expect.objectContaining({ status: 404 }));
+    const old = JSON.parse(h.store.files.get(h.id)!) as DiagnosticParticipant;
+    for (const item of Object.values(old.items)) delete item.selfCheck;
+    h.store.files.set(h.id, JSON.stringify(old));
+    const fresh = new DiagnosticController({ store: h.store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-selfold-')),
+      diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
+    expect(fresh.result(h.id).items.every(i => i.selfCheck === null)).toBe(true);
+    await settle(fresh);
+  });
+
+  it('reading[].cases: 다르게 이은 곳·빠뜨린 곳이 갈래별로 나오고 개수가 counts와 같으며, 학생 첫 요약 원문과 골드 원문이 붙는다', async () => {
+    for (const [label, kind] of [['CONTRADICTS', 'CONTRADICTS'], ['ABSENT', 'MISSING']] as const) {
+      const h = harness({}, {}, { judge: constantJudge(label) });
+      await summarizeAll(h, COG); await settle(h.c);
+      const reading = h.c.result(h.id).reading[0]!;
+      // 모든 단위가 CONTRADICTS면 관계의 오류는 끝 노드에서 물려받은 것이라 사례로 세지 않는다(집계와 같은 규칙).
+      expect(reading.cases.length > 0).toBe(label === 'ABSENT');
+      expect(reading.cases.every(c => c.kind === kind)).toBe(true);
+      for (const branch of ['내용', '논증', '관점', '흐름'] as const) {
+        const own = reading.cases.filter(c => c.branch === branch);
+        const cell = reading.counts.branches[branch];
+        expect(own.length).toBe(label === 'CONTRADICTS' ? cell.wrong : cell.total - cell.caught);
+      }
+      const sample = reading.cases[0];
+      if (!sample) continue;
+      expect(sample.studentText).toContain('이 문단의 요약'); expect(sample.studentText).toContain(sample.paragraphId);
+      expect(sample.sourceTexts.length).toBeGreaterThan(0); expect(sample.paragraphLabel).toMatch(/문단$/u);
+      expect(sample.paragraphPosition).toBeGreaterThan(0); expect(sample.relationType).toMatch(/^[A-Z_]+$/u);
+    }
+    const none = harness({}, {}, { judge: constantJudge('DIRECT') });
+    await summarizeAll(none, COG); await settle(none.c);
+    expect(none.c.result(none.id).reading[0]!.cases).toEqual([]);
+  });
+});

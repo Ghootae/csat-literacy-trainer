@@ -53,7 +53,7 @@ export function MidPage({ title, number, total, card, dev, last, busy, error, re
                   : <><p className="diag-rowtext diag-rowhidden" data-testid={`desc-${item.questionNumber}`}>결과는 가려져 있어</p><span className="diag-reviewbtn diag-reviewhidden" aria-hidden="true" /></>}
               </li>;
             })}</ul>
-            {card.items.some(item => item.revealed) && <p className="diag-muted">정답률과 같은 선지를 고른 비율은 {MEGASTUDY_NOTE}(두 수치는 화작 · 언매 순).</p>}</>}</> : <p className="diag-muted" role="status">{PENDING_TEXT}</p>}</section>
+            {card.items.some(item => item.revealed) && <p className="diag-muted">정답률과 같은 선지를 고른 비율은 {MEGASTUDY_NOTE}.</p>}</>}</> : <p className="diag-muted" role="status">{PENDING_TEXT}</p>}</section>
     <section className="diag-card" aria-label="이 지문까지의 위치"><div className="diag-card-head"><span className="diag-label">이 지문까지의 위치</span><span className="diag-sub">수능 기준 환산 추정</span></div>
       <p className="diag-big" data-testid="grade-text">{card?.position ? `${card.position.grade.mode}등급` : '나의 현재 등급은?'}</p>
       {card?.position && <p className="diag-gradeline" data-testid="grade-sentence">{gradeSentence(card.position.grade.probabilities, card.position.grade.mode)}</p>}

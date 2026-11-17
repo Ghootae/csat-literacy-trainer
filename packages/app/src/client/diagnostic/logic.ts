@@ -2,22 +2,14 @@
  * 진단평가 화면의 순수 계산(인계 B (4)·(5)): 문장 만들기, 정렬, 추천 고르기, 시간 누적.
  * 학생에게 보이는 문장은 반말이다(D-0116). 비틂·관계·단계 이름은 wording.ts에서만 온다.
  */
-import { BRANCH_CODES, BRANCH_WORDING, OTHER_TWIST_NAME, STEP_CODES, STEP_WORDING, TWIST_CODES, TWIST_WORDING, type BranchCode, type TwistCode } from './wording.js';
-import type { AnswerCategory, Confidence, QualityTiers, ReadingCounts, ResultItem, ResultSummaryLink, ResultView, SummaryCardItem, SummaryCardView } from './types.js';
+import { BRANCH_CODES, BRANCH_WORDING, OTHER_TWIST_NAME, TWIST_WORDING, type BranchCode, type TwistCode } from './wording.js';
+import type { AnswerCategory, Confidence, QualityTiers, ReadingCase, ReadingCounts, ResultItem, ResultSummaryLink, ResultView, SummaryCardItem, SummaryCardView } from './types.js';
 
 export const CIRCLED = '①②③④⑤';
 /** ①~⑤ 뒤에 붙는 조사(일·이·삼·사·오). 을/를. */
 const OBJECT_PARTICLE = ['을', '를', '을', '를', '를'];
 export const circled = (position: number): string => CIRCLED[position - 1] ?? String(position);
 export const circledObject = (position: number): string => `${circled(position)}${OBJECT_PARTICLE[position - 1] ?? '을'}`;
-
-/** 받침이 있으면 을, 없으면 를(한글 아닌 끝글자는 를). */
-export function eulReul(word: string): string {
-  const last = word.trim().at(-1) ?? '';
-  const code = last.charCodeAt(0);
-  if (code < 0xac00 || code > 0xd7a3) return '를';
-  return (code - 0xac00) % 28 === 0 ? '를' : '을';
-}
 
 // ---------- 범주 집계 ----------
 
@@ -149,46 +141,114 @@ export const POSITION_NOTE = '시간 제한 없이 근거를 쓰며 푼 결과�
 
 // ---------- ② 문제 풀이 결과 ----------
 
-export interface SolveStats { correct: number; total: number; accurate: number; qualityDenominator: number; sure: number; unsure: number; unverified: number; eliminated: number }
-/** 숫자 칸. 근거까지 정확한 정답(2단계면 근거가 확인되는 정답) / 근거를 판정한 정답(범주 1·2·3)과, 분모에 넣지 않는 범주 4·5·`UNVERIFIED`·소거법 정답 개수. 소거법 정답은 근거를 쓰지 않았으므로 분자·분모에서 빼고 따로 센다(D-0228 추가 2). */
-export function solveStats(items: readonly ResultItem[], total = 16, tiers: QualityTiers = 3): SolveStats {
-  const isEliminated = (item: ResultItem) => item.category === 'WEAK_CORRECT' && item.elimination;
-  const t = categoryTally(countCategories(items.filter(item => !isEliminated(item))), tiers);
-  return { correct: items.filter(item => item.correct).length, total, accurate: t.accurate, qualityDenominator: t.denominator, sure: t.sure, unsure: t.unsure, unverified: t.unverified,
-    eliminated: items.filter(isEliminated).length };
+/** 맨 위 요약의 "근거까지 맞은 정답": 소거법 정답은 근거를 쓰지 않았으므로 세지 않는다(D-0228 추가 2). 2단계 표시면 근거가 확인되는 정답. */
+export function accurateCorrect(items: readonly ResultItem[], tiers: QualityTiers = 3): number {
+  return categoryTally(countCategories(items.filter(item => !(item.category === 'WEAK_CORRECT' && item.elimination))), tiers).accurate;
 }
 
-export interface StepTendency { sentence: string; bars: { code: string; name: string; count: number; ratio: number }[] }
-/** 어긋난 단계(경향). `denominator = 0`이거나 어긋난 단계가 없으면 null(칸을 숨긴다). */
-export function stepTendency(steps: Pick<ResultView['steps'], 'counts' | 'denominator'>): StepTendency | null {
-  if (steps.denominator <= 0) return null;
-  const count = (code: string) => steps.counts[code] ?? 0;
-  const max = Math.max(...STEP_CODES.map(count));
-  if (max <= 0) return null;
-  const names = STEP_CODES.filter(code => count(code) === max).map(code => STEP_WORDING[code]).join('·');
-  return { sentence: `근거를 살펴본 ${steps.denominator}문항 중 ${max}개가 ${names} 단계에서 어긋났어.`,
-    bars: STEP_CODES.map(code => ({ code, name: STEP_WORDING[code], count: count(code), ratio: count(code) / steps.denominator })) };
+/** 분해 막대의 칸 하나. `items`가 칸의 너비(문항 수)이고 칸 안에 문항 번호가 들어간다. `gray`는 판정을 확인하지 못한 정답 칸이다. */
+export interface BreakdownCell { key: string; label: string; items: ResultItem[]; gray?: boolean }
+export interface Breakdown { total: number; correct: number; wrong: number; row2: { correct: BreakdownCell[]; wrong: BreakdownCell[] }; row3: { correct: BreakdownCell[]; wrong: BreakdownCell[] } }
+const isEliminationCorrect = (item: ResultItem) => item.category === 'WEAK_CORRECT' && item.elimination;
+/** 정답 문항의 3줄째 칸. 판정 중·검토 중·판정 불가는 회색 "확인 중" 칸 하나로 모은다. */
+function correctCell(item: ResultItem, tiers: QualityTiers): { key: string; label: string; gray?: boolean } {
+  if (item.review || item.category === 'PENDING' || item.category === 'CHECKING' || item.category === 'UNVERIFIED') return { key: 'checking', label: '확인 중', gray: true };
+  if (item.category === 'SURE_CORRECT') return { key: 'sure', label: '확실' };
+  if (item.category === 'UNSURE_CORRECT') return { key: 'unsure', label: '확신 없이' };
+  if (isEliminationCorrect(item)) return { key: 'elimination', label: '소거법' };
+  if (tiers === 2) return item.category === 'ERROR_CORRECT' ? { key: 'other', label: '그 밖' } : { key: 'accurate', label: '근거가 확인되는 정답' };
+  return item.category === 'SUPPORTED_CORRECT' ? { key: 'accurate', label: '근거까지 정확' } : { key: 'weak', label: '부족·틀린 근거' };
+}
+const CORRECT_CELL_ORDER = ['accurate', 'weak', 'other', 'sure', 'unsure', 'elimination', 'checking'];
+function groupCells(items: readonly ResultItem[], keyOf: (item: ResultItem) => { key: string; label: string; gray?: boolean }, order: readonly string[]): BreakdownCell[] {
+  const cells = new Map<string, BreakdownCell>();
+  for (const item of items) {
+    const { key, label, gray } = keyOf(item);
+    const cell = cells.get(key) ?? { key, label, items: [], ...(gray ? { gray } : {}) };
+    cell.items.push(item); cells.set(key, cell);
+  }
+  return [...cells.values()].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+}
+/** 문제 풀이 분해 막대(설계 2절): 1줄 정답|오답, 2줄 근거 쓴 여부, 3줄 정답 쪽은 정답의 질, 오답 쪽은 문항마다 한 칸. 칸 너비는 문항 수에 비례한다. */
+export function breakdown(items: readonly ResultItem[], total: number, tiers: QualityTiers = 3): Breakdown {
+  const right = items.filter(item => item.correct); const wrong = items.filter(item => !item.correct);
+  const byRationale = (item: ResultItem, correct: boolean) => item.rationale === 'PROVIDED'
+    ? { key: 'provided', label: correct ? '근거를 쓴 정답' : '근거 쓰고 틀림' } : { key: 'omitted', label: correct ? '근거 없이 낸 정답' : '근거 없이 틀림' };
+  return { total, correct: right.length, wrong: wrong.length,
+    row2: { correct: groupCells(right, item => byRationale(item, true), ['provided', 'omitted']), wrong: groupCells(wrong, item => byRationale(item, false), ['provided', 'omitted']) },
+    row3: { correct: groupCells(right, item => correctCell(item, tiers), CORRECT_CELL_ORDER), wrong: wrong.map(item => ({ key: item.questionId, label: '', items: [item] })) } };
 }
 
-const isTwistCode = (code: string): code is TwistCode => code in TWIST_WORDING;
-/** 걸린 함정 꼬리표: 많은 순(같으면 확정본 표 순서), `OTHER`와 표에 없는 코드는 "그 밖의 함정"으로 합쳐 맨 뒤. */
-export function twistTags(counts: Record<string, number>): { name: string; count: number }[] {
-  const known = TWIST_CODES.map((code, order) => ({ code, order, count: counts[code] ?? 0 })).filter(x => x.count > 0)
-    .sort((a, b) => b.count - a.count || a.order - b.order).map(x => ({ name: TWIST_WORDING[x.code].name, count: x.count }));
-  const other = Object.entries(counts).filter(([code]) => !isTwistCode(code)).reduce((sum, [, n]) => sum + n, 0);
-  return other > 0 ? [...known, { name: OTHER_TWIST_NAME, count: other }] : known;
+// ---------- 카드: 글 조각 ----------
+
+export interface TextSegment { text: string; bold: boolean }
+/** 글에서 인용 구절을 찾아 굵게 할 조각으로 나눈다. 글에 없는 구절은 건너뛴다. */
+export function boldQuotes(text: string, quotes: readonly string[]): TextSegment[] {
+  const ranges = quotes.filter(quote => quote !== '').map(quote => ({ start: text.indexOf(quote), length: quote.length })).filter(range => range.start >= 0)
+    .map(range => [range.start, range.start + range.length] as [number, number]).sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const range of ranges) { const last = merged.at(-1); if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]); else merged.push([...range]); }
+  const segments: TextSegment[] = []; let at = 0;
+  for (const [start, end] of merged) { if (start > at) segments.push({ text: text.slice(at, start), bold: false }); segments.push({ text: text.slice(start, end), bold: true }); at = end; }
+  if (at < text.length) segments.push({ text: text.slice(at), bold: false });
+  return segments.length === 0 ? [{ text, bold: false }] : segments;
+}
+/** 선지 전문 가운데 인용 구절 앞뒤 `pad`글자만 남긴 조각("… 구절 …"). 글에 구절이 없으면 구절만 굵게 낸다. */
+export function excerptAround(text: string, quote: string, pad = 16): TextSegment[] {
+  const start = text.indexOf(quote);
+  if (start < 0 || quote === '') return [{ text: quote, bold: true }];
+  const end = start + quote.length;
+  const before = text.slice(Math.max(0, start - pad), start); const after = text.slice(end, end + pad);
+  return [{ text: `${start - pad > 0 ? '… ' : ''}${before}`, bold: false }, { text: quote, bold: true }, { text: `${after}${end + pad < text.length ? ' …' : ''}`, bold: false }];
 }
 
-/** 문항 카드의 걸린 함정. `twist`가 여러 개면 모두. OTHER·표에 없는 코드는 이름만 "그 밖의 함정"이고 한 줄 설명은 없다. 개발용 `twistDetail`은 쓰지 않는다. */
-export function cardTwists(twist: ResultItem['twist']): { name: string; line: string | null; changed: string | null }[] {
-  return (twist ?? []).map(t => isTwistCode(t.twistType)
-    ? { name: TWIST_WORDING[t.twistType].name, line: TWIST_WORDING[t.twistType].line, changed: t.studentText }
-    : { name: OTHER_TWIST_NAME, line: null, changed: t.studentText });
+const SYMBOL = /[\u3260-\u327b\u24d0-\u24e9]|\([가-하]\)/gu;
+/** 글 속 기호(㉠·㉮·ⓐ·(가) 등)가 처음 나올 때 최소 풀이를 붙인다: `ⓑ(후보 초청 제한이 위헌이라는 소수 의견)`, 괄호 기호는 `(가)[…]`. 사전에 없는 기호는 그대로 둔다. `seen`은 한 카드 안에서 이어 쓴다. */
+export function annotateSymbols(text: string, gloss: Readonly<Record<string, string>>, seen: Set<string>): string {
+  return text.replace(SYMBOL, symbol => {
+    const meaning = gloss[symbol];
+    if (meaning === undefined || seen.has(symbol)) return symbol;
+    seen.add(symbol);
+    return symbol.startsWith('(') ? `${symbol}[${meaning}]` : `${symbol}(${meaning})`;
+  });
 }
-export function cardStepName(item: ResultItem): string | null {
-  const step = item.thoughtDiagnosis?.status === 'ready' ? item.thoughtDiagnosis.firstFailedStep : null;
-  return step !== null && step in STEP_WORDING ? STEP_WORDING[step as keyof typeof STEP_WORDING] : null;
+/** 기호 풀이를 조각마다 이어서 붙인다(굵게 표시는 그대로). */
+export const annotateSegments = (segments: readonly TextSegment[], gloss: Readonly<Record<string, string>>, seen: Set<string>): TextSegment[] =>
+  segments.map(segment => ({ ...segment, text: annotateSymbols(segment.text, gloss, seen) }));
+
+/** 오답 카드의 함정 짝에 쓰는 비틂: 적절하지 않은 것 고르기에서 놓친 정답 선지의 것이면 `answerTwist`, 아니면 고른 선지의 `twist`. */
+export function twistsForPairs(item: ResultItem): ResultItem['twist'] { return item.stemPolarity === 'SELECT_INCORRECT' ? item.answerTwist : item.twist; }
+/** 학생에게 낼 비틂 머리말(작은 글씨 전용: 이름만 단독으로 내지 않는다). */
+export const twistName = (twistType: string): string => (twistType in TWIST_WORDING ? TWIST_WORDING[twistType as TwistCode].name : OTHER_TWIST_NAME);
+export const hasPair = (twist: { choiceQuote: string; evidenceQuote: string }): boolean => twist.choiceQuote !== '' && twist.evidenceQuote !== '';
+
+/** 긴 글을 `limit`글자에서 줄인다(맨 위 요약 상자용). */
+export const clip = (text: string, limit = 120): string => { const chars = Array.from(text.trim()); return chars.length <= limit ? text.trim() : `${chars.slice(0, limit).join('').trimEnd()}…`; };
+
+export const SELF_CHECK_CHOICES = ['선지 내용을 잘못 이해했어', '지문 내용을 잘못 기억했어', '찍었어'] as const;
+
+// ---------- 맨 위 요약: 가장 먼저 볼 것 ----------
+
+export interface CaseEntry { passageId: string; index: number; case: ReadingCase }
+export type FirstLook = { kind: 'item'; item: ResultItem } | { kind: 'case'; entry: CaseEntry };
+/** 요약에서 모은 사례의 모든 지문 합. 순서는 지문, 문단, 관계 순이다. */
+export function caseEntries(reading: ResultView['reading']): CaseEntry[] {
+  return reading.filter(r => r.status === 'ready').flatMap(r => r.cases.map((found, index) => ({ passageId: r.passageId, index, case: found })));
 }
+/**
+ * "가장 먼저 볼 것" 하나(설계 8절, 묶음이 없을 때): ① 학생 근거가 있는 오답 중 선지 연결 짝이 있는 문항 → ② 요약에서 다르게 이은 곳
+ * → ③ 근거가 부족한 정답. 같은 순위 안에서는 지문·문항 순서가 앞선 것. 하나도 없으면 null.
+ */
+export function pickFirstLook(items: readonly ResultItem[], reading: ResultView['reading']): FirstLook | null {
+  const checked = items.filter(item => !item.review);
+  const wrong = checked.find(item => !item.correct && item.evidence?.student != null && (twistsForPairs(item) ?? []).some(hasPair));
+  if (wrong) return { kind: 'item', item: wrong };
+  const misread = caseEntries(reading).find(entry => entry.case.kind === 'CONTRADICTS');
+  if (misread) return { kind: 'case', entry: misread };
+  const weak = checked.find(item => item.correct && !isEliminationCorrect(item) && (item.category === 'WEAK_CORRECT' || item.category === 'ERROR_CORRECT') && item.evidence?.student != null);
+  return weak ? { kind: 'item', item: weak } : null;
+}
+
 /** 정답 문항의 질 문구(범주와 표시 단계로 고른다). 판정 중·오답은 null. */
 export function answerQuality(item: Pick<ResultItem, 'category'> & { elimination?: boolean }, tiers: QualityTiers = 3): string | null {
   if (item.category === 'WEAK_CORRECT' && item.elimination === true) return `정답이야. ${ELIMINATION_PRAISE.replace(/\.$/, '')}`;
@@ -208,8 +268,8 @@ export function answerPayload(confidence: Confidence | null, text: string, elimi
   if (confidence === null) return { rationale: { mode: 'PROVIDED', text }, confidence: null };
   return confidence === 'ELIMINATION' ? { rationale: { mode: 'OMITTED' }, confidence, eliminationNote } : { rationale: { mode: 'OMITTED' }, confidence };
 }
-export const percentPair = (pair: readonly [number, number]): string => `${pair[0]}% · ${pair[1]}%`;
-export const MEGASTUDY_NOTE = '메가스터디 이용자 기준 · 화법과작문 · 언어와매체';
+export const percentPair = (pair: readonly [number, number]): string => `화작 ${pair[0]}% · 언매 ${pair[1]}%`;
+export const MEGASTUDY_NOTE = '메가스터디 이용자 기준';
 
 // ---------- ③ 독해 패턴 ----------
 
@@ -222,21 +282,33 @@ export function sumCounts(readings: readonly { counts: ReadingCounts }[]): Readi
   }
   return sum;
 }
-/** "문단 요지는 9곳 중 7곳, 묶음은 12곳 중 6곳, 세부 내용은 30곳 중 11곳을 잡았어." 분모가 0인 층은 뺀다. 모두 0이면 null. */
-export function layerSentence(counts: ReadingCounts): string | null {
-  const parts = ([['요지', '문단 요지는'], ['합성', '묶음은'], ['명제', '세부 내용은']] as const).filter(([key]) => counts.layers[key].total > 0)
-    .map(([key, label]) => `${label} ${counts.layers[key].total}곳 중 ${counts.layers[key].caught}곳`);
-  return parts.length === 0 ? null : `${parts.join(', ')}을 잡았어.`;
+export interface LayerRow { key: '요지' | '합성'; name: string; caught: number; total: number }
+/** 점수 칸 둘: 문단 요지와 내용 묶음. 세부 내용(명제)은 점수 칸이 아니라 `detailLine`으로 낮춘다(설계 7절). */
+export function layerRows(counts: ReadingCounts): LayerRow[] {
+  return ([['요지', '문단 요지'], ['합성', '내용 묶음']] as const).map(([key, name]) => ({ key, name, caught: counts.layers[key].caught, total: counts.layers[key].total }));
 }
-export interface BranchRow { code: BranchCode; name: string; line: string; caught: number; total: number; text: string; wrongText: string | null }
-/** 관계 4갈래 행. `total = 0`인 갈래는 숨긴다. `wrong > 0`일 때만 틀리게 이은 곳을 붙인다. */
+/** "참고 · 요약에 함께 담은 세부 내용 n곳 (지문 전체 m곳). …" 판단한 세부가 없으면 null. */
+export function detailLine(counts: ReadingCounts): string | null {
+  const { caught, total } = counts.layers.명제;
+  return total === 0 ? null : `참고 · 요약에 함께 담은 세부 내용 ${caught}곳 (지문 전체 ${total}곳). 요약은 세부를 추려 내는 일이라 이 수가 적다고 모자란 건 아니야.`;
+}
+export interface BranchRow { code: BranchCode; name: string; line: string; caught: number; total: number; wrong: number; text: string }
+/** 관계 4갈래 행. 네 갈래 모두 같은 틀로 "m곳 중 n곳 · k곳 다르게"를 낸다. */
 export function branchRows(counts: ReadingCounts): BranchRow[] {
-  return BRANCH_CODES.filter(code => counts.branches[code].total > 0).map(code => {
+  return BRANCH_CODES.map(code => {
     const { caught, total, wrong } = counts.branches[code];
-    return { code, name: BRANCH_WORDING[code].name, line: BRANCH_WORDING[code].line, caught, total, text: `${total}곳 중 ${caught}곳을 잡았어`,
-      wrongText: wrong > 0 ? `${wrong}곳은 지문과 다르게 이었어` : null };
+    return { code, name: BRANCH_WORDING[code].name, line: BRANCH_WORDING[code].line, caught, total, wrong, text: `${total}곳 중 ${caught}곳 · ${wrong}곳 다르게` };
   });
 }
+/** 한 갈래의 사례: 다르게 이은 곳(CONTRADICTS)을 앞에, 같은 종류 안에서는 지문·문단 순서를 그대로. */
+export function casesOfBranch(entries: readonly CaseEntry[], code: BranchCode): CaseEntry[] {
+  const own = entries.filter(entry => entry.case.branch === code);
+  return [...own.filter(entry => entry.case.kind === 'CONTRADICTS'), ...own.filter(entry => entry.case.kind !== 'CONTRADICTS')];
+}
+export const caseAnchor = (entry: CaseEntry): string => `diag-case-${entry.passageId}-${entry.index}`;
+/** 사례 상자 머리말: "다르게 이음 · 지문 이름 (나) 3문단 · 대상 사이의 관계". 관계 유형 이름은 갈래 이름을 쓴다(유형별 학생용 이름은 아직 없다). */
+export const caseHeading = (found: ReadingCase, passageTitle: string): string =>
+  `${found.kind === 'CONTRADICTS' ? '다르게 이음' : '빠뜨림'} · ${passageTitle} ${found.paragraphLabel} · ${BRANCH_WORDING[found.branch].name}`;
 export const PENDING_TEXT = '분석 중';
 export const FAILED_TEXT = '이 부분은 분석하지 못했어';
 /** 요약과 틀린 문항 연결 문장. 지도 단위의 글은 쓰지 않고 문단 표시(서버 `paragraphLabel`, 예: "2·3문단", "(나) 3문단")만 쓴다. */
@@ -251,15 +323,8 @@ export function summaryLinkSentence(link: ResultSummaryLink, passageTitle: strin
 
 // ---------- 추천 ----------
 
-export const RECOMMEND_FALLBACK = '어려운 문항으로 더 풀어 보면 좋아';
-/** 추천 칸의 문장들. 비틂 문장만 있고, 세트 이름 문장은 대응표에 항목이 있을 때만 붙는다. */
-export function recommendationLines(recommendation: ResultView['recommendation'], twistCounts: Record<string, number>): string[] {
-  if (recommendation === null || !isTwistCode(recommendation.twistType)) return [RECOMMEND_FALLBACK];
-  const name = TWIST_WORDING[recommendation.twistType].name; const count = twistCounts[recommendation.twistType] ?? 0;
-  const lines = [count >= 2 ? `자주 고른 오답 선지의 함정: ${name}(${count}번)` : `이번에 고른 오답 선지의 함정: ${name}`];
-  if (recommendation.setNames.length > 0) lines.push(`비슷한 구조의 지문으로 ${recommendation.setNames.join(', ')}${eulReul(recommendation.setNames.at(-1)!)} 풀어 보면 좋아.`);
-  return lines;
-}
+/** 추천 칸: 실수 묶음 기반 문구는 2단계에서 위에 붙는다. 지금은 서비스 안내 한 줄뿐이다. */
+export const SERVICE_NOTE = '매 지문 이런 분석을 받으며 훈련할 수 있어.';
 
 // ---------- 문항 풀이 시간(인계 A 계약: solveMs에 근거 입력 시간 없음) ----------
 
@@ -284,10 +349,10 @@ export function timerValues(timer: ItemTimer, now: number, omitted: boolean): { 
 
 // ---------- 결과 화면 보조 ----------
 
-/** 칸 하나라도 분석 중이면 true(결과 화면이 다시 받아 온다). 문항 검토 문항의 판정 칸은 숨겨져 있으므로 보지 않는다. */
+/** 화면에 보이는 칸 하나라도 분석 중이면 true(결과 화면이 다시 받아 온다). 문항 검토 문항의 판정 칸은 숨겨져 있으므로 보지 않는다. 사고 진단·단계 집계는 화면에 내지 않으므로 보지 않는다. */
 export function hasPending(result: ResultView): boolean {
-  return result.position.status === 'pending' || result.steps.status === 'pending' || result.reading.some(r => r.status === 'pending')
-    || result.items.some(item => item.thoughtDiagnosis?.status === 'pending' || item.summaryLink?.status === 'pending' || (!item.review && item.judgment.status === 'pending'));
+  return result.position.status === 'pending' || result.reading.some(r => r.status === 'pending')
+    || result.items.some(item => item.summaryLink?.status === 'pending' || (!item.review && item.judgment.status === 'pending'));
 }
 const SOURCE_LOCATION: Record<string, string> = { PASSAGE: '지문', SCENARIO: '보기', STEM: '발문', CHOICE: '선지' };
 /** 원문 인용의 위치 이름. 공식 해설 같은 학생에게 보이지 않을 자리는 null(인용을 내지 않는다). */

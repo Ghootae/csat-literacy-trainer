@@ -1,15 +1,63 @@
-/** 결과 화면(인계 B (5)). 샘플 `Main.dc.html`의 배치와 순서를 따른다: 한 페이지, ① → ② → ③ → 추천. */
-import { useState } from 'react';
+/** 결과 화면(설계 10절): 맨 위 요약 → ① 내 위치 → ② 문제 풀이 → ③ 독해 패턴 → 추천. */
+import { useEffect, useState } from 'react';
 import type { SetInfo, ResultItem, ResultView as Result } from './types.js';
-import { GradeBar } from './GradeBar.js';
+import { GradeAxis, GradeBar } from './GradeBar.js';
+import { Notice, Segs, glossOf, passageTitles } from './ResultShared.js';
+import { Reading } from './ResultReading.js';
+import { Solve } from './ResultSolve.js';
 import {
-  FAILED_TEXT, MEGASTUDY_NOTE, PENDING_TEXT, POSITION_NOTE, RESULT_GROUP_MARK, answerQuality, branchRows, cardStepName, cardTwists, circledObject, gradeSentence,
-  layerSentence, percentPair, recommendationLines, resultGroup, solveStats, sourceLocationName, stepTendency, sumCounts, summaryLinkSentence, twistTags,
+  SERVICE_NOTE, POSITION_NOTE, accurateCorrect, annotateSegments, annotateSymbols, caseAnchor, caseHeading, circled, clip, excerptAround, gradeSentence, hasPair, pickFirstLook, twistsForPairs,
+  type FirstLook,
 } from './logic.js';
 
-type Box = 'pending' | 'ready' | 'failed';
-const boxText = (status: Box) => status === 'pending' ? PENDING_TEXT : FAILED_TEXT;
-function Notice({ status }: { status: Exclude<Box, 'ready'> }) { return <p className="diag-muted" role="status">{boxText(status)}</p>; }
+// ---------- 맨 위 요약 ----------
+
+/** "가장 먼저 볼 것" 상자(설계 8절, 묶음이 없을 때). 출처 줄, 지문(또는 선지) 문장, "너는 …" 문장, 해당 카드·사례로 가는 링크. */
+function FirstLookBox({ look, result, titles, onShowCard }: { look: FirstLook; result: Result; titles: Record<string, string>; onShowCard: (questionId: string) => void }) {
+  const seen = new Set<string>();
+  if (look.kind === 'case') {
+    const { entry } = look; const gloss = glossOf(result, entry.passageId);
+    const source = entry.case.sourceTexts.slice(0, 2).map(text => annotateSymbols(clip(text, 140), gloss, seen));
+    const mine = entry.case.studentText === '' ? null : annotateSymbols(clip(entry.case.studentText, 140), gloss, seen);
+    return <div className="diag-look" data-testid="first-look" data-source="reading">
+      <p className="diag-label2">가장 먼저 볼 것</p>
+      <p className="diag-look-source">요약 · {titles[entry.passageId] ?? ''} {entry.case.paragraphLabel}</p>
+      {source.map((text, i) => <p key={i} className="diag-look-text"><span className="diag-pair-tag">지문</span> <strong>{text}</strong></p>)}
+      {mine && <p className="diag-look-mine">너는 요약에 &ldquo;{mine}&rdquo;라고 썼어.</p>}
+      <a className="diag-look-link" href={`#${caseAnchor(entry)}`}>{caseHeading(entry.case, titles[entry.passageId] ?? '')} 보러 가기 →</a>
+    </div>;
+  }
+  const item: ResultItem = look.item; const gloss = glossOf(result, item.passageId);
+  const pair = (twistsForPairs(item) ?? []).find(hasPair);
+  const choiceText = item.stemPolarity === 'SELECT_INCORRECT' ? item.answerText ?? '' : item.chosenText;
+  const choice = pair ? annotateSegments(excerptAround(choiceText, pair.choiceQuote), gloss, seen) : null;
+  const evidence = pair ? annotateSegments([{ text: clip(pair.evidenceQuote, 140), bold: true }], gloss, seen) : null;
+  const source = pair ? null : item.evidence?.source[0]?.quote ?? null;
+  const sourceText = source === null ? null : annotateSymbols(clip(source, 140), gloss, seen);
+  const student = item.evidence?.student ?? null;
+  const mine = student === null ? null : annotateSymbols(clip(student, 140), gloss, seen);
+  return <div className="diag-look" data-testid="first-look" data-source="item">
+    <p className="diag-label2">가장 먼저 볼 것</p>
+    <p className="diag-look-source">문제 풀이 · {titles[item.passageId] ?? ''} {item.questionNumber}번</p>
+    {choice && <p className="diag-look-text"><span className="diag-pair-tag">{item.stemPolarity === 'SELECT_INCORRECT' ? `놓친 선지 ${circled(item.answerPosition ?? 0)}` : `선지 ${circled(item.chosenPosition)}`}</span> <Segs segments={choice} /></p>}
+    {evidence && <p className="diag-look-text"><span className="diag-pair-tag">원문</span> <Segs segments={evidence} /></p>}
+    {sourceText && <p className="diag-look-text"><span className="diag-pair-tag">원문</span> <strong>{sourceText}</strong></p>}
+    {mine && <p className="diag-look-mine">너는 &ldquo;{mine}&rdquo;라고 적었어.</p>}
+    <a className="diag-look-link" href="#diag-item-card" onClick={event => { event.preventDefault(); onShowCard(item.questionId); }}>{titles[item.passageId] ?? ''} {item.questionNumber}번 카드 보기 →</a>
+  </div>;
+}
+
+function TopSummary({ result, set, onShowCard }: { result: Result; set: SetInfo; onShowCard: (questionId: string) => void }) {
+  const total = set.passages.reduce((sum, p) => sum + p.questionIds.length, 0);
+  const correct = result.items.filter(item => item.correct).length;
+  const grade = result.position.status === 'ready' ? `추정 ${result.position.grade.mode}등급` : '등급 계산 중';
+  // 2단계에서 `summaryGroups`(두 번 이상 나온 실수 묶음)가 들어오면 그것을 올린다. 지금은 늘 null이라 "가장 먼저 볼 것" 하나로 대신한다.
+  const look = result.summaryGroups === null ? pickFirstLook(result.items, result.reading) : null;
+  return <section className="diag-card diag-top" aria-label="요약">
+    <p className="diag-sentence" data-testid="headline">처음 고른 답 기준 정답 {correct} / {total} · 근거까지 맞은 정답 {accurateCorrect(result.items, result.qualityTiers)} · {grade}</p>
+    {look && <FirstLookBox look={look} result={result} titles={passageTitles(set)} onShowCard={onShowCard} />}
+  </section>;
+}
 
 // ---------- ① 내 위치 ----------
 
@@ -27,100 +75,24 @@ function Position({ result }: { result: Result }) {
         return <div key={p.passageId} className="diag-narrowing-row" data-testid="passage-row" data-last={last}>
           <span>{i === 0 ? '지문 1' : `지문 1~${i + 1}`}</span><GradeBar grade={p.grade} small />
           <span>{p.grade.mode}등급 · {percentOf(p.grade.probabilities, p.grade.mode)}%</span></div>;
-      })}</div></div>
+      })}
+        <div className="diag-narrowing-row diag-narrowing-axis" data-testid="grade-axis"><span /><GradeAxis /><span /></div></div></div>
     <p className="diag-muted">{POSITION_NOTE}</p>
   </>;
 }
 
-// ---------- ② 문제 풀이 결과 ----------
-
-function Card({ item, titles, tiers, onClose }: { item: ResultItem; titles: Record<string, string>; tiers: Result['qualityTiers']; onClose: () => void }) {
-  const title = `${titles[item.passageId] ?? ''} ${item.questionNumber}번`;
-  const same = <div className="diag-stats2">
-    <div><span>{circledObject(item.chosenPosition)} 고른 비율</span><strong>{percentPair(item.megastudy.chosenPercents)}</strong></div>
-    <div><span>이 문항 정답률</span><strong>{percentPair(item.megastudy.correctRate)}</strong></div></div>;
-  if (item.review) return <article className="diag-item" id="diag-item-card" aria-label={`${title} 카드`}>
-    <div className="diag-item-head"><h3>{title} · {circledObject(item.chosenPosition)} 골랐어</h3><button type="button" className="diag-close" onClick={onClose}>접기</button></div>
-    <p>이 문항은 우리가 한 번 더 확인하고 있어.</p>{same}<p className="diag-muted">{MEGASTUDY_NOTE}</p></article>;
-  const twists = cardTwists(item.twist); const step = cardStepName(item);
-  const source = (item.evidence?.source ?? []).flatMap(s => { const name = sourceLocationName(s.location); return name === null ? [] : [{ name, quote: s.quote }]; });
-  return <article className="diag-item" id="diag-item-card" aria-label={`${title} 카드`}>
-    <div className="diag-item-head"><h3>{title} · {circledObject(item.chosenPosition)} 골랐어</h3><span className={item.correct ? 'diag-right' : 'diag-wrong'}>{item.correct ? '정답' : '오답'}</span>
-      <button type="button" className="diag-close" onClick={onClose}>접기</button></div>
-    {item.correct && (item.category === 'PENDING' ? <Notice status="pending" /> : <p className="diag-quality">{answerQuality(item, tiers)}</p>)}
-    {same}<p className="diag-muted">{MEGASTUDY_NOTE}</p>
-    {!item.correct && twists.map((t, i) => <div key={i} className="diag-twist"><span className="diag-warn">고른 선지의 함정 · {t.name}</span>{t.line && <p>{t.line}</p>}{t.changed && <p>{t.changed}</p>}</div>)}
-    {item.thoughtDiagnosis !== null && item.thoughtDiagnosis.status !== 'ready' && <Notice status={item.thoughtDiagnosis.status} />}
-    {step && <span className="diag-step">어긋난 단계 · {step}</span>}
-    {item.evidence !== null && (item.evidence.student !== null || source.length > 0) && <div className="diag-evidence">
-      {item.evidence.student !== null && <div className="diag-mine"><span>내 근거</span><br />{item.evidence.student}</div>}
-      {source.length > 0 && <div className="diag-source"><span>원문 · {source.map(s => s.name).join('·')}</span>{source.map((s, i) => <p key={i}>{s.quote}</p>)}</div>}</div>}
-    {(item.afterFeedback.corrected || item.afterFeedback.skipped) && <div className="diag-after">{item.afterFeedback.corrected && <span>피드백으로 고쳤어</span>}{item.afterFeedback.skipped && <span>건너뜀</span>}</div>}
-  </article>;
-}
-
-function Solve({ result, set }: { result: Result; set: SetInfo }) {
+export function ResultView({ result, set, participantId }: { result: Result; set: SetInfo; participantId: string }): React.JSX.Element {
   const [open, setOpen] = useState<string | null>(null);
-  const titles = Object.fromEntries(set.passages.map(p => [p.passageId, p.title]));
-  const total = set.passages.reduce((sum, p) => sum + p.questionIds.length, 0);
-  const stats = solveStats(result.items, total, result.qualityTiers); const tendency = stepTendency(result.steps); const tags = twistTags(result.twists.counts);
-  const opened = result.items.find(item => item.questionId === open);
-  return <>
-    <div className="diag-stats3">
-      <div><span>정답</span><strong>{stats.correct}<small> / {stats.total}</small></strong></div>
-      <div><span>{result.qualityTiers === 2 ? '근거가 확인되는 정답' : '근거까지 정확한 정답'}</span>{stats.qualityDenominator > 0
-        ? <strong>{stats.accurate}<small> / 근거를 판정한 정답 {stats.qualityDenominator}</small></strong>
-        : <strong><small>근거를 판정한 정답 없음</small></strong>}</div>
-      <div><span>근거 없이 낸 정답</span><strong>{stats.sure + stats.unsure + stats.eliminated}<small> 문항 (확실하다고 한 {stats.sure} · 확신 없이 맞힌 {stats.unsure}{stats.eliminated > 0 && ` · 선지를 걸러 푼 ${stats.eliminated}`})</small></strong></div></div>
-    {stats.unverified > 0 && <p className="diag-muted">{stats.unverified}개는 정답이지만 근거로 풀이를 확인하지는 못했어.</p>}
-    {result.steps.status !== 'ready' ? <Notice status={result.steps.status} />
-      : tendency && <div className="diag-block"><h2>어긋난 단계 <small>(경향)</small></h2><p>{tendency.sentence}</p>
-        <div className="diag-bars">{tendency.bars.map(bar => <div key={bar.code} className="diag-bar-row"><span>{bar.name}</span>
-          <div className="diag-track"><div style={{ width: `${Math.round(bar.ratio * 100)}%` }} data-warn /></div><span>{bar.count}</span></div>)}</div></div>}
-    {tags.length > 0 && <div className="diag-block"><h2>고른 오답 선지의 함정</h2><div className="diag-tags">{tags.map(tag => <span key={tag.name} className="diag-tag">{tag.name} {tag.count}</span>)}</div></div>}
-    <div className="diag-block"><h2>문항별</h2>
-      <div className="diag-cellgrid">{set.passages.map(passage => {
-        const items = result.items.filter(item => item.passageId === passage.passageId);
-        return items.length === 0 ? null : <div key={passage.passageId} className="diag-cellrow"><span>{passage.title}</span><div>{items.map(item => {
-          const group = resultGroup(item.category); const analyzing = item.category === 'PENDING' || item.category === 'CHECKING';
-          return <button key={item.questionId} type="button" className="diag-cell" data-group={group} data-analyzing={analyzing} aria-expanded={open === item.questionId} aria-controls="diag-item-card"
-            aria-label={`${passage.title} ${item.questionNumber}번, ${analyzing ? '분석 중' : RESULT_GROUP_MARK[group]}`} onClick={() => setOpen(open === item.questionId ? null : item.questionId)}>{item.questionNumber}</button>;
-        })}</div></div>;
-      })}</div>
-      <p className="diag-muted">초록 칸은 정답, 초록 점선 칸은 정답이지만 근거 확인이 필요한 문항, 빨간 칸은 오답이야. 줄무늬 칸은 분석 중이야. 지문 결과의 문제 버튼과 같은 색이야. 칸을 누르면 아래 카드가 펼쳐져.</p></div>
-    {opened && <Card item={opened} titles={titles} tiers={result.qualityTiers} onClose={() => setOpen(null)} />}
-  </>;
-}
-
-// ---------- ③ 독해 패턴 ----------
-
-function Reading({ result, set }: { result: Result; set: SetInfo }) {
-  const titles = Object.fromEntries(set.passages.map(p => [p.passageId, p.title]));
-  if (result.reading.length === 0) return <p className="diag-muted">요약을 고른 지문이 없어서 이 칸은 비어 있어.</p>;
-  const settled = result.reading.filter(r => r.status === 'ready');
-  const status: Box = result.reading.some(r => r.status === 'pending') ? 'pending' : result.reading.some(r => r.status === 'failed') ? 'failed' : 'ready';
-  const counts = sumCounts(settled); const layers = layerSentence(counts); const rows = branchRows(counts);
-  const links = result.items.filter(item => item.summaryLink !== null);
-  return <>
-    <p className="diag-muted">요약한 지문 {result.reading.length}개({result.reading.map(r => titles[r.passageId]).join(', ')}) 기준 · 첫 요약만</p>
-    {status !== 'ready' && <Notice status={status} />}
-    {layers && <p className="diag-line">{layers}</p>}
-    {rows.map(row => <div key={row.code} className="diag-branch"><div className="diag-branch-head"><strong>{row.name}</strong><span>{row.text}</span></div>
-      <p className="diag-muted">{row.line}</p>
-      <div className="diag-track"><div style={{ width: `${Math.round(row.caught / row.total * 100)}%` }} /></div>
-      {row.wrongText && <p className="diag-warn-text">{row.wrongText}</p>}</div>)}
-    {links.length > 0 && <div className="diag-block"><div className="diag-links">{links.map(item => <p key={item.questionId} className="diag-line" data-status={item.summaryLink!.status}>
-      {summaryLinkSentence(item.summaryLink!, titles[item.passageId] ?? '', item.questionNumber)}</p>)}</div></div>}
-  </>;
-}
-
-export function ResultView({ result, set }: { result: Result; set: SetInfo }): React.JSX.Element {
-  const recommendation = recommendationLines(result.recommendation, result.twists.counts);
+  const [scrollKey, setScrollKey] = useState(0);
+  // 맨 위 요약의 링크: 카드를 연 채 그 카드로 스크롤한다.
+  useEffect(() => { if (scrollKey > 0) document.getElementById('diag-item-card')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, [scrollKey]);
   return <main className="diag-page"><div className="diag-wrap">
     <header className="diag-heading"><h1>독해력 진단 결과</h1></header>
+    <TopSummary result={result} set={set} onShowCard={questionId => { setOpen(questionId); setScrollKey(key => key + 1); }} />
     <section className="diag-card" aria-label="내 위치"><div className="diag-card-head"><span className="diag-label">① 내 위치</span><span className="diag-sub">수능 기준 환산 추정</span></div><Position result={result} /></section>
-    <section className="diag-card" aria-label="문제 풀이 결과"><span className="diag-label">② 문제 풀이 결과</span><Solve result={result} set={set} /></section>
+    <section className="diag-card" aria-label="문제 풀이 결과"><span className="diag-label">② 문제 풀이 결과</span>
+      <Solve result={result} set={set} participantId={participantId} open={open} onToggle={questionId => setOpen(open === questionId ? null : questionId)} onClose={() => setOpen(null)} /></section>
     <section className="diag-card" aria-label="독해 패턴"><span className="diag-label">③ 독해 패턴</span><Reading result={result} set={set} /></section>
-    <section className="diag-card" aria-label="추천"><span className="diag-label">추천</span>{recommendation.map((line, i) => <p key={i} className="diag-line">{line}</p>)}</section>
+    <section className="diag-card" aria-label="추천"><span className="diag-label">추천</span><p className="diag-line">{SERVICE_NOTE}</p></section>
   </div></main>;
 }

@@ -52,5 +52,5 @@ export function ResultContainer({ id, set }: { id: string; set: SetInfo }) {
     return () => { active = false; window.clearTimeout(timer); };
   }, [id]);
   if (!result) return <main className="diag-page"><div className="diag-wrap"><p className="diag-muted" role={error ? 'alert' : 'status'}>{error || '불러오는 중…'}</p></div></main>;
-  return <ResultView result={result} set={set} />;
+  return <ResultView result={result} set={set} participantId={id} />;
 }

@@ -133,6 +133,14 @@ describe('진단평가 HTTP', () => {
     const result = await (await call(base, 'GET', `${root}/result`)).json() as { items: { questionId: string; correct: boolean; answerPosition: number | null }[]; position: { status: string } };
     expect(result.position.status).toBe('ready'); expect(result.items).toHaveLength(5);
     expect(result.items.find(i => i.questionId === Q13)).toMatchObject({ correct: false, answerPosition: set.items[Q13]!.answerPosition });
+    // 자기 점검: 근거 없이 틀린 문항(Q15)만, 값은 결과 응답에 되돌아온다
+    const checked = await call(base, 'POST', `${root}/item/${Q15}/self-check`, { choice: '찍었어' });
+    expect(checked.status).toBe(200); expect((await checked.json() as { selfCheck: { choice: string } }).selfCheck.choice).toBe('찍었어');
+    expect((await call(base, 'POST', `${root}/item/${Q14}/self-check`, { choice: '찍었어' })).status).toBe(409);
+    expect((await call(base, 'POST', `${root}/item/${Q15}/self-check`, { choice: '' })).status).toBe(400);
+    expect((await call(base, 'GET', `${root}/item/${Q15}/self-check`)).status).toBe(404);
+    const again = await (await call(base, 'GET', `${root}/result`)).json() as { items: { questionId: string; selfCheck: { choice: string } | null }[] };
+    expect(again.items.find(i => i.questionId === Q15)!.selfCheck).toMatchObject({ choice: '찍었어' }); expect(again.items.find(i => i.questionId === Q12)!.selfCheck).toBeNull();
     expect((await call(base, 'GET', '/api/diagnostic/participant/not-a-uuid')).status).toBe(400);
     expect((await call(base, 'GET', '/api/diagnostic/participant/123e4567-e89b-12d3-a456-426614174000')).status).toBe(404);
     expect((await call(base, 'POST', `${root}/passage/unknown/start`, { summary: false })).status).toBe(404);

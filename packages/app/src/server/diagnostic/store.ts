@@ -40,6 +40,8 @@ export interface DiagnosticParticipant {
     reviewFlag: 'WRONG_SUPPORTED' | 'BOUNDARY' | null;
     /** 개발자 이동(D-0217)으로 답 없이 지나친 문항. 옛 파일에는 없다(없으면 false). */
     skipped?: boolean;
+    /** 근거 없이 틀린 문항의 자기 점검 버튼 값(결과 화면). 옛 파일에는 없다(없으면 null). */
+    selfCheck?: { choice: string; at: string } | null;
   }>;
   /** paragraphId 단위. judgments는 단위(노드·관계) id별 결과 */
   analysis: Record<string, { status: JobStatus; judgments: Record<string, unknown> }>;

@@ -4,6 +4,11 @@ import { gradeAtFraction, gradeCurvePath, gradeGradient } from './logic.js';
 
 export const GRADES = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
+/** 1~9 등급 눈금 한 줄(칸 가운데에 등급 이름, 칸 경계에 눈금). 큰 띠 아래와 지문별 작은 띠 맨 아래가 함께 쓴다. */
+export function GradeAxis(): React.JSX.Element {
+  return <div className="diag-gradeticks" aria-hidden="true">{GRADES.map(g => <span key={g}>{g}등급</span>)}</div>;
+}
+
 /**
  * 9개 등급 확률을 부드럽게 이은 그라데이션으로 칠하고, 커서(또는 누름)가 있는 등급의 확률을 보인다.
  * `small`이면 말풍선·눈금 없이 낮은 띠만 그린다(지문별 누적 줄용).
@@ -27,6 +32,6 @@ export function GradeBar({ grade, small = false }: { grade: { probabilities: num
       <div className="diag-gradebar" data-testid="grade-bar" role="img" data-filled={grade !== null} aria-label={label} style={style} />
       {grade && hover && <div className="diag-gradetip" role="status" data-testid="grade-tip" style={{ left: `${hover.x}%`, transform: `translateX(${hover.x < 12 ? '0' : hover.x > 88 ? '-100%' : '-50%'})` }}>{hover.grade}등급일 확률 {percent(hover.grade)}%</div>}
     </div>
-    <div className="diag-gradeticks" aria-hidden="true">{GRADES.map(g => <span key={g}>{g}등급</span>)}</div>
+    <GradeAxis />
   </>;
 }

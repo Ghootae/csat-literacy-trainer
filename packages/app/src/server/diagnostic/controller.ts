@@ -17,16 +17,17 @@ import {
 import type { DialoguePassageContent } from '../content.js';
 import { FeedbackRequestSchema, ProblemFeedbackController, type FeedbackRecord } from '../problem-feedback.js';
 import { SimpleDialogueController, SimpleNavigateSchema, SimpleRespondSchema } from '../dialogue-simple.js';
+import { loadExaminerStrategies, stemPolarity, type ExaminerStrategyMap } from '../examiner-strategy.js';
 import type { SimpleDialogueView } from '../../shared/dialogue-simple.js';
 import type { FeedbackMessage, FeedbackWorkbenchView } from '../../shared/problem-feedback.js';
 import type { ProblemContentView } from '../../shared/contract.js';
 import {
   loadAnalysisMaps, loadChoiceLinkTargets, loadChoiceLinkTwists, loadClassifyTypes, loadDiagnosticBundle, loadDiagnosticPassages, loadDiagnosticSet,
-  loadRecommendationMap, loadTwistStudentText,
+  loadRecommendationMap, loadSymbolGloss, loadTwistStudentText,
   type ChoiceLinkTargets, type ChoiceLinkTwist, type DiagnosticSet, type DiagnosticSetPassage, type LoadedAnalysisMap,
 } from './content.js';
 import {
-  addCounts, copyOverlap, countParagraph, emptyCounts, judgedUnitIndex, pickTwist, summaryLink,
+  addCounts, copyOverlap, countParagraph, emptyCounts, judgedUnitIndex, paragraphLabel, pickTwist, readingCases, summaryLink,
   type JudgedUnitInfo, type SummaryLink,
 } from './reading.js';
 import { FileDiagnosticStore, diagnosticRoot, isParticipantId, type DiagnosticParticipant, type DiagnosticStore, type ItemAnswer } from './store.js';
@@ -49,6 +50,8 @@ export const DiagnosticItemRequestSchema = z.object({
 export const DiagnosticStartSchema = z.object({ summary: z.boolean() }).strict();
 export const DiagnosticFeedbackRequestSchema = FeedbackRequestSchema;
 export const DiagnosticRevealSchema = z.object({ questionId: z.string().trim().min(1) }).strict();
+/** 자기 점검 버튼 값(결과 화면, 인계 1단계 3-6). 문구는 화면이 정하고 서버는 그대로 기록한다. */
+export const DiagnosticSelfCheckSchema = z.object({ choice: z.string().trim().min(1).max(200) }).strict();
 export const DiagnosticDevSkipSchema = z.object({ to: z.enum(['ANSWERING', 'FEEDBACK', 'DONE']) }).strict();
 const STATUS_RANK = { NOT_STARTED: 0, SUMMARY: 1, ANSWERING: 2, AWAITING_JUDGMENT: 3, FEEDBACK: 4, DONE: 5 } as const;
 
@@ -100,6 +103,10 @@ export interface DiagnosticControllerOptions {
   loadClassify?: (passage: DiagnosticSetPassage) => Map<string, string>[];
   /** 비틂 코드 → 추천 세트 이름. 없으면 대응표 파일. */
   recommendationMap?: Record<string, string[]>;
+  /** 출제자 전략 글이 있는 문항(결과 카드의 "출제자 설명 보기" 버튼). 없으면 최종본 파일. */
+  strategies?: ExaminerStrategyMap;
+  /** 지문 id → 기호 풀이 사전. 없으면 기호 풀이 파일. */
+  symbolGloss?: (passageId: string) => Record<string, string>;
   /** "<문항 id>:<선지 번호>" → 학생용 바뀐 내용 문장. 없으면 학생용 문장 파일. */
   twistStudentText?: Record<string, string[]>;
   /** 백그라운드 판정·진단·문단 판정의 최대 시도 수(처음 1회 + 자동 재시도). 기본 3. */
@@ -128,6 +135,8 @@ export class DiagnosticController {
   private readonly loadClassify: NonNullable<DiagnosticControllerOptions['loadClassify']>;
   private recommendationMap: Record<string, string[]> | undefined;
   private twistStudentText: Record<string, string[]> | undefined;
+  private strategies: ExaminerStrategyMap | undefined;
+  private readonly symbolGloss: (passageId: string) => Record<string, string>;
   private readonly targetCache = new Map<string, ReturnType<typeof loadChoiceLinkTargets>>();
   private readonly classifyCache = new Map<string, Map<string, string>[]>();
   private readonly unitIndexCache = new Map<string, Map<string, JudgedUnitInfo>[]>();
@@ -158,6 +167,8 @@ export class DiagnosticController {
     this.loadClassify = options.loadClassify ?? loadClassifyTypes;
     this.recommendationMap = options.recommendationMap;
     this.twistStudentText = options.twistStudentText;
+    this.strategies = options.strategies;
+    this.symbolGloss = options.symbolGloss ?? loadSymbolGloss;
     this.maxAttempts = options.maxAttempts ?? 3;
     this.concurrency = options.analysisConcurrency ?? 8;
     this.diagnosisTransport = options.diagnosisTransport ?? createOpenAiTransport();
@@ -438,6 +449,22 @@ export class DiagnosticController {
     return this.itemView(p, questionId);
   }
 
+  /** 근거 없이 틀린 문항의 자기 점검 버튼 값을 기록한다(다시 고를 수 있고 마지막 값이 남는다). 사건에는 누를 때마다 남긴다. */
+  selfCheck(participantId: string, questionId: string, raw: unknown): { selfCheck: { choice: string; at: string } } {
+    const p = this.require(participantId);
+    const passage = this.set.passages.find(candidate => candidate.questionIds.includes(questionId));
+    if (!passage) return fail(404, '등록되지 않은 문항입니다.');
+    const { choice } = DiagnosticSelfCheckSchema.parse(raw);
+    const state = p.passages[passage.passageId]!; const item = p.items[questionId]!;
+    if (item.first === null) fail(409, '답이 없는 문항입니다.');
+    if (state.status === 'NOT_STARTED' || state.status === 'SUMMARY' || state.status === 'ANSWERING') fail(409, '아직 답 입력을 마치지 않은 지문입니다.');
+    if (this.isCorrect(item) || item.first!.rationale.mode !== 'OMITTED') fail(409, '근거 없이 틀린 문항에만 쓸 수 있습니다.');
+    item.selfCheck = { choice, at: new Date().toISOString() };
+    this.event('SELF_CHECK', p, { questionId, passageId: passage.passageId, choice });
+    this.requestSave(p);
+    return { selfCheck: item.selfCheck };
+  }
+
   // ---------- 결과 ----------
 
   result(participantId: string) {
@@ -460,6 +487,9 @@ export class DiagnosticController {
         counts: stepCounts, denominator: diagnosed.length },
       twists: { counts: twistCounts },
       recommendation: this.recommendation(twistCounts),
+      /** 2단계에서 "두 번 이상 나온 실수" 묶음이 들어올 자리. 지금은 늘 null이고 화면은 "가장 먼저 볼 것"으로 대신한다. */
+      summaryGroups: null,
+      symbolGloss: Object.fromEntries(this.set.passages.map(passage => [passage.passageId, this.symbolGloss(passage.passageId)])),
       reading: this.set.passages.filter(passage => p.passages[passage.passageId]!.summaryChosen === true).map(passage => this.resultReading(p, passage)),
     };
   }
@@ -915,20 +945,30 @@ export class DiagnosticController {
     const megastudy = { chosenPercents: [meta.megastudy.choicePercents[0][chosen.position - 1]!, meta.megastudy.choicePercents[1][chosen.position - 1]!] as [number, number],
       correctRate: meta.megastudy.correctRate };
     const afterFeedback = { corrected: session.correctionSucceeded, skipped: session.result?.skipped === true };
+    const content = this.bundle(questionId).content;
+    const textOf = (choiceId: string) => content.choices.find(c => c.choiceId === choiceId)?.text ?? '';
+    this.strategies ??= loadExaminerStrategies();
     const base = { questionId, passageId: passage.passageId, questionNumber: meta.questionNumber, chosenPosition: chosen.position,
-      correct, rationale: first.rationale.mode, category: this.answerCategory(item), elimination: first.confidence === 'ELIMINATION', megastudy, afterFeedback };
+      correct, rationale: first.rationale.mode, category: this.answerCategory(item), elimination: first.confidence === 'ELIMINATION', megastudy, afterFeedback,
+      stem: content.stem, chosenText: textOf(chosen.choiceId), stemPolarity: stemPolarity(content.stem), selfCheck: item.selfCheck ?? null,
+      strategyAvailable: this.strategies.has(questionId) };
     if (review) {
-      return { ...base, review: true as const, answerPosition: null, judgment: { status: 'pending' as Box, contentAssessment: null, boundary: null },
+      return { ...base, review: true as const, answerPosition: null, answerText: null, answerTwist: null, judgment: { status: 'pending' as Box, contentAssessment: null, boundary: null },
         twist: null, thoughtDiagnosis: null, evidence: null, summaryLink: null };
     }
     const assessment = session.assessments[0]?.mode === 'SELECTION' ? session.assessments[0] : null;
     let twistFn = this.twistCache.get(passage.choiceLinkPath);
     if (!twistFn) { twistFn = this.loadTwists(passage.choiceLinkPath); this.twistCache.set(passage.choiceLinkPath, twistFn); }
-    const twists = (correct ? [] : twistFn(meta.questionNumber, chosen.position)).map((twist, n) =>
-      ({ ...twist, studentText: (this.twistTexts()[`${questionId}:${chosen.position}`] ?? [])[n] ?? null }));
+    const twistsOf = (position: number) => twistFn(meta.questionNumber, position).map((twist, n) =>
+      ({ ...twist, studentText: (this.twistTexts()[`${questionId}:${position}`] ?? [])[n] ?? null }));
+    const twists = correct ? [] : twistsOf(chosen.position);
+    // 적절하지 않은 것 고르기: 고른 선지는 맞는 진술이라 비틂이 없다. 학생이 놓친 진짜 틀린 선지(정답 선지)와 그 비틂을 따로 준다.
+    const missedAnswer = !correct && base.stemPolarity === 'SELECT_INCORRECT';
+    const answerTwists = missedAnswer ? twistsOf(meta.answerPosition) : [];
     const eligibleDiagnosis = first.rationale.mode === 'PROVIDED' && (!correct || item.firstJudgment.contentAssessment !== 'SUPPORTED');
     const output = item.thoughtDiagnosis.output as { firstFailedStep: string | null; outcomeType: string } | null;
     return { ...base, review: false as const, answerPosition: meta.answerPosition,
+      answerText: correct ? null : textOf(session.source.answerChoiceId), answerTwist: answerTwists.length > 0 ? answerTwists : null,
       judgment: { status: box(item.firstJudgment.status), contentAssessment: item.firstJudgment.contentAssessment, boundary: item.firstJudgment.boundary },
       twist: twists.length > 0 ? twists : null,
       summaryLink: correct ? null : this.summaryLinkFor(p, passage, questionId, chosen.position),
@@ -969,6 +1009,7 @@ export class DiagnosticController {
     const statuses = paragraphs.map(q => p.analysis[q.paragraphId]!.status);
     const status: Box = statuses.some(s => s === 'PENDING') ? 'pending' : statuses.some(s => s === 'FAILED') ? 'failed' : 'ready';
     let counts = emptyCounts();
+    const cases: (ReturnType<typeof readingCases>[number] & { paragraphPosition: number; paragraphLabel: string; studentText: string })[] = [];
     const rows = paragraphs.map(q => {
       const loaded = this.mapFor(passage.passageId, q.paragraphId)!;
       const judgments = Object.fromEntries(Object.entries(p.analysis[q.paragraphId]!.judgments).map(([id, value]) => {
@@ -978,9 +1019,13 @@ export class DiagnosticController {
       const combined = combineRound(loaded.map, q.paragraphId, judgments);
       const typeOf = this.classifyFor(passage.passageId)[this.maps(passage.passageId).indexOf(loaded)]!;
       counts = addCounts(counts, countParagraph(loaded.map, q.paragraphId, judgments, typeOf));
+      const studentText = p.passages[passage.passageId]!.firstTurns[q.paragraphId]?.text ?? '';
+      for (const found of readingCases(loaded.map, q.paragraphId, judgments, typeOf)) {
+        cases.push({ ...found, paragraphPosition: q.position, paragraphLabel: paragraphLabel([q.paragraphId], () => q.position), studentText });
+      }
       return { paragraphId: q.paragraphId, nodes: combined.nodes, relations: combined.relations };
     });
-    return { passageId: passage.passageId, status, paragraphs: rows, counts };
+    return { passageId: passage.passageId, status, paragraphs: rows, counts, cases };
   }
 
   // ---------- 내부: 저장·기록 ----------

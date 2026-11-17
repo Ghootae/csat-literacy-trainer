@@ -9,7 +9,7 @@ import { assemble } from '../../../../../scripts/run-analysis-judge-gongsun.mjs'
 import { BRANCHES as SCRIPT_BRANCHES } from '../../../../../scripts/run-relation-classify.mjs';
 import { loadAnalysisMaps, loadChoiceLinkTargets, loadClassifyTypes, loadDiagnosticSet } from './content.js';
 import {
-  BRANCH_TYPES, BRANCHES, LAYERS, TWIST_ORDER, addCounts, copyOverlap, countParagraph, emptyCounts, judgedUnitIndex, paragraphLabel, pickTwist, resolveTargetId, summaryLink,
+  BRANCH_TYPES, BRANCHES, LAYERS, TWIST_ORDER, addCounts, copyOverlap, countParagraph, emptyCounts, judgedUnitIndex, paragraphLabel, pickTwist, readingCases, resolveTargetId, summaryLink,
 } from './reading.js';
 
 const set = loadDiagnosticSet();
@@ -168,5 +168,26 @@ describe('paragraphLabel', () => {
     expect(paragraphLabel(['a-p3', 'a-p2', 'a-p3'], pos)).toBe('2·3문단');
     expect(paragraphLabel(['x-na-p3'], pos)).toBe('(나) 3문단');
     expect(paragraphLabel(['x-na-p1', 'x-ga-p4'], pos)).toBe('(가) 4문단, (나) 1문단');
+  });
+});
+
+describe('갈래별 사례(readingCases)', () => {
+  it('세트 E 모든 지도·문단에서 사례 수가 집계와 같다: 갈래마다 CONTRADICTS = wrong, 사례 전체 = total - caught', () => {
+    for (const seed of [1, 2, 3]) for (const passage of set.passages) {
+      const maps = loadAnalysisMaps(passage); const classify = loadClassifyTypes(passage);
+      for (const [i, { map }] of maps.entries()) for (const paragraphId of new Set(map.propositions.map(p => p.paragraphId))) {
+        const units = unitsForParagraph(map, paragraphId); let n = 0;
+        const judgments: Record<string, { finalLabel: string | null }> = {};
+        for (const unit of [...units.nodes, ...units.relations]) { n++; judgments[unit.id] = { finalLabel: LABELS[(n * (seed + 2) + (n % 7) * seed) % LABELS.length]! }; }
+        const counts = countParagraph(map, paragraphId, judgments, classify[i]!);
+        const cases = readingCases(map, paragraphId, judgments, classify[i]!);
+        for (const branch of BRANCHES) {
+          const own = cases.filter(c => c.branch === branch);
+          expect(own.filter(c => c.kind === 'CONTRADICTS').length, `${paragraphId} ${branch}`).toBe(counts.branches[branch].wrong);
+          expect(own.length, `${paragraphId} ${branch}`).toBe(counts.branches[branch].total - counts.branches[branch].caught);
+        }
+        for (const found of cases) { expect(found.sourceTexts.length).toBeGreaterThan(0); expect(found.paragraphId).toBe(paragraphId); }
+      }
+    }
   });
 });
