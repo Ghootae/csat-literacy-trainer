@@ -20,11 +20,14 @@ const runsIndex = process.argv.indexOf('--runs');
 const runs = runsIndex > 0 ? Number(process.argv[runsIndex + 1]) : 1;
 const ledgerIndex = process.argv.indexOf('--ledger');
 const ledger = ledgerIndex > 0 ? process.argv[ledgerIndex + 1] : null;   // 누적 비용 원장(JSON 숫자). 상한을 넘으면 호출 전에 멈춘다.
-const COST_CAP = 3; const spend = (inTok, outTok) => inTok * 2e-6 + outTok * 1e-5;   // 가정 단가(D-0115의 진단 1회 약 $0.012에서 역산)
+const capIndex = process.argv.indexOf('--cap');
+const COST_CAP = capIndex > 0 ? Number(process.argv[capIndex + 1]) : 3;
+const freshDiagnosis = process.argv.includes('--fresh-diagnosis');   // 저장된 사고 진단을 무시하고 새로 돌려 덮어쓴다(입력 문항이 바뀐 학생용)
+void 0; const spend = (inTok, outTok) => inTok * 2e-6 + outTok * 1e-5;   // 가정 단가(D-0115의 진단 1회 약 $0.012에서 역산)
 const ledgerTotal = () => ledger && existsSync(ledger) ? Number(readFileSync(ledger, 'utf8')) : 0;
 const addCost = (v) => { if (ledger) writeFileSync(ledger, String(ledgerTotal() + v)); };
 const guard = () => { if (ledgerTotal() >= COST_CAP) throw new Error(`비용 상한 $${COST_CAP} 도달(누적 $${ledgerTotal().toFixed(2)})`); };
-const retrying = async (fn) => { for (let attempt = 0; ; attempt++) { guard(); try { return await fn(); } catch (error) { const status = error?.status; if (attempt >= 2 || !(status === 429 || status >= 500 || error?.name === 'APIConnectionError' || error?.name === 'APIConnectionTimeoutError')) throw error; await new Promise(r => setTimeout(r, 15000 * (attempt + 1))); } } };
+const retrying = async (fn) => { for (let attempt = 0; ; attempt++) { guard(); try { return await fn(); } catch (error) { const status = error?.status; if (attempt >= 2 || !(status === 429 || status >= 500 || /Connection|fetch failed|ETIMEDOUT|ENOTFOUND|ECONNRESET/u.test(`${error?.name} ${error?.message} ${error?.cause?.message ?? ''} ${error?.cause?.cause?.code ?? ''}`))) throw error; await new Promise(r => setTimeout(r, 15000 * (attempt + 1))); } } };
 const promptFile = version ? `PROMPT-${version}.md` : 'PROMPT-v2.md';
 const label = version ? `${student}-${version}` : student;
 const dir = resolve(process.cwd(), 'docs/experiments/reading-error-2026-11-18');
@@ -51,7 +54,7 @@ const byItem = (item) => {
 };
 const savedPath = resolve(dir, `runs/${student}.diagnosis.json`);
 let diagnosisLog;
-if (existsSync(savedPath)) {
+if (existsSync(savedPath) && !freshDiagnosis) {
   // 이어 실행: 이미 저장된 사고 진단 원본을 그대로 쓴다(재호출 없음).
   diagnosisLog = JSON.parse(readFileSync(savedPath, 'utf8')).calls;
   for (const entry of input.evidenceEntries) {
