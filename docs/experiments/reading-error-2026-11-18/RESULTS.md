@@ -454,3 +454,147 @@ problems:
   ]
 }
 ```
+
+
+---
+
+# v2.2 (7명) (2026-11-18)
+
+채점은 하지 않았다. 웹 스레드가 KEY와 대조한다. KEY.md·students.py·codes.json은 읽지도 모델에 넣지도 않았다.
+
+## 실행 조건
+
+- 1단계 사고 진단: S-58은 `runs/S-58.diagnosis.json` 재사용(재호출 없음), 나머지 6명(S-07·S-12·S-23·S-31·S-44·S-66)은 새로 돌려 `runs/S-xx.diagnosis.json`에 저장(28회). 앱의 현재 지시문·모델·요청 함수 그대로, 모델 `gpt-6.1-sol`.
+- 2단계 거르기: 태그만(단계 제한 없음). 태그 ∈ {CONDITION, SCOPE, DIRECTION, POLARITY, REFERENT, MAPPING, PARAPHRASE_DISTANCE, MISREAD_FACT}. 저장 `inputs-filtered/S-xx-v2.2.json`. 대상이 서로 다른 문항 2개 미만이면 생성·검토 호출 없이 NONE.
+- 3·4단계: `PROMPT-v2.2.md`, sol(reasoning medium), 학생당 생성 3회 + 각 생성에 대한 검토 3회. 결과 `runs/S-xx-v2.2-rN.gen.json`, `runs/S-xx-v2.2-rN.review.json`(원본 출력 전체는 이 파일들에 있다).
+- 호출: 사고 진단 28 + 생성 18 + 검토 18 = 64회(S-12는 대상 1개라 생성·검토 없음 → 계획 70회 중 6회 감소). 누적 추정 비용 약 $1.27(가정 단가 입력 $2/M·출력 $10/M, 승인 상한 $3). 재시도 횟수는 로그에 남기지 않았다.
+- 실행 `run-one.mjs S-xx --version v2.2 --runs 3`(`--runs`, `--ledger` 옵션 추가). 학생당 3회는 병렬로 호출했다.
+
+## 1단계: 학생별 사고 진단 태그 (S-58 제외 6명은 이번 실행, S-58은 위 v2 절 표와 같음)
+
+### S-07
+
+| 문항 | outcomeType | errors (step / tag) |
+|---|---|---|
+| 의식과 인지 과정에 대한 철학적 논의 15번 | ERROR | S5_JUDGE / SCOPE |
+| 경마식 보도와 선거 방송 토론회 5번 | ERROR | S4_INTERPRET / CONDITION |
+| 경마식 보도와 선거 방송 토론회 7번 | UNJUDGEABLE | (없음) |
+| 플라스틱의 중합 반응과 물리적 성질 8번 | ERROR | S4_INTERPRET / OUTSIDE_KNOWLEDGE |
+| 오디오 신호의 디지털 저장과 지각부호화 압축 15번 | ERROR | S5_JUDGE / OUTSIDE_KNOWLEDGE |
+
+### S-12
+
+| 문항 | outcomeType | errors (step / tag) |
+|---|---|---|
+| 의식과 인지 과정에 대한 철학적 논의 13번 | ERROR | S4_INTERPRET / ATTRIBUTION |
+| 의식과 인지 과정에 대한 철학적 논의 14번 | ERROR | S4_INTERPRET / MISREAD_FACT, S4_INTERPRET / SURFACE_MATCH |
+| 의식과 인지 과정에 대한 철학적 논의 15번 | ERROR | S4_INTERPRET / ATTRIBUTION |
+| 플라스틱의 중합 반응과 물리적 성질 9번 | UNJUDGEABLE | (없음) |
+| 오디오 신호의 디지털 저장과 지각부호화 압축 16번 | UNJUDGEABLE | (없음) |
+
+### S-23
+
+| 문항 | outcomeType | errors (step / tag) |
+|---|---|---|
+| 경마식 보도와 선거 방송 토론회 6번 | ERROR | S4_INTERPRET / ATTRIBUTION |
+| 경마식 보도와 선거 방송 토론회 7번 | ERROR | S4_INTERPRET / CONDITION |
+| 플라스틱의 중합 반응과 물리적 성질 10번 | ERROR | S4_INTERPRET / DIRECTION |
+| 오디오 신호의 디지털 저장과 지각부호화 압축 15번 | ERROR | S4_INTERPRET / CONDITION |
+| 오디오 신호의 디지털 저장과 지각부호화 압축 16번 | ERROR | S4_INTERPRET / DIRECTION |
+
+### S-31
+
+| 문항 | outcomeType | errors (step / tag) |
+|---|---|---|
+| 경마식 보도와 선거 방송 토론회 4번 | UNJUDGEABLE | (없음) |
+| 경마식 보도와 선거 방송 토론회 7번 | ERROR | S4_INTERPRET / CONDITION |
+| 플라스틱의 중합 반응과 물리적 성질 9번 | ERROR | S4_INTERPRET / MISREAD_FACT |
+| 오디오 신호의 디지털 저장과 지각부호화 압축 14번 | ERROR | S4_INTERPRET / MISREAD_FACT |
+
+### S-44
+
+| 문항 | outcomeType | errors (step / tag) |
+|---|---|---|
+| 의식과 인지 과정에 대한 철학적 논의 12번 | UNJUDGEABLE | (없음) |
+| 플라스틱의 중합 반응과 물리적 성질 8번 | ERROR | S5_JUDGE / SCOPE |
+| 플라스틱의 중합 반응과 물리적 성질 9번 | ERROR | S4_INTERPRET / SCOPE |
+| 플라스틱의 중합 반응과 물리적 성질 10번 | ERROR | S4_INTERPRET / MAPPING |
+| 오디오 신호의 디지털 저장과 지각부호화 압축 16번 | ERROR | S4_INTERPRET / MISREAD_FACT |
+
+### S-58
+
+| 문항 | outcomeType | errors (step / tag) |
+|---|---|---|
+| 경마식 보도와 선거 방송 토론회 5번 | ERROR | S4_INTERPRET / CONDITION |
+| 경마식 보도와 선거 방송 토론회 6번 | ERROR | S2_CHOICE / CONDITION |
+| 플라스틱의 중합 반응과 물리적 성질 10번 | ERROR | S4_INTERPRET / DIRECTION |
+| 오디오 신호의 디지털 저장과 지각부호화 압축 16번 | UNJUDGEABLE | (없음) |
+| 오디오 신호의 디지털 저장과 지각부호화 압축 17번 | ERROR | S5_JUDGE / CONDITION |
+
+### S-66
+
+| 문항 | outcomeType | errors (step / tag) |
+|---|---|---|
+| 경마식 보도와 선거 방송 토론회 4번 | ERROR | S2_CHOICE / MISREAD_FACT |
+| 경마식 보도와 선거 방송 토론회 7번 | ERROR | S4_INTERPRET / ATTRIBUTION |
+| 플라스틱의 중합 반응과 물리적 성질 10번 | ERROR | S1_STEM / REFERENT |
+| 오디오 신호의 디지털 저장과 지각부호화 압축 16번 | ERROR | S4_INTERPRET / MISREAD_FACT |
+
+## 2단계 거르기 결과
+
+| 학생 | 대상 문항(서로 다른 문항 수) | 제외 문항 (태그) | 생성·검토 |
+|---|---|---|---|
+| S-07 | 의식과 인지 과정에 대한 철학적 논의 15번 / 경마식 보도와 선거 방송 토론회 5번 (2개) | 경마식 보도와 선거 방송 토론회 7번 (없음) / 플라스틱의 중합 반응과 물리적 성질 8번 (OUTSIDE_KNOWLEDGE) / 오디오 신호의 디지털 저장과 지각부호화 압축 15번 (OUTSIDE_KNOWLEDGE) | 3회 생성·검토 |
+| S-12 | 의식과 인지 과정에 대한 철학적 논의 14번 (1개) | 의식과 인지 과정에 대한 철학적 논의 13번 (ATTRIBUTION) / 의식과 인지 과정에 대한 철학적 논의 15번 (ATTRIBUTION) / 플라스틱의 중합 반응과 물리적 성질 9번 (없음) / 오디오 신호의 디지털 저장과 지각부호화 압축 16번 (없음) | 호출 없음(대상 2개 미만 → NONE) |
+| S-23 | 경마식 보도와 선거 방송 토론회 7번 / 플라스틱의 중합 반응과 물리적 성질 10번 / 오디오 신호의 디지털 저장과 지각부호화 압축 15번 / 오디오 신호의 디지털 저장과 지각부호화 압축 16번 (4개) | 경마식 보도와 선거 방송 토론회 6번 (ATTRIBUTION) | 3회 생성·검토 |
+| S-31 | 경마식 보도와 선거 방송 토론회 7번 / 플라스틱의 중합 반응과 물리적 성질 9번 / 오디오 신호의 디지털 저장과 지각부호화 압축 14번 (3개) | 경마식 보도와 선거 방송 토론회 4번 (없음) | 3회 생성·검토 |
+| S-44 | 플라스틱의 중합 반응과 물리적 성질 8번 / 플라스틱의 중합 반응과 물리적 성질 9번 / 플라스틱의 중합 반응과 물리적 성질 10번 / 오디오 신호의 디지털 저장과 지각부호화 압축 16번 (4개) | 의식과 인지 과정에 대한 철학적 논의 12번 (없음) | 3회 생성·검토 |
+| S-58 | 경마식 보도와 선거 방송 토론회 5번 / 경마식 보도와 선거 방송 토론회 6번 / 플라스틱의 중합 반응과 물리적 성질 10번 / 오디오 신호의 디지털 저장과 지각부호화 압축 17번 (4개) | 오디오 신호의 디지털 저장과 지각부호화 압축 16번 (없음) | 3회 생성·검토 |
+| S-66 | 경마식 보도와 선거 방송 토론회 4번 / 플라스틱의 중합 반응과 물리적 성질 10번 / 오디오 신호의 디지털 저장과 지각부호화 압축 16번 (3개) | 경마식 보도와 선거 방송 토론회 7번 (ATTRIBUTION) | 3회 생성·검토 |
+
+## 3·4단계: 학생별·회차별 결과 (생성 3회, 검토 3회)
+
+secondary는 `line`과 `items`. problems는 검토가 적은 문제 전부.
+
+| 학생 | 회 | result | kind | headline | featured 문항 | otherCases 문항 | secondary | 검토 verdict | problems |
+|---|---|---|---|---|---|---|---|---|---|
+| S-07 | r1 | NONE | null | null | null | (없음) | null | PASS | (없음) |
+| S-07 | r2 | NONE | null | null | null | (없음) | null | PASS | (없음) |
+| S-07 | r3 | NONE | null | null | null | (없음) | null | PASS | (없음) |
+| S-12 | - | NONE(코드) | - | - | - | - | - | (검토 없음) | 대상 1개(<2) |
+| S-23 | r1 | PATTERN | DIRECTION | 종합적으로 보면, 너는 전과 후나 어느 쪽이 더 큰지를 나타내는 말을 반대로 바꿔 읽은 경우가 있었어. | 오디오 신호의 디지털 저장과 지각부호화 압축 15번 | 플라스틱의 중합 반응과 물리적 성질 10번 / 오디오 신호의 디지털 저장과 지각부호화 압축 16번 | null | PASS | (없음) |
+| S-23 | r2 | PATTERN | DIRECTION | 종합적으로 보면, 너는 문장에서 크고 작음이나 앞뒤를 나타내는 말을 반대로 바꿔 읽은 경우가 있었어. | 오디오 신호의 디지털 저장과 지각부호화 압축 15번 | 플라스틱의 중합 반응과 물리적 성질 10번 / 오디오 신호의 디지털 저장과 지각부호화 압축 16번 | null | PASS | (없음) |
+| S-23 | r3 | PATTERN | DIRECTION+CONDITION | 종합적으로 보면, 너는 문장에서 높고 낮음, 넓고 좁음, 전과 후를 나타내는 말을 반대로 읽은 경우가 있었어. | 오디오 신호의 디지털 저장과 지각부호화 압축 15번 | 플라스틱의 중합 반응과 물리적 성질 10번 / 오디오 신호의 디지털 저장과 지각부호화 압축 16번 | null | PASS | (없음) |
+| S-31 | r1 | NONE | null | null | null | (없음) | null | PASS | (없음) |
+| S-31 | r2 | NONE | null | null | null | (없음) | null | PASS | (없음) |
+| S-31 | r3 | NONE | null | null | null | (없음) | null | PASS | (없음) |
+| S-44 | r1 | NONE | null | null | null | (없음) | null | FAIL | 플라스틱 8번과 9번에서 반복되는 범위 축소를 놓쳤다. 8번은 '분자 전체'의 결합을 '탄소끼리'의 결합으로 좁혀 판단했고, 9번은 '성장 과정이 종결되기 전까지 계속'을 '처음 한 번만'으로 좁혔다. 대상 범위와 시간 범위라는 차이는 있지만, 문장이 포괄하는 범위를 일부로 축소해 적용했다는 같은 종류의 변화이므로, 세부 문장 형식이 다르다는 이유로 묶지 않고 NONE으로 판정한 것은 부적절하다. |
+| S-44 | r2 | NONE | null | null | null | (없음) | null | FAIL | 플라스틱 8번과 9번에서 범위를 일부로 좁혀 판단하는 변화가 반복되므로 NONE 판정은 정당하지 않음. 8번은 분자 전체의 결합을 '탄소끼리'의 결합으로 한정했고, 9번은 성장 과정이 끝나기 전까지 계속되는 발생을 '처음에 한 번만'으로 한정했음. 대상 범위와 시간 범위라는 차이만으로 별개로 배제하지 말고, 문장이 포괄하는 범위를 일부로 축소하는 같은 형식 변화로 묶어야 함. |
+| S-44 | r3 | NONE | null | null | null | (없음) | null | FAIL | 플라스틱 8번과 9번에서 반복되는 범위 축소를 놓쳤다. 8번은 분자 전체의 결합을 탄소 사이의 결합으로, 9번은 성장 과정 내내 반복되는 발생을 최초 한 번의 발생으로 좁혀 판단했다. 대상 범위와 시간·횟수 범위라는 차이는 있지만, 문장이 포괄하는 범위를 일부로 제한해 적용한 동일한 종류의 형식 변화로 묶을 수 있으므로 NONE 판정은 정당하지 않다. |
+| S-58 | r1 | PATTERN | CONDITION+SCOPE | 종합적으로 보면, 너는 문장의 뼈대는 잡았지만 언제까지인지, 얼마나 효율적인지처럼 뜻을 좁혀 주는 말을 빼고 읽거나 적용한 경우가 있었어. | 경마식 보도와 선거 방송 토론회 6번 | 경마식 보도와 선거 방송 토론회 5번 / 오디오 신호의 디지털 저장과 지각부호화 압축 17번 | null | PASS | (없음) |
+| S-58 | r2 | PATTERN | CONDITION+SCOPE | 종합적으로 보면, 너는 문장에서 때나 정도를 정하는 말을 빼고 뼈대만 읽거나 적용한 경우가 있었어. | 경마식 보도와 선거 방송 토론회 6번 | 경마식 보도와 선거 방송 토론회 5번 / 오디오 신호의 디지털 저장과 지각부호화 압축 17번 | null | PASS | (없음) |
+| S-58 | r3 | PATTERN | CONDITION+SCOPE | 종합적으로 보면, 너는 문장에서 언제까지인지, 어느 정도인지를 정하는 말을 빼고 읽거나 적용한 경우가 있었어. | 경마식 보도와 선거 방송 토론회 6번 | 경마식 보도와 선거 방송 토론회 5번 / 오디오 신호의 디지털 저장과 지각부호화 압축 17번 | null | PASS | (없음) |
+| S-66 | r1 | NONE | null | null | null | (없음) | null | PASS | (없음) |
+| S-66 | r2 | NONE | null | null | null | (없음) | null | PASS | (없음) |
+| S-66 | r3 | NONE | null | null | null | (없음) | null | FAIL | 플라스틱 10번을 <보기> 원문이 없다는 이유만으로 제외하여 반복되는 대상 연결 변경을 놓쳤다. 제공된 chosenTwists에는 유연하고 충격에 강한 소재로 적합한 ㉮를 ㉯로 바꾼 오류가 명시되어 있고, 학생 근거에도 그 성질을 ㉯에 연결한 내용이 확인된다. 가지 구조의 정확한 대응까지 확정하지 않더라도, 성질을 다른 대상에 연결한 사례로 판단할 수 있다. 이는 오디오 16번에서 명칭을 다른 대상에 연결한 사례와 대상 연결을 바꾸는 수준에서 묶을 수 있으므로 NONE은 정당하지 않다. |
+
+## 회차별 featured 문장 (PATTERN인 회차만)
+
+- S-23 r1: 오디오 신호의 디지털 저장과 지각부호화 압축 15번 / sentence: 파일로 저장된, 압축 전의 오디오 신호는 소리 크기마다 할당된 비트의 개수가 동일하다. / studentQuote: 압축하고 나면 소리 크기마다 할당되는 비트 개수가 같아짐 / sourceForm: A로 저장된, B 전의 C는 D마다 할당된 E의 개수가 동일하다. / studentForm: B 후의 C는 D마다 할당된 E의 개수가 동일하다.
+- S-23 r2: 오디오 신호의 디지털 저장과 지각부호화 압축 15번 / sentence: 파일로 저장된, 압축 전의 오디오 신호는 소리 크기마다 할당된 비트의 개수가 동일하다. / studentQuote: 압축하고 나면 소리 크기마다 할당되는 비트 개수가 같아짐 / sourceForm: 파일로 저장된, A 전의 B는 C마다 할당된 D의 개수가 동일하다. / studentForm: A하고 나면 C마다 할당되는 D의 개수가 같아진다.
+- S-23 r3: 오디오 신호의 디지털 저장과 지각부호화 압축 15번 / sentence: 파일로 저장된, 압축 전의 오디오 신호는 소리 크기마다 할당된 비트의 개수가 동일하다. / studentQuote: 압축하고 나면 소리 크기마다 할당되는 비트 개수가 같아짐 / sourceForm: A로 저장된, B 전의 C는 D마다 할당된 E의 개수가 동일하다. / studentForm: B하고 나면 C는 D마다 할당되는 E의 개수가 같아진다.
+- S-58 r1: 경마식 보도와 선거 방송 토론회 6번 / sentence: 유권자들이 뛰어난 역량을 가진 소수 정당 후보자를 주요 후보자들과 동시에 비교할 수 있는 가장 효율적인 방법이 선거 방송 초청 대상 후보자 토론회라면 ⓑ의 입장은 약화되겠군. / studentQuote: 소수 정당 후보도 토론회에서 주요 후보랑 같이 비교할 수 있으면 모든 후보를 동시에 비교 못 하게 한다는 ⓑ 비판이 안 맞게 되니까 약화되는 게 맞음 / sourceForm: A가 B를 C와 동시에 비교할 수 있는 가장 효율적인 방법이 D라면 E는 약화되겠군. / studentForm: D에서 B를 C와 동시에 비교할 수 있으면 E는 약화된다.
+- S-58 r2: 경마식 보도와 선거 방송 토론회 6번 / sentence: 유권자들이 뛰어난 역량을 가진 소수 정당 후보자를 주요 후보자들과 동시에 비교할 수 있는 가장 효율적인 방법이 선거 방송 초청 대상 후보자 토론회라면 ⓑ의 입장은 약화되겠군. / studentQuote: 소수 정당 후보도 토론회에서 주요 후보랑 같이 비교할 수 있으면 모든 후보를 동시에 비교 못 하게 한다는 ⓑ 비판이 안 맞게 되니까 약화되는 게 맞음 / sourceForm: A를 B와 동시에 비교할 수 있는 가장 효율적인 방법이 C라면 D는 약화된다. / studentForm: C에서 A를 B와 동시에 비교할 수 있으면 D는 약화된다.
+- S-58 r3: 경마식 보도와 선거 방송 토론회 6번 / sentence: 유권자들이 뛰어난 역량을 가진 소수 정당 후보자를 주요 후보자들과 동시에 비교할 수 있는 가장 효율적인 방법이 선거 방송 초청 대상 후보자 토론회라면 ⓑ의 입장은 약화되겠군. / studentQuote: 소수 정당 후보도 토론회에서 주요 후보랑 같이 비교할 수 있으면 모든 후보를 동시에 비교 못 하게 한다는 ⓑ 비판이 안 맞게 되니까 약화되는 게 맞음 / sourceForm: A가 B를 C와 동시에 비교할 수 있는 가장 효율적인 방법이 D라면 E는 약화된다. / studentForm: A가 D에서 B를 C와 같이 비교할 수 있으면 E는 약화된다.
+
+## 측정 요약 (해석 아님)
+
+| 학생 | 생성 result 3회 | 검토 verdict 3회 |
+|---|---|---|
+| S-07 | NONE, NONE, NONE | PASS, PASS, PASS |
+| S-12 | NONE(코드) | - |
+| S-23 | PATTERN(DIRECTION), PATTERN(DIRECTION), PATTERN(DIRECTION+CONDITION) | PASS, PASS, PASS |
+| S-31 | NONE, NONE, NONE | PASS, PASS, PASS |
+| S-44 | NONE, NONE, NONE | FAIL, FAIL, FAIL |
+| S-58 | PATTERN(CONDITION+SCOPE), PATTERN(CONDITION+SCOPE), PATTERN(CONDITION+SCOPE) | PASS, PASS, PASS |
+| S-66 | NONE, NONE, NONE | PASS, PASS, FAIL |
