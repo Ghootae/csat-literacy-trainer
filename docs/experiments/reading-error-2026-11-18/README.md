@@ -20,7 +20,7 @@
 ## 실행 순서 (CLI)
 
 1. **사고 진단**: 각 입력의 `evidenceEntries`마다 진단평가 앱의 현재 사고 진단(운영 지시문·모델 그대로)을 돌린다. 결과 `thoughtDiagnosis: { outcomeType, steps, firstFailedStep, errors: [{ tag, step, studentQuote }] }`를 그 항목에 붙인다.
-2. **거르기 (코드)**: 대상 = `errors` 중 하나 이상이 `step ∈ {S2_CHOICE, S4_INTERPRET}`이면서 `tag ∈ {CONDITION, SCOPE, DIRECTION, POLARITY, REFERENT, MAPPING, PARAPHRASE_DISTANCE, MISREAD_FACT}`인 항목이다. 나머지는 `excludedEntries: [{ item, tags }]`로 옮긴다. 결과는 `inputs-filtered/S-xx.json`에 저장하고, 원본 `inputs/`는 건드리지 않는다. 대상이 서로 다른 문항 2개 미만이면 생성 호출 없이 `NONE`으로 기록한다.
+2. **거르기 (코드)**: 대상 = `errors` 중 하나 이상의 `tag ∈ {CONDITION, SCOPE, DIRECTION, POLARITY, REFERENT, MAPPING, PARAPHRASE_DISTANCE, MISREAD_FACT}`인 항목이다. 나머지는 `excludedEntries: [{ item, tags }]`로 옮긴다. 결과는 `inputs-filtered/S-xx.json`에 저장하고, 원본 `inputs/`는 건드리지 않는다. 대상이 서로 다른 문항 2개 미만이면 생성 호출 없이 `NONE`으로 기록한다.
 3. **생성**: `PROMPT-v2.md`의 생성 부분과 `inputs-filtered/S-xx.json`. 모델은 sol이고, 학생당 3회 반복해 흔들림을 본다. 결과 `runs/S-xx-rN.gen.json`.
 4. **검토**: 같은 입력과 생성 결과로 `PROMPT-v2.md`의 검토 부분을 돌린다. 결과 `runs/S-xx-rN.review.json`.
 5. **요약표** `RESULTS.md`:

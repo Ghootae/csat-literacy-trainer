@@ -13,6 +13,11 @@ import { loadDiagnosticBundle, loadDiagnosticSet } from '../../../packages/app/d
 
 const student = process.argv[2];
 if (!/^S-\d+$/u.test(student ?? '')) throw new Error('학생 id 필요(예: S-58)');
+// 선택: --version v2.1 → PROMPT-v2.1.md, 거르기는 태그만(단계 제한 없음), 사고 진단은 저장본만 재사용(재호출 금지), 결과 이름에 버전을 붙인다.
+const versionIndex = process.argv.indexOf('--version');
+const version = versionIndex > 0 ? process.argv[versionIndex + 1] : null;
+const promptFile = version ? `PROMPT-${version}.md` : 'PROMPT-v2.md';
+const label = version ? `${student}-${version}` : student;
 const dir = resolve(process.cwd(), 'docs/experiments/reading-error-2026-11-18');
 const write = (path, value) => writeFileSync(resolve(dir, path), typeof value === 'string' ? value : JSON.stringify(value, null, 2) + '\n');
 mkdirSync(resolve(dir, 'inputs-filtered'), { recursive: true }); mkdirSync(resolve(dir, 'runs'), { recursive: true });
@@ -37,6 +42,7 @@ const byItem = (item) => {
 };
 const savedPath = resolve(dir, `runs/${student}.diagnosis.json`);
 let diagnosisLog;
+if (version && !existsSync(savedPath)) throw new Error('버전 실행은 저장된 사고 진단이 있어야 한다(재호출 안 함).');
 if (existsSync(savedPath)) {
   // 이어 실행: 이미 저장된 사고 진단 원본을 그대로 쓴다(재호출 없음).
   diagnosisLog = JSON.parse(readFileSync(savedPath, 'utf8')).calls;
@@ -64,18 +70,18 @@ if (existsSync(savedPath)) {
 // ---------- 2) 거르기 (코드) ----------
 const STEPS = new Set(['S2_CHOICE', 'S4_INTERPRET']);
 const TAGS = new Set(['CONDITION', 'SCOPE', 'DIRECTION', 'POLARITY', 'REFERENT', 'MAPPING', 'PARAPHRASE_DISTANCE', 'MISREAD_FACT']);
-const isTarget = (entry) => entry.thoughtDiagnosis.errors.some(e => STEPS.has(e.step) && TAGS.has(e.tag));
+const isTarget = (entry) => entry.thoughtDiagnosis.errors.some(e => (version || STEPS.has(e.step)) && TAGS.has(e.tag));
 const kept = input.evidenceEntries.filter(isTarget);
 const excludedEntries = input.evidenceEntries.filter(e => !isTarget(e)).map(e => ({ item: e.item, tags: e.thoughtDiagnosis.errors.map(x => x.tag) }));
 const filtered = { ...input, evidenceEntries: kept, excludedEntries };
-write(`inputs-filtered/${student}.json`, filtered);
+write(`inputs-filtered/${label}.json`, filtered);
 console.log(`거르기: 대상 ${kept.length}개, 제외 ${excludedEntries.length}개`);
-if (kept.length < 2) { console.log('대상이 2개 미만 → 생성·검토 호출 없이 NONE'); write(`runs/${student}.none.json`, { student, result: 'NONE', reason: `대상 ${kept.length}개(<2)`, excludedEntries }); process.exit(0); }
+if (kept.length < 2) { console.log('대상이 2개 미만 → 생성·검토 호출 없이 NONE'); write(`runs/${label}.none.json`, { student, result: 'NONE', reason: `대상 ${kept.length}개(<2)`, excludedEntries }); process.exit(0); }
 
 // ---------- 3) 생성 (sol 1회) ----------
-const prompt = readFileSync(resolve(dir, 'PROMPT-v2.md'), 'utf8');
+const prompt = readFileSync(resolve(dir, promptFile), 'utf8');
 const [generationPrompt, reviewPrompt] = prompt.split(/\n---\n/u);
-if (!generationPrompt?.includes('(생성)') || !reviewPrompt?.includes('(검토)')) throw new Error('PROMPT-v2.md를 생성·검토로 나누지 못함');
+if (!generationPrompt?.includes('(생성)') || !reviewPrompt?.includes('(검토)')) throw new Error(`${promptFile}를 생성·검토로 나누지 못함`);
 const ask = async (instructionsText, userText) => {
   const started = performance.now();
   const response = await transport.create({ model: THOUGHT_DIAGNOSIS_MODEL, instructions: instructionsText, reasoning: { effort: 'medium' }, max_output_tokens: 12000,
@@ -87,10 +93,10 @@ const ask = async (instructionsText, userText) => {
 };
 const inputText = JSON.stringify(filtered, null, 2);
 const gen = await ask(generationPrompt, inputText);
-write(`runs/${student}-r1.gen.json`, { student, run: 1, metadata: gen.metadata, output: gen.value });
+write(`runs/${label}-r1.gen.json`, { student, run: 1, metadata: gen.metadata, output: gen.value });
 console.log(`생성 완료: result=${gen.value.result}`);
 
 // ---------- 4) 검토 (1회) ----------
 const review = await ask(reviewPrompt, `## 입력\n${inputText}\n\n## 생성 결과\n${JSON.stringify(gen.value, null, 2)}`);
-write(`runs/${student}-r1.review.json`, { student, run: 1, metadata: review.metadata, output: review.value });
+write(`runs/${label}-r1.review.json`, { student, run: 1, metadata: review.metadata, output: review.value });
 console.log(`검토 완료: verdict=${review.value.verdict}`);

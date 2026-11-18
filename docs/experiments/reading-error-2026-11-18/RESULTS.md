@@ -305,3 +305,152 @@ verdict **PASS**. quotesVerbatim true, distinctItems true, inScope true, formsAc
   "problems": []
 }
 ```
+
+
+---
+
+# v2.1 (학생 S-58 한 명, 2026-11-18)
+
+채점은 하지 않았다. 위 v2 절의 결과와 비교하려고 같은 사고 진단 원본을 재사용했다. KEY.md·students.py·codes.json은 읽지도 모델에 넣지도 않았다.
+
+## 실행 조건
+
+- 1단계: `runs/S-58.diagnosis.json`을 **재사용**했다(사고 진단 재호출 0회). 위 v2 절 1단계 표와 같다.
+- 2단계 거르기: **태그만**(단계 제한 없음). `errors` 중 하나 이상의 tag ∈ {CONDITION, SCOPE, DIRECTION, POLARITY, REFERENT, MAPPING, PARAPHRASE_DISTANCE, MISREAD_FACT}. 저장 `inputs-filtered/S-58-v2.1.json`(v2의 `S-58.json`은 그대로 둠).
+- 3·4단계: `PROMPT-v2.1.md`, 모델 `gpt-6.1-sol`(sol), reasoning medium, 각 1회. 실행 `node --env-file=.env docs/experiments/reading-error-2026-11-18/run-one.mjs S-58 --version v2.1`(`run-one.mjs`에 `--version` 옵션 추가).
+- 호출: 생성 1·검토 1 성공. 첫 시도는 서버 과부하(503 `server_is_overloaded`)로 실패했고 저장된 출력이 없어 같은 조건으로 한 번 재시도했다.
+- 토큰: 생성 입력 7974·출력 2195, 검토 입력 7370·출력 368.
+- 저장: `runs/S-58-v2.1-r1.gen.json`, `runs/S-58-v2.1-r1.review.json`.
+
+## 2단계: 거르기 (태그만)
+
+- 대상 4개: 경마식 보도와 선거 방송 토론회 5번 / 경마식 보도와 선거 방송 토론회 6번 / 플라스틱의 중합 반응과 물리적 성질 10번 / 오디오 신호의 디지털 저장과 지각부호화 압축 17번
+- 제외: 오디오 신호의 디지털 저장과 지각부호화 압축 16번 (태그: 없음)
+- v2 대비: 오디오 17번(S5_JUDGE / CONDITION)이 대상에 새로 들어옴. 나머지는 같다.
+
+## 3단계: 생성 결과 (1회)
+
+| 항목 | 값 |
+|---|---|
+| result | PATTERN |
+| kind | CONDITION+SCOPE |
+| headline | 종합적으로 보면, 너는 범위·때·정도를 정하는 말을 빼고 문장의 뼈대만으로 판단한 경우가 있었어. |
+| featured | 경마식 보도와 선거 방송 토론회 5번: ｢공직선거법｣의 규정에 따르면, 당선인을 예상케 하는 여론조사를 실시하는 것은 언제든지 가능하지만, 그 결과의 보도는 선거일 6일 전부터 투표 마감 시각까지 금지된다. (sourceForm: A를 실시하는 것은 언제든지 가능하지만, 그 결과의 B는 C부터 D까지 금지된다. / studentForm: A 결과의 B는 선거일에는 금지된다.) |
+| otherCases 문항 | 경마식 보도와 선거 방송 토론회 6번, 오디오 신호의 디지털 저장과 지각부호화 압축 17번 |
+| secondary | null |
+| nextTime | '~까지', '가장', '~할 때'에 동그라미를 치고, 판단 근거를 쓸 때도 그 말을 그대로 넣어서 적용 범위가 같은지 확인해 봐. |
+| perEntry 제외(eligible=false) | 플라스틱의 중합 반응과 물리적 성질 10번 |
+
+## 4단계: 검토 결과 (1회)
+
+verdict **FAIL**. quotesVerbatim false, distinctItems true, inScope false, formsAccurate true, notContentOnly true, notGeneric true, noneJustified null.
+
+problems:
+- otherCases의 두 sentence에 각각 '**가장 효율적인 방법**', '**압축할 때**'라는 마크다운 강조가 삽입되어 있어 선지 원문과 그대로 일치하지 않는다.
+- 오디오 신호의 디지털 저장과 지각부호화 압축 17번은 학생이 '압축 전엔'이라는 조건을 명시적으로 보존하면서 그 규칙을 압축 상황의 판단에 적용한 사례다. '압축할 때'를 문장에서 빼고 읽었다는 직접 근거는 없으므로, 이를 문장 하나의 오독 사례로 포함하면 적용·추론 실패가 섞인다.
+
+측정 메모(해석 아님): 검토의 첫째 problem은 `otherCases.sentence`에 들어간 `**굵게**` 표시를 원문 불일치로 본 것이다. `PROMPT-v2.1.md` 생성 지시문은 `otherCases`의 `sentence`에 "바뀐 말은 **굵게**"를 요구하고, 검토 지시문 1번은 `sentence`가 원문에 그대로 있는지를 묻는다. 두 지시문이 서로 어긋난다.
+
+# 부록 (v2.1): 원본 출력 (그대로)
+
+## D. 생성 JSON 전체 (`runs/S-58-v2.1-r1.gen.json`의 output)
+
+```json
+{
+  "perEntry": [
+    {
+      "item": "경마식 보도와 선거 방송 토론회 5번",
+      "eligible": true,
+      "sentence": "｢공직선거법｣의 규정에 따르면, 당선인을 예상케 하는 여론조사를 실시하는 것은 언제든지 가능하지만, 그 결과의 보도는 선거일 6일 전부터 투표 마감 시각까지 금지된다.",
+      "sourceForm": "A를 실시하는 것은 언제든지 가능하지만, 그 결과의 B는 C부터 D까지 금지된다.",
+      "studentForm": "A 결과의 B는 선거일에는 금지된다.",
+      "changed": "금지가 끝나는 때인 '투표 마감 시각까지'를 버리고, 금지 범위를 선거일 전체로 넓힘",
+      "kind": "CONDITION+SCOPE",
+      "tagDisagreement": null
+    },
+    {
+      "item": "경마식 보도와 선거 방송 토론회 6번",
+      "eligible": true,
+      "sentence": "유권자들이 뛰어난 역량을 가진 소수 정당 후보자를 주요 후보자들과 동시에 비교할 수 있는 가장 효율적인 방법이 선거 방송 초청 대상 후보자 토론회라면 ⓑ의 입장은 약화되겠군.",
+      "sourceForm": "A가 B를 C와 동시에 비교할 수 있는 가장 효율적인 방법이 D라면 E의 입장은 약화된다.",
+      "studentForm": "A가 D에서 B를 C와 같이 비교할 수 있으면 E의 입장은 약화된다.",
+      "changed": "'가장 효율적인 방법'이라는 한정을 빼고, 함께 비교할 수 있다는 가능성만으로 조건을 바꿈",
+      "kind": "CONDITION+SCOPE",
+      "tagDisagreement": null
+    },
+    {
+      "item": "플라스틱의 중합 반응과 물리적 성질 10번",
+      "eligible": false,
+      "sentence": "",
+      "sourceForm": "UNKNOWN",
+      "studentForm": "UNKNOWN",
+      "changed": "확인할 수 없음. 조밀한 배열이면 빛이 더 잘 통과할 것이라는 인과를 스스로 만들어 판단했으며, 특정 문장의 방향을 뒤집어 읽었다는 근거는 없음",
+      "kind": "",
+      "tagDisagreement": "DIRECTION 태그와 달리, 학생 근거에는 원문의 관계를 뒤집어 읽은 흔적보다 지문에 없는 인과를 만들어 판단한 흔적이 드러남"
+    },
+    {
+      "item": "오디오 신호의 디지털 저장과 지각부호화 압축 17번",
+      "eligible": true,
+      "sentence": "A와 B는 소리 크기가 같으므로 압축할 때 두 소리 크기에 같은 개수의 비트가 할당되겠군.",
+      "sourceForm": "A와 B는 C가 같으므로 D할 때 같은 개수의 E가 할당된다.",
+      "studentForm": "A와 B는 C가 같으므로 같은 개수의 E가 할당된다.",
+      "changed": "판단 대상의 '압축할 때'를 반영하지 않고, 학생 자신이 '압축 전엔'이라고 한정해 읽은 규칙을 압축 상황에도 적용함",
+      "kind": "CONDITION",
+      "tagDisagreement": null
+    }
+  ],
+  "result": "PATTERN",
+  "kind": "CONDITION+SCOPE",
+  "headline": "종합적으로 보면, 너는 범위·때·정도를 정하는 말을 빼고 문장의 뼈대만으로 판단한 경우가 있었어.",
+  "featured": {
+    "item": "경마식 보도와 선거 방송 토론회 5번",
+    "sentence": "｢공직선거법｣의 규정에 따르면, 당선인을 예상케 하는 여론조사를 실시하는 것은 언제든지 가능하지만, 그 결과의 보도는 선거일 6일 전부터 투표 마감 시각까지 금지된다.",
+    "studentQuote": "선거일에는 여론조사 결과 보도가 금지라서 보도할 수 없음.",
+    "sourceForm": "A를 실시하는 것은 언제든지 가능하지만, 그 결과의 B는 C부터 D까지 금지된다.",
+    "studentForm": "A 결과의 B는 선거일에는 금지된다.",
+    "explanation": "'C부터 D까지'는 금지가 적용되는 시작과 끝을 정하는 말이야. 여기서 '투표 마감 시각까지'를 빼고 '선거일에는 금지된다'로 읽으면, 금지가 끝나는 시각 뒤까지 금지 범위를 넓히게 돼."
+  },
+  "otherCases": [
+    {
+      "item": "경마식 보도와 선거 방송 토론회 6번",
+      "sentence": "유권자들이 뛰어난 역량을 가진 소수 정당 후보자를 주요 후보자들과 동시에 비교할 수 있는 **가장 효율적인 방법**이 선거 방송 초청 대상 후보자 토론회라면 ⓑ의 입장은 약화되겠군.",
+      "studentQuote": "소수 정당 후보도 토론회에서 주요 후보랑 같이 비교할 수 있으면 모든 후보를 동시에 비교 못 하게 한다는 ⓑ 비판이 안 맞게 되니까 약화되는 게 맞음",
+      "changed": "'가장 효율적인 방법'이라는 한정을 빼고 '같이 비교할 수 있으면'만 남김"
+    },
+    {
+      "item": "오디오 신호의 디지털 저장과 지각부호화 압축 17번",
+      "sentence": "A와 B는 소리 크기가 같으므로 **압축할 때** 두 소리 크기에 같은 개수의 비트가 할당되겠군.",
+      "studentQuote": "압축 전엔 소리 크기마다 같은 개수의 비트를 할당한다고 했으니까 A랑 B 크기가 같으면 비트도 같음",
+      "changed": "'압축할 때'라는 적용 시점을 빼고, '압축 전엔' 성립하는 규칙으로 판단함"
+    }
+  ],
+  "secondary": null,
+  "nextTime": "'~까지', '가장', '~할 때'에 동그라미를 치고, 판단 근거를 쓸 때도 그 말을 그대로 넣어서 적용 범위가 같은지 확인해 봐.",
+  "counterCheck": "오디오 신호의 디지털 저장과 지각부호화 압축 15번에서는 '압축 전에는'이라는 시점 한정을 정확히 적었다. 의식과 인지 과정에 대한 철학적 논의 16번에서도 '해석에 의존해서만'이라는 한정을 보존했고, 플라스틱의 중합 반응과 물리적 성질 9번에서는 '사슬 끝'을 '양쪽 끝'으로 넓히지 않았다. 따라서 한정 표현을 늘 놓치는 습관으로 단정하지 않고, 한정을 빼거나 적용 과정에서 유지하지 못한 경우가 있었다고 진단한다.",
+  "rejected": [
+    {
+      "kind": "DIRECTION",
+      "why": "플라스틱의 중합 반응과 물리적 성질 10번은 학생이 만든 인과에 따른 판단이므로 제외했다. 문장의 비교·방향·순서를 뒤집어 읽은 사례가 서로 다른 두 문항에서 확인되지 않는다."
+    }
+  ]
+}
+```
+
+## E. 검토 JSON 전체 (`runs/S-58-v2.1-r1.review.json`의 output)
+
+```json
+{
+  "quotesVerbatim": false,
+  "distinctItems": true,
+  "inScope": false,
+  "formsAccurate": true,
+  "notContentOnly": true,
+  "notGeneric": true,
+  "noneJustified": null,
+  "verdict": "FAIL",
+  "problems": [
+    "otherCases의 두 sentence에 각각 '**가장 효율적인 방법**', '**압축할 때**'라는 마크다운 강조가 삽입되어 있어 선지 원문과 그대로 일치하지 않는다.",
+    "오디오 신호의 디지털 저장과 지각부호화 압축 17번은 학생이 '압축 전엔'이라는 조건을 명시적으로 보존하면서 그 규칙을 압축 상황의 판단에 적용한 사례다. '압축할 때'를 문장에서 빼고 읽었다는 직접 근거는 없으므로, 이를 문장 하나의 오독 사례로 포함하면 적용·추론 실패가 섞인다."
+  ]
+}
+```
