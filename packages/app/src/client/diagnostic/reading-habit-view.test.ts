@@ -16,7 +16,7 @@ const wrongItem = { questionId: 'q9', passageId: 'plastic', questionNumber: 9, c
 const habit: ReadingHabit = {
   headline: '종합적으로 보면, 너는 문장의 범위를 정하는 말을 빼고 읽는 경향이 있어.',
   featured: { questionId: 'q10', passageId: 'plastic', questionNumber: 10, sourceKind: 'CHOICE', choicePosition: 2, sentence: '㉮보다 ㉯로 이루어진 소재가 적합하겠군.',
-    studentQuote: '㉯가 조밀하니까 투명할 것 같음', sourceForm: 'A보다 B가 적합하다', studentForm: 'B가 투명하다', explanation: '비교하는 말이 빠지면 뜻이 달라져.' },
+    studentQuote: '㉯가 조밀하니까 투명할 것 같음', sourceForm: 'A보다 B가 적합하다', studentForm: 'B가 투명하다', changed: '보다 → 가', explanation: '비교하는 말이 빠지면 뜻이 달라져.' },
   otherCases: [{ questionId: 'q9', passageId: 'plastic', questionNumber: 9, sentence: '사슬 **끝에** 있다', studentQuote: '양쪽 끝이라고 함', changed: "'끝에'를 '양쪽 끝'으로 바꿈" }],
   secondary: { line: '그리고 순서를 거꾸로 읽은 곳도 두 번 있었어.', questionIds: ['q9'] },
   nextTime: '비교하는 말에 동그라미를 쳐 봐.',
@@ -39,6 +39,14 @@ describe('맨 위 요약의 읽기 습관 상자', () => {
     expect(html).toContain('㉮(가지를 친 구조의 사슬들)보다 ㉯(직선형 구조의 사슬들)로'); expect(html).toContain('<strong>끝에</strong>');
     expect(html).toContain('그 밖에: 그리고 순서를 거꾸로 읽은 곳도 두 번 있었어.'); expect(html).toContain('9번');
     expect(html).toContain('카드 보기 →');
+  });
+  it('원래 문장의 굵은 말은 강조하고, 네가 읽은 것은 강조 없이. 뺀 말·바꿔 읽은 말 한 줄', () => {
+    const bolded: ReadingHabit = { ...habit, featured: { ...habit.featured, sentence: '㉮보다 **㉯로** 이루어진 소재', sourceForm: 'A보다 **B가** 적합하다', changed: '비교하는 말' } };
+    const html = render({ status: 'ready', habit: bolded });
+    expect(html).toContain('<strong>㉯'); expect(html).toContain('<strong>B가</strong>');
+    expect(html).not.toContain('**'); expect(html).toContain('<dt>네가 읽은 것</dt><dd>B가 투명하다</dd>');
+    expect(html).toContain('네가 뺀 말: 비교하는 말');
+    expect(render({ status: 'ready', habit })).toContain('네가 바꿔 읽은 말: 보다 → 가');
   });
   it('sourceKind에 따라 선지 번호·지문·〈보기〉로 쓴다', () => {
     const at = (sourceKind: 'PASSAGE' | 'SCENARIO') => render({ status: 'ready', habit: { ...habit, featured: { ...habit.featured, sourceKind, choicePosition: null } } });

@@ -52,9 +52,10 @@ function HabitBox({ habit, result, titles, onShowCard }: { habit: ReadingHabit; 
   const seen = new Set<string>(); const { featured, secondary } = habit;
   const gloss = (passageId: string) => glossOf(result, passageId);
   const note = (passageId: string, text: string) => annotateSymbols(text, gloss(passageId), seen);
-  const sentence = note(featured.passageId, parseBold(featured.sentence).map(segment => segment.text).join(''));
+  const sentenceSegments = annotateSegments(parseBold(featured.sentence), gloss(featured.passageId), seen);
   const quote = note(featured.passageId, featured.studentQuote);
-  const sourceForm = note(featured.passageId, featured.sourceForm); const studentForm = note(featured.passageId, featured.studentForm);
+  const sourceSegments = annotateSegments(parseBold(featured.sourceForm), gloss(featured.passageId), seen); const studentForm = note(featured.passageId, featured.studentForm);
+  const changed = note(featured.passageId, featured.changed);
   const explanation = note(featured.passageId, featured.explanation);
   const others = habit.otherCases.map(c => ({ ...c, segments: annotateSegments(parseBold(c.sentence), gloss(c.passageId), seen), quote: note(c.passageId, c.studentQuote) }));
   const numberOf = (questionId: string) => result.items.find(item => item.questionId === questionId);
@@ -63,12 +64,13 @@ function HabitBox({ habit, result, titles, onShowCard }: { habit: ReadingHabit; 
   return <div className="diag-look diag-habit" data-testid="reading-habit">
     <p className="diag-habit-headline" data-testid="habit-headline">{habit.headline}</p>
     <p className="diag-look-source">{titles[featured.passageId] ?? ''} {featured.questionNumber}번 · {habitSourceName(featured.sourceKind, featured.choicePosition)}</p>
-    <p className="diag-look-text"><strong>&ldquo;{sentence}&rdquo;</strong></p>
+    <p className="diag-look-text diag-habit-sentence">&ldquo;<Segs segments={sentenceSegments} />&rdquo;</p>
     <p className="diag-look-mine">네 근거 &nbsp;&ldquo;{quote}&rdquo;</p>
     <dl className="diag-habit-forms">
-      <dt>원래 문장</dt><dd>{sourceForm}</dd>
+      <dt>원래 문장</dt><dd><Segs segments={sourceSegments} /></dd>
       <dt>네가 읽은 것</dt><dd>{studentForm}</dd>
     </dl>
+    <p className="diag-look-text diag-habit-changed" data-testid="habit-changed">{featured.changed.includes('→') ? '네가 바꿔 읽은 말' : '네가 뺀 말'}: {changed}</p>
     <p className="diag-look-text">{explanation}</p>
     {others.length > 0 && <div className="diag-habit-others"><p className="diag-label2">같은 방식으로 읽은 곳</p>
       <ul>{others.map(c => <li key={c.questionId}>

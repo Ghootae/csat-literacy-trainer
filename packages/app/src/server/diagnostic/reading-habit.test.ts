@@ -18,9 +18,9 @@ const readJson = (path: string): any => JSON.parse(readFileSync(resolve(EXPERIME
 // ---------- 지시문 ----------
 
 describe('지시문', () => {
-  it('PROMPT-v2.3.md를 생성·검토로 나눈다', () => {
+  it('PROMPT-v2.4.1.md를 생성·검토로 나눈다', () => {
     const { generation, review } = loadReadingHabitPrompts();
-    expect(READING_HABIT_PROMPT_VERSION).toBe('v2.3');
+    expect(READING_HABIT_PROMPT_VERSION).toBe('v2.4.1');
     expect(generation).toContain('(생성)'); expect(review).toContain('(검토)');
     expect(generation).not.toContain('(검토)');
   });
@@ -33,25 +33,28 @@ for (const passage of set.passages) for (const questionId of passage.questionIds
   const source = loadDiagnosticBundle(questionId).source;
   refs.set(`${source.title} ${source.questionNumber}번`, { questionId, passageId: passage.passageId, questionNumber: source.questionNumber });
 }
-const replay = (student: string, run: number, mutate?: (generation: any) => void) => {
-  const input = readJson(`inputs-filtered/${student}-v2.3.json`) as HabitInput;
-  const generation = readJson(`runs/${student}-v2.3-r${run}.gen.json`).output; mutate?.(generation);
-  const review = readJson(`runs/${student}-v2.3-r${run}.review.json`).output;
+// 보이는 경우와 REVIEW_FAIL은 v2.4 실행 출력(S-58·S-23·S-66 ×3). NONE·S-12는 v2.4를 돌리지 않아 v2.3 출력을 쓴다.
+const replay = (student: string, run: number, mutate?: (generation: any) => void, version = 'v2.4') => {
+  const input = readJson(`inputs-filtered/${student}-${version}.json`) as HabitInput;
+  const generation = readJson(`runs/${student}-${version}-r${run}.gen.json`).output; mutate?.(generation);
+  const review = readJson(`runs/${student}-${version}-r${run}.review.json`).output;
   return checkHabit(input, refs, HabitGenerationSchema.parse(generation), HabitReviewSchema.parse(review));
 };
 
 describe('보여 주기 전 코드 검사: 저장된 실험 출력 재생(인계 4절)', () => {
-  it.each([['S-58', 1], ['S-58', 2], ['S-58', 3], ['S-66', 1], ['S-66', 2], ['S-66', 3], ['S-23', 1], ['S-23', 3]] as const)('%s r%i → 보임', (student, run) => {
+  it.each([['S-58', 1], ['S-58', 3], ['S-66', 1], ['S-66', 2], ['S-66', 3], ['S-23', 1], ['S-23', 3]] as const)('%s r%i → 보임', (student, run) => {
     const { shown, hiddenReason } = replay(student, run);
     expect(hiddenReason).toBeNull(); expect(shown).not.toBeNull();
     // 응답에 내부용 값이 없다
     expect(Object.keys(shown!)).toEqual(['headline', 'featured', 'otherCases', 'secondary', 'nextTime']);
+    // featured.changed가 화면 응답까지 그대로 넘어간다
+    expect(shown!.featured.changed).toBe(readJson(`runs/${student}-v2.4-r${run}.gen.json`).output.featured.changed);
   });
-  it.each([['S-23', 2], ['S-44', 1], ['S-44', 2], ['S-44', 3]] as const)('%s r%i → 숨김(REVIEW_FAIL)', (student, run) => {
+  it.each([['S-23', 2], ['S-58', 2]] as const)('%s r%i → 숨김(REVIEW_FAIL)', (student, run) => {
     expect(replay(student, run)).toEqual({ shown: null, hiddenReason: 'REVIEW_FAIL' });
   });
-  it.each([['S-07', 1], ['S-07', 2], ['S-07', 3], ['S-31', 1], ['S-31', 2], ['S-31', 3]] as const)('%s r%i → 숨김(NONE)', (student, run) => {
-    expect(replay(student, run)).toEqual({ shown: null, hiddenReason: 'NONE' });
+  it.each([['S-07', 1], ['S-07', 2], ['S-07', 3], ['S-31', 1], ['S-31', 2], ['S-31', 3]] as const)('%s r%i → 숨김(NONE, v2.3 출력)', (student, run) => {
+    expect(replay(student, run, undefined, 'v2.3')).toEqual({ shown: null, hiddenReason: 'NONE' });
   });
   it('S-12는 거른 대상이 2개 미만이라 호출 자체가 없다', () => {
     expect(readJson('inputs-filtered/S-12-v2.3.json').evidenceEntries.length).toBeLessThan(2);
@@ -74,7 +77,7 @@ describe('보여 주기 전 코드 검사: 한 가지씩 깨뜨리기', () => {
     expect(replay('S-58', 1, g => { g.otherCases = []; }).hiddenReason).toBe('CHECK_3');
   });
   it('strength가 사례 수와 다르면 CHECK_6', () => {
-    const generation = readJson('runs/S-58-v2.3-r1.gen.json').output;
+    const generation = readJson('runs/S-58-v2.4-r1.gen.json').output;
     const distinct = new Set([generation.featured.item, ...generation.otherCases.map((c: any) => c.item)]).size;
     expect(replay('S-58', 1, g => { g.strength = distinct >= 3 ? 'TWO' : 'THREE_PLUS'; }).hiddenReason).toBe('CHECK_6');
   });
@@ -178,7 +181,7 @@ describe('입력 만들기와 호출(가짜 transport)', () => {
     w.c.result(w.id); await settle(w.c);
     expect(w.c.result(w.id).readingHabit).toEqual({ status: 'none' });
     const done = w.store.events.find(e => e.type === 'READING_HABIT_DONE') as any;
-    expect(done).toMatchObject({ promptVersion: 'v2.3', hiddenReason: 'NONE', shown: null, generation: { result: 'NONE' }, review: { verdict: 'PASS' }, inputHash: expect.any(String) });
+    expect(done).toMatchObject({ promptVersion: 'v2.4.1', hiddenReason: 'NONE', shown: null, generation: { result: 'NONE' }, review: { verdict: 'PASS' }, inputHash: expect.any(String) });
     expect(done.metadata).toMatchObject({ generation: { model: 'gpt-6.1-sol' }, review: { model: 'gpt-6.1-sol' } });
     expect(w.store.load(w.id)!.readingHabit).toMatchObject({ status: 'READY', hiddenReason: 'NONE', shown: null });
   });
@@ -189,7 +192,7 @@ describe('입력 만들기와 호출(가짜 transport)', () => {
     const input = inputOf(probe.habit.requests[0]);
     const [a, b] = input.evidenceEntries as { item: string; studentRationale: string; chosen: { text: string; position: number } }[];
     const generation = { perEntry: [], result: 'PATTERN', kind: 'CONDITION', strength: 'TWO', headline: '이번 진단에서 조건을 빼고 읽은 곳이 두 번 있었어.',
-      featured: { item: a!.item, sentence: a!.chosen.text.slice(0, 8), studentQuote: a!.studentRationale, sourceForm: 'A는 C일 때 B', studentForm: 'A는 B', explanation: '설명이야.' },
+      featured: { item: a!.item, sentence: a!.chosen.text.slice(0, 8), studentQuote: a!.studentRationale, sourceForm: 'A는 C일 때 B', studentForm: 'A는 B', changed: 'C일 때', explanation: '설명이야.' },
       otherCases: [{ item: b!.item, sentence: `**${b!.chosen.text.slice(0, 6)}**`, studentQuote: b!.studentRationale, changed: '조건을 버림' }],
       secondary: null, nextTime: '다음에 밑줄을 그어.', counterCheck: '', rejected: [] };
     const w = await world(tags, {}, { generation });

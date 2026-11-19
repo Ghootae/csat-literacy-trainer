@@ -17,7 +17,7 @@ export const READING_HABIT_TAGS: ReadonlySet<string> = new Set(['CONDITION', 'SC
 
 // ---------- 모델 응답 모양 ----------
 
-const Featured = z.object({ item: z.string(), sentence: z.string(), studentQuote: z.string(), sourceForm: z.string(), studentForm: z.string(), explanation: z.string() });
+const Featured = z.object({ item: z.string(), sentence: z.string(), studentQuote: z.string(), sourceForm: z.string(), studentForm: z.string(), changed: z.string(), explanation: z.string() });
 const OtherCase = z.object({ item: z.string(), sentence: z.string(), studentQuote: z.string(), changed: z.string() });
 export const HabitGenerationSchema = z.discriminatedUnion('result', [
   z.object({ result: z.literal('PATTERN'), strength: z.enum(['TWO', 'THREE_PLUS']), headline: z.string(), featured: Featured, otherCases: z.array(OtherCase),
@@ -140,7 +140,7 @@ export type HabitSourceKind = 'CHOICE' | 'PASSAGE' | 'SCENARIO';
 export interface ShownHabit {
   headline: string;
   featured: { questionId: string; passageId: string; questionNumber: number; sourceKind: HabitSourceKind; choicePosition: number | null;
-    sentence: string; studentQuote: string; sourceForm: string; studentForm: string; explanation: string };
+    sentence: string; studentQuote: string; sourceForm: string; studentForm: string; changed: string; explanation: string };
   otherCases: { questionId: string; passageId: string; questionNumber: number; sentence: string; studentQuote: string; changed: string }[];
   secondary: { line: string; questionIds: string[] } | null;
   nextTime: string;
@@ -186,7 +186,7 @@ export function checkHabit(input: HabitInput, refs: ReadonlyMap<string, HabitRef
   return { hiddenReason: null, shown: {
     headline: generation.headline,
     featured: { ...featuredRef, sourceKind: featuredAt.kind, choicePosition: featuredAt.choicePosition, sentence: featured.sentence.trim(), studentQuote: featured.studentQuote.trim(),
-      sourceForm: featured.sourceForm, studentForm: featured.studentForm, explanation: featured.explanation },
+      sourceForm: featured.sourceForm, studentForm: featured.studentForm, changed: featured.changed, explanation: featured.explanation },
     otherCases: generation.otherCases.map(c => ({ ...refs.get(c.item)!, sentence: c.sentence.trim(), studentQuote: c.studentQuote.trim(), changed: c.changed })),
     secondary, nextTime: generation.nextTime } };
 }
