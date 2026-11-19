@@ -14,9 +14,9 @@ const EXPERIMENT = resolve(process.cwd(), 'docs/experiments/wrong-card-layer1-20
 const readJson = (path: string): any => JSON.parse(readFileSync(resolve(EXPERIMENT, path), 'utf8'));
 
 describe('지시문', () => {
-  it('PROMPT-v1.2.md 전문을 그대로 읽고 버전 상수는 v1.2다', () => {
-    expect(WRONG_CARD_PROMPT_VERSION).toBe('v1.2');
-    expect(loadWrongCardPrompt()).toBe(readFileSync(resolve(EXPERIMENT, 'PROMPT-v1.2.md'), 'utf8'));
+  it('PROMPT-v1.3.md 전문을 그대로 읽고 버전 상수는 v1.3이다', () => {
+    expect(WRONG_CARD_PROMPT_VERSION).toBe('v1.3');
+    expect(loadWrongCardPrompt()).toBe(readFileSync(resolve(EXPERIMENT, 'PROMPT-v1.3.md'), 'utf8'));
   });
 });
 
@@ -54,6 +54,35 @@ describe('코드 검사(run.mjs codeChecks 이식)', () => {
   it('금지어가 있으면 실패', () => {
     const out = output3(); out.examinerIntent = `${out.examinerIntent} 긍정·부정 뒤집기`;
     expect(failed(out, input3)).toContain('금지어(규칙 4)가 없다');
+  });
+  it('금지어가 지문·발문·선지에 그대로 나오는 낱말이면 예외(예: "오차 범위"), 그 밖의 금지어는 여전히 실패', () => {
+    // card3의 지문에는 "범위"가 이미 있다(예외), "방향"은 지문·발문·선지 어디에도 없다.
+    expect(input3.passage).toContain('범위');
+    const exempt = output3(); exempt.examinerIntent = `${exempt.examinerIntent} 오차 범위를 줄여 읽었어.`;
+    expect(failed(exempt, input3)).not.toContain('금지어(규칙 4)가 없다');
+    const out = output3(); out.examinerIntent = `${out.examinerIntent} 반대 방향으로 읽었어.`;
+    expect(failed(out, input3)).toContain('금지어(규칙 4)가 없다');
+    expect(failed(out, { ...input3, passage: `${input3.passage} 방향` })).not.toContain('금지어(규칙 4)가 없다');
+    expect(failed(out, { ...input3, stem: `${input3.stem} 방향` })).not.toContain('금지어(규칙 4)가 없다');
+    expect(failed(out, { ...input3, chosen: { ...input3.chosen, text: `${input3.chosen.text} 방향` } })).not.toContain('금지어(규칙 4)가 없다');
+    expect(failed(out, { ...input3, answer: { ...input3.answer, text: `${input3.answer.text} 방향` } })).not.toContain('금지어(규칙 4)가 없다');
+    out.examinerIntent = `${out.examinerIntent} 긍정·부정 뒤집기`;
+    expect(failed(out, { ...input3, passage: `${input3.passage} 방향` })).toContain('금지어(규칙 4)가 없다');   // 예외는 지문 등에 있는 낱말만
+  });
+  it('근거 없는 오답이면 case와 상관없이 selfCheckOptions가 정확히 3개여야 한다', () => {
+    const checkName = '근거 없는 오답이면 selfCheckOptions가 정확히 3개다';
+    const { studentRationale: _a, ...omittedProvidedCase } = input3;   // WRONG_OMITTED
+    const { studentRationale: _b, ...omittedTrueChosen } = input4;     // WRONG_TRUE_CHOSEN, 근거 없음
+    for (const input of [omittedProvidedCase, omittedTrueChosen] as WrongCardInput[]) {
+      const out = input === omittedTrueChosen ? output4() : output3();
+      out.pair.top = input.chosen.text;   // pair.top 검사는 이 테스트의 관심사가 아니다
+      expect(failed(out, input)).toContain(checkName);                                   // 없음
+      out.selfCheckOptions = ['가', '나']; expect(failed(out, input)).toContain(checkName);        // 2개
+      out.selfCheckOptions = ['가', '나', '다', '라']; expect(failed(out, input)).toContain(checkName);   // 4개
+      out.selfCheckOptions = ['가', '나', '다']; expect(failed(out, input)).not.toContain(checkName);    // 3개
+    }
+    expect(failed(output3(), input3)).not.toContain(checkName);   // 근거 쓴 오답은 selfCheckOptions가 없어도 된다
+    expect(failed(output4(), input4)).not.toContain(checkName);
   });
   it('1층이 131자면 실패, 130자는 통과', () => {
     const out = output3(); out.symbolGlosses = [];
@@ -149,7 +178,7 @@ const validOutput = (input: WrongCardInput): any => {
   return { layer1: '1층 문장이야.', symbolGlosses: [], matchesTrap: true,
     pair: { top: input.studentRationale ?? input.chosen.text.slice(0, 10), source, sourceFocus: source.slice(0, 5), conclusion: '그래서 결론이야.' },
     ...(input.case === 'WRONG_TRUE_CHOSEN' ? { missedAnswer: { text: '놓친 선지', source } } : {}), examinerIntent: '출제자 의도야.',
-    ...(input.case === 'WRONG_OMITTED' ? { selfCheckOptions: ['하나', '둘', '셋'] } : {}) };
+    ...(input.case !== 'CORRECT_WEAK' && input.studentRationale === undefined ? { selfCheckOptions: ['하나', '둘', '셋'] } : {}) };
 };
 const cardFake = (respond: (input: WrongCardInput, index: number) => unknown = validOutput, init: Parameters<typeof transportFake>[1] = {}) =>
   transportFake((request, index) => respond(inputOf(request), index), init);
@@ -192,9 +221,9 @@ describe('컨트롤러 흐름: 결과의 items[].card', () => {
     expect(view).toMatchObject({ status: 'ready', layer1: '1층 문장이야.', pair: { conclusion: '결론이야.' }, examinerIntent: '출제자 의도야.' });
     expect(JSON.stringify(w.c.result(w.id))).not.toContain('matchesTrap');
     const stored = w.store.load(w.id)!.items[H6]!.wrongCard!;
-    expect(stored).toMatchObject({ status: 'ready', attempts: 1, promptVersion: 'v1.2', output: { matchesTrap: true } });
+    expect(stored).toMatchObject({ status: 'ready', attempts: 1, promptVersion: 'v1.3', output: { matchesTrap: true } });
     const done = w.store.events.find(e => e.type === 'WRONG_CARD_DONE') as any;
-    expect(done).toMatchObject({ questionId: H6, case: 'WRONG_PROVIDED', status: 'ready', promptVersion: 'v1.2', attempts: [{ attempt: 1, passed: true, failedChecks: [], conclusionStrippedLeadingSo: '그래서 결론이야.', metadata: { model: 'gpt-6.1-sol' } }] });
+    expect(done).toMatchObject({ questionId: H6, case: 'WRONG_PROVIDED', status: 'ready', promptVersion: 'v1.3', attempts: [{ attempt: 1, passed: true, failedChecks: [], conclusionStrippedLeadingSo: '그래서 결론이야.', metadata: { model: 'gpt-6.1-sol' } }] });
   });
 
   it('1회 검사 실패 후 재생성 성공 → ready, 호출 2회(실패 항목이 사건에 남는다)', async () => {

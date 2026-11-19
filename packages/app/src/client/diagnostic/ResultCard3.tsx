@@ -17,6 +17,8 @@ export function LayeredCard({ item, card, passageTitle, selfCheck, onClose }: { 
   return <article className="diag-item diag-card3" id="diag-item-card" aria-label={`${title} 카드`}>
     <div className="diag-item-head"><h3>{title} · {circledObject(item.chosenPosition)} 골랐어</h3><span className={item.correct ? 'diag-right' : 'diag-wrong'}>{item.correct ? '정답' : '오답'}</span>
       <button type="button" className="diag-close" onClick={onClose}>접기</button></div>
+    <p className="diag-l0" data-testid="card-stem">{item.stem}</p>
+    <p className="diag-l0" data-testid="card-chosen">{circled(item.chosenPosition)} {item.chosenText}</p>
 
     <section className="diag-l1" data-testid="card-layer1">
       <p className="diag-l1-text">{card.layer1}</p>

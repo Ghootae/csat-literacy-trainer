@@ -35,6 +35,12 @@ describe('3층 카드: ready', () => {
     expect(html).toContain('②를 고른 수험생 화작 14% · 언매 11%');
     expect(html).not.toMatch(/[㉮㉯]\(/u); expect(html).not.toContain('풀이 A');   // 사전 풀이(annotateSymbols)는 3층 카드 경로에서 쓰지 않는다
   });
+  it('제목 아래에 발문 한 줄과 고른 선지 전문이 작은 글씨로 나온다(비튼 구절 강조 없음)', () => {
+    expect(html).toContain('<p class="diag-l0" data-testid="card-stem">발문</p>');
+    expect(html).toContain('<p class="diag-l0" data-testid="card-chosen">② 선지 구절이 들어 있는 선지</p>');
+    expect(html.indexOf('card-stem')).toBeLessThan(html.indexOf('card-layer1'));
+    expect(html.slice(html.indexOf('card-chosen'), html.indexOf('card-layer1'))).not.toContain('<strong');
+  });
   it('기호 풀이가 없으면 구분선도 없다', () => {
     expect(render(wrong({ card: { ...ready, symbolGlosses: [] } }))).not.toContain('<hr');
   });

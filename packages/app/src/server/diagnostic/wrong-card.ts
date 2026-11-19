@@ -94,7 +94,7 @@ export function buildWrongCardInput(s: WrongCardSource): WrongCardInput {
   };
 }
 
-// ---------- 코드 검사(PROMPT-v1.2 "코드 검사") ----------
+// ---------- 코드 검사(PROMPT-v1.3 "코드 검사") ----------
 
 const FORBIDDEN = ['뒤집기', '비틂', '함정 유형', '조건 축소', '범위', '방향', '긍정·부정', '인과 왜곡', '상식 개입'];
 const LAYER_SYMBOL_PAREN = /[㉠-㉿ⓐ-ⓩ]\s*\(|\([가-힣]\)\s*\(/u;
@@ -103,6 +103,12 @@ const LEADING_SO = /^\s*그래서[\s,，:：]*/u;
 export function stripLeadingSo(out: WrongCardOutput): { out: WrongCardOutput; stripped: boolean; before?: string } {
   if (!LEADING_SO.test(out.pair.conclusion)) return { out, stripped: false };
   return { out: { ...out, pair: { ...out.pair, conclusion: out.pair.conclusion.replace(LEADING_SO, '') } }, stripped: true, before: out.pair.conclusion };
+}
+
+/** 금지어 중 본문에 나오고, 지문·발문·선지(고른 선지·정답 선지)에 그대로 나오지 않는 것. 거기 그대로 있는 낱말(예: "오차 범위")은 예외다. */
+export function forbiddenHits(bodies: readonly string[], input: Pick<WrongCardInput, 'passage' | 'stem' | 'chosen' | 'answer'>): string[] {
+  const given = [input.passage, input.stem, input.chosen.text, input.answer.text];
+  return FORBIDDEN.filter(w => bodies.some(b => b.includes(w)) && !given.some(g => g.includes(w)));
 }
 
 export interface WrongCardCheck { name: string; ok: boolean; detail?: string }
@@ -116,8 +122,9 @@ export function codeChecks(out: WrongCardOutput, input: WrongCardInput): WrongCa
   const base = input.studentRationale ?? input.chosen.text;
   add(input.studentRationale === undefined ? 'pair.top(**제외)이 고른 선지에 글자 그대로 있다' : 'pair.top(**제외)이 학생 근거에 글자 그대로 있다', base.includes(noBold(out.pair.top)), out.pair.top);
   const bodies = [out.layer1, out.pair.top, out.pair.source, out.pair.conclusion, out.missedAnswer?.text, out.missedAnswer?.source, out.examinerIntent].map(s => s ?? '');
-  const hits = FORBIDDEN.filter(w => bodies.some(b => b.includes(w)));
+  const hits = forbiddenHits(bodies, input);
   add('금지어(규칙 4)가 없다', hits.length === 0, hits.join(', '));
+  add('근거 없는 오답이면 selfCheckOptions가 정확히 3개다', !(input.case !== 'CORRECT_WEAK' && input.studentRationale === undefined) || out.selfCheckOptions?.length === 3, `${out.selfCheckOptions?.length ?? 0}개`);
   add('1층이 130자 이내다', out.layer1.length <= 130, `${out.layer1.length}자`);
   const missing = out.symbolGlosses.filter(g => !out.layer1.includes(g.symbol)).map(g => g.symbol);
   add('symbolGlosses의 기호가 모두 1층에 나온다', missing.length === 0, missing.join(', '));
