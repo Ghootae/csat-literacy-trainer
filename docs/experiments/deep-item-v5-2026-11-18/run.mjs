@@ -88,7 +88,8 @@ const guideText = fs.readFileSync(path.join(DIR, process.env.GUIDE || 'readabili
 const KIND_NAME = { case: '사례', table: '표·단계 목록', view: '외부 글·관점' };
 const KIND = { V1: process.env.KIND_V1, V2: process.env.KIND_V2 };
 for (const v of ['V1', 'V2']) if (!KIND_NAME[KIND[v]]) throw new Error(`KIND_${v}는 case | table | view 중 하나`);
-const commonRules = fs.readFileSync(path.join(DIR, 'rules-common.md'), 'utf8');
+const commonRules = fs.readFileSync(path.join(DIR, 'rules-common.md'), 'utf8')
+  + (MODE === 'B' && process.env.V53_B !== '0' ? '\n\n' + fs.readFileSync(path.join(DIR, 'rules-common-v53-B.md'), 'utf8') : ''); // 2026-11-19: v5.3 규칙은 B형에만
 const kindRules = [...new Set([KIND.V1, KIND.V2])].map(k => `[갈래 규칙: ${KIND_NAME[k]} (${k})]\n` + fs.readFileSync(path.join(DIR, `kind-${k}.md`), 'utf8')).join('\n\n');
 const POS_WEIGHT = [19, 29, 35, 38, 48]; // 기출 3점 169문항 정답 번호 분포
 function pickPos(seed) {

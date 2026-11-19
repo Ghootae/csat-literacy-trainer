@@ -1,6 +1,6 @@
 # 작업 수형도
 
-갱신: 2026-11-13
+갱신: 2026-11-19
 
 병렬 작업의 갈래와 각 갈래의 다음 한 단계를 한눈에 보기 위한 지도다. 최상위 갈래는 제품
 기능 단위다. 노드는 한 줄 요약과 근거 번호만 담고, 사실의 상세는 아래 근거 표의 링크와
@@ -106,8 +106,14 @@
 │  ├─● 깊은 〈보기〉 문항 — 출제자 시뮬레이션 규칙 + API 파이프라인          D-0229·D-0231
 │  │     골드 지도 탐색 → 선별 → 〈보기〉 조립 → 풀이 검증, 방향 확정(promising)
 │  │     플라스틱 v4.1 4문항 검토: 정오 유지·가독성 양호, 사용자 판단 대기 Q-0049
-│  │     다음: 사용자 판정 → 보완·스크립트화 판단(계산 양식 규칙은 후보)
+│  │     생성 지문 대 실제 기출 〈보기〉 비교: 과학·기술 직접 대조형 반복       CP-K
+│  │     v5.3 혼합 블라인드 종료. 기준 A형 v5.2·B형 v5.2+v5.3                  D-0235
+│  │     다음: ③ 쉬운 유형 생성기
+│  │     별도 정리 문장 압력 조건 비교 설계 미결정
 │  └─○ 다른 유형 생성기·큰 표본 유형 범주화 — 난이도 축은 Q-0046          D-0220
+│
+├─● 수능형 지문 생성(구조 목록→생성기 v2→충실도 검사기) — 추천·판매용 전형성   CP-J
+│     검사기 보정 통과(r3a 따름·r3b 절반). 다음: 구조 지정 생성 3~4구조×2회   CP-J
 │
 └─○ 문항 골드 — 오프라인 감사·회귀용으로만 보관                              CP-C
 
@@ -122,6 +128,8 @@
 | D-0138 | [문단 요약 근본 검토](./decisions/D-0138-paragraph-fundamental-review-question-quality-first.md), [질문 비교 묶음](../docs/experiments/question-quality-h0-vs-v4-2026-10-15/README.md), [D-0139 질문 규칙](./decisions/D-0139-paragraph-simple-format-question-rules.md), [D-0140 개발자 모드](./decisions/D-0140-paragraph-simple-holistic-dev-mode.md) |
 | D-0090 | [v5 명칭](./decisions/D-0090-problem-evaluator-v5-naming.md) |
 | CP-I | [K4 확인 단계 실험](./checkpoints/2026-10-27-k4-blank-probe.md), [보고](../docs/experiments/k4-blank-probe-2026-10-27/REPORT-human.md) |
+| CP-J | [충실도 검사기 보정](./checkpoints/2026-11-16-fidelity-checker-calibration.md) |
+| CP-K | [생성 문항 대 실제 기출 비교](./checkpoints/2026-11-17-generated-items-vs-past-exam.md) |
 | D-0182 | [v5.3 보강판 채택](./decisions/D-0182-problem-feedback-v53-three-cell-adopted.md) |
 | D-0185 | [판정 v5.6 선지 읽기 보강](./decisions/D-0185-judge-reading-added-vs-stronger-v56.md), [보고](../docs/experiments/judge-reading-paraphrase-d1-2026-10-28/REPORT-human.md) |
 | D-0188 | [판정 v5.7-2 교정 질문](./decisions/D-0188-problem-feedback-v57-2-direct-questions.md), [보고](../docs/experiments/v57-regression-2026-10-29/REPORT-human.md) |

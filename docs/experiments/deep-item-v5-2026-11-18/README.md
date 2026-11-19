@@ -140,3 +140,8 @@ for P in doppler-bloodflow mrna-vaccine-lipid-nanoparticle; do
 done; wait
 tail -n 3 /tmp/v53-*.log; cat $V5/out-v53/*/repair/eval-summary.txt
 ```
+
+## 기준 버전 (2026-11-19 결정)
+- A형(적절하지 않은 것) = v5.2 규칙(rules-common.md C1~C17) + eval-repair 수리.
+- B형(가장 적절한 것) = v5.2 + v5.3 규칙(rules-common-v53-B.md C18~C21) + eval-repair 수리. run.mjs가 MODE=B일 때 자동으로 붙인다(V53_B=0이면 끔).
+- 근거: RESULT.md "Claude 직접 판정"(B형 4자리 모두 v5.3이 나음), 코덱스 '수능 같음' 양쪽 일치 문항 = v5.3 B형 표(도플러 마). A형은 v5.3에서 나아지지 않음.

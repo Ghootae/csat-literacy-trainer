@@ -79,13 +79,15 @@
 1. 1′ 첫 과제: 문제 판정 v5.1 `coaching` 필드 정리 완료([D-0177](./decisions/D-0177-problem-feedback-v51-drop-unused-coaching.md)).
 2. 1′ 나머지: 문단 작동 순서 문서 남김 1건(골드 없는 지문 추가 때 목록 필터).
 3. 얇은 학생판 범위 설계(내부 정보 숨김, 로그 저장, 최소 인증, 서버 상시 실행).
-4. SNS 진단평가 모드(D-0200): 세트 E(D-0201) 자료 동결(`docs/experiments/sns-diagnostic-gold-2026-11-05/`). ⑥ 설계 확정: [D-0203](./decisions/D-0203-megastudy-rates-public-display-and-calibration.md), [D-0204](./decisions/D-0204-sns-diagnostic-keeps-service-feedback.md), [D-0205](./decisions/D-0205-sns-diagnostic-design-issues-2-5.md), [D-0207](./decisions/D-0207-sns-diagnostic-position-calibration-method.md), [D-0208](./decisions/D-0208-sns-diagnostic-skip-item-review-rationale-prompt.md). 인계 A(백엔드)·B(화면 `/diagnostic`) 구현·검토 완료, 표현 [D-0209](./decisions/D-0209-sns-diagnostic-student-wording.md). 측정 1차([기록](./checkpoints/2026-11-07-sns-diagnostic-cost-measurement-1.md)): 1인 $0.5~1.2, 대기 20~70초. L 재측정·17번 재현은 보류(사용자 2026-11-07). 사용자 첫 완주 문제 목록: [체크포인트](./checkpoints/2026-11-07-sns-diagnostic-first-run-issues.md). 공개 전: 인계 B 끝 절.
+4. SNS 진단평가 모드(D-0200): 세트 E(D-0201) 자료 동결(`docs/experiments/sns-diagnostic-gold-2026-11-05/`). ⑥ 설계 확정: [D-0203](./decisions/D-0203-megastudy-rates-public-display-and-calibration.md), [D-0204](./decisions/D-0204-sns-diagnostic-keeps-service-feedback.md), [D-0205](./decisions/D-0205-sns-diagnostic-design-issues-2-5.md), [D-0207](./decisions/D-0207-sns-diagnostic-position-calibration-method.md), [D-0208](./decisions/D-0208-sns-diagnostic-skip-item-review-rationale-prompt.md). 인계 A(백엔드)·B(화면 `/diagnostic`) 구현·검토 완료, 표현 [D-0209](./decisions/D-0209-sns-diagnostic-student-wording.md). 측정 1차([기록](./checkpoints/2026-11-07-sns-diagnostic-cost-measurement-1.md)): 1인 $0.5~1.2, 대기 20~70초. 첫 완주 문제: [체크포인트](./checkpoints/2026-11-07-sns-diagnostic-first-run-issues.md). 공개 전: 인계 B 끝 절.
    - **판정 과적합(Q-0044)** [보고](../docs/experiments/judge-model-explanation-2026-11-08/REPORT-human.md): 해설은 주원인 아님, 엄격함 = 서버 검사(고침, D-0211) + luna + 171행(sol에도). [체크포인트](./checkpoints/2026-11-07-feedback-overfitting-candidates.md) 끝 절이 다음 시작점.
    - 판정 흐름 (나) 확정 [D-0213](./decisions/D-0213-diagnostic-judgment-split-option-na.md)(11-09): 정답의 질 3단계·버튼 둘·정답 sol(진단만 시험)·문항별 피드백 열기.
-   - v5.9·v5.10 시험([보고](../docs/reports/REPORT-v59-v510-run-human.md)): v5.10 통과. 후보는 v5.10 하나([D-0216](./decisions/D-0216-v510-single-candidate-diagnostic-first-lab-held.md)): 질문 블라인드 판정 4/5 통과, **진단 기본값 v5.10 전환**(11-10, [기록](./checkpoints/2026-11-10-question-rules-blind-result.md)). lab은 v5.8 보류. 오디오 16 경계, Q-0045.
+   - v5.10 통과([보고](../docs/reports/REPORT-v59-v510-run-human.md)), 후보는 하나([D-0216](./decisions/D-0216-v510-single-candidate-diagnostic-first-lab-held.md)): 질문 블라인드 4/5, **진단 기본값 v5.10**(11-10, [기록](./checkpoints/2026-11-10-question-rules-blind-result.md)). lab은 v5.8 보류. Q-0045.
    - [전 구간 가상 검토](../docs/experiments/diagnostic-full-simulation-2026-11-13/REPORT-full-simulation-human.md): 완주. D-0234 구현(화면 확인 대기). 라벨 문구 대기: `docs/handoffs/2026-11-16-diagnostic-result-labels.md`.
-   - 진단 화면 M4 칠하기·B7 기록 위치 유지(11-09). 답은 입력창 안 버튼으로 확정([D-0226](./decisions/D-0226-diagnostic-answer-submit-buttons-conclusion.md)), 소거법은 [소거법] 버튼(D-0228).
-5. 골드 기반 문항 생성: E1 종료·E2 보류(D-0210), [P1 중단](./decisions/D-0230-p1-principle-application-generation-stopped.md). API 생성 방향 확정([D-0231](./decisions/D-0231-deep-item-generation-api-pipeline-confirmed.md), promising), 계산 양식 규칙은 후보. 플라스틱 v4.1 4문항 [Codex 검토](./checkpoints/2026-11-13-deep-item-v41-codex-review.md): 정오 유지·가독성 양호, 쉬운 선지·중복 판단 보완 권고. 사용자 판단 대기(Q-0049), 이전 음향·깊이 쟁점 미해결.
+   - 진단 화면: 답은 입력창 안 버튼으로 확정([D-0226](./decisions/D-0226-diagnostic-answer-submit-buttons-conclusion.md)), 소거법은 [소거법] 버튼(D-0228).
+5. 문항 생성: E1 종료·E2 보류(D-0210), P1 중단(D-0230). 깊은 〈보기〉 API 확정(D-0231), 계산 양식 후보, 플라스틱 v4.1 판단 대기(Q-0049). [기출 비교](./checkpoints/2026-11-17-generated-items-vs-past-exam.md): 과학·기술 직접 대조 반복, 법 적용력 있음. v5.3 비교 종료, 기준 A형 v5.2·B형 v5.2+v5.3(D-0235). 다음: ③ 쉬운 유형 생성기. 정리 문장 압력 설계 미결.
+
+6. 지문 생성(구조 목록 → 생성기 v2 → 충실도 검사기): 검사기 보정 통과(r3a 따름·r3b 절반, 사람 판단과 일치, [체크포인트](./checkpoints/2026-11-16-fidelity-checker-calibration.md)). 다음: 구조 지정 생성(3~4구조×2회), 인계 `docs/handoffs/2026-11-15-catalog-generator-v2-and-goals.md` 3.2절.
 
 ## 금지선
 
@@ -99,12 +101,12 @@
 ## 가장 큰 잔여 위험
 
 - 외부 실제 학생 데이터가 없고, 생성기·평가기·심사자가 같은 모델 계열인 합성 실험이 대부분이다.
-- 문제 풀이 표본과 문단 요약 표본이 작고 지문 안에서 군집되어 있다.
+- 문제 풀이·문단 요약 표본이 작고 지문 안에서 군집되어 있다.
 - 실제 학생의 회피, 부분 답변, 새 오류 같은 후속 행동에서 회복률이 확인되지 않았다. 도움 없이 새 지문으로 전이되는지, 효과가 유지되는지도 확인되지 않았다.
 - 정답 선택 학생의 짧은 관련 소재를 충분한 근거로 보충하거나, 설명에서 충돌을 찾고도 `CLEAR_ERROR` 대신 `UNCERTAIN`으로 내리는 사례가 있다.
-- 동일 프롬프트·모델·응답에서도 경계 응답의 `SUPPORTED`/`UNCERTAIN`과 진단 질문 전제가 실행마다 달라질 수 있어, 단일 샘플 통과만으로 경계 안정성을 보장하기 어렵다.
+- 같은 프롬프트·모델·응답에서도 경계 응답의 `SUPPORTED`/`UNCERTAIN`과 진단 질문 전제가 실행마다 달라져, 단일 샘플 통과로 경계 안정성을 보장하기 어렵다.
 - 부정 발문에서 오답 선지 선택을 선지 내용에 대한 동의처럼 해석하면, 내용 오해가 남았는데도 `SELECTION_EXECUTION`과 `CORRECTED`로 승격하고 재선택 뒤 전체 회복으로 집계할 수 있다([사례](./checkpoints/2026-10-01-information-asymmetry-q13-user-review.md)).
-- 문단 게이트 계약 오류 자동 재시도 경로는 코드 회귀로만 확인했고, 실제 운영 표본에서 재시도 회복률은 측정하지 않았다.
+- 문단 게이트 계약 오류 자동 재시도는 코드 회귀로만 확인했고 운영 표본 회복률은 미측정이다.
 
 ## 현재 근거
 
