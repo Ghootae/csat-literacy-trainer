@@ -21,7 +21,7 @@ test.beforeAll(async () => {
   root = mkdtempSync(resolve(tmpdir(), 'diagnostic-dev-e2e-')); mkdirSync(shots, { recursive: true });
   previousDev = process.env['CSAT_DIAGNOSTIC_DEV']; process.env['CSAT_DIAGNOSTIC_DEV'] = '1';
   const fb = feedbackFake();
-  controller = new DiagnosticController({ store: new FileDiagnosticStore(resolve(root, 'diagnostic')), feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: resolve(root, 'summary'),
+  controller = new DiagnosticController({ store: new FileDiagnosticStore(resolve(root, 'diagnostic')), feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), wrongCardTransport: refusedHabitTransport(), summaryLogDirectory: resolve(root, 'summary'),
     diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
   server = createLearningServer({ developerMode: true, diagnosticEnabled: true, diagnosticController: controller, dialogueLogDirectory: resolve(root, 'dialogue'), warmer: () => Promise.resolve(), problemFeedbackSave() {} });
   await new Promise<void>((ready, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', ready); });

@@ -131,3 +131,11 @@ export function loadReadingHabitPrompts(root = process.cwd()): { generation: str
   if (!generation?.includes('(생성)') || !review?.includes('(검토)')) throw new Error(`${READING_HABIT_PROMPT_PATH}를 생성·검토로 나누지 못했습니다.`);
   return { generation, review };
 }
+
+/** 오답 카드 3층 생성 지시문 버전. 파일 이름(PROMPT-v1.2.md)과 사건 기록에 쓴다. */
+export const WRONG_CARD_PROMPT_VERSION = 'v1.2';
+const WRONG_CARD_PROMPT_PATH = `docs/experiments/wrong-card-layer1-2026-11-19/PROMPT-${WRONG_CARD_PROMPT_VERSION}.md`;
+/** 오답 카드 생성 지시문 전문. 서버에서 문구를 고치지 않는다. */
+export function loadWrongCardPrompt(root = process.cwd()): string {
+  return readFileSync(resolve(root, WRONG_CARD_PROMPT_PATH), 'utf8');
+}

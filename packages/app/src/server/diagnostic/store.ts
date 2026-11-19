@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import type { FeedbackRationale, FeedbackSession } from '@csat/pipeline';
 import type { FeedbackMessage } from '../../shared/problem-feedback.js';
 import type { ShownHabit } from './reading-habit.js';
+import type { WrongCardOutput } from './wrong-card.js';
 
 export type JobStatus = 'NONE' | 'PENDING' | 'READY' | 'FAILED';
 /** 근거를 생략한 응답의 확신 구분. 옛 파일에는 없을 수 있다(없으면 SURE로 본다). */
@@ -43,6 +44,8 @@ export interface DiagnosticParticipant {
     skipped?: boolean;
     /** 근거 없이 틀린 문항의 자기 점검 버튼 값(결과 화면). 옛 파일에는 없다(없으면 null). */
     selfCheck?: { choice: string; at: string } | null;
+    /** 문항 카드 3층 생성 결과(인계 2026-11-20). 입력 해시·지시문 버전이 같으면 다시 부르지 않는다. fallback이면 출력은 저장하지 않는다(사건 기록에만). 옛 파일에는 없다(없으면 아직 안 만든 것). */
+    wrongCard?: { status: 'pending' | 'ready' | 'fallback'; inputHash: string; promptVersion: string; attempts: number; output: WrongCardOutput | null };
   }>;
   /** paragraphId 단위. judgments는 단위(노드·관계) id별 결과 */
   analysis: Record<string, { status: JobStatus; judgments: Record<string, unknown> }>;

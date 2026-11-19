@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ResultItem, ResultTwist, ResultView as Result, SetInfo } from './types.js';
 import { postSelfCheck } from './api.js';
 import { Notice, Segs, glossOf, passageTitles } from './ResultShared.js';
+import { LayeredCard } from './ResultCard3.js';
 import {
   MEGASTUDY_NOTE, RESULT_GROUP_MARK, SELF_CHECK_CHOICES, annotateSegments, annotateSymbols, answerQuality, boldQuotes, breakdown, circled, circledObject, excerptAround,
   hasPair, percentPair, resultGroup, sourceLocationName, summaryLinkSentence, twistName, twistsForPairs, type BreakdownCell, type TextSegment,
@@ -63,10 +64,12 @@ function Pairs({ pairs }: { pairs: readonly PairData[] }) {
   </div>)}</>;
 }
 
-function SelfCheck({ selected, error, onSelect }: { selected: string | null; error: boolean; onSelect: (choice: string) => void }) {
+/** `choices`: 3층 카드는 생성된 문구, 없으면 고정 문구. `prompt`: 3층 카드는 자기 칸 위에 이미 물음을 쓰므로 생략한다. */
+function SelfCheck({ selected, error, onSelect, choices = SELF_CHECK_CHOICES, prompt = true }: { selected: string | null; error: boolean; onSelect: (choice: string) => void;
+  choices?: readonly string[]; prompt?: boolean }) {
   return <div className="diag-selfcheck" data-testid="self-check">
-    <p>어디서 헷갈렸는지는 몰라. 어디서 헷갈렸어?</p>
-    <div className="diag-buttons">{SELF_CHECK_CHOICES.map(choice => <button key={choice} type="button" className="diag-secondary diag-choice" aria-pressed={selected === choice} onClick={() => onSelect(choice)}>{choice}</button>)}</div>
+    {prompt && <p>어디서 헷갈렸는지는 몰라. 어디서 헷갈렸어?</p>}
+    <div className="diag-buttons">{choices.map(choice => <button key={choice} type="button" className="diag-secondary diag-choice" aria-pressed={selected === choice} onClick={() => onSelect(choice)}>{choice}</button>)}</div>
     {error && <p className="err" role="alert">저장하지 못했어. 다시 눌러 줘.</p>}
   </div>;
 }
@@ -81,6 +84,9 @@ function Card({ item, titles, result, selfCheck, selfCheckError, onSelfCheck, on
     <div><span>이 문항 정답률</span><strong>{percentPair(item.megastudy.correctRate)}</strong></div></div>;
   if (item.review) return <article className="diag-item" id="diag-item-card" aria-label={`${title} 카드`}>{head}
     <p>이 문항은 우리가 한 번 더 확인하고 있어.</p>{stats}<p className="diag-muted">{MEGASTUDY_NOTE}</p></article>;
+  // 3층 카드는 생성·검사를 통과했을 때만. 아니면 아래 11/17 형식 카드가 대체 경로다.
+  if (item.card.status === 'ready') return <LayeredCard item={item} card={item.card} passageTitle={titles[item.passageId] ?? ''} onClose={onClose}
+    selfCheck={<SelfCheck selected={selfCheck} error={selfCheckError} onSelect={onSelfCheck} choices={item.card.selfCheckOptions ?? SELF_CHECK_CHOICES} prompt={false} />} />;
 
   // 기호 풀이는 한 카드 안에서 처음 나올 때만 붙는다. 화면에 나오는 순서대로 이어서 부른다.
   const gloss = glossOf(result, item.passageId); const seen = new Set<string>();

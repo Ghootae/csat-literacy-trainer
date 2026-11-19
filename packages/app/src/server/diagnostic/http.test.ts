@@ -53,7 +53,7 @@ describe('진단평가 HTTP', () => {
   it('표의 요청이 동작하고, 정오는 숨기며, 리뷰 대상이 아니면 409이고, 공개·다음 지문이 동작한다', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'diag-http-')); dirs.push(dir);
     const fb = feedbackFake({ behavior: q => q === Q13 ? 'ERROR' : 'SUPPORTED' });
-    const controller = new DiagnosticController({ store: new MemoryStore(), feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: dir,
+    const controller = new DiagnosticController({ store: new MemoryStore(), feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), wrongCardTransport: refusedHabitTransport(), summaryLogDirectory: dir,
       diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
     const base = await listen({ diagnosticEnabled: true, diagnosticController: controller });
     const created = await (await call(base, 'POST', '/api/diagnostic/participant')).json() as { participantId: string; set: { passages: { passageId: string; title: string; questionIds: string[] }[] } };
@@ -148,7 +148,7 @@ describe('진단평가 HTTP', () => {
   it('개발자 이동 API(dev/*)는 CSAT_DIAGNOSTIC_DEV=1이 없으면 404이고, 있으면 표대로 동작한다(D-0217)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'diag-http-dev-')); dirs.push(dir);
     const fb = feedbackFake();
-    const controller = new DiagnosticController({ store: new MemoryStore(), feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: dir,
+    const controller = new DiagnosticController({ store: new MemoryStore(), feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), wrongCardTransport: refusedHabitTransport(), summaryLogDirectory: dir,
       diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
     const base = await listen({ diagnosticEnabled: true, diagnosticController: controller });
     const created = await (await call(base, 'POST', '/api/diagnostic/participant')).json() as { participantId: string };

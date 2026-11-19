@@ -23,7 +23,7 @@ import type { FeedbackMessage, FeedbackWorkbenchView } from '../../shared/proble
 import type { ProblemContentView } from '../../shared/contract.js';
 import {
   loadAnalysisMaps, loadChoiceLinkTargets, loadChoiceLinkTwists, loadClassifyTypes, loadDiagnosticBundle, loadDiagnosticPassages, loadDiagnosticSet,
-  READING_HABIT_PROMPT_VERSION, loadReadingHabitPrompts, loadRecommendationMap, loadSymbolGloss, loadTwistStudentText,
+  READING_HABIT_PROMPT_VERSION, WRONG_CARD_PROMPT_VERSION, loadReadingHabitPrompts, loadRecommendationMap, loadSymbolGloss, loadTwistStudentText, loadWrongCardPrompt,
   type ChoiceLinkTargets, type ChoiceLinkTwist, type DiagnosticSet, type DiagnosticSetPassage, type LoadedAnalysisMap,
 } from './content.js';
 import {
@@ -34,6 +34,9 @@ import {
   HabitGenerationSchema, HabitReviewSchema, askReadingHabit, buildHabitInput, checkHabit, reviewUserText,
   type HabitContext, type HabitInput, type HabitRef, type ReadingHabitView,
 } from './reading-habit.js';
+import {
+  attemptWrongCard, buildWrongCardInput, readyCardView, type WrongCardAttempt, type WrongCardInput, type WrongCardView,
+} from './wrong-card.js';
 import { FileDiagnosticStore, diagnosticRoot, isParticipantId, type DiagnosticParticipant, type DiagnosticStore, type ItemAnswer } from './store.js';
 
 export class DiagnosticHttpError extends Error {
@@ -98,6 +101,8 @@ export interface DiagnosticControllerOptions {
   judgeTransport?: FeedbackTransport;
   /** 문장 읽기 습관(맨 위 요약) 생성·검토 호출. 없으면 본 서비스 기본 transport(실제 모델). */
   readingHabitTransport?: FeedbackTransport;
+  /** 문항 카드 3층 생성 호출(문항당 최대 2회). 없으면 본 서비스 기본 transport(실제 모델). */
+  wrongCardTransport?: FeedbackTransport;
   set?: DiagnosticSet;
   loadBundle?: typeof loadDiagnosticBundle;
   passages?: readonly DialoguePassageContent[];
@@ -135,6 +140,7 @@ export class DiagnosticController {
   private readonly diagnosisTransport: FeedbackTransport;
   private readonly judgeTransport: FeedbackTransport;
   private readonly readingHabitTransport: FeedbackTransport;
+  private readonly wrongCardTransport: FeedbackTransport;
   private readonly loadBundle: typeof loadDiagnosticBundle;
   private readonly loadMaps: (passage: DiagnosticSetPassage) => LoadedAnalysisMap[];
   private readonly loadTwists: NonNullable<DiagnosticControllerOptions['loadTwists']>;
@@ -163,6 +169,7 @@ export class DiagnosticController {
   private judgePrompts: ReturnType<typeof loadJudgePrompts> | undefined;
   private diagnosisInstructions: string | undefined;
   private habitPrompts: ReturnType<typeof loadReadingHabitPrompts> | undefined;
+  private wrongCardPrompt: string | undefined;
 
   constructor(options: DiagnosticControllerOptions = {}) {
     this.store = options.store ?? new FileDiagnosticStore();
@@ -182,6 +189,7 @@ export class DiagnosticController {
     this.diagnosisTransport = options.diagnosisTransport ?? createOpenAiTransport();
     this.judgeTransport = options.judgeTransport ?? createOpenAiTransport();
     this.readingHabitTransport = options.readingHabitTransport ?? createOpenAiTransport();
+    this.wrongCardTransport = options.wrongCardTransport ?? createOpenAiTransport();
     this.feedback = new ProblemFeedbackController({
       evaluator: options.feedbackEvaluator ?? new OpenAIFeedbackEvaluator({ selectionModels: DIAGNOSTIC_SELECTION_MODELS, ...DIAGNOSTIC_JUDGMENT }),
       withoutInstantBubble: true,
@@ -619,6 +627,8 @@ export class DiagnosticController {
       if (item.firstJudgment.status === 'PENDING') this.track(this.runFirstJudgment(p, questionId, true));
       if (item.thoughtDiagnosis.status === 'PENDING') this.track(this.runDiagnosis(p, questionId));
       else this.maybeStartDiagnosis(p, questionId);
+      // 카드 생성 작업도 메모리에만 있다. 비워 두고 다음 result()가 입력 해시로 다시 시작한다.
+      if (item.wrongCard?.status === 'pending') delete item.wrongCard;
     }
     // 읽기 습관 작업은 메모리에만 있다. 서버를 다시 켠 뒤에는 비워 두고 다음 result()가 입력 해시로 다시 시작한다.
     if (p.readingHabit?.status === 'PENDING') delete p.readingHabit;
@@ -994,6 +1004,75 @@ export class DiagnosticController {
     this.requestSave(p);
   }
 
+  // ---------- 내부: 문항 카드 3층 ----------
+
+  /**
+   * 문항 카드 3층 응답. 대상은 오답과 근거를 쓴 정답 중 첫 근거 판정이 SUPPORTED가 아닌 것(문항 검토 문항은 호출 전에 걸러진다).
+   * 첫 판정·사고 진단이 아직이면 pending으로 응답만 하고 시작하지 않는다. 입력 해시·지시문 버전이 저장본과 같으면 저장본을 쓰고, 다르면 새로 시작한다.
+   */
+  private wrongCard(p: Participant, questionId: string): WrongCardView {
+    const item = p.items[questionId]!; const first = item.first!;
+    const provided = first.rationale.mode === 'PROVIDED'; const correct = this.isCorrect(item);
+    if (provided && (item.firstJudgment.status === 'PENDING' || item.thoughtDiagnosis.status === 'PENDING')) return { status: 'pending' };
+    if (correct && (!provided || item.firstJudgment.contentAssessment === 'SUPPORTED')) return { status: 'none' };
+    const input = this.wrongCardInput(p, questionId);
+    const inputHash = jsonHash(input);
+    const saved = item.wrongCard;
+    if (saved?.inputHash === inputHash && saved.promptVersion === WRONG_CARD_PROMPT_VERSION) {
+      if (saved.status === 'ready' && saved.output !== null) return readyCardView(saved.output);
+      return { status: saved.status === 'pending' ? 'pending' : 'fallback' };
+    }
+    const slot = { status: 'pending' as const, inputHash, promptVersion: WRONG_CARD_PROMPT_VERSION, attempts: 0, output: null };
+    item.wrongCard = slot;
+    this.requestSave(p);
+    this.track(this.runWrongCard(p, questionId, slot, input));
+    return { status: 'pending' };
+  }
+
+  private wrongCardInput(p: Participant, questionId: string): WrongCardInput {
+    const item = p.items[questionId]!; const first = item.first!; const session = item.session!;
+    const passage = this.passageOfQuestion(questionId); const meta = this.set.items[questionId]!; const content = this.bundle(questionId).content;
+    const textAt = (position: number) => content.choices.find(c => c.position === position)?.text ?? '';
+    const chosenPosition = session.source.choices.find(c => c.choiceId === first.choiceId)!.position;
+    const correct = this.isCorrect(item); const polarity = stemPolarity(content.stem);
+    let twistFn = this.twistCache.get(passage.choiceLinkPath);
+    if (!twistFn) { twistFn = this.loadTwists(passage.choiceLinkPath); this.twistCache.set(passage.choiceLinkPath, twistFn); }
+    this.strategies ??= loadExaminerStrategies();
+    const strategyPosition = !correct && polarity === 'SELECT_INCORRECT' ? meta.answerPosition : chosenPosition;
+    return buildWrongCardInput({
+      title: this.content(passage.passageId).title, number: meta.questionNumber, stem: content.stem, scenario: content.scenario, passage: content.passage,
+      textAnnotations: content.textAnnotations ?? [], stemPolarity: polarity,
+      chosen: { position: chosenPosition, text: textAt(chosenPosition) }, answer: { position: meta.answerPosition, text: textAt(meta.answerPosition) },
+      correct, firstRationale: first.rationale.mode === 'PROVIDED' ? first.rationale.text : null,
+      rationaleJudgment: item.firstJudgment.contentAssessment,
+      chosenTwists: twistFn(meta.questionNumber, chosenPosition), answerTwists: twistFn(meta.questionNumber, meta.answerPosition),
+      strategyParagraphs: this.strategies.get(questionId)?.find(s => s.position === strategyPosition)?.paragraphs ?? null,
+      symbolGloss: this.symbolGloss(passage.passageId), megastudy: meta.megastudy,
+    });
+  }
+
+  /** 검사를 통과하지 못하거나 JSON 오류면 1회만 다시 생성한다. 그래도 실패면 fallback(모델 출력은 사건 기록에만 남긴다). */
+  private async runWrongCard(p: Participant, questionId: string, slot: NonNullable<ItemState['wrongCard']>, input: WrongCardInput): Promise<void> {
+    const item = p.items[questionId]!;
+    const stale = () => p.items[questionId] !== item || item.wrongCard !== slot;   // 개발자 지문 초기화 등으로 다른 작업이 이 자리를 차지했다
+    this.wrongCardPrompt ??= loadWrongCardPrompt();
+    const instructions = this.wrongCardPrompt;
+    const attempts: WrongCardAttempt[] = [];
+    for (let n = 1; n <= 2; n++) {
+      if (stale()) return;
+      const attempt = await this.limited(() => attemptWrongCard(this.wrongCardTransport, instructions, input, n));
+      if (stale()) return;
+      attempts.push(attempt); slot.attempts = n;
+      if (attempt.passed) break;
+    }
+    const final = attempts.at(-1)!;
+    Object.assign(slot, final.passed ? { status: 'ready', output: final.output } : { status: 'fallback', output: null });
+    this.event('WRONG_CARD_DONE', p, { questionId, inputHash: slot.inputHash, promptVersion: slot.promptVersion, case: input.case, status: slot.status,
+      attempts: attempts.map(a => ({ attempt: a.attempt, passed: a.passed, failedChecks: a.checks.filter(c => !c.ok), rawOutput: a.rawOutput, output: a.output,
+        ...(a.conclusionStrippedLeadingSo === undefined ? {} : { conclusionStrippedLeadingSo: a.conclusionStrippedLeadingSo }), ...(a.error === undefined ? {} : { error: a.error }), metadata: a.metadata ?? null })) });
+    this.requestSave(p);
+  }
+
   // ---------- 내부: 위치·결과 ----------
 
   private responsesFor(p: Participant, passages: DiagnosticSetPassage[]) {
@@ -1035,7 +1114,7 @@ export class DiagnosticController {
       strategyAvailable: this.strategies.has(questionId) };
     if (review) {
       return { ...base, review: true as const, answerPosition: null, answerText: null, answerTwist: null, judgment: { status: 'pending' as Box, contentAssessment: null, boundary: null },
-        twist: null, thoughtDiagnosis: null, evidence: null, summaryLink: null };
+        twist: null, thoughtDiagnosis: null, evidence: null, summaryLink: null, card: { status: 'none' } as WrongCardView };
     }
     const assessment = session.assessments[0]?.mode === 'SELECTION' ? session.assessments[0] : null;
     let twistFn = this.twistCache.get(passage.choiceLinkPath);
@@ -1053,6 +1132,7 @@ export class DiagnosticController {
       judgment: { status: box(item.firstJudgment.status), contentAssessment: item.firstJudgment.contentAssessment, boundary: item.firstJudgment.boundary },
       twist: twists.length > 0 ? twists : null,
       summaryLink: correct ? null : this.summaryLinkFor(p, passage, questionId, chosen.position),
+      card: this.wrongCard(p, questionId),
       thoughtDiagnosis: eligibleDiagnosis && item.thoughtDiagnosis.status !== 'NONE'
         ? { status: box(item.thoughtDiagnosis.status), firstFailedStep: output?.firstFailedStep ?? null, outcomeType: output?.outcomeType ?? null } : null,
       // 결과 분석은 첫 응답만 쓴다. 근거를 생략했으면 피드백 대화 중 나온 근거는 "내 근거"로 쓰지 않는다.

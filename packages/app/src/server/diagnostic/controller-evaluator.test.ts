@@ -16,7 +16,7 @@ const { MemoryStore, refusedHabitTransport, summaryEvaluator, diagnosisFake, jud
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 
-const make = (feedbackEvaluator?: FeedbackEvaluator) => new DiagnosticController({ store: new MemoryStore(), summaryEvaluator, readingHabitTransport: refusedHabitTransport(),
+const make = (feedbackEvaluator?: FeedbackEvaluator) => new DiagnosticController({ store: new MemoryStore(), summaryEvaluator, readingHabitTransport: refusedHabitTransport(), wrongCardTransport: refusedHabitTransport(),
   diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport, ...(feedbackEvaluator ? { feedbackEvaluator } : {}) });
 
 describe('진단 기본 평가기 (D-0213 6)', () => {

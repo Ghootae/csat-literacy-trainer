@@ -10,7 +10,7 @@ const item = (over: Partial<ResultItem> = {}): ResultItem => ({
   questionId: 'q', passageId: 'p', questionNumber: 12, chosenPosition: 2, correct: true, rationale: 'PROVIDED', category: 'SUPPORTED_CORRECT', elimination: false, megastudy: { chosenPercents: [4, 2], correctRate: [70, 80] },
   afterFeedback: { corrected: false, skipped: false }, review: false, answerPosition: 1,
   judgment: { status: 'ready', contentAssessment: 'SUPPORTED', boundary: 'NONE' }, twist: null, thoughtDiagnosis: null, evidence: null, summaryLink: null,
-  stem: '발문', chosenText: '고른 선지', answerText: null, stemPolarity: 'SELECT_CORRECT', answerTwist: null, selfCheck: null, strategyAvailable: false, ...over });
+  stem: '발문', chosenText: '고른 선지', answerText: null, stemPolarity: 'SELECT_CORRECT', answerTwist: null, selfCheck: null, strategyAvailable: false, card: { status: 'none' }, ...over });
 const twist = (over: Partial<ResultTwist> = {}): ResultTwist => ({ twistType: 'NEGATION', twistDetail: '개발용', studentText: null, choiceQuote: '구절', evidenceQuote: '원문 문장', ...over });
 
 const counts = (over: Partial<Record<AnswerCategory, number>> = {}): Record<AnswerCategory, number> => ({ ...countCategories([]), ...over });

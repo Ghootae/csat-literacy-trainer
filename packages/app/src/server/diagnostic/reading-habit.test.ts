@@ -10,7 +10,7 @@ import { DiagnosticController } from './controller.js';
 import {
   HabitGenerationSchema, HabitReviewSchema, checkHabit, type HabitInput, type HabitRef,
 } from './reading-habit.js';
-import { MemoryStore, diagnosisFake, feedbackFake, habitFake, judgeFake, provided, set, summaryEvaluator, transportFake, wrongChoice, correctChoice, type Behavior } from './test-support.js';
+import { MemoryStore, diagnosisFake, feedbackFake, habitFake, judgeFake, provided, refusedHabitTransport, set, summaryEvaluator, transportFake, wrongChoice, correctChoice, type Behavior } from './test-support.js';
 
 const EXPERIMENT = resolve(process.cwd(), 'docs/experiments/reading-error-2026-11-18');
 const readJson = (path: string): any => JSON.parse(readFileSync(resolve(EXPERIMENT, path), 'utf8'));
@@ -105,7 +105,7 @@ async function world(tags: Record<string, string[]>, behaviors: Record<string, B
   const store = new MemoryStore(); const habit = habitFake(habitInit);
   const fb = feedbackFake({ behavior: q => behaviors[q] ?? (q in tags ? 'ERROR' : 'SUPPORTED') });
   const c = new DiagnosticController({ store, feedbackEvaluator: fb.evaluator, summaryEvaluator, summaryLogDirectory: resolve(process.cwd(), 'sessions/test-reading-habit-unused'),
-    diagnosisTransport: diagnosisBy(tags).transport, judgeTransport: judgeFake().transport, readingHabitTransport: habit.transport });
+    diagnosisTransport: diagnosisBy(tags).transport, judgeTransport: judgeFake().transport, readingHabitTransport: habit.transport, wrongCardTransport: refusedHabitTransport() });
   const id = c.create().participantId;
   // 모든 문항에 근거를 쓰고: 다룰 문항(tags에 있는 것)은 오답, 나머지는 정답(근거가 SUPPORTED이면 사고 진단 대상이 아님).
   for (const passage of [HORSE, PLASTIC]) {
@@ -158,7 +158,7 @@ describe('입력 만들기와 호출(가짜 transport)', () => {
     const gate = new Promise<void>(resolve => { release = resolve; });
     const diagnosis = diagnosisBy(tags); diagnosis.delay = () => gate;
     const c = new DiagnosticController({ store, feedbackEvaluator: feedbackFake({ behavior: () => 'ERROR' }).evaluator, summaryEvaluator, summaryLogDirectory: resolve(process.cwd(), 'sessions/test-reading-habit-unused'),
-      diagnosisTransport: diagnosis.transport, judgeTransport: judgeFake().transport, readingHabitTransport: habit.transport });
+      diagnosisTransport: diagnosis.transport, judgeTransport: judgeFake().transport, readingHabitTransport: habit.transport, wrongCardTransport: refusedHabitTransport() });
     const id = c.create().participantId;
     c.start(id, HORSE.passageId, { summary: false });
     for (const q of HORSE.questionIds) c.confirmItem(id, q, provided(wrongChoice(q)));
@@ -232,13 +232,13 @@ describe('입력 만들기와 호출(가짜 transport)', () => {
     // 저장본으로 이어 가기: 호출 없이 같은 응답
     const habit = habitFake();
     const second = new DiagnosticController({ store: w.store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: resolve(process.cwd(), 'sessions/test-reading-habit-unused'),
-      diagnosisTransport: diagnosisBy(tags).transport, judgeTransport: judgeFake().transport, readingHabitTransport: habit.transport });
+      diagnosisTransport: diagnosisBy(tags).transport, judgeTransport: judgeFake().transport, readingHabitTransport: habit.transport, wrongCardTransport: refusedHabitTransport() });
     expect(second.result(w.id).readingHabit).toEqual({ status: 'none' });
     expect(habit.requests).toHaveLength(0);
     // 옛 파일: readingHabit 필드 없음 → 입력이 모이면 새로 시작(없다고 깨지지 않는다)
     delete stored.readingHabit; w.store.files.set(w.id, JSON.stringify(stored));
     const third = new DiagnosticController({ store: w.store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: resolve(process.cwd(), 'sessions/test-reading-habit-unused'),
-      diagnosisTransport: diagnosisBy(tags).transport, judgeTransport: judgeFake().transport, readingHabitTransport: habit.transport });
+      diagnosisTransport: diagnosisBy(tags).transport, judgeTransport: judgeFake().transport, readingHabitTransport: habit.transport, wrongCardTransport: refusedHabitTransport() });
     expect(third.result(w.id).readingHabit).toEqual({ status: 'pending' });
     await settle(third);
     expect(habit.requests).toHaveLength(2);

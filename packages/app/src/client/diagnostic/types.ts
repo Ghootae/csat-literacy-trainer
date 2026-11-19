@@ -53,6 +53,11 @@ type Box = 'pending' | 'ready' | 'failed';
 export interface ResultTwist { twistType: string; twistDetail: string; studentText: string | null; choiceQuote: string; evidenceQuote: string }
 export interface ResultSelfCheck { choice: string; at: string }
 export interface ResultSummaryLink { status: Box; kind: 'MISREAD' | 'MISSED' | 'CAUGHT'; paragraphs: number[]; paragraphLabel: string }
+/** 문항 카드 3층(서버 `wrong-card.ts`의 응답). ready가 아니면 화면은 기존 카드(11/17 형식)를 쓴다. `matchesTrap`은 응답에 없다. */
+export type WrongCardView =
+  | { status: 'pending' | 'fallback' | 'none' }
+  | { status: 'ready'; layer1: string; symbolGlosses: { symbol: string; gloss: string }[]; pair: { top: string; source: string; sourceFocus: string; conclusion: string };
+      missedAnswer?: { text: string; source: string }; examinerIntent: string; selfCheckOptions?: string[] };
 export interface ResultItem {
   questionId: string; passageId: string; questionNumber: number; chosenPosition: number; correct: boolean; rationale: 'PROVIDED' | 'OMITTED'; category: AnswerCategory; elimination: boolean;
   megastudy: { chosenPercents: [number, number]; correctRate: [number, number] };
@@ -72,6 +77,7 @@ export interface ResultItem {
   selfCheck: ResultSelfCheck | null;
   /** 이 문항의 출제자 전략 글이 있다. 있을 때만 "출제자 설명 보기" 버튼을 그린다. */
   strategyAvailable: boolean;
+  card: WrongCardView;
 }
 export type BranchKey = '내용' | '논증' | '관점' | '흐름';
 /** 갈래별 사례: 요약에서 지문과 다르게 이은 곳(CONTRADICTS)이나 빠뜨린 곳(MISSING). `studentText`는 그 문단의 첫 요약 원문이다. */

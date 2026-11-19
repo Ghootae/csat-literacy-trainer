@@ -14,7 +14,7 @@ beforeEach(() => { dirs = []; });
 function harness(fb: FeedbackFake = feedbackFake()) {
   const store = new MemoryStore(); const diagnosis = diagnosisFake(); const judge = judgeFake();
   const logs = mkdtempSync(join(tmpdir(), 'diag-dev-')); dirs.push(logs);
-  const c = new DiagnosticController({ store, feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: logs,
+  const c = new DiagnosticController({ store, feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), wrongCardTransport: refusedHabitTransport(), summaryLogDirectory: logs,
     diagnosisTransport: diagnosis.transport, judgeTransport: judge.transport });
   return { c, store, fb, diagnosis, judge, id: c.create().participantId };
 }
@@ -157,7 +157,7 @@ describe('개발자 읽기 자료(D-0217)', () => {
     expect(view.problemUrl).toBeNull();
     expect(httpStatus(() => h.c.devSummary(h.id, COG.passageId, 99))).toBe(400);
     // 서버를 다시 켠 뒤(요약 세션이 메모리에 없음)
-    const restarted = new DiagnosticController({ store: h.store, feedbackEvaluator: h.fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: dirs[0]!,
+    const restarted = new DiagnosticController({ store: h.store, feedbackEvaluator: h.fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), wrongCardTransport: refusedHabitTransport(), summaryLogDirectory: dirs[0]!,
       diagnosisTransport: h.diagnosis.transport, judgeTransport: h.judge.transport });
     expect(httpStatus(() => restarted.devSummary(h.id, COG.passageId, 0))).toBe(409);
     await settle(h.c);
