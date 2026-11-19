@@ -121,3 +121,13 @@ export function loadSymbolGloss(passageId: string): Record<string, string> {
     throw error;
   }
 }
+
+/** 지시문 버전. 파일 이름(PROMPT-v2.3.md)과 사건 기록에 쓴다. */
+export const READING_HABIT_PROMPT_VERSION = 'v2.3';
+const READING_HABIT_PROMPT_PATH = `docs/experiments/reading-error-2026-11-18/PROMPT-${READING_HABIT_PROMPT_VERSION}.md`;
+/** 문장 읽기 습관 지시문. 파일을 `\n---\n`로 나눠 앞이 생성, 뒤가 검토다. 각 부분에 `(생성)`·`(검토)`가 없으면 던진다. */
+export function loadReadingHabitPrompts(root = process.cwd()): { generation: string; review: string } {
+  const [generation, review] = readFileSync(resolve(root, READING_HABIT_PROMPT_PATH), 'utf8').split(/\n---\n/u);
+  if (!generation?.includes('(생성)') || !review?.includes('(검토)')) throw new Error(`${READING_HABIT_PROMPT_PATH}를 생성·검토로 나누지 못했습니다.`);
+  return { generation, review };
+}

@@ -243,11 +243,12 @@ describe('시간 누적', () => {
 
 describe('결과 화면 보조', () => {
   it('분석 중인 칸이 하나라도 있으면 true이고, 문항 검토 문항의 숨겨진 판정은 보지 않는다', () => {
-    const base = { position: { status: 'ready' }, steps: { status: 'ready', counts: {}, denominator: 0 }, twists: { counts: {} }, recommendation: null, reading: [], items: [item()] } as never as ResultView;
+    const base = { position: { status: 'ready' }, steps: { status: 'ready', counts: {}, denominator: 0 }, twists: { counts: {} }, recommendation: null, reading: [], items: [item()], readingHabit: { status: 'none' } } as never as ResultView;
     expect(hasPending(base)).toBe(false);
     expect(hasPending({ ...base, items: [item({ review: true, correct: false, judgment: { status: 'pending', contentAssessment: null, boundary: null } })] })).toBe(false);
     expect(hasPending({ ...base, items: [item({ judgment: { status: 'pending', contentAssessment: null, boundary: null } })] })).toBe(true);
     expect(hasPending({ ...base, items: [item({ summaryLink: { status: 'pending', kind: 'MISSED', paragraphs: [1], paragraphLabel: '1문단' } })] })).toBe(true);
+    expect(hasPending({ ...base, readingHabit: { status: 'pending' } })).toBe(true);
     expect(hasPending({ ...base, reading: [{ passageId: 'p', status: 'pending', counts: {} as never, cases: [] }] })).toBe(true);
     // 사고 진단·단계 집계는 화면에 내지 않으므로 분석 중이어도 다시 받아 오지 않는다
     expect(hasPending({ ...base, steps: { status: 'pending', counts: {}, denominator: 0 } })).toBe(false);

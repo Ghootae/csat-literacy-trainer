@@ -12,11 +12,11 @@ vi.mock('@csat/pipeline', async importOriginal => {
   } };
 });
 const { DIAGNOSTIC_JUDGMENT, DIAGNOSTIC_SELECTION_MODELS, DiagnosticController } = await import('./controller.js');
-const { MemoryStore, summaryEvaluator, diagnosisFake, judgeFake, feedbackFake } = await import('./test-support.js');
+const { MemoryStore, refusedHabitTransport, summaryEvaluator, diagnosisFake, judgeFake, feedbackFake } = await import('./test-support.js');
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 
-const make = (feedbackEvaluator?: FeedbackEvaluator) => new DiagnosticController({ store: new MemoryStore(), summaryEvaluator,
+const make = (feedbackEvaluator?: FeedbackEvaluator) => new DiagnosticController({ store: new MemoryStore(), summaryEvaluator, readingHabitTransport: refusedHabitTransport(),
   diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport, ...(feedbackEvaluator ? { feedbackEvaluator } : {}) });
 
 describe('진단 기본 평가기 (D-0213 6)', () => {

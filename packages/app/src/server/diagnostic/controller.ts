@@ -11,7 +11,7 @@ import { basename, dirname, resolve } from 'node:path';
 import { z, ZodError } from 'zod/v4';
 import {
   FeedbackRationaleSchema, OpenAIFeedbackEvaluator, combineRound, createFeedbackSession, createOpenAiTransport, diagnoseThought,
-  judgeUnit, loadJudgePrompts, loadPositionData, loadThoughtDiagnosisPrompts, participantPosition, unitsForParagraph,
+  judgeUnit, loadJudgePrompts, loadPositionData, loadThoughtDiagnosisPrompts, jsonHash, participantPosition, unitsForParagraph,
   type FeedbackEvaluator, type FeedbackTransport, type ParticipantPosition, type SimpleEvaluator,
 } from '@csat/pipeline';
 import type { DialoguePassageContent } from '../content.js';
@@ -23,13 +23,17 @@ import type { FeedbackMessage, FeedbackWorkbenchView } from '../../shared/proble
 import type { ProblemContentView } from '../../shared/contract.js';
 import {
   loadAnalysisMaps, loadChoiceLinkTargets, loadChoiceLinkTwists, loadClassifyTypes, loadDiagnosticBundle, loadDiagnosticPassages, loadDiagnosticSet,
-  loadRecommendationMap, loadSymbolGloss, loadTwistStudentText,
+  READING_HABIT_PROMPT_VERSION, loadReadingHabitPrompts, loadRecommendationMap, loadSymbolGloss, loadTwistStudentText,
   type ChoiceLinkTargets, type ChoiceLinkTwist, type DiagnosticSet, type DiagnosticSetPassage, type LoadedAnalysisMap,
 } from './content.js';
 import {
   addCounts, copyOverlap, countParagraph, emptyCounts, judgedUnitIndex, paragraphLabel, pickTwist, readingCases, summaryLink,
   type JudgedUnitInfo, type SummaryLink,
 } from './reading.js';
+import {
+  HabitGenerationSchema, HabitReviewSchema, askReadingHabit, buildHabitInput, checkHabit, reviewUserText,
+  type HabitContext, type HabitInput, type HabitRef, type ReadingHabitView,
+} from './reading-habit.js';
 import { FileDiagnosticStore, diagnosticRoot, isParticipantId, type DiagnosticParticipant, type DiagnosticStore, type ItemAnswer } from './store.js';
 
 export class DiagnosticHttpError extends Error {
@@ -92,6 +96,8 @@ export interface DiagnosticControllerOptions {
   summaryLogDirectory?: string;
   diagnosisTransport?: FeedbackTransport;
   judgeTransport?: FeedbackTransport;
+  /** 문장 읽기 습관(맨 위 요약) 생성·검토 호출. 없으면 본 서비스 기본 transport(실제 모델). */
+  readingHabitTransport?: FeedbackTransport;
   set?: DiagnosticSet;
   loadBundle?: typeof loadDiagnosticBundle;
   passages?: readonly DialoguePassageContent[];
@@ -128,6 +134,7 @@ export class DiagnosticController {
   private readonly summary: SimpleDialogueController;
   private readonly diagnosisTransport: FeedbackTransport;
   private readonly judgeTransport: FeedbackTransport;
+  private readonly readingHabitTransport: FeedbackTransport;
   private readonly loadBundle: typeof loadDiagnosticBundle;
   private readonly loadMaps: (passage: DiagnosticSetPassage) => LoadedAnalysisMap[];
   private readonly loadTwists: NonNullable<DiagnosticControllerOptions['loadTwists']>;
@@ -155,6 +162,7 @@ export class DiagnosticController {
   private readonly concurrency: number;
   private judgePrompts: ReturnType<typeof loadJudgePrompts> | undefined;
   private diagnosisInstructions: string | undefined;
+  private habitPrompts: ReturnType<typeof loadReadingHabitPrompts> | undefined;
 
   constructor(options: DiagnosticControllerOptions = {}) {
     this.store = options.store ?? new FileDiagnosticStore();
@@ -173,6 +181,7 @@ export class DiagnosticController {
     this.concurrency = options.analysisConcurrency ?? 8;
     this.diagnosisTransport = options.diagnosisTransport ?? createOpenAiTransport();
     this.judgeTransport = options.judgeTransport ?? createOpenAiTransport();
+    this.readingHabitTransport = options.readingHabitTransport ?? createOpenAiTransport();
     this.feedback = new ProblemFeedbackController({
       evaluator: options.feedbackEvaluator ?? new OpenAIFeedbackEvaluator({ selectionModels: DIAGNOSTIC_SELECTION_MODELS, ...DIAGNOSTIC_JUDGMENT }),
       withoutInstantBubble: true,
@@ -487,8 +496,8 @@ export class DiagnosticController {
         counts: stepCounts, denominator: diagnosed.length },
       twists: { counts: twistCounts },
       recommendation: this.recommendation(twistCounts),
-      /** 2단계에서 "두 번 이상 나온 실수" 묶음이 들어올 자리. 지금은 늘 null이고 화면은 "가장 먼저 볼 것"으로 대신한다. */
-      summaryGroups: null,
+      /** 맨 위 요약의 문장 읽기 습관. ready가 아니면 화면은 "가장 먼저 볼 것"(pending이면 대기 한 줄)으로 대신한다. */
+      readingHabit: this.readingHabit(p),
       symbolGloss: Object.fromEntries(this.set.passages.map(passage => [passage.passageId, this.symbolGloss(passage.passageId)])),
       reading: this.set.passages.filter(passage => p.passages[passage.passageId]!.summaryChosen === true).map(passage => this.resultReading(p, passage)),
     };
@@ -611,6 +620,8 @@ export class DiagnosticController {
       if (item.thoughtDiagnosis.status === 'PENDING') this.track(this.runDiagnosis(p, questionId));
       else this.maybeStartDiagnosis(p, questionId);
     }
+    // 읽기 습관 작업은 메모리에만 있다. 서버를 다시 켠 뒤에는 비워 두고 다음 result()가 입력 해시로 다시 시작한다.
+    if (p.readingHabit?.status === 'PENDING') delete p.readingHabit;
     for (const [paragraphId, analysis] of Object.entries(p.analysis)) {
       if (analysis.status === 'PENDING') this.track(this.runAnalysis(p, this.passageOfParagraph(paragraphId), paragraphId));
     }
@@ -911,6 +922,76 @@ export class DiagnosticController {
       transcript: [intro, ...base.transcript.filter(m => !m.id.startsWith(`done-${questionId}:`)).map(messageFor)],
       skippable: base.phase === 'AWAITING_RATIONALE' || base.phase === 'AWAITING_CORRECTION' || base.phase === 'AWAITING_RESELECTION' };
     return structuredClone(view);
+  }
+
+  // ---------- 내부: 문장 읽기 습관(맨 위 요약) ----------
+
+  private habitContext(p: Participant): HabitContext {
+    return {
+      passages: this.answeredPassages(p),
+      questionNumber: questionId => this.set.items[questionId]!.questionNumber,
+      answerPosition: questionId => this.set.items[questionId]!.answerPosition,
+      title: passageId => this.content(passageId).title,
+      source: questionId => this.bundle(questionId).source,
+      twists: (path, questionNumber, position) => {
+        let twistFn = this.twistCache.get(path);
+        if (!twistFn) { twistFn = this.loadTwists(path); this.twistCache.set(path, twistFn); }
+        return twistFn(questionNumber, position);
+      },
+      symbolGloss: passageId => this.symbolGloss(passageId),
+      isCorrect: item => this.isCorrect(item),
+    };
+  }
+
+  /**
+   * 맨 위 요약. 입력이 아직 다 모이지 않았으면 pending. 입력 해시가 저장본과 같고 끝났으면(READY·FAILED) 저장본, 다르면 새로 시작한다.
+   * 거른 근거의 서로 다른 문항이 2개 미만이면 호출하지 않고 none.
+   */
+  private readingHabit(p: Participant): ReadingHabitView {
+    const { pending, input, refs } = buildHabitInput(p, this.habitContext(p));
+    if (pending) return { status: 'pending' };
+    if (input.evidenceEntries.length < 2) return { status: 'none' };
+    const inputHash = jsonHash(input);
+    const saved = p.readingHabit;
+    if (saved?.inputHash === inputHash) {
+      if (saved.status === 'PENDING') return { status: 'pending' };
+      if (saved.status === 'FAILED') return { status: 'failed' };
+      if (saved.status === 'READY') return saved.shown === null ? { status: 'none' } : { status: 'ready', habit: saved.shown };
+    }
+    this.habitPrompts ??= loadReadingHabitPrompts();
+    const slot = { status: 'PENDING' as const, inputHash, generation: null, review: null, shown: null, hiddenReason: null };
+    p.readingHabit = slot;
+    this.requestSave(p);
+    this.track(this.runReadingHabit(p, slot, input, refs));
+    return { status: 'pending' };
+  }
+
+  private async runReadingHabit(p: Participant, slot: NonNullable<Participant['readingHabit']>, input: HabitInput, refs: Map<string, HabitRef>): Promise<void> {
+    const prompts = this.habitPrompts!; const inputText = JSON.stringify(input, null, 2);
+    const call = async <T>(instructions: string, userText: string, schema: Parameters<typeof askReadingHabit<T>>[3]) => {
+      let lastError = '';
+      for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+        if (p.readingHabit !== slot) return null;   // 개발자 초기화 등으로 다른 작업이 이 자리를 차지했다
+        try { return await askReadingHabit(this.readingHabitTransport, instructions, userText, schema); }
+        catch (error) { lastError = error instanceof Error ? error.message : String(error); }
+      }
+      throw new Error(lastError);
+    };
+    try {
+      const generation = await call(prompts.generation, inputText, HabitGenerationSchema);
+      if (generation === null) return;
+      const review = await call(prompts.review, reviewUserText(inputText, generation.value), HabitReviewSchema);
+      if (review === null || p.readingHabit !== slot) return;
+      const checked = checkHabit(input, refs, generation.parsed, review.parsed);
+      Object.assign(slot, { status: 'READY', generation: generation.value, review: review.value, shown: checked.shown, hiddenReason: checked.hiddenReason });
+      this.event('READING_HABIT_DONE', p, { inputHash: slot.inputHash, promptVersion: READING_HABIT_PROMPT_VERSION, generation: generation.value, review: review.value,
+        shown: checked.shown, hiddenReason: checked.hiddenReason, metadata: { generation: generation.metadata, review: review.metadata } });
+    } catch (error) {
+      if (p.readingHabit !== slot) return;
+      slot.status = 'FAILED';
+      this.event('READING_HABIT_FAILED', p, { inputHash: slot.inputHash, error: error instanceof Error ? error.message : String(error) });
+    }
+    this.requestSave(p);
   }
 
   // ---------- 내부: 위치·결과 ----------

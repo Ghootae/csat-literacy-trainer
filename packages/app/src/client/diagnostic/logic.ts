@@ -193,6 +193,13 @@ export function boldQuotes(text: string, quotes: readonly string[]): TextSegment
   if (at < text.length) segments.push({ text: text.slice(at), bold: false });
   return segments.length === 0 ? [{ text, bold: false }] : segments;
 }
+/** `**굵게**` 표시를 조각으로 나눈다(표시가 짝이 맞지 않으면 남은 글은 그대로 둔다). */
+export function parseBold(text: string): TextSegment[] {
+  return text.split('**').map((part, i) => ({ text: part, bold: i % 2 === 1 })).filter(segment => segment.text !== '');
+}
+/** 읽기 습관 상자 출처 줄의 위치 이름: 선지 ③ / 지문 / 〈보기〉. */
+export const habitSourceName = (sourceKind: 'CHOICE' | 'PASSAGE' | 'SCENARIO', choicePosition: number | null): string =>
+  sourceKind === 'CHOICE' ? `선지 ${circled(choicePosition ?? 0)}` : sourceKind === 'PASSAGE' ? '지문' : '〈보기〉';
 /** 선지 전문 가운데 인용 구절 앞뒤 `pad`글자만 남긴 조각("… 구절 …"). 글에 구절이 없으면 구절만 굵게 낸다. */
 export function excerptAround(text: string, quote: string, pad = 16): TextSegment[] {
   const start = text.indexOf(quote);
@@ -351,7 +358,7 @@ export function timerValues(timer: ItemTimer, now: number, omitted: boolean): { 
 
 /** 화면에 보이는 칸 하나라도 분석 중이면 true(결과 화면이 다시 받아 온다). 문항 검토 문항의 판정 칸은 숨겨져 있으므로 보지 않는다. 사고 진단·단계 집계는 화면에 내지 않으므로 보지 않는다. */
 export function hasPending(result: ResultView): boolean {
-  return result.position.status === 'pending' || result.reading.some(r => r.status === 'pending')
+  return result.position.status === 'pending' || result.readingHabit.status === 'pending' || result.reading.some(r => r.status === 'pending')
     || result.items.some(item => item.summaryLink?.status === 'pending' || (!item.review && item.judgment.status === 'pending'));
 }
 const SOURCE_LOCATION: Record<string, string> = { PASSAGE: '지문', SCENARIO: '보기', STEM: '발문', CHOICE: '선지' };

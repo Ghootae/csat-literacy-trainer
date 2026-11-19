@@ -7,7 +7,7 @@ import { DiagnosticController, DiagnosticHttpError, OMITTED_WRONG_RATIONALE_LINE
 import { loadAnalysisMaps, loadDiagnosticPassages } from './content.js';
 import { FileDiagnosticStore, type DiagnosticParticipant } from './store.js';
 import {
-  MemoryStore, correctChoice, diagnosisFake, feedbackFake, judgeFake, omitted, provided, set, summaryEvaluator, transportFake, wrongChoice,
+  MemoryStore, refusedHabitTransport, correctChoice, diagnosisFake, feedbackFake, judgeFake, omitted, provided, set, summaryEvaluator, transportFake, wrongChoice,
   type Behavior, type FeedbackFake, type TransportFake,
 } from './test-support.js';
 
@@ -23,7 +23,7 @@ function harness(behaviors: Record<string, Behavior> = {}, extra: Partial<Diagno
   const fb = fakes.fb ?? feedbackFake({ behavior: q => behaviors[q] ?? 'SUPPORTED' });
   const diagnosis = fakes.diagnosis ?? diagnosisFake(); const judge = fakes.judge ?? judgeFake();
   const logs = mkdtempSync(join(tmpdir(), 'diag-summary-')); dirs.push(logs);
-  const c = new DiagnosticController({ store, feedbackEvaluator: fb.evaluator, summaryEvaluator, summaryLogDirectory: logs,
+  const c = new DiagnosticController({ store, feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: logs,
     diagnosisTransport: diagnosis.transport, judgeTransport: judge.transport, ...extra });
   return { c, store, fb, diagnosis, judge, id: c.create().participantId };
 }
@@ -45,7 +45,7 @@ describe('요약 대화 기록 위치(인계 A (6)-1)', () => {
     process.env['CSAT_DIAGNOSTIC_ROOT'] = root;
     try {
       const fb = feedbackFake({ behavior: () => 'SUPPORTED' }); const diagnosis = diagnosisFake(); const judge = judgeFake();
-      const c = new DiagnosticController({ store: new MemoryStore(), feedbackEvaluator: fb.evaluator, summaryEvaluator, diagnosisTransport: diagnosis.transport, judgeTransport: judge.transport });
+      const c = new DiagnosticController({ store: new MemoryStore(), feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), diagnosisTransport: diagnosis.transport, judgeTransport: judge.transport });
       const id = c.create().participantId;
       c.start(id, COG.passageId, { summary: true });
       await c.summaryRespond(id, COG.passageId, { transitionId: 't1', paragraphIndex: 0, text: '이 문단은 동일론과 기능주의를 소개한다.' });
@@ -322,7 +322,7 @@ describe('저장', () => {
     const { dir, store } = fileHarness();
     const randomDelay = async () => { await new Promise(resolve => setTimeout(resolve, Math.floor(Math.random() * 8))); };
     const fb = feedbackFake({ delay: randomDelay, behavior: q => q === Q13 ? 'ERROR' : 'SUPPORTED' });
-    const c = new DiagnosticController({ store, feedbackEvaluator: fb.evaluator, summaryEvaluator, summaryLogDirectory: join(dir, 'summary'),
+    const c = new DiagnosticController({ store, feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: join(dir, 'summary'),
       diagnosisTransport: diagnosisFake({ delay: randomDelay }).transport, judgeTransport: judgeFake({ delay: randomDelay }).transport });
     const id = c.create().participantId;
     c.start(id, COG.passageId, { summary: true });
@@ -352,7 +352,7 @@ describe('저장', () => {
     let judgmentsSeen = 0;
     const firstJudge = judgeFake({ delay: async () => { if (++judgmentsSeen > 3) await hang(); } });
     const firstFb = feedbackFake({ delay: hang });
-    const first = new DiagnosticController({ store, feedbackEvaluator: firstFb.evaluator, summaryEvaluator, summaryLogDirectory: join(dir, 'summary'),
+    const first = new DiagnosticController({ store, feedbackEvaluator: firstFb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: join(dir, 'summary'),
       diagnosisTransport: diagnosisFake({ delay: hang }).transport, judgeTransport: firstJudge.transport });
     const id = first.create().participantId;
     first.start(id, COG.passageId, { summary: true });
@@ -369,7 +369,7 @@ describe('저장', () => {
     const units = unitsForParagraph(loadAnalysisMaps(COG)[0]!.map, paragraphId); const total = units.nodes.length + units.relations.length;
     // 새 컨트롤러(첫 컨트롤러의 멈춘 작업은 버려진다)
     const fb = feedbackFake({ behavior: q => q === Q13 || q === Q15 ? 'ERROR' : 'SUPPORTED' }); const diagnosis = diagnosisFake(); const judge = judgeFake();
-    const second = new DiagnosticController({ store, feedbackEvaluator: fb.evaluator, summaryEvaluator, summaryLogDirectory: join(dir, 'summary'),
+    const second = new DiagnosticController({ store, feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: join(dir, 'summary'),
       diagnosisTransport: diagnosis.transport, judgeTransport: judge.transport });
     expect(second.progress(id).passages[0]!.status).toBe('AWAITING_JUDGMENT');
     await settle(second);
@@ -627,7 +627,7 @@ describe('confidence (인계 (3))', () => {
       delete (item.firstJudgment as { reconstructability?: unknown }).reconstructability; delete (item.firstJudgment as { consistency?: unknown }).consistency;
     }
     store.files.set(h.id, JSON.stringify(old));
-    const second = new DiagnosticController({ store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-old-summary-')),
+    const second = new DiagnosticController({ store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-old-summary-')),
       diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
     const card = second.summaryCard(h.id, COG.passageId);
     expect(card.items.map(i => i.category)).toEqual(['SUPPORTED_CORRECT', 'SUPPORTED_CORRECT', 'SURE_CORRECT', 'SUPPORTED_CORRECT', 'SUPPORTED_CORRECT']);
@@ -791,7 +791,7 @@ describe('지문 결과 화면 (D-0218)', () => {
     for (const text of [JSON.stringify(nearly), JSON.stringify(h.c.reveal(h.id, COG.passageId, { questionId: Q15 }))]) { expect(text).not.toContain('probabilities'); expect(text).not.toContain('"mode"'); }
     // 저장 파일에서 이어 가기
     await settle(h.c);
-    const second = new DiagnosticController({ store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-reveal-')),
+    const second = new DiagnosticController({ store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-reveal-')),
       diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
     expect(second.summaryCard(h.id, COG.passageId).items.map(i => i.revealed)).toEqual([true, true, true, true, false]);
     const started = performance.now();
@@ -819,7 +819,7 @@ describe('지문 결과 화면 (D-0218)', () => {
     const old = JSON.parse(store.files.get(h.id)!) as DiagnosticParticipant;
     for (const state of Object.values(old.passages)) { delete state.revealed; state.feedbackCursor = 0; }
     store.files.set(h.id, JSON.stringify(old));
-    const second = new DiagnosticController({ store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-old-')),
+    const second = new DiagnosticController({ store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-old-')),
       diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
     expect(second.summaryCard(h.id, COG.passageId)).toMatchObject({ allRevealed: false, position: null });
     expect(second.summaryCard(h.id, COG.passageId).items.every(i => !i.revealed)).toBe(true);
@@ -880,11 +880,11 @@ describe('결과 카드 자료와 자기 점검 (결과 화면 1단계)', () => 
     expect(items.filter(i => i.strategyAvailable).map(i => i.questionId)).toEqual([Q12]);
   });
 
-  it('결과 응답: summaryGroups는 null이고 symbolGloss는 지문별 사전이다', async () => {
+  it('결과 응답: 읽기 습관 대상이 없으면 none이고 symbolGloss는 지문별 사전이다', async () => {
     const h = harness();
     await answerPassage(h, HORSE, Object.fromEntries(HORSE.questionIds.map(q => [q, provided(correctChoice(q))]))); await settle(h.c);
     const result = h.c.result(h.id);
-    expect(result.summaryGroups).toBeNull();
+    expect(result.readingHabit).toEqual({ status: 'none' });
     expect(Object.keys(result.symbolGloss)).toEqual(set.passages.map(p => p.passageId));
     expect(result.symbolGloss[HORSE.passageId]!['ⓑ']).toContain('소수 의견');
     expect(result.symbolGloss['audio-perceptual-coding']).toEqual({});
@@ -900,7 +900,7 @@ describe('결과 카드 자료와 자기 점검 (결과 화면 1단계)', () => 
     h.c.selfCheck(h.id, Q15, { choice: '선지 내용을 잘못 이해했어' });
     expect(h.store.events.filter(e => e.type === 'SELF_CHECK').map(e => [e['questionId'], e['choice']])).toEqual([[Q15, '찍었어'], [Q15, '선지 내용을 잘못 이해했어']]);
     await settle(h.c);
-    const second = new DiagnosticController({ store: h.store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-self-')),
+    const second = new DiagnosticController({ store: h.store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-self-')),
       diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
     expect(second.result(h.id).items.find(i => i.questionId === Q15)!.selfCheck).toMatchObject({ choice: '선지 내용을 잘못 이해했어' });
     await settle(second);
@@ -921,7 +921,7 @@ describe('결과 카드 자료와 자기 점검 (결과 화면 1단계)', () => 
     const old = JSON.parse(h.store.files.get(h.id)!) as DiagnosticParticipant;
     for (const item of Object.values(old.items)) delete item.selfCheck;
     h.store.files.set(h.id, JSON.stringify(old));
-    const fresh = new DiagnosticController({ store: h.store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-selfold-')),
+    const fresh = new DiagnosticController({ store: h.store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: mkdtempSync(join(tmpdir(), 'diag-selfold-')),
       diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
     expect(fresh.result(h.id).items.every(i => i.selfCheck === null)).toBe(true);
     await settle(fresh);

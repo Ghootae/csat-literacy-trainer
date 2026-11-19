@@ -104,6 +104,12 @@ export const diagnosisFake = (init: Parameters<typeof transportFake>[1] = {}) =>
   steps: { S1_STEM: 'PASS', S2_CHOICE: 'PASS', S3_LOCATE: 'FAIL', S4_INTERPRET: 'NOT_OBSERVED', S5_JUDGE: 'NOT_OBSERVED' },
   firstFailedStep: 'S3_LOCATE', errors: [{ tag: 'MISREAD_FACT', step: 'S3_LOCATE', studentQuote: '인용' }], note: '메모', unjudgeableReason: null, guessed: false,
 }), init);
+/** 읽기 습관 transport: 지시문의 (생성)·(검토) 표시로 단계를 가려 각각 `generation`·`review`를 돌려준다. 기본은 생성 NONE + 검토 PASS(맨 위 요약이 "가장 먼저 볼 것"으로 남는다). */
+export const habitFake = (init: Parameters<typeof transportFake>[1] & { generation?: unknown; review?: unknown } = {}) => transportFake(request => String(request.instructions).includes('(생성)')
+  ? init.generation ?? { perEntry: [], result: 'NONE', kind: null, strength: null, headline: null, featured: null, otherCases: [], secondary: null, nextTime: null, counterCheck: '', rejected: [] }
+  : init.review ?? { verdict: 'PASS', problems: [] }, init);
+/** 읽기 습관 호출이 있으면 안 되는 테스트용: 부르면 실패한다(실제 모델로 나가지 않게 하는 안전장치). */
+export const refusedHabitTransport = (): FeedbackTransport => transportFake(() => ({}), { fail: () => true }).transport;
 /** 문단 판정 transport: 학생 발화 앞부분을 인용한 DIRECT를 돌려준다. */
 export const judgeFake = (init: Parameters<typeof transportFake>[1] = {}) => transportFake(request => ({
   label: 'DIRECT', quotes: [inputOf(request).dialogue[0].text.slice(0, 3)], reason: '가짜 판정',

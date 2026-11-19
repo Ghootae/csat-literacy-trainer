@@ -83,6 +83,15 @@ export interface ReadingCounts {
   layers: Record<'요지' | '합성' | '명제', { caught: number; total: number }>;
   branches: Record<'내용' | '논증' | '관점' | '흐름', { caught: number; total: number; wrong: number }>;
 }
+export interface ReadingHabit {
+  headline: string;
+  featured: { questionId: string; passageId: string; questionNumber: number; sourceKind: 'CHOICE' | 'PASSAGE' | 'SCENARIO'; choicePosition: number | null;
+    sentence: string; studentQuote: string; sourceForm: string; studentForm: string; explanation: string };
+  otherCases: { questionId: string; passageId: string; questionNumber: number; sentence: string; studentQuote: string; changed: string }[];
+  secondary: { line: string; questionIds: string[] } | null;
+  nextTime: string;
+}
+export type ReadingHabitView = { status: 'pending' | 'failed' | 'none' } | { status: 'ready'; habit: ReadingHabit };
 export interface ResultView {
   qualityTiers: QualityTiers;
   position: { status: 'pending' } | { status: 'ready'; answered: number; correct: number; percentile: PositionView['percentile']; grade: PositionView['grade'];
@@ -92,8 +101,8 @@ export interface ResultView {
   twists: { counts: Record<string, number> };
   recommendation: { twistType: string; setNames: string[] } | null;
   reading: { passageId: string; status: Box; counts: ReadingCounts; cases: ReadingCase[] }[];
-  /** 2단계에서 "두 번 이상 나온 실수" 묶음이 들어올 자리. 지금은 늘 null이다. */
-  summaryGroups: null;
+  /** 맨 위 요약의 문장 읽기 습관. ready가 아니면 "가장 먼저 볼 것"(pending이면 대기 한 줄)을 보인다. */
+  readingHabit: ReadingHabitView;
   /** 지문 id → 기호(㉠·(가)·ⓐ 등) → 최소 풀이. */
   symbolGloss: Record<string, Record<string, string>>;
 }

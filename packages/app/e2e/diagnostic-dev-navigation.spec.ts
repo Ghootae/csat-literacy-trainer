@@ -10,7 +10,7 @@ import { expect, test } from '@playwright/test';
 import { createLearningServer } from '../src/server/index.js';
 import { DiagnosticController } from '../src/server/diagnostic/controller.js';
 import { FileDiagnosticStore } from '../src/server/diagnostic/store.js';
-import { diagnosisFake, feedbackFake, judgeFake, set, summaryEvaluator } from '../src/server/diagnostic/test-support.js';
+import { diagnosisFake, refusedHabitTransport, feedbackFake, judgeFake, set, summaryEvaluator } from '../src/server/diagnostic/test-support.js';
 
 const port = Number(process.env['CSAT_API_PORT'] ?? 5384);
 const shots = process.env['DIAGNOSTIC_SCREENSHOT_DIR'] ?? resolve(tmpdir(), 'csat-diagnostic-dev-screens');
@@ -21,7 +21,7 @@ test.beforeAll(async () => {
   root = mkdtempSync(resolve(tmpdir(), 'diagnostic-dev-e2e-')); mkdirSync(shots, { recursive: true });
   previousDev = process.env['CSAT_DIAGNOSTIC_DEV']; process.env['CSAT_DIAGNOSTIC_DEV'] = '1';
   const fb = feedbackFake();
-  controller = new DiagnosticController({ store: new FileDiagnosticStore(resolve(root, 'diagnostic')), feedbackEvaluator: fb.evaluator, summaryEvaluator, summaryLogDirectory: resolve(root, 'summary'),
+  controller = new DiagnosticController({ store: new FileDiagnosticStore(resolve(root, 'diagnostic')), feedbackEvaluator: fb.evaluator, summaryEvaluator, readingHabitTransport: refusedHabitTransport(), summaryLogDirectory: resolve(root, 'summary'),
     diagnosisTransport: diagnosisFake().transport, judgeTransport: judgeFake().transport });
   server = createLearningServer({ developerMode: true, diagnosticEnabled: true, diagnosticController: controller, dialogueLogDirectory: resolve(root, 'dialogue'), warmer: () => Promise.resolve(), problemFeedbackSave() {} });
   await new Promise<void>((ready, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', ready); });

@@ -1,12 +1,12 @@
 /** 결과 화면(설계 10절): 맨 위 요약 → ① 내 위치 → ② 문제 풀이 → ③ 독해 패턴 → 추천. */
 import { useEffect, useState } from 'react';
-import type { SetInfo, ResultItem, ResultView as Result } from './types.js';
+import type { SetInfo, ResultItem, ReadingHabit, ResultView as Result } from './types.js';
 import { GradeAxis, GradeBar } from './GradeBar.js';
 import { Notice, Segs, glossOf, passageTitles } from './ResultShared.js';
 import { Reading } from './ResultReading.js';
 import { Solve } from './ResultSolve.js';
 import {
-  SERVICE_NOTE, POSITION_NOTE, accurateCorrect, annotateSegments, annotateSymbols, caseAnchor, caseHeading, circled, clip, excerptAround, gradeSentence, hasPair, pickFirstLook, twistsForPairs,
+  SERVICE_NOTE, POSITION_NOTE, accurateCorrect, annotateSegments, annotateSymbols, caseAnchor, caseHeading, circled, clip, excerptAround, gradeSentence, habitSourceName, hasPair, parseBold, pickFirstLook, twistsForPairs,
   type FirstLook,
 } from './logic.js';
 
@@ -47,14 +47,52 @@ function FirstLookBox({ look, result, titles, onShowCard }: { look: FirstLook; r
   </div>;
 }
 
+/** 문장 읽기 습관 상자(인계 3절). 범주 이름은 쓰지 않는다. 문항 링크는 카드 보기와 같은 동작이다. */
+function HabitBox({ habit, result, titles, onShowCard }: { habit: ReadingHabit; result: Result; titles: Record<string, string>; onShowCard: (questionId: string) => void }) {
+  const seen = new Set<string>(); const { featured, secondary } = habit;
+  const gloss = (passageId: string) => glossOf(result, passageId);
+  const note = (passageId: string, text: string) => annotateSymbols(text, gloss(passageId), seen);
+  const sentence = note(featured.passageId, parseBold(featured.sentence).map(segment => segment.text).join(''));
+  const quote = note(featured.passageId, featured.studentQuote);
+  const sourceForm = note(featured.passageId, featured.sourceForm); const studentForm = note(featured.passageId, featured.studentForm);
+  const explanation = note(featured.passageId, featured.explanation);
+  const others = habit.otherCases.map(c => ({ ...c, segments: annotateSegments(parseBold(c.sentence), gloss(c.passageId), seen), quote: note(c.passageId, c.studentQuote) }));
+  const numberOf = (questionId: string) => result.items.find(item => item.questionId === questionId);
+  const link = (questionId: string, label: string) => <a key={questionId} className="diag-look-link" href="#diag-item-card"
+    onClick={event => { event.preventDefault(); onShowCard(questionId); }}>{label}</a>;
+  return <div className="diag-look diag-habit" data-testid="reading-habit">
+    <p className="diag-habit-headline" data-testid="habit-headline">{habit.headline}</p>
+    <p className="diag-look-source">{titles[featured.passageId] ?? ''} {featured.questionNumber}번 · {habitSourceName(featured.sourceKind, featured.choicePosition)}</p>
+    <p className="diag-look-text"><strong>&ldquo;{sentence}&rdquo;</strong></p>
+    <p className="diag-look-mine">네 근거 &nbsp;&ldquo;{quote}&rdquo;</p>
+    <dl className="diag-habit-forms">
+      <dt>원래 문장</dt><dd>{sourceForm}</dd>
+      <dt>네가 읽은 것</dt><dd>{studentForm}</dd>
+    </dl>
+    <p className="diag-look-text">{explanation}</p>
+    {others.length > 0 && <div className="diag-habit-others"><p className="diag-label2">같은 방식으로 읽은 곳</p>
+      <ul>{others.map(c => <li key={c.questionId}>
+        <span>{titles[c.passageId] ?? ''} {c.questionNumber}번 &mdash; <Segs segments={c.segments} /> &middot; {note(c.passageId, c.changed)}</span>
+        {link(c.questionId, '카드 보기 →')}</li>)}</ul></div>}
+    {secondary && <p className="diag-look-text diag-habit-secondary">그 밖에: {secondary.line} {secondary.questionIds.map(questionId => {
+      const found = numberOf(questionId);
+      return link(questionId, found ? `${found.questionNumber}번` : '카드');
+    })}</p>}
+    <p className="diag-look-text diag-habit-next"><strong>다음에:</strong> {habit.nextTime}</p>
+  </div>;
+}
+
 function TopSummary({ result, set, onShowCard }: { result: Result; set: SetInfo; onShowCard: (questionId: string) => void }) {
   const total = set.passages.reduce((sum, p) => sum + p.questionIds.length, 0);
   const correct = result.items.filter(item => item.correct).length;
   const grade = result.position.status === 'ready' ? `추정 ${result.position.grade.mode}등급` : '등급 계산 중';
-  // 2단계에서 `summaryGroups`(두 번 이상 나온 실수 묶음)가 들어오면 그것을 올린다. 지금은 늘 null이라 "가장 먼저 볼 것" 하나로 대신한다.
-  const look = result.summaryGroups === null ? pickFirstLook(result.items, result.reading) : null;
+  // 문장 읽기 습관이 ready면 그 상자, 살펴보는 중이면 대기 한 줄, 아니면(none·failed) "가장 먼저 볼 것"을 보인다.
+  const habit = result.readingHabit;
+  const look = habit.status === 'none' || habit.status === 'failed' ? pickFirstLook(result.items, result.reading) : null;
   return <section className="diag-card diag-top" aria-label="요약">
     <p className="diag-sentence" data-testid="headline">처음 고른 답 기준 정답 {correct} / {total} · 근거까지 맞은 정답 {accurateCorrect(result.items, result.qualityTiers)} · {grade}</p>
+    {habit.status === 'ready' && <HabitBox habit={habit.habit} result={result} titles={passageTitles(set)} onShowCard={onShowCard} />}
+    {habit.status === 'pending' && <p className="diag-muted" role="status" data-testid="habit-pending">문장 읽기 습관을 살펴보는 중이야.</p>}
     {look && <FirstLookBox look={look} result={result} titles={passageTitles(set)} onShowCard={onShowCard} />}
   </section>;
 }

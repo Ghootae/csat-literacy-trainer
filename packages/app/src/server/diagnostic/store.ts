@@ -6,6 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeF
 import { resolve } from 'node:path';
 import type { FeedbackRationale, FeedbackSession } from '@csat/pipeline';
 import type { FeedbackMessage } from '../../shared/problem-feedback.js';
+import type { ShownHabit } from './reading-habit.js';
 
 export type JobStatus = 'NONE' | 'PENDING' | 'READY' | 'FAILED';
 /** 근거를 생략한 응답의 확신 구분. 옛 파일에는 없을 수 있다(없으면 SURE로 본다). */
@@ -45,6 +46,8 @@ export interface DiagnosticParticipant {
   }>;
   /** paragraphId 단위. judgments는 단위(노드·관계) id별 결과 */
   analysis: Record<string, { status: JobStatus; judgments: Record<string, unknown> }>;
+  /** 결과 화면 맨 위 요약(문장 읽기 습관). 입력 해시가 같으면 저장본을 쓴다. 옛 파일에는 없다(없으면 NONE). */
+  readingHabit?: { status: JobStatus; inputHash: string | null; generation: unknown | null; review: unknown | null; shown: ShownHabit | null; hiddenReason: string | null };
 }
 
 export interface DiagnosticEvent { type: string; participantId: string; at?: string; [key: string]: unknown }
