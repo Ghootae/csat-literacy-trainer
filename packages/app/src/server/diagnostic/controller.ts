@@ -631,7 +631,8 @@ export class DiagnosticController {
       if (item.wrongCard?.status === 'pending') delete item.wrongCard;
     }
     // 읽기 습관 작업은 메모리에만 있다. 서버를 다시 켠 뒤에는 비워 두고 다음 result()가 입력 해시로 다시 시작한다.
-    if (p.readingHabit?.status === 'PENDING') delete p.readingHabit;
+    // FAILED도 비운다: 실패 원인(키 없음 등)이 서버를 다시 켜며 고쳐졌을 수 있다. 서버가 켜져 있는 동안은 FAILED를 유지해 폴링마다 다시 부르지 않는다(readingHabit()).
+    if (p.readingHabit?.status === 'PENDING' || p.readingHabit?.status === 'FAILED') delete p.readingHabit;
     for (const [paragraphId, analysis] of Object.entries(p.analysis)) {
       if (analysis.status === 'PENDING') this.track(this.runAnalysis(p, this.passageOfParagraph(paragraphId), paragraphId));
     }

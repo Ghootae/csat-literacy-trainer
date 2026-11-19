@@ -218,6 +218,25 @@ describe('입력 만들기와 호출(가짜 transport)', () => {
     expect(w.store.count('READING_HABIT_FAILED')).toBe(1);
   });
 
+  it('FAILED로 저장된 참가자를 서버를 다시 켜 불러오면 result()가 새로 호출을 시작한다(켜져 있는 동안은 유지)', async () => {
+    const w = await world(tags, {}, { fail: () => true });
+    w.c.result(w.id); await settle(w.c);
+    expect(JSON.parse(w.store.files.get(w.id)!).readingHabit.status).toBe('FAILED');
+    // 같은 서버가 켜져 있는 동안은 폴링해도 다시 부르지 않는다
+    w.c.result(w.id); w.c.result(w.id); await settle(w.c);
+    expect(w.habit.requests).toHaveLength(3);
+    // 서버를 다시 켠다(고쳐진 transport): 저장된 FAILED를 비우고 다음 result()가 새로 시작한다
+    const habit = habitFake();
+    const second = new DiagnosticController({ store: w.store, feedbackEvaluator: feedbackFake().evaluator, summaryEvaluator, summaryLogDirectory: resolve(process.cwd(), 'sessions/test-reading-habit-unused'),
+      diagnosisTransport: diagnosisBy(tags).transport, judgeTransport: judgeFake().transport, readingHabitTransport: habit.transport, wrongCardTransport: refusedHabitTransport() });
+    expect(habit.requests).toHaveLength(0);
+    expect(second.result(w.id).readingHabit).toEqual({ status: 'pending' });
+    await settle(second);
+    expect(habit.requests.length).toBeGreaterThan(0);
+    expect(JSON.parse(w.store.files.get(w.id)!).readingHabit.status).toBe('READY');   // 기본 가짜 출력은 보이지 않는 결과(none)일 수 있다. 중요한 건 FAILED가 풀렸다는 것
+    expect(['ready', 'none']).toContain(second.result(w.id).readingHabit.status);
+  });
+
   it('모양이 틀린 응답도 다시 부른다(PATTERN인데 headline이 없으면 실패로 센다)', async () => {
     const w = await world(tags, {}, { generation: { result: 'PATTERN', strength: 'TWO' } });
     w.c.result(w.id); await settle(w.c);
