@@ -1,6 +1,7 @@
 /**
  * 오답 카드 1~3층 생성 실험(PROMPT-v1.1). 손 생성 5장(HAND-CARDS.md)과 같은 문항·학생을 모델(sol)로 만든다.
  * 사용(저장소 루트): node --env-file=.env docs/experiments/wrong-card-layer1-2026-11-19/run.mjs [--dry]
+ *   v1.2 재실행: ... run.mjs --prompt v1.2 --cards card2,card3,card4   (저장된 inputs/card*.json을 그대로 쓰고 runs/v1.2/에 쓴다)
  * 읽는 파일: PROMPT-v1.1.md(지시문 전체), reading-error-2026-11-18/inputs/<학생>.json, 진단 콘텐츠(문항 묶음·선지 연결·기호 사전·출제자 전략).
  * 쓰는 파일: inputs/<카드>.json(모델 입력), runs/<카드>.json(시도별 원출력·코드 검사 결과·메타데이터).
  * 모델 호출: 카드당 1회, 코드 검사 실패 시 1회만 다시 생성(최대 10회). 검토 모델은 쓰지 않는다.
@@ -13,9 +14,14 @@ import { loadDiagnosticBundle, loadDiagnosticSet, loadChoiceLinkTwists, loadSymb
 import { loadExaminerStrategies } from '../../../packages/app/dist/server/examiner-strategy.js';
 
 const dry = process.argv.includes('--dry');
+const argOf = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : null; };
+const promptVersion = argOf('--prompt') ?? 'v1.1';   // 지시문 PROMPT-<버전>.md
+const onlyCards = argOf('--cards')?.split(',') ?? null;
+const reuseInputs = argOf('--prompt') !== null;      // 지시문 버전을 지정하면 저장된 입력을 그대로 쓴다(입력을 다시 만들지 않는다)
+const runsPrefix = promptVersion === 'v1.1' ? 'runs' : `runs/${promptVersion}`;
 const dir = resolve(process.cwd(), 'docs/experiments/wrong-card-layer1-2026-11-19');
 const inputsDir = resolve(process.cwd(), 'docs/experiments/reading-error-2026-11-18/inputs');
-mkdirSync(resolve(dir, 'inputs'), { recursive: true }); mkdirSync(resolve(dir, 'runs'), { recursive: true });
+mkdirSync(resolve(dir, 'inputs'), { recursive: true }); mkdirSync(resolve(dir, runsPrefix), { recursive: true });
 const write = (path, value) => writeFileSync(resolve(dir, path), JSON.stringify(value, null, 2) + '\n');
 
 // HAND-CARDS.md의 5장(카드 번호 순). omitted는 첫 응답에 근거가 없는 카드이고, 고른 선지 번호는 HAND-CARDS.md 카드 2(⑤)를 따른다.
@@ -97,6 +103,12 @@ function buildInput(card) {
 // ---------- 코드 검사(PROMPT-v1.1 "코드 검사") ----------
 const FORBIDDEN = ['뒤집기', '비틂', '함정 유형', '조건 축소', '범위', '방향', '긍정·부정', '인과 왜곡', '상식 개입'];
 const LAYER_SYMBOL_PAREN = /[㉠-㉿ⓐ-ⓩ]\s*\(|\([가-힣]\)\s*\(/u;
+/** v1.2 코드 처리: `conclusion`이 "그래서"로 시작하면 코드가 지운다(화면 칸 이름이 "그래서"). 지운 사실은 기록한다. */
+const LEADING_SO = /^\s*그래서[\s,，:：]*/u;
+function stripLeadingSo(out) {
+  if (typeof out?.pair?.conclusion !== 'string' || !LEADING_SO.test(out.pair.conclusion)) return { out, stripped: false };
+  return { out: { ...out, pair: { ...out.pair, conclusion: out.pair.conclusion.replace(LEADING_SO, '') } }, stripped: true, before: out.pair.conclusion };
+}
 function codeChecks(out, input) {
   const checks = []; const add = (name, ok, detail) => checks.push({ name, ok: Boolean(ok), ...(ok ? {} : { detail }) });
   const passage = input.passage; const noBold = (s) => String(s ?? '').replaceAll('**', '');
@@ -117,7 +129,7 @@ function codeChecks(out, input) {
 }
 
 // ---------- 모델 호출 ----------
-const instructions = readFileSync(resolve(dir, 'PROMPT-v1.1.md'), 'utf8');
+const instructions = readFileSync(resolve(dir, `PROMPT-${promptVersion}.md`), 'utf8');
 const client = dry ? null : new OpenAI({ maxRetries: 0 });
 async function generate(inputText) {
   const started = performance.now();
@@ -133,22 +145,24 @@ async function generate(inputText) {
 
 const summary = [];
 for (const card of CARDS) {
-  const input = buildInput(card);
-  write(`inputs/${card.id}.json`, input);
+  if (onlyCards && !onlyCards.includes(card.id)) continue;
+  const input = reuseInputs ? JSON.parse(readFileSync(resolve(dir, `inputs/${card.id}.json`), 'utf8')) : buildInput(card);
+  if (!reuseInputs) write(`inputs/${card.id}.json`, input);
   console.log(`${card.id} ${card.student} ${card.title} ${card.number}번 → case=${input.case}, 기호 ${input.symbols.map(s => s.symbol).join('') || '없음'}, 전략 ${input.examinerStrategy ? '있음' : '없음'}`);
   if (dry) continue;
   const inputText = JSON.stringify(input, null, 2);
   const attempts = [];
   for (let n = 1; n <= 2; n++) {
     const result = await generate(inputText);
-    const checks = result.output ? codeChecks(result.output, input) : [{ name: 'JSON으로 읽힌다', ok: false, detail: result.parseError }];
+    const post = result.output && promptVersion !== 'v1.1' ? stripLeadingSo(result.output) : { out: result.output, stripped: false };
+    const checks = post.out ? codeChecks(post.out, input) : [{ name: 'JSON으로 읽힌다', ok: false, detail: result.parseError }];
     const passed = checks.every(c => c.ok);
-    attempts.push({ attempt: n, ...result, checks, passed });
+    attempts.push({ attempt: n, ...result, ...(post.stripped ? { conclusionStrippedLeadingSo: post.before, output: post.out, rawOutput: result.output } : {}), checks, passed });
     console.log(`  시도 ${n}: 코드 검사 ${passed ? '통과' : '실패 — ' + checks.filter(c => !c.ok).map(c => c.name).join(' / ')}`);
     if (passed) break;
   }
   const final = attempts.at(-1);
-  write(`runs/${card.id}.json`, { card, model: THOUGHT_DIAGNOSIS_MODEL, case: input.case, attempts, finalPassed: final.passed, fallbackTo1117: !final.passed });
+  write(`${runsPrefix}/${card.id}.json`, { card, model: THOUGHT_DIAGNOSIS_MODEL, promptVersion, case: input.case, attempts, finalPassed: final.passed, fallbackTo1117: !final.passed });
   summary.push({ id: card.id, attempts: attempts.length, passed: final.passed });
 }
 if (!dry) console.log(JSON.stringify(summary));
