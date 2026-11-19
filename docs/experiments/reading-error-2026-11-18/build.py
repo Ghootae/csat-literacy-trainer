@@ -37,7 +37,7 @@ for (name,st),code in zip(S.items(),codes):
     if ch==ans and jud=='SUPPORTED':
       supported.append({'item':ref,'studentRationale':rat}); continue
     pol,tw=twists(pid,Q['questionNumber'],ch)
-    e={'item':ref,'stem':Q['stem'],'stemPolarity':pol,'chosen':{'position':ch,'text':text(ch)},'correct':ch==ans,
+    e={'item':ref,'stem':Q['stem'],**({'scenario':Q['scenario']} if Q['scenario'].strip() else {}),'stemPolarity':pol,'chosen':{'position':ch,'text':text(ch)},'correct':ch==ans,
        'studentRationale':rat}
     if ch==ans: e['rationaleJudgment']=jud
     else:
