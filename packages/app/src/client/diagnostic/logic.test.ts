@@ -100,7 +100,13 @@ describe('② 문제 풀이', () => {
     expect(bar.row2.wrong.map(c => [c.label, c.items.length])).toEqual([['근거 쓰고 틀림', 2], ['근거 없이 틀림', 1]]);
     expect(bar.row3.correct.map(c => [c.label, c.items.map(x => x.questionId).join('')])).toEqual([['근거까지 정확', 'a'], ['부족·틀린 근거', 'bc'], ['확실', 'd'], ['확신 없이', 'e'], ['소거법', 'f'], ['확인 중', 'ghi']]);
     expect(bar.row3.correct.at(-1)!.gray).toBe(true);
-    expect(bar.row3.wrong.map(c => c.items.map(x => x.questionId))).toEqual([['j'], ['k'], ['l']]);   // 문항마다 한 칸
+    expect(bar.row3.wrong.map(c => c.items.map(x => x.questionId))).toEqual([['j'], ['l'], ['k']]);   // 문항마다 한 칸, 근거 쓴 문항 먼저
+  });
+  it('분해 막대 3줄째 오답 칸: 근거 쓴 문항 먼저, 근거 없는 문항 다음, 같은 묶음은 문항 번호 순', () => {
+    const bar = breakdown([wrong({ questionId: 'a', questionNumber: 3, rationale: 'OMITTED' }), wrong({ questionId: 'b', questionNumber: 9 }),
+      wrong({ questionId: 'c', questionNumber: 1, rationale: 'OMITTED' }), wrong({ questionId: 'd', questionNumber: 5 })], 16);
+    expect(bar.row3.wrong.map(c => c.items[0]!.questionId)).toEqual(['d', 'b', 'c', 'a']);
+    expect(bar.row2.wrong.map(c => c.items.length)).toEqual([2, 2]);   // 2줄째 칸 너비와 같은 순서로 이어진다
   });
   it('분해 막대 2단계 표시: 근거까지 정확·부족·틀린 근거를 "근거가 확인되는 정답 / 그 밖"으로', () => {
     const bar = breakdown([item({ questionId: 'a' }), item({ questionId: 'b', category: 'WEAK_CORRECT' }), item({ questionId: 'c', category: 'ERROR_CORRECT' })], 16, 2);

@@ -871,6 +871,22 @@ describe('결과 카드 자료와 자기 점검 (결과 화면 1단계)', () => 
     expect(wrongPick.answerText).not.toBeNull(); expect(wrongPick.chosenText).toContain(wrongPick.twist![0]!.choiceQuote);
   });
 
+  it('근거를 생략한 오답은 피드백 대화에서 근거를 써도 결과 카드의 "내 근거"(evidence.student)가 null이다(첫 응답 원칙)', async () => {
+    const h = harness({ [Q15]: 'ERROR' });
+    await answerPassage(h, COG, { ...mixed(), [Q13]: provided(correctChoice(Q13)) }); await settle(h.c);
+    const waiting = h.c.feedbackView(h.id, Q15);
+    expect(waiting.phase).toBe('AWAITING_RATIONALE');
+    await h.c.feedbackSubmit(h.id, Q15, { transitionId: 'late-rationale', expectedRevision: waiting.revision, command: { type: 'RATIONALE', rationale: { mode: 'PROVIDED', text: '대화 중에 뒤늦게 쓴 근거' } } });
+    await vi.waitFor(() => expect(h.c.feedbackView(h.id, Q15).evaluationStatus).not.toBe('PROCESSING'));
+    const q15 = h.c.result(h.id).items.find(i => i.questionId === Q15)!;
+    expect(q15).toMatchObject({ rationale: 'OMITTED', review: false });
+    expect(q15.evidence!.student).toBeNull();
+    // 근거를 쓴 오답은 그대로 "내 근거"가 나온다.
+    const h2 = harness({ [Q13]: 'ERROR' });
+    await answerPassage(h2, COG, mixed()); await settle(h2.c);
+    expect(h2.c.result(h2.id).items.find(i => i.questionId === Q13)!.evidence!.student).not.toBeNull();
+  });
+
   it('문항 검토 문항은 정답 선지 전문·비틂을 내지 않고, 출제자 전략 글이 있는 문항만 strategyAvailable이다', async () => {
     const strategies = new Map([[Q12, [{ position: 1, paragraphs: ['전략 글'] }]]]);
     const h = harness({ [Q13]: 'BOUNDARY' }, { strategies });

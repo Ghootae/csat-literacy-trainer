@@ -169,6 +169,11 @@ function groupCells(items: readonly ResultItem[], keyOf: (item: ResultItem) => {
   }
   return [...cells.values()].sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
 }
+/** 오답 쪽 3줄째: 문항마다 한 칸. 2줄째(근거 쓰고 틀림 → 근거 없이 틀림)와 위치가 맞도록 근거 쓴 문항 먼저, 같은 묶음 안에서는 문항 번호 순. */
+function wrongRow3(wrong: readonly ResultItem[]): BreakdownCell[] {
+  const rank = (item: ResultItem) => item.rationale === 'PROVIDED' ? 0 : 1;
+  return [...wrong].sort((a, b) => rank(a) - rank(b) || a.questionNumber - b.questionNumber).map(item => ({ key: item.questionId, label: '', items: [item] }));
+}
 /** 문제 풀이 분해 막대(설계 2절): 1줄 정답|오답, 2줄 근거 쓴 여부, 3줄 정답 쪽은 정답의 질, 오답 쪽은 문항마다 한 칸. 칸 너비는 문항 수에 비례한다. */
 export function breakdown(items: readonly ResultItem[], total: number, tiers: QualityTiers = 3): Breakdown {
   const right = items.filter(item => item.correct); const wrong = items.filter(item => !item.correct);
@@ -176,7 +181,7 @@ export function breakdown(items: readonly ResultItem[], total: number, tiers: Qu
     ? { key: 'provided', label: correct ? '근거를 쓴 정답' : '근거 쓰고 틀림' } : { key: 'omitted', label: correct ? '근거 없이 낸 정답' : '근거 없이 틀림' };
   return { total, correct: right.length, wrong: wrong.length,
     row2: { correct: groupCells(right, item => byRationale(item, true), ['provided', 'omitted']), wrong: groupCells(wrong, item => byRationale(item, false), ['provided', 'omitted']) },
-    row3: { correct: groupCells(right, item => correctCell(item, tiers), CORRECT_CELL_ORDER), wrong: wrong.map(item => ({ key: item.questionId, label: '', items: [item] })) } };
+    row3: { correct: groupCells(right, item => correctCell(item, tiers), CORRECT_CELL_ORDER), wrong: wrongRow3(wrong) } };
 }
 
 // ---------- 카드: 글 조각 ----------

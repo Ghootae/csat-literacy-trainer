@@ -1055,7 +1055,8 @@ export class DiagnosticController {
       summaryLink: correct ? null : this.summaryLinkFor(p, passage, questionId, chosen.position),
       thoughtDiagnosis: eligibleDiagnosis && item.thoughtDiagnosis.status !== 'NONE'
         ? { status: box(item.thoughtDiagnosis.status), firstFailedStep: output?.firstFailedStep ?? null, outcomeType: output?.outcomeType ?? null } : null,
-      evidence: { student: assessment && assessment.studentEvidence.length > 0 ? assessment.studentEvidence.map(e => e.quote).join(' / ') : null,
+      // 결과 분석은 첫 응답만 쓴다. 근거를 생략했으면 피드백 대화 중 나온 근거는 "내 근거"로 쓰지 않는다.
+      evidence: { student: first.rationale.mode === 'PROVIDED' && assessment && assessment.studentEvidence.length > 0 ? assessment.studentEvidence.map(e => e.quote).join(' / ') : null,
         source: (assessment?.sourceEvidence ?? []).filter(e => e.quote !== null).map(e => ({ location: e.location, quote: e.quote! })) } };
   }
 
