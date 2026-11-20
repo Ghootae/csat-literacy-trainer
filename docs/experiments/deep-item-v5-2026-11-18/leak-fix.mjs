@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { renderBoth, validateSpec } from './graph/render.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(path.join(process.cwd(), 'package.json'));
@@ -75,7 +76,7 @@ for (const it of targets) {
 ${it.stem}
 〈보기〉 (문장 번호 붙임)
 ${numbered(sents)}
-${it.choices.join('\n')}`;
+${it.choices.join('\n')}${it.kind === 'graph' ? `\n[graphSpec — 〈보기〉는 이 명세에서 자동 생성한 그래프 읽기 판이다]\n${JSON.stringify(it.graphSpec)}` : ''}`;
   const r1 = lastJson(await call(`l12-find-rewrite-${it.version}`, `너는 수능 국어 독서 문항 검토·수리자다. ${COMMON}
 〈보기〉가 정답을 판정하는 데 쓰이는 '판정 관계'를 대놓고 적어 학생이 문장을 옮기기만 하면 되는지 찾고, 그런 문장만 고친다.
 
@@ -95,24 +96,33 @@ ${it.choices.join('\n')}`;
 5. 바꾼 문장 길이는 원문과 비슷하게(±40% 안) 한다.
 6. 다른 소재 예(설명용): 〈보기〉에 "택배 B는 A와 같은 물건이다"라는 판정 관계 진술이 있었다면 "택배 B의 송장에는 A와 같은 일련번호가 적혀 있었다"처럼 학생이 '같은 일련번호 → 같은 물건'을 한 단계 추론하게 바꾼다. 이 예의 소재를 결과에 쓰지 않는다.
 
+(그래프 갈래) 〈보기〉는 graphSpec에서 자동 생성한 읽기 판이다. 문장을 직접 고치지 말고, 노출이 축·범례의 판정어, 표시 기호의 위치, 꼭짓점·기울기 설계에 있으면 graphSpec 전체를 고쳐 "graphSpec"에 담는다(changes는 빈 배열, leaks에는 읽기 판 줄 번호와 원인). 계열 수와 표시 기호(ⓐ 등)는 그대로 두고 점 위치·축 이름·눈금만 고친다. 정답이 둘이 되거나 바뀌지 않게 한다.
+
 맨 끝에 JSON 블록(노출 없음이면 leaks와 changes를 빈 배열로): \`\`\`json {"version":"V1","leaks":[{"no":3,"sentence":"원문 그대로","relation":"지시 대상|선후|같음·다름|입장 일치","whyLeaks":"무엇이 판정을 대신 말하는지 한 줄"}],"changes":[{"no":3,"after":"대체문","clue":"단서가 되는 행동·날짜·발화·값","inference":"학생이 거칠 추론 한 줄"}],"summary":"한 줄"} \`\`\``,
     `[지문]\n${passage}\n\n[공통 원칙]\n${commonRules}\n\n[문항]\n${keyed}`));
   const log = { version: it.version, leaks: r1.leaks || [], changes: r1.changes || [] };
   const entry = { ...it, leakfix: { adopted: false, status: '', leaks: log.leaks, changes: log.changes } };
   logLines.push(`## ${it.version}`, '', `정답 ${it.answer}, 발문: ${it.stem}`, '');
-  if (!log.leaks.length || !log.changes.length) {
+  const isGraph = it.kind === 'graph';
+  if (!log.leaks.length || (!isGraph && !log.changes.length) || (isGraph && !r1.graphSpec)) {
     entry.leakfix.status = '노출 없음(원본 유지)';
     logLines.push(`- L1: 노출 없음 — ${r1.summary || ''}`, '');
     results.push(entry); continue;
   }
   // 서버가 〈보기〉를 직접 조립: 찾은 문장 번호만 대체문으로.
+  let newSpec = null, newBogi, bad = [];
   const byNo = new Map(log.changes.map(c => [Number(c.no), c]));
-  const bad = [...byNo.keys()].filter(n => !(n >= 1 && n <= sents.length));
+  if (isGraph) {
+    const v = validateSpec(r1.graphSpec);
+    const mk = sp => (sp.series || []).flatMap(q => (q.points || []).filter(pp => pp.mark).map(pp => pp.mark)).join(',');
+    if (v.errs.length) bad.push(`명세 오류 ${v.errs.join('/')}`);
+    else if ((r1.graphSpec.series || []).length !== (it.graphSpec.series || []).length || mk(r1.graphSpec) !== mk(it.graphSpec)) bad.push('계열 수·표시 기호가 바뀜');
+    else { newSpec = r1.graphSpec; newBogi = renderBoth(newSpec).text; }
+  } else bad = [...byNo.keys()].filter(n => !(n >= 1 && n <= sents.length));
   if (bad.length) { entry.leakfix.status = `되돌림: 문장 번호 오류 ${bad.join(',')}`; results.push(entry); logLines.push(`- ${entry.leakfix.status}`, ''); continue; }
-  const newSents = sents.map((s, i) => byNo.has(i + 1) ? byNo.get(i + 1).after.trim() : s);
-  const newBogi = it.bogi.includes('\n') ? newSents.join('\n') : newSents.join(' ');
+  if (!isGraph) { const newSents = sents.map((s, i) => byNo.has(i + 1) ? byNo.get(i + 1).after.trim() : s); newBogi = it.bogi.includes('\n') ? newSents.join('\n') : newSents.join(' '); }
   const ratio = newBogi.length / it.bogi.length;
-  logLines.push('- L1 노출 문장:', ...log.leaks.map(l => `  - (${l.no}) ${l.sentence} — [${l.relation}] ${l.whyLeaks}`), '- L2 바꾼 문장:', ...log.changes.map(c => `  - (${c.no}) ${sents[Number(c.no) - 1]}\n    → ${c.after}\n    단서: ${c.clue} / 추론: ${c.inference}`), `- 〈보기〉 길이: ${it.bogi.length}자 → ${newBogi.length}자 (${(ratio * 100 - 100).toFixed(1)}%)`);
+  logLines.push('- L1 노출 문장:', ...log.leaks.map(l => `  - (${l.no}) ${l.sentence} — [${l.relation}] ${l.whyLeaks}`), '- L2 바꾼 곳:', ...(isGraph ? [`  - graphSpec 수정: ${JSON.stringify(newSpec)}`, '  - 새 읽기 판:', newBogi] : log.changes.map(c => `  - (${c.no}) ${sents[Number(c.no) - 1]}\n    → ${c.after}\n    단서: ${c.clue} / 추론: ${c.inference}`)), `- 〈보기〉 길이: ${it.bogi.length}자 → ${newBogi.length}자 (${(ratio * 100 - 100).toFixed(1)}%)`);
   // L3: 정답 모르는 별도 호출이 고친 문항을 처음부터 푼다.
   const patched = { ...it };
   const r3 = lastJson(await call(`l3-resolve-${it.version}`, `너는 수능 국어 만점권 수험생이다. ${COMMON}
@@ -132,6 +142,7 @@ ${it.choices.join('\n')}`;
     entry.leakfix.adopted = true; entry.leakfix.status = '채택';
     entry.beforeLeakfix = { bogi: it.bogi };
     entry.bogi = newBogi;
+    if (isGraph) { entry.beforeLeakfix.graphSpec = it.graphSpec; entry.graphSpec = newSpec; }
   }
   entry.leakfix.resolve = { answer: r3.answer, validAnswers: va, weak: r3.weak || [], inferenceNeeded: r3.inferenceNeeded };
   logLines.push(`- 결과: **${entry.leakfix.status}**`, '');

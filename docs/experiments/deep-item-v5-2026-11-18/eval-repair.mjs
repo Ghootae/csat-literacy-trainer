@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { renderBoth, validateSpec } from './graph/render.mjs'; // 그래프 갈래(2026-11-21): 〈보기〉 = graphSpec에서 자동 생성한 읽기 판
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(path.join(process.cwd(), 'package.json'));
@@ -141,7 +142,7 @@ const d0 = await evaluate(items, '');
 const report = { passage: PID, in: IN, before: d0 };
 if (REPAIR && Object.values(d0).some(x => x.repair)) {
   const target = items.filter(it => d0[it.version].repair);
-  const fixText = target.map(it => `[${it.version}] 정답 ${CIRC[it.answer - 1]} (${polarity(it)}), 갈래 ${it.kind}\n${it.stem}\n〈보기〉\n${it.bogi}\n${it.choices.join('\n')}\n수리 사유:\n- ${d0[it.version].reasons.join('\n- ')}\n참고: 핵심 관찰 ${JSON.stringify(d0[it.version].keyEvidence)}, 출제 쪽 경쟁 선지 ${d0[it.version].rival}, 풀이 쪽 경쟁 선지 ${JSON.stringify(d0[it.version].closestRival)}, 지문 한 사실로 지워지는 오답 ${JSON.stringify(d0[it.version].easyChoices)}`).join('\n\n');
+  const fixText = target.map(it => `[${it.version}] 정답 ${CIRC[it.answer - 1]} (${polarity(it)}), 갈래 ${it.kind}\n${it.stem}\n〈보기〉\n${it.bogi}\n${it.choices.join('\n')}${it.kind === 'graph' ? `\n(그래프 갈래) 〈보기〉는 아래 graphSpec에서 자동 생성한 읽기 판이다. 〈보기〉를 직접 쓰지 말고 graphSpec 전체를 고쳐 JSON의 "graphSpec"에 담는다. 계열 수·표시 기호(ⓐ 등)는 그대로 두고 점 위치·눈금·축 이름만 고친다(축 이름·범례에 판정어 금지).\ngraphSpec: ${JSON.stringify(it.graphSpec)}` : ''}\n수리 사유:\n- ${d0[it.version].reasons.join('\n- ')}\n참고: 핵심 관찰 ${JSON.stringify(d0[it.version].keyEvidence)}, 출제 쪽 경쟁 선지 ${d0[it.version].rival}, 풀이 쪽 경쟁 선지 ${JSON.stringify(d0[it.version].closestRival)}, 지문 한 사실로 지워지는 오답 ${JSON.stringify(d0[it.version].easyChoices)}`).join('\n\n');
   const e4 = lastJson(await call('e4-repair', `너는 수능 국어 독서 출제자다. ${COMMON}
 입력 문항에는 검사에서 나온 수리 사유가 붙어 있다. 사유만 고치는 최소 수정을 한다.
 지킬 것:
@@ -159,7 +160,9 @@ if (REPAIR && Object.values(d0).some(x => x.repair)) {
   items = items.map(it => {
     const f = fixed[it.version]; if (!f) return it;
     if (Number(f.answer) !== it.answer) console.warn(`[경고] ${it.version}: 수리에서 정답 번호가 바뀜 ${it.answer} → ${f.answer} (원래 번호 유지 안 됨)`);
-    return { ...it, stem: f.stem || it.stem, bogi: f.bogi, choices: f.choices.map((c, i) => `${CIRC[i]} ${strip(c)}`), answer: Number(f.answer), roles: f.roles, repairNotes: f.repairNotes, beforeRepair: { bogi: it.bogi, choices: it.choices } };
+    let gs = it.graphSpec, gbogi = f.bogi;
+    if (it.kind === 'graph') { const v = f.graphSpec ? validateSpec(f.graphSpec) : { errs: ['graphSpec 없음'] }; if (v.errs.length) { console.warn(`[경고] ${it.version}: 그래프 수리 명세 오류(${v.errs.join('/')}) → 원본 명세 유지`); } else { gs = f.graphSpec; } gbogi = renderBoth(gs).text; }
+    return { ...it, ...(it.kind === 'graph' ? { graphSpec: gs, beforeGraphSpec: it.graphSpec } : {}), stem: f.stem || it.stem, bogi: gbogi, choices: f.choices.map((c, i) => `${CIRC[i]} ${strip(c)}`), answer: Number(f.answer), roles: f.roles, repairNotes: f.repairNotes, beforeRepair: { bogi: it.bogi, choices: it.choices } };
   });
   report.after = await evaluate(items.filter(it => fixed[it.version]), 'r');
 }

@@ -114,7 +114,8 @@ ${itemText(it, it.bogi, it.choices)}`;
   const edits = r2.edits || [];
   let bogi = it.bogi; const choices = [...it.choices]; const errs = [];
   for (const e of edits) {
-    if (e.where === 'bogi') { if (bogi.split(e.before).length !== 2) errs.push(`〈보기〉에서 "${e.before}"를 정확히 한 번 찾지 못함`); else bogi = bogi.replace(e.before, e.after); }
+    if (e.where === 'bogi' && it.kind === 'graph') errs.push('그래프 갈래의 〈보기〉(읽기 판)는 명세에서 자동 생성되므로 직접 고치지 않음');
+    else if (e.where === 'bogi') { if (bogi.split(e.before).length !== 2) errs.push(`〈보기〉에서 "${e.before}"를 정확히 한 번 찾지 못함`); else bogi = bogi.replace(e.before, e.after); }
     else { const i = Number(e.choice) - 1; if (!(i >= 0 && i < 5) || choices[i].split(e.before).length !== 2) errs.push(`선지 ${e.choice}에서 "${e.before}"를 정확히 한 번 찾지 못함`); else choices[i] = choices[i].replace(e.before, e.after); }
   }
   logLines.push('- 고친 곳:', ...edits.map(e => `  - ${e.where === 'bogi' ? '〈보기〉' : CIRC[e.choice - 1]}: "${e.before}" → "${e.after}" (${e.why})`));

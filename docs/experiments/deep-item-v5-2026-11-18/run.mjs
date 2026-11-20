@@ -28,6 +28,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { renderBoth, validateSpec } from './graph/render.mjs'; // KIND=graph (2026-11-21): 명세 JSON → 읽기 판·SVG
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(path.join(process.cwd(), 'package.json'));
@@ -85,9 +86,9 @@ const AVOID = (avoidText ? `\n\n[이미 쓴 함정 — 같은 지문의 A형 문
 const guideText = fs.readFileSync(path.join(DIR, process.env.GUIDE || 'readability-guide-v4.md'), 'utf8');
 
 // v5: 갈래·정답 번호·비튼 방식
-const KIND_NAME = { case: '사례', table: '표·단계 목록', view: '외부 글·관점' };
+const KIND_NAME = { case: '사례', table: '표·단계 목록', view: '외부 글·관점', graph: '그래프' };
 const KIND = { V1: process.env.KIND_V1, V2: process.env.KIND_V2 };
-for (const v of ['V1', 'V2']) if (!KIND_NAME[KIND[v]]) throw new Error(`KIND_${v}는 case | table | view 중 하나`);
+for (const v of ['V1', 'V2']) if (!KIND_NAME[KIND[v]]) throw new Error(`KIND_${v}는 case | table | view | graph 중 하나`);
 const commonRules = fs.readFileSync(path.join(DIR, 'rules-common.md'), 'utf8')
   + (MODE === 'B' && process.env.V53_B !== '0' ? '\n\n' + fs.readFileSync(path.join(DIR, 'rules-common-v53-B.md'), 'utf8') : ''); // 2026-11-19: v5.3 규칙은 B형에만
 const kindRules = [...new Set([KIND.V1, KIND.V2])].map(k => `[갈래 규칙: ${KIND_NAME[k]} (${k})]\n` + fs.readFileSync(path.join(DIR, `kind-${k}.md`), 'utf8')).join('\n\n');
@@ -211,11 +212,16 @@ ${MODE === 'B' ? ASSEMBLE_B : ASSEMBLE_A}맨 끝에 아래 형식의 JSON 코드
 \`\`\`json
 {"items":[{"version":"V1","kind":"table","stem":"...","bogi":"...","choices":["①...","②...","③...","④...","⑤..."],"answer":4,"answerTwist":"짝 바꾸기","twists":["참","뒤집기","참","짝 바꾸기","참"],"roles":["쉬움","경쟁","중간","정답","중간"],"rival":2}]}
 \`\`\`
-roles는 선지별 역할(공통 C11), rival은 가장 강한 경쟁 선지 번호다. kind는 갈래 영문 이름, answerTwist는 공통 C6의 방식 이름, twists는 선지별로 거짓이면 비튼 방식 이름, 참이면 "참"이다. 표 〈보기〉는 bogi 안에 안내 글과 마크다운 표를 줄바꿈으로 이어 넣는다.`,
+roles는 선지별 역할(공통 C11), rival은 가장 강한 경쟁 선지 번호다. kind는 갈래 영문 이름, answerTwist는 공통 C6의 방식 이름, twists는 선지별로 거짓이면 비튼 방식 이름, 참이면 "참"이다. 표 〈보기〉는 bogi 안에 안내 글과 마크다운 표를 줄바꿈으로 이어 넣는다. 갈래가 graph인 항목은 bogi를 빈 문자열로 두고 "graphSpec" 객체(갈래 규칙의 형식)를 항목에 넣는다. 시험지 형태 출력에서 〈보기〉 자리에는 graphSpec의 요약(축·곡선 모양·표시 기호)을 적는다.`,
   `[지문]\n${passage}\n\n[버전별 지정]\n${SPEC}\n\n[공통 원칙 — 양식 규칙과 부딪치면 이것을 따른다]\n${commonRules}\n\n${kindRules}\n\n[${MODE}. 출제 규칙]\n${rulesA}\n\n[가독성 기준 — 〈보기〉와 선지 문장을 처음부터 이 기준에 맞게 쓴다]\n${guideText}\n\n[${MODE === 'B' ? 'S' : 'B'}. 선정된 거짓 진술]\n${s2}${AVOID}`);
 
 // 3b단계: 사후 수정(다듬기) — 표현만 고친다. 정오·정답·연결 고리는 그대로.
 const lastJson = t => [...t.matchAll(/```json\s*([\s\S]*?)```/g)].pop();
+// 그래프 갈래(2026-11-21): 3단계 JSON의 graphSpec이 기준이다. 〈보기〉 = 명세에서 자동 생성한 읽기 판. 3b·3c에는 읽기 판을 따로 붙이고, 이후 graphSpec·bogi는 3단계 것으로 덮어쓴다.
+const graphSpecs = {}; // version → graphSpec
+try { for (const it of JSON.parse(lastJson(s3)[1]).items) if (it.graphSpec) graphSpecs[it.version] = it.graphSpec; } catch {}
+for (const [v, g] of Object.entries(graphSpecs)) { const val = validateSpec(g); if (val.errs.length) console.warn(`[그래프 명세 오류] ${v}: ${val.errs.join(' / ')}`); }
+const graphNote = Object.keys(graphSpecs).length ? '\n\n[그래프 읽기 판(graphSpec에서 자동 생성, 〈보기〉로 취급 — graphSpec·bogi는 고치지 않는다)]\n' + Object.entries(graphSpecs).map(([v, g]) => `[${v}]\n${renderBoth(g).text}`).join('\n\n') : '';
 if (!lastJson(s3)) throw new Error('3단계 출력에서 JSON 블록을 찾지 못했습니다. out/3-assemble.md 확인');
 const checklist = fs.readFileSync(path.join(DIR, 'polish-checklist.md'), 'utf8');
 const s3b = await call('3b-polish', `너는 수능 국어 독서 문항의 문장을 다듬는 편집자다. ${COMMON}
@@ -225,13 +231,13 @@ const s3b = await call('3b-polish', `너는 수능 국어 독서 문항의 문�
 - 정오, 정답 번호, 선지가 노리는 연결 고리와 난도는 바꾸지 않는다. 문항을 버리거나 쉽게 만들지 않는다.
 - 고치면 정오가 흔들릴 것 같은 문제는 고치지 않고 '논리 메모'에 적는다.
 - 고칠 곳이 없으면 그대로 둔다. 고치기 위해 고치지 않는다.
-- (v5) 〈보기〉에 목적·까닭·판정 결론 문장("~하려고", "~위해", "~ 때문에", "~에 해당했다")이 있으면 사실만 남기고 지운다(공통 C1). 표 〈보기〉의 표 구조와 값은 바꾸지 않는다. kind, answerTwist, twists, roles, rival은 그대로 옮긴다.
+- (v5) 〈보기〉에 목적·까닭·판정 결론 문장("~하려고", "~위해", "~ 때문에", "~에 해당했다")이 있으면 사실만 남기고 지운다(공통 C1). 표 〈보기〉의 표 구조와 값은 바꾸지 않는다. (그래프 갈래) graphSpec과 bogi(읽기 판)는 고치지 않고 그대로 옮기며, 발문(stem)의 그래프 소개 문장과 선지만 다듬는다. kind, answerTwist, twists, roles, rival은 그대로 옮긴다.
 출력(마크다운): 버전마다 (1) 수정 표: 위치(〈보기〉 n번째 문장 / 선지 번호), 원문, 수정문, 점검표 항목 번호, (2) 논리 메모(없으면 '없음'), (3) 다듬은 문항(시험지 형태).
 맨 끝에 아래 형식의 JSON 코드 블록을 하나 덧붙인다. truth는 선지별 정오(적절하면 "O", 적절하지 않으면 "X"), intent는 선지별 출제 의도 한 줄(〈보기〉의 어느 표현을 지문의 어느 개념으로 옮겨야 하는지, 거짓이면 어디가 어긋나는지), answerIntent는 정답이 노리는 착각 한 줄이다:
 \`\`\`json
 {"items":[{"version":"V1","kind":"table","stem":"...","bogi":"...","choices":["①...","②...","③...","④...","⑤..."],"answer":4,"answerTwist":"짝 바꾸기","twists":["참","뒤집기","참","짝 바꾸기","참"],"truth":["O","O","O","X","O"],"intent":["...","...","...","...","..."],"answerIntent":"...","edits":3}]}
 \`\`\``,
-  `[지문]\n${passage}\n\n[출제 규칙]\n${rulesA}\n\n[공통 원칙]\n${commonRules}\n\n[다듬기 점검표]\n${checklist}\n\n[출제자가 만든 문항]\n${s3}`, POLISH_EFFORT);
+  `[지문]\n${passage}\n\n[출제 규칙]\n${rulesA}\n\n[공통 원칙]\n${commonRules}\n\n[다듬기 점검표]\n${checklist}\n\n[출제자가 만든 문항]\n${s3}${graphNote}`, POLISH_EFFORT);
 
 // 3c단계: 가독성·오류 최종 교정 (v3.1) — 처음 읽는 학생이 한 번에 뜻을 잡게. 정오·정답·숨긴 핵심 개념은 그대로.
 const j3b = lastJson(s3b);
@@ -245,8 +251,8 @@ const s3c = await call('3c-readability', `너는 수능 국어 독서 문항의 
 3. 정오와 정답 번호는 바꾸지 않는다. 고치면 정오가 흔들릴 것 같은 곳은 고치지 않고 메모로 남긴다.
 4. 조건을 더하거나 빼지 않는다. 표현만 바꾼다. 숨긴 라벨을 보여 주는 장면을 새로 만들지 않고, 장면을 고칠 때는 지문 정의와의 대응이 유지되는지 확인한다.
 출력(마크다운): 버전마다 (1) 숨긴 핵심 개념, (2) 수정 표: 위치, 원문, 수정문, 기준 번호, (3) 메모(없으면 '없음'), (4) 교정한 문항(시험지 형태).
-맨 끝에 입력 JSON과 같은 형식의 JSON 코드 블록을 하나 덧붙인다. 항목마다 "hidden"(숨긴 핵심 개념 배열)과 "readabilityEdits"(수정 수)를 더하고, intent도 고친 문장에 맞게 갱신한다. kind, answerTwist, twists, roles, rival은 그대로 둔다. 표 〈보기〉의 표 구조와 값은 바꾸지 않는다.`,
-  `[지문]\n${passage}\n\n[교정 기준]\n${guide}\n\n[출제 기록]\n${s3}\n\n[다듬은 문항 JSON]\n${j3b[1]}`, POLISH_EFFORT);
+맨 끝에 입력 JSON과 같은 형식의 JSON 코드 블록을 하나 덧붙인다. 항목마다 "hidden"(숨긴 핵심 개념 배열)과 "readabilityEdits"(수정 수)를 더하고, intent도 고친 문장에 맞게 갱신한다. kind, answerTwist, twists, roles, rival은 그대로 둔다. 표 〈보기〉의 표 구조와 값은 바꾸지 않는다. (그래프 갈래) graphSpec과 bogi는 고치지 않고 그대로 옮긴다.`,
+  `[지문]\n${passage}\n\n[교정 기준]\n${guide}\n\n[출제 기록]\n${s3}${graphNote}\n\n[다듬은 문항 JSON]\n${j3b[1]}`, POLISH_EFFORT);
 
 // 4단계: 독립 풀이 검증 (정답 모르는 상태로, 최종 교정한 문항을 푼다)
 const json = lastJson(s3c);
@@ -254,6 +260,11 @@ if (!json) throw new Error('3c단계 출력에서 JSON 블록을 찾지 못했�
 let items = JSON.parse(json[1]).items;
 if (ONLY) items = items.filter(x => x.version === ONLY);
 if (!items.length) throw new Error('3c 결과에 만들 버전이 없습니다');
+for (const it of items) if (graphSpecs[it.version]) { // 그래프: 3단계 명세가 기준
+  it.kind = 'graph'; it.graphSpec = graphSpecs[it.version]; it.bogi = renderBoth(it.graphSpec).text;
+  const gdir = path.join(OUT, 'graph'); fs.mkdirSync(gdir, { recursive: true });
+  const { svg, text } = renderBoth(it.graphSpec); fs.writeFileSync(path.join(gdir, `${it.version}.svg`), svg); fs.writeFileSync(path.join(gdir, `${it.version}.txt`), text + '\n');
+}
 const before = Object.fromEntries(JSON.parse(lastJson(s3)[1]).items.map(it => [it.version, it]));
 const polished = Object.fromEntries(JSON.parse(j3b[1]).items.map(it => [it.version, it]));
 for (const it of items) {
@@ -285,13 +296,19 @@ for (const it of items) {
   const lines = it.bogi.split('\n');
   const tableLines = lines.filter(l => /^\s*\|/.test(l));
   const text = lines.filter(l => !/^\s*\|/.test(l)).join(' ');
-  const purpose = text.match(/[가-힣]*(하려고|려고|하기 위해|위해서|위하여|위해|알아보려|확인하려|목적으로|때문에|그래서)/g);
+  const purpose = it.kind === 'graph' ? null : text.match(/[가-힣]*(하려고|려고|하기 위해|위해서|위하여|위해|알아보려|확인하려|목적으로|때문에|그래서)/g);
   if (purpose) c.push(`〈보기〉 목적·까닭 표현: ${[...new Set(purpose)].join(', ')}`);
-  const judge = text.match(/[가-힣]*(에 해당|의 대상이|대상이 되)/g);
+  const judge = it.kind === 'graph' ? null : text.match(/[가-힣]*(에 해당|의 대상이|대상이 되)/g);
   if (judge) c.push(`〈보기〉 판정 표현: ${[...new Set(judge)].join(', ')}`);
   const len = s => s.length;
   const tlen = len(text.trim());
-  if (it.kind === 'table') {
+  if (it.kind === 'graph') {
+    const val = validateSpec(it.graphSpec || {});
+    for (const e of val.errs) c.push(`그래프 명세 오류: ${e}`);
+    for (const w of val.warns) c.push(`그래프 판정어: ${w}`);
+    const pts = (it.graphSpec?.series || []).reduce((n, q) => n + (q.points || []).length, 0);
+    if (pts > 14) c.push(`그래프 점 ${pts}개(모양 위주로 줄일 것)`);
+  } else if (it.kind === 'table') {
     if (tableLines.length < 3 && !/㉠|→/.test(it.bogi)) c.push('표 갈래인데 표·단계 목록이 없음');
     if (tlen > 160) c.push(`표 안내 글 ${tlen}자 (권장 30~120)`);
     const rows = tableLines.filter(l => !/^\s*\|\s*-/.test(l)).slice(1).map(l => l.split('|').slice(1, -1).map(s => s.trim()));
@@ -313,7 +330,7 @@ for (const it of items) {
   if (rank === 1) c.push(`정답이 가장 긴 선지 (${ansLen}자, 다음 ${[...lens].sort((x, y) => y - x)[1]}자)`);
   const avg = Math.round(lens.reduce((x, y) => x + y, 0) / 5);
   it.choiceAvg = avg;
-  const [clo, chi] = it.kind === 'table' ? [35, 60] : it.kind === 'view' ? [70, 100] : [40, 85];
+  const [clo, chi] = it.kind === 'graph' ? [35, 70] : it.kind === 'table' ? [35, 60] : it.kind === 'view' ? [70, 100] : [40, 85];
   if (avg < clo - 5 || avg > chi + 10) c.push(`선지 평균 ${avg}자 (권장 ${clo}~${chi})`);
   if (Array.isArray(it.twists)) {
     const cnt = {};
@@ -329,7 +346,7 @@ if (i1 && i2 && i1.answerTwist && i1.answerTwist === i2.answerTwist) (checks[ONL
 fs.writeFileSync(path.join(OUT, 'checks.json'), JSON.stringify(checks, null, 2));
 fs.writeFileSync(path.join(OUT, 'items.json'), JSON.stringify({ passage: PID, mode: MODE, items }, null, 2));
 if (keptItem) fs.writeFileSync(path.join(OUT, 'items-merged.json'), JSON.stringify({ passage: PID, mode: MODE, items: [...items, keptItem].sort((a, b) => a.version.localeCompare(b.version)) }, null, 2));
-const exam = items.map(it => `[${it.version} · 갈래: ${KIND_NAME[it.kind] || it.kind}]\n${it.stem}\n〈보기〉\n${it.bogi}\n${it.choices.join('\n')}`).join('\n\n');
+const exam = items.map(it => `[${it.version} · 갈래: ${KIND_NAME[it.kind] || it.kind}]\n${it.stem}\n〈보기〉${it.kind === 'graph' ? '(그림 대신 그래프 읽기 판)' : ''}\n${it.bogi}\n${it.choices.join('\n')}`).join('\n\n');
 const s4 = await call('4-solve', `너는 수능 국어 만점권 수험생이자 검토자다. ${COMMON}
 각 문항을 풀어라. 문항마다: 고른 답, 선지별 정오와 지문 근거 문장, 정답이 둘 이상이거나 없을 가능성, 〈보기〉와 지문이 모순되는 곳, 지문 밖 지식이 필요한 곳, 해석에 따라 정오가 흔들리는 선지를 적는다.
 또 세 가지를 따로 검사한다.
