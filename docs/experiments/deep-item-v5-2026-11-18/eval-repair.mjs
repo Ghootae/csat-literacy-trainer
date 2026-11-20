@@ -28,7 +28,7 @@ if (!process.env.OPENAI_API_KEY && fs.existsSync('.env')) {
     if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
   }
 }
-const MODEL = process.env.GEN_MODEL || 'gpt-6.1-sol';
+const MODEL = process.env.GEN_MODEL || 'gpt-6.2-sol'; // 기본 6.2-sol(2026-11-20, REPORT-cell-gen62.md). 6.1은 GEN_MODEL=gpt-6.1-sol
 const EFFORT = process.env.GEN_EFFORT || 'high';
 const client = new OpenAI({ maxRetries: 0, timeout: 60 * 60 * 1000 });
 const PID = process.env.PASSAGE; if (!PID) throw new Error('PASSAGE=<id>');
@@ -40,12 +40,14 @@ const passage = fs.readFileSync(path.join(DIR, 'passages', PID, 'passage.txt'), 
 const commonRules = fs.readFileSync(path.join(DIR, 'rules-common.md'), 'utf8');
 const usagePath = path.join(OUT, 'usage.json');
 const usageLog = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : [];
+// gpt-6.2 계열은 긴 규칙을 top-level instructions 대신 developer 메시지로 보낸다(캐시용, 2026-11-20). 6.1 동작은 그대로.
+const reqBody = (instructions, input) => MODEL.startsWith('gpt-6.2') ? { input: [{ role: 'developer', content: instructions }, ...(Array.isArray(input) ? input : [{ role: 'user', content: input }])] } : { instructions, input };
 async function call(stage, instructions, input) {
   const cached = path.join(OUT, `${stage}.md`);
   if (fs.existsSync(cached) && !process.env.FORCE) { console.log(`[${stage}] 이미 있음, 건너뜀`); return fs.readFileSync(cached, 'utf8'); }
   console.log(`[${stage}] 호출 중 (${MODEL}, ${EFFORT})...`);
   const t0 = Date.now();
-  const res = await client.responses.stream({ model: MODEL, reasoning: { effort: EFFORT }, instructions, input }).finalResponse();
+  const res = await client.responses.stream({ model: MODEL, reasoning: { effort: EFFORT }, ...reqBody(instructions, input) }).finalResponse();
   fs.writeFileSync(cached, res.output_text);
   usageLog.push({ stage, model: res.model, seconds: Math.round((Date.now() - t0) / 1000), usage: res.usage });
   fs.writeFileSync(usagePath, JSON.stringify(usageLog, null, 2));

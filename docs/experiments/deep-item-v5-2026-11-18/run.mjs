@@ -23,7 +23,7 @@
 //   계산 양식 사례 건너뛰기 연결을 정답 자리에, 규칙 예시에서 기출 소재 제거), 선별 매력도 축, 3b 다듬기 단계(polish-checklist.md).
 // MODE=A: 개념 연결 양식(rules-A, 부정 발문). MODE=B: 계산 양식(rules-B, 긍정 발문, 식·변수·범위·절차 공격).
 // 필요: OPENAI_API_KEY (저장소 .env 또는 셸 환경), 저장소의 openai 패키지.
-// 모델: gpt-6.1-sol (운영 생성 모델과 같게). 사람 개입 없음: 2단계 선별도 모델이 한다.
+// 모델: 기본 gpt-6.2-sol(2026-11-20 전환, 이전 gpt-6.1-sol). 사람 개입 없음: 2단계 선별도 모델이 한다.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,7 +43,7 @@ if (!process.env.OPENAI_API_KEY && fs.existsSync('.env')) {
   }
 }
 
-const MODEL = process.env.GEN_MODEL || 'gpt-6.1-sol';
+const MODEL = process.env.GEN_MODEL || 'gpt-6.2-sol'; // 기본 6.2-sol(2026-11-20, REPORT-cell-gen62.md). 6.1은 GEN_MODEL=gpt-6.1-sol
 const EFFORT = process.env.GEN_EFFORT || 'high';
 const POLISH_EFFORT = process.env.POLISH_EFFORT || EFFORT;
 const client = new OpenAI({ maxRetries: 0, timeout: 60 * 60 * 1000 }); // 재시도하면 중복 과금, 긴 추론은 스트리밍으로 받는다
@@ -110,12 +110,14 @@ console.log('[v5 지정]\n' + SPEC);
 const usagePath = path.join(OUT, 'usage.json');
 const usageLog = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : [];
 
+// gpt-6.2 계열은 긴 규칙을 top-level instructions 대신 developer 메시지로 보낸다(캐시용, 2026-11-20). 6.1 동작은 그대로.
+const reqBody = (instructions, input) => MODEL.startsWith('gpt-6.2') ? { input: [{ role: 'developer', content: instructions }, ...(Array.isArray(input) ? input : [{ role: 'user', content: input }])] } : { instructions, input };
 async function call(stage, instructions, input, effort = EFFORT) {
   const cached = path.join(OUT, `${stage}.md`);
   if (fs.existsSync(cached) && !process.env.FORCE) { console.log(`[${stage}] 이미 있음, 건너뜀`); return fs.readFileSync(cached, 'utf8'); }
   console.log(`[${stage}] 호출 중 (${MODEL}, ${effort})...`);
   const t0 = Date.now();
-  const res = await client.responses.stream({ model: MODEL, reasoning: { effort }, instructions, input }).finalResponse();
+  const res = await client.responses.stream({ model: MODEL, reasoning: { effort }, ...reqBody(instructions, input) }).finalResponse();
   const text = res.output_text;
   fs.writeFileSync(cached, text);
   usageLog.push({ stage, effort, model: res.model, seconds: Math.round((Date.now() - t0) / 1000), usage: res.usage });
