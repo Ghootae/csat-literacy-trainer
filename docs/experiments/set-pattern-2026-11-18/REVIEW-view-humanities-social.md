@@ -1,0 +1,72 @@
+# ② 관점 칸 L2 (인문·사회 외부 글·관점 〈보기〉) — 2026-11-20
+
+## 1. 무엇을 확인하나
+- kind-view.md 규칙이 기출 지문에서 기출 등급 문항을 만드는가 (L2).
+- 지문: 의미 내재주의·외재주의(인문, 퍼트넘 vs 전통), 정보 비대칭과 사상의 자유 시장(사회, 이론 vs 비판론, 다수 vs 소수 의견). 둘 다 금광 지도가 batch2에 있어 준비 비용 0.
+- 같은 지문의 기출 〈보기〉 3점 문항과 섞어 코덱스 블라인드로 비교.
+
+## 2. 실행 전에 바꾼 것 (웹, 비용 없음)
+kind-view.md에 추가 (관점만 돌리면 kind-case가 안 읽히므로 사례 칸 교훈을 옮김):
+- K-E5 지문 예시 복제 금지 (의미 지문은 쌍둥이 지구 예를 옛 사례 문항이 복제했던 지문).
+- K-E6 판정 관계 직접 진술 금지 ("이는 ~에 해당한다", "○○와 같은 취지에서" 금지).
+- K-E7 다섯 선지 모두 〈보기〉 내용을 쓰게 (〈보기〉 없이 풀리는 선지 최대 1).
+- 평가자가 법 조항·학설·판결 의견일 때의 예 (다른 소재: 소음 규제).
+
+## 3. 볼 것 (판정 뒤 웹이 정리)
+- K-E1·K-E6: 〈보기〉에 평가자 이름·입장·판정 관계가 새는가.
+- K-E2: 정답 오류가 귀속·묶음·평가 방향에 있는가.
+- K-E5: 의미 지문 〈보기〉가 쌍둥이 지구를 떠났는가.
+- K-E7: 〈보기〉 없이 풀리는 선지 수.
+- 선지 70~100자, 〈보기〉 200~480자.
+- 사례형 vs 새 관점형 중 무엇이 나왔는지(V1·V2).
+
+## 4. CLI 지시문 (붙여 넣기용, 추정 약 $4.5, 상한 $6)
+```
+작업 폴더: 저장소 루트 (branch experiment/problem-solving-mvp)
+V5=docs/experiments/deep-item-v5-2026-11-18
+
+0) 확인 (하나라도 안 맞으면 실행하지 말고 멈춰서 알려 줘. 파일을 git checkout·stash·restore로 되돌리지 마)
+ - grep으로 $V5/kind-view.md 에 "K-E5", "K-E6", "K-E7", "법 조항·학설·판결" 이 있는지 확인.
+ - 아래 1)~3)의 API 호출 수(단계별) × 단가로 예상 비용 계산. $V5/out-case-hs/*/usage.json, repair/usage.json 실제 사용량을 근거로.
+   $6을 넘으면 멈추고 보고, 안 넘으면 바로 진행.
+
+1) 지문 2편을 $V5/passages/ 에 넣어 줘 (gongsun-long-later-mohists 폴더와 같은 형식)
+ - meaning-internalism-externalism, information-asymmetry-free-marketplace:
+   passage.txt, map.json = docs/experiments/gold-search-api-batch2-2026-11-11/passages/<id>/ 에서 복사 (끝에 메모 줄이 있으면 지움)
+   meta.json = {"title": 지문 제목, "exam": 출처 시험(suneung_db로 확인) + " (인문 관점 대조)" 또는 "(사회 관점 대조)", "mapSource": 위 map 경로}
+
+2) 생성 + 검사 + 1회 수리 (V1·V2 모두 view. A 먼저, B는 같은 회차 A의 함정을 피하게 KEEP_OUT/AVOID_OUT을 out-view-hs로)
+for P in meaning-internalism-externalism information-asymmetry-free-marketplace; do
+  ( PASSAGE=$P MODE=A KIND_V1=view KIND_V2=view OUT_NAME=out-view-hs node $V5/run.mjs > /tmp/view-hs-$P-A.log 2>&1
+    PASSAGE=$P MODE=B KIND_V1=view KIND_V2=view OUT_NAME=out-view-hs AVOID_OUT=out-view-hs node $V5/run.mjs > /tmp/view-hs-$P-B.log 2>&1
+    for M in A B; do PASSAGE=$P IN=$V5/out-view-hs/$P-$M/items.json OUT_DIR=$V5/out-view-hs/$P-$M/repair REPAIR=1 node $V5/eval-repair.mjs > /tmp/view-hs-$P-$M-repair.log 2>&1; done ) &
+done; wait
+cat $V5/out-view-hs/*/repair/eval-summary.txt
+ (AVOID_OUT 이름이 run.mjs와 다르면, B가 "같은 회차 A"를 보게 하는 실제 변수를 코드에서 찾아 써 줘)
+
+3) 검사기 보정: 두 지문 각각의 기출 〈보기〉 3점 문항(suneung_db, 관점형이 있으면 그것, 없으면 그 지문의 〈보기〉 문항)을
+   $V5/calib-gold/gongsun-12.json 형식으로 $V5/calib-gold/meaning-<번호>.json, infoasym-<번호>.json 에 저장하고 검사만(수리 없음):
+   PASSAGE=<id> IN=$V5/calib-gold/<파일> OUT_DIR=$V5/calib4-gold/<파일이름> node $V5/eval-repair.mjs
+
+4) 블라인드: $V5/blind/BLIND-view-hs.md = 지문마다 생성 4문항(A-V1·A-V2·B-V1·B-V2, 수리 반영본 items-final.json) + 같은 지문 기출 1문항,
+   지문 안에서 순서 무작위, 출처 표시 없게. 발문은 기출 표준형으로 통일. 풀이지 형식·결함 표시 목록은 BLIND-case-hs2.md와 같게 하되
+   결함 목록에 "㉴ 〈보기〉가 평가자의 입장이나 판정 관계를 직접 말함"을 추가.
+   정답·출처는 $V5/blind/KEY-view-hs.md, 코덱스 요청은 CODEX-PROMPT-case-hs2.md를 바탕으로 CODEX-PROMPT-view-hs.md (문항 수는 실제대로 적기).
+
+5) 실제 비용(usage.json 합산) 보고. 커밋은 하지 마.
+```
+- 추정 비용(gpt-6.1-sol): 지문 2편 × (A·B 생성 각 약 $0.7 + 검사·수리 각 약 $0.3) ≈ $4 + 기출 2문항 검사만 약 $0.5 = **약 $4.5**.
+- 줄인 것: 지문 2편만, 지도 새로 안 만듦(재사용), 생성 지문·과학 관점 없음. V2는 같은 조립 호출에서 나오므로 빼도 거의 안 줄어 둠.
+
+## 5. 실행 결과 (2026-11-20 저녁, 웹 1차)
+- out-view-hs 8문항. 검사기 최종: 통과 7, 수리 필요 1(의미 A-V2, 수리 뒤에도).
+- **검사기 보정 실패:** 기출 의미 23번·정보 비대칭 13번 둘 다 "수리 필요"로 잡힘 = 관점 갈래에서 거짓 경보. 사례 갈래(공손룡·공시)에선 기출이 통과했으므로 관점 갈래 특유 문제. 관점 문항은 "핵심 관찰 하나를 가리면 정답이 안 남아야" 기준이 안 맞을 수 있음(〈보기〉가 짧은 입장문 하나라 가리면 전부 가려짐). → 관점 갈래는 검사기 결과를 참고만 하고 코덱스 판정을 우선.
+- 블라인드 수정(웹): 기출 의미 23번 발문을 통일형에서 원래 "〈보기〉의 관점에서 퍼트넘의 주장을 비판한 것으로"로 되돌림. 선지가 비판문이라 통일 발문 아래에선 기출이 불리하게 판정될 수 있어서.
+
+## 6. 코덱스 블라인드 판정 (2026-11-20 저녁, blind/REPORT-view-hs-human.md·-desktop.md)
+- 생성 8 중 두 평가자 모두 기출 등급 = 1 (의미 라 = A-V1 ⑤: 2020년은 두 표본 구조가 같다고 밝혀진 때인데 ⑤가 의미가 처음 성립한 때로 바꿈). 갈림 2: 정보 나(수능 같음/중), 정보 다(중/수능 아님). 둘 다 수능 아님 1: 의미 가(B-V2, 한의 선언이 퍼트넘 원칙과 바로 맞대짐). 나머지 4 = 중. 기출 2 = 둘 다 수능 같음. 정답 10/10, 등급 일치 8/10.
+- 결함(생성 8, 주/독립): ㉰ 쓰이지 않는 사실 3/3, ㉱ 무관 사건 4/2, ㉯ 2/2, ㉲ 2/2, ㉳ 1/2, ㉴ 1/0, ㉮ 0/0.
+- 진단: K-E5(예시 복제)는 고쳐짐(㉮ 0, 쌍둥이 지구 떠남). 남은 주 결함 = 〈보기〉에 안 쓰이는 사건·덧붙인 사건(정보 가 "시청이 글을 비공개로 돌린 사건", 정보 라 "다른 언론사 사전 삭제" 등). 사례 칸 ① 첫 회(기출 등급 1/8)와 같은 수준.
+- ㉴ 해석 갈림: 비판형 발문에서 〈보기〉가 비판 전제를 주는 것은 결함이 아님. 앞으로 ㉴ = "학생이 내려야 할 판정까지 〈보기〉가 말함"으로 좁힌다(AUTO-LOOP 결함 목록 반영).
+- 반영: kind-view K-E8(〈보기〉 모든 사실을 선지가 씀, 한 사안), K-E9(인물의 입장 선언 금지, 비판 전제는 허용).
+- 검사기: 관점 기출 2문항 모두 거짓 경보 → 관점 갈래에서는 검사기 참고만.
