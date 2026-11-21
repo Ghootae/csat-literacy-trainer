@@ -67,3 +67,6 @@
 - 미리보기: `set-pattern-2026-11-18/graph-preview/r3/`(`doppler-gen-r3.svg`, `mrna-gen-r3.svg`, PNG 2장). 도플러 그림이 납작한 상태와 mRNA 접함 문장이 긴 읽기 판을 확인할 수 있다.
 - 바뀐 규칙·코드: `rules-common.md` C23, `kind-case.md` K-S9·`kind-view.md` K-E7 축약, `kind-graph.md` 형식 절·G4, `graph/render.mjs`(tick label 필수, 읽기 판 기울기 순위·구간 경계 id 제거)
 - 한계: mRNA 기출 19번은 그래프가 없어 글 설명으로만 대조했다. 기출 12번 원본 그림은 저장소에 없고 글 설명과만 대조했다.
+
+## 8. 웹 검토 (2026-11-21)
+도플러 r3는 설계가 비일관(송신 주파수가 각도에 따라 바뀜, 풀이자 답 null). 원인은 C4×C23 충돌과 rules-B 9(범위 단계를 그래프로 풀려고 각도를 가로축에 올림). mRNA는 지문에 적힌 관계(pH-전하) 대신 세포 단면 분포를 고름. 해소: REVIEW-rules-2026-11-21-graph.md 1~9번 반영, 렌더 수리. 5절의 A안(재판정)은 하지 않음. 그래프 칸은 보류.

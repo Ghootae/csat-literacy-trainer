@@ -99,12 +99,18 @@ function analyze(spec) {
   for (let a = 0; a < spec.series.length; a++) for (let b = a + 1; b < spec.series.length; b++) {
     const xs = [...new Set([...spec.series[a].points, ...spec.series[b].points].map(p => p.x))].sort((p, q) => p - q);
     const f = (s, x) => { const P = s.points; if (x < P[0].x || x > P[P.length - 1].x) return null; for (let i = 0; i < P.length - 1; i++) if (x >= P[i].x && x <= P[i + 1].x) return P[i].y + (P[i + 1].y - P[i].y) * (x - P[i].x) / (P[i + 1].x - P[i].x); return null; };
+    const diff = x => { const u = f(spec.series[a], x), v = f(spec.series[b], x); return u === null || v === null ? null : u - v; };
+    const seen = new Set();
+    const push = (x, touch) => { const k = x.toFixed(6); if (seen.has(k)) return; seen.add(k); out.cross.push({ a, b, x, touch }); };
     for (let i = 0; i < xs.length - 1; i++) {
-      const [fa0, fb0, fa1, fb1] = [f(spec.series[a], xs[i]), f(spec.series[b], xs[i]), f(spec.series[a], xs[i + 1]), f(spec.series[b], xs[i + 1])];
-      if ([fa0, fb0, fa1, fb1].some(v => v === null)) continue;
-      const d0 = fa0 - fb0, d1 = fa1 - fb1;
-      if (sgn(d0) !== 0 && sgn(d1) !== 0 && sgn(d0) !== sgn(d1)) out.cross.push({ a, b, x: xs[i] + (xs[i + 1] - xs[i]) * d0 / (d0 - d1) });
-      else if (sgn(d1) === 0 && sgn(d0) !== 0) out.cross.push({ a, b, x: xs[i + 1], touch: true });
+      const d0 = diff(xs[i]), d1 = diff(xs[i + 1]);
+      if (d0 === null || d1 === null) continue;
+      if (sgn(d0) !== 0 && sgn(d1) !== 0 && sgn(d0) !== sgn(d1)) push(xs[i] + (xs[i + 1] - xs[i]) * d0 / (d0 - d1), false);
+      else if (sgn(d1) === 0 && sgn(d0) !== 0) { // 한 점에서 닿음. 이어서 겹쳐 가면(같은 구간 겹침) 적지 않는다.
+        const d2 = i + 2 < xs.length ? diff(xs[i + 2]) : null;
+        if (d2 !== null && sgn(d2) === 0) continue;
+        push(xs[i + 1], d2 === null || sgn(d2) === sgn(d0));
+      }
     }
   }
   out.values = values;
@@ -120,8 +126,10 @@ export function readingText(spec) {
   L.push('[그래프 읽기 판]');
   L.push(`가로축: ${ax.label}${ax.unit ? `(${ax.unit})` : ''}. 세로축: ${ay.label}${ay.unit ? `(${ay.unit})` : ''}.`);
   if (A.values.length) L.push(`세로축에 값이 적힌 눈금: ${A.values.map(fmt).join(', ')}.`);
+  const allY = [...spec.series.flatMap(S => S.points.map(p => p.y)), ...(A.values || [])];
+  const zeroShown = Math.min(...allY) <= 0 && Math.max(...allY) >= 0; // 세로축 범위에 0이 있을 때만 '가로축 위·아래'를 적는다
   const mkInfo = [];
-  for (const [si, S] of spec.series.entries()) for (const p of S.points) if (p.mark) mkInfo.push({ x: p.x, t: `${p.mark}(${n > 1 ? nameOf(S, si, n) + ', ' : ''}가로축 ${sgn(p.y) > 0 ? '위' : sgn(p.y) < 0 ? '아래' : '0, 가로축 위'})` });
+  for (const [si, S] of spec.series.entries()) for (const p of S.points) if (p.mark) mkInfo.push({ x: p.x, t: `${p.mark}${n > 1 || zeroShown ? `(${[n > 1 ? nameOf(S, si, n) : null, zeroShown ? `가로축 ${sgn(p.y) > 0 ? '위' : sgn(p.y) < 0 ? '아래' : '0, 가로축 위'}` : null].filter(Boolean).join(', ')})` : ''}` });
   mkInfo.sort((a, b) => a.x - b.x);
   if (mkInfo.length) L.push(`곡선 위 표시(가로축 왼쪽부터): ${mkInfo.map(m => m.t).join(', ')}.`);
   const tk = (ax.ticks || []).map(t => `${t.label}${ax.unit || ''}`);
@@ -149,8 +157,6 @@ export function readingText(spec) {
       sc.push(`${A.where(prevX, i)}~끝 ${sign(prevS)}`);
       L.push(`- 가로축 기준 부호: ${sc.join(', ')}`);
     }
-    else if (Math.max(...ys) <= 0 && Math.min(...ys) < 0) L.push('- 가로축 기준 부호: 전 구간 음(−)');
-    else if (Math.min(...ys) >= 0 && Math.max(...ys) > 0) L.push('- 가로축 기준 부호: 전 구간 양(+)');
   }
   for (const c of A.cross) L.push(`${nameOf(spec.series[c.a], c.a, n)}와 ${nameOf(spec.series[c.b], c.b, n)}는 ${A.where(c.x)}에서 만남${c.touch ? '(접함)' : '(교차)'}.`);
   for (const sh of spec.shade || []) L.push(`빗금: ${sh.from}~${sh.to} 구간에서 곡선과 가로축 사이.`);
@@ -176,9 +182,11 @@ function monotonePath(P) { // P: [[x,y]] 화면 좌표, Fritsch–Carlson 단조
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 export function renderSvg(spec) {
-  const W = 560, H = 360, ml = 64, mr = 36, mt = 28, mb = 56;
+  const shortOf = s => (s.label ? String(s.label).split(/\s+/)[0] : null);
+  const legend = spec.series.filter(s => s.label && String(s.label).split(/\s+/).length > 1);
+  const W = 560, ml = 64, mr = 36, mt = 28, legendH = legend.length ? 8 + legend.length * 18 : 0, mb = 56 + legendH, H = 360 + legendH;
   const all = spec.series.flatMap(s => s.points);
-  const xs = all.map(p => p.x), ys = [...all.map(p => p.y), 0, ...(spec.yAxis.values || [])];
+  const xs = all.map(p => p.x), ys = [...all.map(p => p.y), ...(spec.yAxis.values || [])]; // 0을 강제로 넣지 않는다
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const padY = (y1 - y0) * 0.12 || 1, padX = (x1 - x0) * 0.06 || 1;
   const X = x => ml + (x - (x0 - 0)) / (x1 + padX - x0) * (W - ml - mr);
@@ -204,6 +212,7 @@ export function renderSvg(spec) {
     o.push(`<line x1="${X(t.at).toFixed(1)}" x2="${X(t.at).toFixed(1)}" y1="${axisY - 4}" y2="${axisY + 4}" stroke="#000"/>`);
     o.push(`<text x="${X(t.at).toFixed(1)}" y="${(axisY + 18).toFixed(1)}" text-anchor="middle">${esc(t.label)}</text>`);
   }
+  legend.forEach((s, k) => o.push(`<text x="${ml}" y="${H - legendH + 22 + k * 18}" font-size="13">${esc(s.label)}</text>`));
   // 빗금
   for (const sh of spec.shade || []) {
     const s = spec.series.find(q => q.id === sh.series) || spec.series[0];
@@ -218,7 +227,7 @@ export function renderSvg(spec) {
     const P = s.points.map(p => [X(p.x), Y(p.y)]);
     const d = s.curve === 'linear' ? `M${P.map(p => p.map(v => v.toFixed(1)).join(',')).join(' L')}` : monotonePath(P);
     o.push(`<path d="${d}" fill="none" stroke="#000" stroke-width="2" ${s.style === 'dashed' ? 'stroke-dasharray="7,5"' : ''}/>`);
-    if (s.label) { const e = P[P.length - 1]; o.push(`<text x="${(e[0] + 6).toFixed(1)}" y="${(e[1] - 6).toFixed(1)}" font-size="14">${esc(s.label)}</text>`); }
+    if (s.label) { const e = P[P.length - 1]; o.push(`<text x="${(e[0] + 6).toFixed(1)}" y="${(e[1] - 6).toFixed(1)}" font-size="14">${esc(shortOf(s))}</text>`); }
     for (const p of s.points) if (p.mark) {
       const px = X(p.x), py = Y(p.y), up = p.y >= 0;
       o.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3.4" fill="#000"/>`);
