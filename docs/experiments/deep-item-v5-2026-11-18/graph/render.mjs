@@ -3,13 +3,13 @@
 //
 // 명세 형식(graphSpec):
 // {
-//   "xAxis": {"label":"시간","unit":"t"|null, "ticks":[{"id":"t1","at":1}]},     // ticks = 가로축에 표시할 구간 경계(선택)
+//   "xAxis": {"label":"시간","unit":"t"|null, "ticks":[{"at":1,"label":"20"}]},     // ticks = 가로축에 찍을 눈금(선택). label(표시 값)이 필수이고 그림·읽기 판에는 label만 찍는다. 선지가 가로축의 값·범위로 판정되면 그 값을 label로 준다.
 //   "yAxis": {"label":"도플러 변위","unit":"Hz"|null, "values":[-200,0,300]},      // 값 눈금(최소만). 점의 y가 여기 없으면 숫자를 보여 주지 않는다.
 //   "series": [{"id":"s1","label":"㉠"|null,"style":"solid|dashed","curve":"smooth|linear",
 //               "points":[{"x":0,"y":0},{"x":1,"y":-200,"mark":"ⓐ"}, ...]}],      // points는 x 오름차순. mark = 곡선 위에 찍을 표시 기호
 //   "shade": [{"series":"s1","from":"ⓑ","to":"ⓓ"}]                                // (선택) 곡선과 가로축 사이 빗금(넓이 읽기용)
 // }
-// 읽기 판은 점에서 자동으로 계산한다: 구간별 증가/감소/일정, 기울기 순위, 꼭짓점(극대·극소), 가로축(0) 통과와 부호, 계열 사이 교차.
+// 읽기 판은 그림에 보이는 것만 적는다(2026-11-21): 축 이름·단위, 눈금 값, 표시 점의 값(눈금에 있을 때)과 가로축 위·아래, 구간별 증가/감소/일정, 꼭짓점(최고·최저), 가로축(0) 통과와 부호, 계열 사이 교차. 기울기 크기 순위와 눈금 id는 적지 않는다.
 // 사용:  node graph/render.mjs <spec.json> <출력 폴더>        → <이름>.svg, <이름>.txt
 //        node graph/render.mjs --items <items.json> <출력 폴더> → 문항마다 <version>.svg/.txt
 import fs from 'node:fs';
@@ -36,7 +36,7 @@ export function validateSpec(spec) {
       if (p.mark) { if (marks.has(p.mark)) errs.push(`표시 기호 ${p.mark} 중복`); marks.add(p.mark); }
     });
   }
-  for (const t of spec.xAxis?.ticks || []) if (typeof t.at !== 'number' || !t.id) errs.push('xAxis.ticks 항목에 id·at 필요');
+  for (const t of spec.xAxis?.ticks || []) if (typeof t.at !== 'number' || t.label === undefined || t.label === null || String(t.label).trim() === '') errs.push('xAxis.ticks 항목에 at(숫자)·label(표시 값) 필요');
   for (const sh of spec.shade || []) for (const k of ['from', 'to']) if (!marks.has(sh[k])) errs.push(`shade.${k} ${sh[k]}는 표시 기호가 아님`);
   const labelTexts = [spec.xAxis?.label, spec.xAxis?.unit, spec.yAxis?.label, spec.yAxis?.unit, ...(spec.series || []).map(s => s.label)].filter(Boolean);
   for (const t of labelTexts) for (const w of JUDGE_WORDS) if (String(t).includes(w)) warns.push(`축·범례 "${t}"에 판정어 "${w}"`);
@@ -47,7 +47,7 @@ export function validateSpec(spec) {
 function analyze(spec) {
   const marks = []; // {name, x, y, series}
   for (const [si, s] of spec.series.entries()) for (const p of s.points) if (p.mark) marks.push({ name: p.mark, x: p.x, y: p.y, series: si });
-  for (const t of spec.xAxis.ticks || []) marks.push({ name: t.id, x: t.at, y: null, series: null, tick: true });
+  for (const t of spec.xAxis.ticks || []) marks.push({ name: `가로축 ${t.label}${spec.xAxis.unit || ''}`, x: t.at, y: null, series: null, tick: true });
   marks.sort((a, b) => a.x - b.x);
   const xmin = Math.min(...spec.series.map(s => s.points[0].x));
   const where = (x, si = null) => { // si: 읽고 있는 계열 번호. 같은 가로 좌표에 다른 계열의 표시 기호가 있으면 그 계열 점으로 오해하지 않게 "같은 가로 위치"로 쓴다.
@@ -124,8 +124,8 @@ export function readingText(spec) {
   for (const [si, S] of spec.series.entries()) for (const p of S.points) if (p.mark) mkInfo.push({ x: p.x, t: `${p.mark}(${n > 1 ? nameOf(S, si, n) + ', ' : ''}가로축 ${sgn(p.y) > 0 ? '위' : sgn(p.y) < 0 ? '아래' : '0, 가로축 위'})` });
   mkInfo.sort((a, b) => a.x - b.x);
   if (mkInfo.length) L.push(`곡선 위 표시(가로축 왼쪽부터): ${mkInfo.map(m => m.t).join(', ')}.`);
-  const tk = (ax.ticks || []).map(t => t.id);
-  if (tk.length) L.push(`가로축 구간 경계: ${tk.join(', ')}.`);
+  const tk = (ax.ticks || []).map(t => `${t.label}${ax.unit || ''}`);
+  if (tk.length) L.push(`가로축에 값이 적힌 눈금: ${tk.join(', ')}.`);
   for (const [i, S] of A.series.entries()) {
     const nm = nameOf(S.s, i, n);
     L.push(`${nm}${S.s.style === 'dashed' ? '(점선)' : ''}:`);
@@ -151,14 +151,6 @@ export function readingText(spec) {
     }
     else if (Math.max(...ys) <= 0 && Math.min(...ys) < 0) L.push('- 가로축 기준 부호: 전 구간 음(−)');
     else if (Math.min(...ys) >= 0 && Math.max(...ys) > 0) L.push('- 가로축 기준 부호: 전 구간 양(+)');
-    // 기울기 순위(단조 구간 둘 이상일 때)
-    const mono = S.runs.filter(r => r.dir !== 0);
-    if (mono.length >= 2) {
-      const order = [...mono].sort((a, b) => b.slope - a.slope);
-      const names = r => `${label(r.from)}~${label(r.to)}`;
-      const groups = []; for (const r of order) { const g = groups[groups.length - 1]; if (g && Math.abs(g[0].slope - r.slope) <= 0.05 * g[0].slope) g.push(r); else groups.push([r]); }
-      L.push(`- 기울기 크기(가파른 순): ${groups.map(g => g.map(names).join(' = ')).join(' > ')}`);
-    }
   }
   for (const c of A.cross) L.push(`${nameOf(spec.series[c.a], c.a, n)}와 ${nameOf(spec.series[c.b], c.b, n)}는 ${A.where(c.x)}에서 만남${c.touch ? '(접함)' : '(교차)'}.`);
   for (const sh of spec.shade || []) L.push(`빗금: ${sh.from}~${sh.to} 구간에서 곡선과 가로축 사이.`);
@@ -210,7 +202,7 @@ export function renderSvg(spec) {
   // 구간 경계 눈금
   for (const t of spec.xAxis.ticks || []) {
     o.push(`<line x1="${X(t.at).toFixed(1)}" x2="${X(t.at).toFixed(1)}" y1="${axisY - 4}" y2="${axisY + 4}" stroke="#000"/>`);
-    o.push(`<text x="${X(t.at).toFixed(1)}" y="${(axisY + 18).toFixed(1)}" text-anchor="middle">${esc(t.id)}</text>`);
+    o.push(`<text x="${X(t.at).toFixed(1)}" y="${(axisY + 18).toFixed(1)}" text-anchor="middle">${esc(t.label)}</text>`);
   }
   // 빗금
   for (const sh of spec.shade || []) {
