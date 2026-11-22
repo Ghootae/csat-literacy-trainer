@@ -1,38 +1,37 @@
-# 규칙 감사 0단계: 기출 자료 목록 (2026-11-23)
+# 규칙 감사 0단계: 기출 자료 목록 (2026-11-23, 1단계에서 갱신)
 
-- 근거: 웹 결정 2026-11-23 00:38, 계획 `docs/experiments/rule-audit-2026-11-23/PLAN-rule-audit.md`, 지시문 `CLI-step0-inventory.md`. API 호출 없음. 규칙·기준 파일은 건드리지 않았다.
+- 근거: 웹 결정 2026-11-23 00:38, 계획 `PLAN-rule-audit.md`, 지시문 `CLI-step0-inventory.md`. 1단계 지시문(`CLI-step1-pilot.md`, 웹 결정 00:51)에 따라 관점 확인용 맞바꿈과 '감사 갈래' 열을 더했다(아래 선정 기록). API 호출 없음.
 - 대상: 평가원(6월·9월 모의평가)·수능 독서 **3점 〈보기〉 문항**(저장된 문항 JSON에서 `points=3`이고 `supplement`(〈보기〉) 블록이 있는 것). 교육청(고1~고3)은 3절 표에 따로 적고 본 목록과 합쳐 세지 않는다.
 
 ## 요약
 
-- **평가원·수능 3점 〈보기〉 문항: 총 33개** (본 감사용 27 + 확인용 6, 확인용 중 1개는 같은 지문 짝으로 딸려 간 `기타`). 시험 수: 평가원 6월·9월 모의평가와 수능 2023~2026년 시행분 30세트(DB의 평가원 21·수능 9).
+- **평가원·수능 3점 〈보기〉 문항: 총 33개** (본 감사용 26 + 확인용 5 + 확인용 동반 2). 동반은 확인용 문항과 같은 지문이라 함께 옮긴 문항으로 확인용 수에 안 센다.
 - 사용 이력 '없음': **19개** (해부·태깅·수리 검사기 보정·칸 판정 기출 기준·규칙 대조 중 어디에도 안 쓰임. 그 밖의 쓰임은 '참고' 열에 따로 적음).
 - 교육청 3점 〈보기〉 문항: **138개**(3절 표, 본 목록과 합치지 않음. 이 중 12개가 태깅에 쓰임).
-- 확인용: 사례 2 · 관점 2 · 표 **1(모자람 1)** — 표는 '사용 이력 없음'이 1개뿐이었다. 관점 2번째는 건너뛴 문항이 있다(아래 2절 선정 기록).
 
-### 갈래 × 발문 칸별 수 (본 감사용 / 확인용)
+### 감사 갈래 × 발문 칸별 수 (본 감사용 / 확인용)
 
-갈래 판정은 태깅 PLAN 1.3의 "기출 갈래 판정 기준"(선지 주어가 관점 주체이고 그 평가·견해를 묻으면 관점, 지문의 규칙·개념을 〈보기〉 상황에 적용해 결과를 묻으면 사례)을 썼고, 이미 태깅 KEY에 판정이 있으면 그것을 따랐다. 발문: 부정 A = "적절하지 않은 것", 긍정 B = "적절한/가장 적절한 것".
+감사 갈래는 사례 / 관점 / 자료(표·그래프 합침) / 기타 넷이다. 원 갈래 판정은 태깅 PLAN 1.3의 "기출 갈래 판정 기준"(선지 주어가 관점 주체이고 그 평가·견해를 묻으면 관점, 지문의 규칙·개념을 〈보기〉 상황에 적용해 결과를 묻으면 사례)을 썼고 태깅 KEY에 판정이 있으면 따랐다. 발문: 부정 A = "적절하지 않은 것", 긍정 B = "적절한/가장 적절한 것".
 
-| 갈래 | 부정 A (본/확인) | 긍정 B (본/확인) | 갈래 합계 (본/확인) |
-|---|---|---|---|
-| 사례 | 7 / 2 | 4 / 0 | 11 / 2 |
-| 관점 | 6 / 0 | 0 / 2 | 6 / 2 |
-| 표 | 0 / 1 | 1 / 0 | 1 / 1 |
-| 그래프 | 1 / 0 | 1 / 0 | 2 / 0 |
-| 기타 | 4 / 0 | 3 / 0 | 7 / 0 |
-| **합계** | 18 / 3 | 9 / 2 | **27 / 5** |
+| 감사 갈래 | 부정 A (본/확인) | 긍정 B (본/확인) | 합계 (본/확인) | 층 판정 가능성 (PLAN 2-3) |
+|---|---|---|---|---|
+| 사례 | 7 / 2 | 4 / 0 | 11 / 2 | 적용 문항 4개 이상이면 층 판정 |
+| 관점 | 5 / 1 | 1 / 1 | 6 / 2 | 적용 문항 4개 이상이면 층 판정 |
+| 자료 | 1 / 1 | 2 / 0 | 3 / 1 | **표본 부족**(본 감사 3개, 층을 정하지 않음) |
+| 기타 | 3 / 0 | 3 / 0 | 6 / 0 | 갈래별 층은 정하지 않음. 문항 성립 조건·공통 규칙(rules-common) 집계에만 씀 |
+| **합계** | 16 / 4 | 10 / 1 | **26 / 5** | |
 
-(확인용 `동반` 1개(2025-11-수능-16, 기타·A)는 위 확인용 칸에 넣지 않았다. 넣으면 기타 A 확인용 1·합계 6. 6행 = 확인용 5 + 동반 1.)
+(확인용 동반 2개: 2025-11-수능-16, 2024-06-평가원-14 — 둘 다 기타, 위 칸에 넣지 않음.)
 
-- `그래프`는 〈보기〉가 그래프·도식·그림인 문항(표 아님), `기타`는 학습 활동지·실험·관찰형·빈칸형 대화다. 하위 형태는 표의 갈래 열 괄호에 적었다.
-- **'애매' 판정이 있는 문항: 8개**(아래 4절). 칸 수는 애매 문항도 현재 판정대로 센다.
+- 자료 = 표 2(2025-09-평가원-17 본, 2023-11-수능-7 확인용) + 그래프·도식·그림 2(2024-11-수능-13, 2025-11-수능-12, 둘 다 본). 본 감사 자료는 3개다.
+- 기타 = 학습 활동지·실험·관찰형·빈칸형 대화. **문항 성립 조건·공통 규칙(rules-common) 집계에만 쓰고 갈래별 층은 정하지 않는다.**
+- **'애매' 판정이 있는 문항: 8개**(4절). 칸 수는 애매 문항도 현재 판정대로 센다.
 
 ## 뒤진 위치 (모든 문항 파일을 찾았다고 확신하지 못해 목록을 적는다)
 
-1. `docs/experiments/set-pattern-2026-11-18/data/questions/*.json`·`data/answers/*.json` — DB 158세트 전체(교육청 127, 평가원 21, 수능 9, 라벨상 교육청 1)의 문항 원본·정답. **3점 〈보기〉 문항의 전수 근거는 이 폴더다.** (이 `data/` 폴더는 `.gitignore`의 `data/`에 걸려 git에 올라가지 않는다. 출처는 `~/Projects/suneung_db/output/`.)
-2. `docs/experiments/megastudy-rate-coverage-2026-11-05/db-sets.json` — 세트별 시험 라벨·출처(평가원/수능/교육청).
-3. `docs/experiments/set-pattern-2026-11-18/BOGI-ANATOMY.md`(해부 9), `PROGRESS-hard.md`, `REVIEW-rules-*.md`, `REPORT-*.md`, `STRATEGY-hard-cells.md`, `PLAN-*.md`
+1. `docs/experiments/set-pattern-2026-11-18/data/questions/*.json`·`data/answers/*.json` — DB 158세트 전체(교육청 127, 평가원 21, 수능 9, 라벨상 교육청 1)의 문항 원본·정답. **3점 〈보기〉 문항의 전수 근거는 이 폴더다.** (`.gitignore`의 `data/`에 걸려 git에 올라가지 않는다. 출처는 `~/Projects/suneung_db/output/`.)
+2. `docs/experiments/megastudy-rate-coverage-2026-11-05/db-sets.json` — 세트별 시험 라벨·출처.
+3. `docs/experiments/set-pattern-2026-11-18/`의 `BOGI-ANATOMY.md`(해부 9), `PROGRESS-hard.md`, `REVIEW-rules-*.md`, `REPORT-*.md`, `STRATEGY-hard-cells.md`, `PLAN-*.md`
 4. `docs/experiments/bogi-distractor-tagging-2026-11-22/`(`items/`, `KEY.md`, `SELECTION.md`, `candidates.json`)
 5. `docs/experiments/deep-item-v5-2026-11-18/`(`passages/`, `calib-gold/`, `calib4-gold/`, `out-*/`, `blind/`)
 6. `docs/experiments/rule-strategy-2026-11-22/`, `docs/handoffs/`, `memory/`, 저장소의 `content/`(기출이 아니라 트레이너 콘텐츠 — 〈보기〉 문항 없음)
@@ -48,58 +47,61 @@
 - **규칙 대조**: REVIEW-rules-*.md가 규칙을 기출과 맞춰 본 것(플라스틱 ④·결측치 ③을 인용한 REVIEW-rules-2026-11-21-case-A.md).
 - **참고(그 밖 쓰임)**: 문제 풀이 gold 실험(problem-gold-*), 분석 gold 보정, choice-link 시험 등 〈보기〉 규칙 감사와 무관한 쓰임. 사용 이력 '없음' 판정에는 넣지 않았다.
 
-## 1. 본 감사용 (27개)
+## 1. 본 감사용 (26개)
 
-| 문항 키 | 저장소 id | 갈래 | 발문 | 지문(세트 앞 8자리) | 파일 위치(`docs/experiments/` 기준) | 사용 이력 | 참고(그 밖 쓰임) |
+| 문항 키 | 저장소 id | 감사 갈래 (원 갈래·하위 형태) | 발문 | 지문(세트 앞 8자리) | 파일 위치(`docs/experiments/` 기준) | 사용 이력 | 참고(그 밖 쓰임) |
 |---|---|---|---|---|---|---|---|
-| 2026-06-평가원-8 | bt-6a213e8b | 관점 | 부정(A) | 6a213e8b 조선 노비제와 민권 논의의 역사적 전개 | `set-pattern-2026-11-18/data/questions/6a213e8b86fd308968e0fef6.json (문항 8)`<br>`set-pattern-2026-11-18/data/answers/6a213e8b86fd308968e0fef6.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-6a213e8b.json`<br>`deep-item-v5-2026-11-18/passages/bt-6a213e8b/` | 태깅 | — |
-| 2026-06-평가원-16 | — | 기타(실험·관찰(인쇄 경과 관찰)) **애매** | 긍정(B) | 6a213ea0 표면 장력과 라플라스 식 | `set-pattern-2026-11-18/data/questions/6a213ea086fd308968e101df.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/6a213ea086fd308968e101df.json` | 없음 | choice-link 시험 대상(targets-ui), 지문 생성 참고 |
-| 2026-06-평가원-13 | bt-6a213e93, infoasym-13, information-asymmetry-free-marketplace | 사례 | 부정(A) | 6a213e93 정보 비대칭과 사상의 자유 시장 이론 | `set-pattern-2026-11-18/data/questions/6a213e9386fd308968e100b3.json (문항 13)`<br>`set-pattern-2026-11-18/data/answers/6a213e9386fd308968e100b3.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-6a213e93.json`<br>`deep-item-v5-2026-11-18/passages/bt-6a213e93/`<br>`deep-item-v5-2026-11-18/calib-gold/infoasym-13.json` | 태깅 / 수리 검사기 보정(calib-gold/infoasym-13) / 칸 판정 기출 기준(gen62 정보 13번) | — |
-| 2025-11-수능-12 | — | 그래프(그림(두 층 띠 입체 그림)) | 긍정(B) | 69bbefa4 열팽창과 액추에이터 | `set-pattern-2026-11-18/data/questions/69bbefa4a029f488d9e4e809.json (문항 12)`<br>`set-pattern-2026-11-18/data/answers/69bbefa4a029f488d9e4e809.json` | 없음 | 문제 풀이 gold 실험(thermal-actuator-q12) |
-| 2025-09-평가원-8 | bt-69bbf8bd | 사례(영화 비평문) **애매** | 부정(A) | 69bbf8bd 영화와 SF의 사회적 의미와 장르적 특성 | `set-pattern-2026-11-18/data/questions/69bbf8bd8937cf1455190460.json (문항 8)`<br>`set-pattern-2026-11-18/data/answers/69bbf8bd8937cf1455190460.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69bbf8bd.json`<br>`deep-item-v5-2026-11-18/passages/bt-69bbf8bd/` | 태깅 | — |
-| 2025-09-평가원-17 | bt-69bc9646 | 표(값 표(글 표로 옮김)) | 긍정(B) | 69bc9646 오디오 신호의 디지털 저장과 지각부호화 압축 | `set-pattern-2026-11-18/data/questions/69bc96468095df3b8c51460e.json (문항 17)`<br>`set-pattern-2026-11-18/data/answers/69bc96468095df3b8c51460e.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69bc9646.json`<br>`deep-item-v5-2026-11-18/passages/bt-69bc9646/`<br>`bogi-distractor-tagging-2026-11-22/bogi-transcribed/bt-69bc9646.md` | 해부 B1 / 태깅 | — |
-| 2025-09-평가원-12 | bt-69bbf8c9 | 관점(사례 둘) **애매** | 부정(A) | 69bbf8c9 공공 저널리즘의 등장과 특징 | `set-pattern-2026-11-18/data/questions/69bbf8c9a029f488d9e5217f.json (문항 12)`<br>`set-pattern-2026-11-18/data/answers/69bbf8c9a029f488d9e5217f.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69bbf8c9.json`<br>`deep-item-v5-2026-11-18/passages/bt-69bbf8c9/` | 해부 C1 / 태깅 | — |
-| 2025-06-평가원-17 | — | 기타(빈칸형 대화(㉮ 채우기)) **애매** | 부정(A) | 69bc9f9a 플로리디의 정보 철학 | `set-pattern-2026-11-18/data/questions/69bc9f9a76ad66e59a726757.json (문항 17)`<br>`set-pattern-2026-11-18/data/answers/69bc9f9a76ad66e59a726757.json` | 없음 | — |
-| 2025-06-평가원-12 | — | 기타(실험·관찰(실험 수행)) **애매** | 긍정(B) | 69bc9e5c 수소의 저장, 운송 및 활용 | `set-pattern-2026-11-18/data/questions/69bc9e5c76ad66e59a724b37.json (문항 12)`<br>`set-pattern-2026-11-18/data/answers/69bc9e5c76ad66e59a724b37.json` | 없음 | 문제 풀이 gold 실험(hydrogen-production-q12) |
-| 2024-11-수능-8 | — | 관점(사례(A 마을)) **애매** | 부정(A) | 69bca782 근대 문명과 과학 정신의 수용 | `set-pattern-2026-11-18/data/questions/69bca7828095df3b8c5354a6.json (문항 8)`<br>`set-pattern-2026-11-18/data/answers/69bca7828095df3b8c5354a6.json` | 없음 | 분석 gold 보정 지문(analysis-gold-calibration-2026-10-20) |
-| 2024-11-수능-16 | — | 사례(댓글 그림 포함(글)) | 부정(A) | 69bca837 가상 공간의 자기 정체성과 명예훼손 | `set-pattern-2026-11-18/data/questions/69bca8378095df3b8c535e9d.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/69bca8378095df3b8c535e9d.json` | 없음 | 분석 gold 보정(analysis-gold-calibration-2-2026-10-21), choice-link 보정 |
-| 2024-11-수능-13 | — | 그래프(도식(확산 모델 A 단계 그림)) | 부정(A) | 69bc036a 인공 지능 확산 모델의 원리 | `set-pattern-2026-11-18/data/questions/69bc036a8937cf145519091f.json (문항 13)`<br>`set-pattern-2026-11-18/data/answers/69bc036a8937cf145519091f.json` | 해부 B2 | 문제 풀이 gold 실험(diffusion-model-q13) |
-| 2024-09-평가원-8 | — | 기타(학습 활동지(○× 판단표)) | 부정(A) | 69bcae30 블록체인 기술의 특성 | `set-pattern-2026-11-18/data/questions/69bcae308095df3b8c53d9a2.json (문항 8)`<br>`set-pattern-2026-11-18/data/answers/69bcae308095df3b8c53d9a2.json` | 해부 B3 | — |
-| 2024-09-평가원-6 | bt-69bc0d52 | 사례 | 부정(A) | 69bc0d52 재판매 가격 유지 행위와 부당 광고 규제 | `set-pattern-2026-11-18/data/questions/69bc0d528937cf1455192521.json (문항 6)`<br>`set-pattern-2026-11-18/data/answers/69bc0d528937cf1455192521.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69bc0d52.json`<br>`deep-item-v5-2026-11-18/passages/bt-69bc0d52/` | 해부 A1 / 태깅 | — |
-| 2024-09-평가원-11 | — | 사례(업체 A·B 비교) | 긍정(B) | 69bcae30 블록체인 기술의 특성 | `set-pattern-2026-11-18/data/questions/69bcae308095df3b8c53d9a2.json (문항 11)`<br>`set-pattern-2026-11-18/data/answers/69bcae308095df3b8c53d9a2.json` | 없음 | — |
-| 2024-06-평가원-7 | — | 사례 | 긍정(B) | 69bc1c17 과두제적 경영의 특성과 보완책 | `set-pattern-2026-11-18/data/questions/69bc1c178937cf1455192d1f.json (문항 7)`<br>`set-pattern-2026-11-18/data/answers/69bc1c178937cf1455192d1f.json` | 없음 | — |
-| 2024-06-평가원-16 | — | 관점(외부 이론 글) | 부정(A) | 69bffc01 도덕 문장의 성격과 논리적 타당성 | `set-pattern-2026-11-18/data/questions/69bffc0178128b2a9bedcfe6.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/69bffc0178128b2a9bedcfe6.json` | 없음 | 문제 풀이 gold 실험(moral-logic-q16) |
-| 2024-06-평가원-14 | — | 기타(학습 활동지(진술·견해 표)) | 부정(A) | 69bffc01 도덕 문장의 성격과 논리적 타당성 | `set-pattern-2026-11-18/data/questions/69bffc0178128b2a9bedcfe6.json (문항 14)`<br>`set-pattern-2026-11-18/data/answers/69bffc0178128b2a9bedcfe6.json` | 없음 | 문제 풀이 gold 실험(moral-logic-q16, 같은 지문) |
-| 2024-06-평가원-10 | bt-69bc1c89 | 사례(같은 물질 두 구조 비교) | 긍정(B) | 69bc1c89 플라스틱의 중합 반응과 물리적 성질 | `set-pattern-2026-11-18/data/questions/69bc1c89a029f488d9e54e5b.json (문항 10)`<br>`set-pattern-2026-11-18/data/answers/69bc1c89a029f488d9e54e5b.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69bc1c89.json`<br>`deep-item-v5-2026-11-18/passages/bt-69bc1c89/` | 해부 A2 / 태깅 / 규칙 대조(REVIEW-rules-2026-11-21-case-A.md S4) | — |
-| 2023-11-수능-16 | bt-69c007c0 | 관점 | 부정(A) | 69c007c0 노자 사상에 대한 다양한 해석 | `set-pattern-2026-11-18/data/questions/69c007c078128b2a9bedd3c7.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/69c007c078128b2a9bedd3c7.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69c007c0.json`<br>`deep-item-v5-2026-11-18/passages/bt-69c007c0/` | 해부 C2 / 태깅 | — |
-| 2023-11-수능-10 | — | 사례(가정한 B 기법) | 긍정(B) | 69c006f1 데이터의 결측치와 이상치 처리 | `set-pattern-2026-11-18/data/questions/69c006f178128b2a9bedd2f3.json (문항 10)`<br>`set-pattern-2026-11-18/data/answers/69c006f178128b2a9bedd2f3.json` | 해부 A3 / 규칙 대조(REVIEW-rules-2026-11-21-case-A.md S4) | 분석 gold 보정(analysis-gold-calibration-2026-10-20) |
-| 2023-09-평가원-6 | — | 사례 | 부정(A) | 69c00a67 데이터 소유권과 데이터 이동권 | `set-pattern-2026-11-18/data/questions/69c00a6778128b2a9bedd500.json (문항 6)`<br>`set-pattern-2026-11-18/data/answers/69c00a6778128b2a9bedd500.json` | 없음 | — |
-| 2023-09-평가원-16 | bt-69c00be9 | 관점 | 부정(A) | 69c00be9 조선 후기 신분제 변화와 개혁론 | `set-pattern-2026-11-18/data/questions/69c00be9fa5063deffe1a2ed.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/69c00be9fa5063deffe1a2ed.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69c00be9.json`<br>`deep-item-v5-2026-11-18/passages/bt-69c00be9/` | 태깅 | — |
-| 2023-09-평가원-11 | — | 기타(실험·관찰(측정 서술)) **애매** | 긍정(B) | 69bc2332 압전 효과와 수정 진동자 | `set-pattern-2026-11-18/data/questions/69bc23328937cf1455195b3f.json (문항 11)`<br>`set-pattern-2026-11-18/data/answers/69bc23328937cf1455195b3f.json` | 해부 D1 | — |
-| 2023-06-평가원-6 | — | 기타(실험·관찰(실험 진행)) **애매** | 부정(A) | 69c01054 공포 소구의 설득 효과에 관한 이론 | `set-pattern-2026-11-18/data/questions/69c01054fa5063deffe1a559.json (문항 6)`<br>`set-pattern-2026-11-18/data/answers/69c01054fa5063deffe1a559.json` | 없음 | — |
-| 2023-06-평가원-16 | bt-69c0114f | 사례(상황 둘(암실)) | 부정(A) | 69c0114f 의식과 인지 과정에 대한 철학적 논의 | `set-pattern-2026-11-18/data/questions/69c0114f78128b2a9bedd8fc.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/69c0114f78128b2a9bedd8fc.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69c0114f.json`<br>`deep-item-v5-2026-11-18/passages/bt-69c0114f/` | 태깅 | — |
-| 2023-06-평가원-10 | — | 사례(공정 예) | 부정(A) | 69c0110b 고체 촉매의 구성 요소와 작용 원리 | `set-pattern-2026-11-18/data/questions/69c0110bfa5063deffe1a632.json (문항 10)`<br>`set-pattern-2026-11-18/data/answers/69c0110bfa5063deffe1a632.json` | 없음 | — |
+| 2026-06-평가원-8 | bt-6a213e8b | 관점 (관점) | 부정(A) | 6a213e8b 조선 노비제와 민권 논의의 역사적 전개 | `set-pattern-2026-11-18/data/questions/6a213e8b86fd308968e0fef6.json (문항 8)`<br>`set-pattern-2026-11-18/data/answers/6a213e8b86fd308968e0fef6.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-6a213e8b.json`<br>`deep-item-v5-2026-11-18/passages/bt-6a213e8b/` | 태깅 | — |
+| 2026-06-평가원-16 | — | 기타 (기타·실험·관찰(인쇄 경과 관찰)) **애매** | 긍정(B) | 6a213ea0 표면 장력과 라플라스 식 | `set-pattern-2026-11-18/data/questions/6a213ea086fd308968e101df.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/6a213ea086fd308968e101df.json` | 없음 | choice-link 시험 대상(targets-ui), 지문 생성 참고 |
+| 2026-06-평가원-13 | bt-6a213e93, infoasym-13, information-asymmetry-free-marketplace | 사례 (사례) | 부정(A) | 6a213e93 정보 비대칭과 사상의 자유 시장 이론 | `set-pattern-2026-11-18/data/questions/6a213e9386fd308968e100b3.json (문항 13)`<br>`set-pattern-2026-11-18/data/answers/6a213e9386fd308968e100b3.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-6a213e93.json`<br>`deep-item-v5-2026-11-18/passages/bt-6a213e93/`<br>`deep-item-v5-2026-11-18/calib-gold/infoasym-13.json` | 태깅 / 수리 검사기 보정(calib-gold/infoasym-13) / 칸 판정 기출 기준(gen62 정보 13번) | — |
+| 2025-11-수능-12 | — | 자료 (그래프·그림(두 층 띠 입체 그림)) | 긍정(B) | 69bbefa4 열팽창과 액추에이터 | `set-pattern-2026-11-18/data/questions/69bbefa4a029f488d9e4e809.json (문항 12)`<br>`set-pattern-2026-11-18/data/answers/69bbefa4a029f488d9e4e809.json` | 없음 | 문제 풀이 gold 실험(thermal-actuator-q12) |
+| 2025-09-평가원-8 | bt-69bbf8bd | 사례 (사례·영화 비평문) **애매** | 부정(A) | 69bbf8bd 영화와 SF의 사회적 의미와 장르적 특성 | `set-pattern-2026-11-18/data/questions/69bbf8bd8937cf1455190460.json (문항 8)`<br>`set-pattern-2026-11-18/data/answers/69bbf8bd8937cf1455190460.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69bbf8bd.json`<br>`deep-item-v5-2026-11-18/passages/bt-69bbf8bd/` | 태깅 | — |
+| 2025-09-평가원-17 | bt-69bc9646 | 자료 (표·값 표(글 표로 옮김)) | 긍정(B) | 69bc9646 오디오 신호의 디지털 저장과 지각부호화 압축 | `set-pattern-2026-11-18/data/questions/69bc96468095df3b8c51460e.json (문항 17)`<br>`set-pattern-2026-11-18/data/answers/69bc96468095df3b8c51460e.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69bc9646.json`<br>`deep-item-v5-2026-11-18/passages/bt-69bc9646/`<br>`bogi-distractor-tagging-2026-11-22/bogi-transcribed/bt-69bc9646.md` | 해부 B1 / 태깅 | — |
+| 2025-09-평가원-12 | bt-69bbf8c9 | 관점 (관점·사례 둘) **애매** | 부정(A) | 69bbf8c9 공공 저널리즘의 등장과 특징 | `set-pattern-2026-11-18/data/questions/69bbf8c9a029f488d9e5217f.json (문항 12)`<br>`set-pattern-2026-11-18/data/answers/69bbf8c9a029f488d9e5217f.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69bbf8c9.json`<br>`deep-item-v5-2026-11-18/passages/bt-69bbf8c9/` | 해부 C1 / 태깅 | — |
+| 2025-06-평가원-17 | — | 기타 (기타·빈칸형 대화(㉮ 채우기)) **애매** | 부정(A) | 69bc9f9a 플로리디의 정보 철학 | `set-pattern-2026-11-18/data/questions/69bc9f9a76ad66e59a726757.json (문항 17)`<br>`set-pattern-2026-11-18/data/answers/69bc9f9a76ad66e59a726757.json` | 없음 | — |
+| 2025-06-평가원-12 | — | 기타 (기타·실험·관찰(실험 수행)) **애매** | 긍정(B) | 69bc9e5c 수소의 저장, 운송 및 활용 | `set-pattern-2026-11-18/data/questions/69bc9e5c76ad66e59a724b37.json (문항 12)`<br>`set-pattern-2026-11-18/data/answers/69bc9e5c76ad66e59a724b37.json` | 없음 | 문제 풀이 gold 실험(hydrogen-production-q12) |
+| 2024-11-수능-8 | — | 관점 (관점·사례(A 마을)) **애매** | 부정(A) | 69bca782 근대 문명과 과학 정신의 수용 | `set-pattern-2026-11-18/data/questions/69bca7828095df3b8c5354a6.json (문항 8)`<br>`set-pattern-2026-11-18/data/answers/69bca7828095df3b8c5354a6.json` | 없음 | 분석 gold 보정 지문(analysis-gold-calibration-2026-10-20) |
+| 2024-11-수능-16 | — | 사례 (사례·댓글 그림 포함(글)) | 부정(A) | 69bca837 가상 공간의 자기 정체성과 명예훼손 | `set-pattern-2026-11-18/data/questions/69bca8378095df3b8c535e9d.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/69bca8378095df3b8c535e9d.json` | 없음 | 분석 gold 보정(analysis-gold-calibration-2-2026-10-21), choice-link 보정 |
+| 2024-11-수능-13 | — | 자료 (그래프·도식(확산 모델 A 단계 그림)) | 부정(A) | 69bc036a 인공 지능 확산 모델의 원리 | `set-pattern-2026-11-18/data/questions/69bc036a8937cf145519091f.json (문항 13)`<br>`set-pattern-2026-11-18/data/answers/69bc036a8937cf145519091f.json` | 해부 B2 | 문제 풀이 gold 실험(diffusion-model-q13) |
+| 2024-09-평가원-8 | — | 기타 (기타·학습 활동지(○× 판단표)) | 부정(A) | 69bcae30 블록체인 기술의 특성 | `set-pattern-2026-11-18/data/questions/69bcae308095df3b8c53d9a2.json (문항 8)`<br>`set-pattern-2026-11-18/data/answers/69bcae308095df3b8c53d9a2.json` | 해부 B3 | — |
+| 2024-09-평가원-6 | bt-69bc0d52 | 사례 (사례) | 부정(A) | 69bc0d52 재판매 가격 유지 행위와 부당 광고 규제 | `set-pattern-2026-11-18/data/questions/69bc0d528937cf1455192521.json (문항 6)`<br>`set-pattern-2026-11-18/data/answers/69bc0d528937cf1455192521.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69bc0d52.json`<br>`deep-item-v5-2026-11-18/passages/bt-69bc0d52/` | 해부 A1 / 태깅 | — |
+| 2024-09-평가원-16 | — | 관점 (관점·학생 감상문 + 두 이론 관점) | 긍정(B) | 69bcaed2 영화 이론: 리얼리즘과 정신분석학 | `set-pattern-2026-11-18/data/questions/69bcaed276ad66e59a749782.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/69bcaed276ad66e59a749782.json` | 없음 | — |
+| 2024-09-평가원-11 | — | 사례 (사례·업체 A·B 비교) | 긍정(B) | 69bcae30 블록체인 기술의 특성 | `set-pattern-2026-11-18/data/questions/69bcae308095df3b8c53d9a2.json (문항 11)`<br>`set-pattern-2026-11-18/data/answers/69bcae308095df3b8c53d9a2.json` | 없음 | — |
+| 2024-06-평가원-7 | — | 사례 (사례) | 긍정(B) | 69bc1c17 과두제적 경영의 특성과 보완책 | `set-pattern-2026-11-18/data/questions/69bc1c178937cf1455192d1f.json (문항 7)`<br>`set-pattern-2026-11-18/data/answers/69bc1c178937cf1455192d1f.json` | 없음 | — |
+| 2024-06-평가원-10 | bt-69bc1c89 | 사례 (사례·같은 물질 두 구조 비교) | 긍정(B) | 69bc1c89 플라스틱의 중합 반응과 물리적 성질 | `set-pattern-2026-11-18/data/questions/69bc1c89a029f488d9e54e5b.json (문항 10)`<br>`set-pattern-2026-11-18/data/answers/69bc1c89a029f488d9e54e5b.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69bc1c89.json`<br>`deep-item-v5-2026-11-18/passages/bt-69bc1c89/` | 해부 A2 / 태깅 / 규칙 대조(REVIEW-rules-2026-11-21-case-A.md S4) | — |
+| 2023-11-수능-16 | bt-69c007c0 | 관점 (관점) | 부정(A) | 69c007c0 노자 사상에 대한 다양한 해석 | `set-pattern-2026-11-18/data/questions/69c007c078128b2a9bedd3c7.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/69c007c078128b2a9bedd3c7.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69c007c0.json`<br>`deep-item-v5-2026-11-18/passages/bt-69c007c0/` | 해부 C2 / 태깅 | — |
+| 2023-11-수능-10 | — | 사례 (사례·가정한 B 기법) | 긍정(B) | 69c006f1 데이터의 결측치와 이상치 처리 | `set-pattern-2026-11-18/data/questions/69c006f178128b2a9bedd2f3.json (문항 10)`<br>`set-pattern-2026-11-18/data/answers/69c006f178128b2a9bedd2f3.json` | 해부 A3 / 규칙 대조(REVIEW-rules-2026-11-21-case-A.md S4) | 분석 gold 보정(analysis-gold-calibration-2026-10-20) |
+| 2023-09-평가원-6 | — | 사례 (사례) | 부정(A) | 69c00a67 데이터 소유권과 데이터 이동권 | `set-pattern-2026-11-18/data/questions/69c00a6778128b2a9bedd500.json (문항 6)`<br>`set-pattern-2026-11-18/data/answers/69c00a6778128b2a9bedd500.json` | 없음 | — |
+| 2023-09-평가원-16 | bt-69c00be9 | 관점 (관점) | 부정(A) | 69c00be9 조선 후기 신분제 변화와 개혁론 | `set-pattern-2026-11-18/data/questions/69c00be9fa5063deffe1a2ed.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/69c00be9fa5063deffe1a2ed.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69c00be9.json`<br>`deep-item-v5-2026-11-18/passages/bt-69c00be9/` | 태깅 | — |
+| 2023-09-평가원-11 | — | 기타 (기타·실험·관찰(측정 서술)) **애매** | 긍정(B) | 69bc2332 압전 효과와 수정 진동자 | `set-pattern-2026-11-18/data/questions/69bc23328937cf1455195b3f.json (문항 11)`<br>`set-pattern-2026-11-18/data/answers/69bc23328937cf1455195b3f.json` | 해부 D1 | — |
+| 2023-06-평가원-6 | — | 기타 (기타·실험·관찰(실험 진행)) **애매** | 부정(A) | 69c01054 공포 소구의 설득 효과에 관한 이론 | `set-pattern-2026-11-18/data/questions/69c01054fa5063deffe1a559.json (문항 6)`<br>`set-pattern-2026-11-18/data/answers/69c01054fa5063deffe1a559.json` | 없음 | — |
+| 2023-06-평가원-16 | bt-69c0114f | 사례 (사례·상황 둘(암실)) | 부정(A) | 69c0114f 의식과 인지 과정에 대한 철학적 논의 | `set-pattern-2026-11-18/data/questions/69c0114f78128b2a9bedd8fc.json (문항 16)`<br>`set-pattern-2026-11-18/data/answers/69c0114f78128b2a9bedd8fc.json`<br>`bogi-distractor-tagging-2026-11-22/items/bt-69c0114f.json`<br>`deep-item-v5-2026-11-18/passages/bt-69c0114f/` | 태깅 | — |
+| 2023-06-평가원-10 | — | 사례 (사례·공정 예) | 부정(A) | 69c0110b 고체 촉매의 구성 요소와 작용 원리 | `set-pattern-2026-11-18/data/questions/69c0110bfa5063deffe1a632.json (문항 10)`<br>`set-pattern-2026-11-18/data/answers/69c0110bfa5063deffe1a632.json` | 없음 | — |
 
-## 2. 확인용 (5개 + 동반 1개)
+## 2. 확인용 (5개 + 동반 2개)
 
-확인용은 목록에 키·id·갈래만 적는다(문항 내용·선지는 옮기지 않음). 파일 위치는 본 감사용과 같은 규칙으로 문항 JSON을 가리킨다.
+확인용은 목록에 키·id·갈래만 적는다(문항 내용·선지는 옮기지 않음).
 
-| 문항 키 | 저장소 id | 갈래 | 발문 | 지문(세트 앞 8자리) | 비고 |
+| 문항 키 | 저장소 id | 감사 갈래 (원 갈래) | 발문 | 지문(세트 앞 8자리) | 비고 |
 |---|---|---|---|---|---|
-| 2025-11-수능-8 | — | 사례 | 부정(A) | 69bbef9a | 사용 이력 없음 |
-| 2025-11-수능-17 | — | 관점 | 긍정(B) | 69bff913 | 사용 이력 없음 |
-| 2025-06-평가원-8 | — | 사례 | 부정(A) | 69bffa62 | 사용 이력 없음 |
-| 2024-09-평가원-16 | — | 관점 | 긍정(B) | 69bcaed2 | 사용 이력 없음 |
-| 2023-11-수능-7 | — | 표 | 부정(A) | 69c0041a | 사용 이력 없음 |
-| 2025-11-수능-16 | — | 기타 | 부정(A) | 69bff913 | 동반(같은 지문 문항이라 함께 이동, 6개에 안 셈) |
+| 2025-11-수능-8 | — | 사례 (사례) | 부정(A) | 69bbef9a | 사용 이력 없음 |
+| 2025-11-수능-17 | — | 관점 (관점) | 긍정(B) | 69bff913 | 사용 이력 없음 |
+| 2025-06-평가원-8 | — | 사례 (사례) | 부정(A) | 69bffa62 | 사용 이력 없음 |
+| 2024-06-평가원-16 | — | 관점 (관점) | 부정(A) | 69bffc01 | 사용 이력 없음 |
+| 2023-11-수능-7 | — | 자료 (표) | 부정(A) | 69c0041a | 사용 이력 없음 |
+| 2025-11-수능-16 | — | 기타 (기타) | 부정(A) | 69bff913 | 동반(같은 지문 문항이라 함께 이동, 확인용 수에 안 셈) |
+| 2024-06-평가원-14 | — | 기타 (기타) | 부정(A) | 69bffc01 | 동반(같은 지문 문항이라 함께 이동, 확인용 수에 안 셈) |
 
 ### 선정 기록
 
+**2026-11-23 (0단계, CLI)**
 - 규칙: 갈래마다 2개, 사용 이력 '없음'에서 최근 시행분부터, 같은 지문 문항은 지문 단위로 함께 이동.
-- **사례 2**: 2025-11-수능-8(보증 계약, 지문에 3점 〈보기〉 1개), 2025-06-평가원-8(임대차, 1개). 이력 없는 사례 중 가장 최근 둘이다.
-- **관점 2**: 2025-11-수능-17(인격의 동일성) — 같은 지문의 2025-11-수능-16(기타·학습 활동지)이 함께 이동. 다음으로 최근인 2024-11-수능-8(근대 문명)은 사례/관점 **애매**라 건너뛰고 2024-09-평가원-16(영화 감상문)을 골랐다. 확인용은 갈래가 분명한 문항이어야 해서 내린 판단이다. 사람이 뒤집을 수 있다.
-- **표 1(모자람 1)**: 평가원·수능의 표 〈보기〉는 2개뿐이고(2025-09-평가원-17은 해부·태깅 이력 있음) 이력 없는 것은 2023-11-수능-7 하나다.
-- 확인용 지문들은 본 감사용에 문항이 남지 않는다(지문별 3점 〈보기〉 문항이 모두 확인용 쪽). 2025-11-수능-16·17은 한 지문이라 함께 갔다.
+- 사례 2: 2025-11-수능-8, 2025-06-평가원-8. 관점 2: 2025-11-수능-17(동반 2025-11-수능-16), 2024-09-평가원-16(애매인 2024-11-수능-8을 건너뜀). 표 1(모자람 1): 이력 없는 표 〈보기〉가 2023-11-수능-7뿐.
+**2026-11-23 (1단계, 웹 결정 00:51 지시, CLI 반영)**
+- 2024-09-평가원-16(관점·긍정 B)을 확인용 → 본 감사로, 2024-06-평가원-16(관점·부정 A)을 본 감사 → 확인용으로 맞바꿨다. 이유는 지시문에 적혀 있지 않다(관점 본 감사의 발문 방향을 맞추려는 것으로 보이나 확인하지 않았다).
+- 지문 단위 원칙: 2024-06-평가원-16과 같은 지문(69bffc01)의 3점 〈보기〉 문항 2024-06-평가원-14(기타·학습 활동지)를 함께 확인용으로 옮겼다. 2024-09-평가원-16의 지문(69bcaed2)에는 다른 3점 〈보기〉 문항이 없다(2024-09-평가원-14는 2점).
+- '감사 갈래' 열을 더했다: 사례 / 관점 / 자료(표·그래프 합침) / 기타.
+- 결과: 본 감사용 27 → 26, 확인용 5 → 5(관점 A·B 각 1), 동반 1 → 2. 관점 본 감사는 A 6 → 5, B 0 → 1.
 
 ## 3. 교육청 보충 (138개, 본 목록과 합치지 않음)
 
