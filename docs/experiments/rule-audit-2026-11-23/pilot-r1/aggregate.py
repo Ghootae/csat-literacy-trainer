@@ -180,7 +180,7 @@ for f in low:
         for n in range(1,6):
             v=[opt(j,p,n)[f] for j in J]
             key=lambda x: tuple(sorted(x)) if isinstance(x,list) else x
-            dis=sum(key(a)!=key(b) for a,b in pairs)
+            dis=sum(key(v[J.index(a)])!=key(v[J.index(b)]) for a,b in pairs)
             if dis: rows.append((-dis,p,n,v))
     rows.sort(key=lambda r:(r[0],r[1],r[2]))
     W(f'### {f} (전체 {fmt(cellrate[f])})\n')
