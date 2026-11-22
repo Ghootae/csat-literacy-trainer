@@ -94,7 +94,7 @@
    - 원인(웹 검토): (1) 렌더 결함(y축 0 강제, 범례 겹침, 접함 중복, 부호 줄). (2) 규칙 충돌 C4(문단 분산)×C23(모든 선지 〈보기〉 사용)로 다른 문단 사실을 그래프에 억지로 실음. (3) rules-B 9 '범위' 단계 때문에 각도를 가로축에 올림. (4) mRNA는 지문에 있는 관계(pH-전하) 대신 없는 세포 단면 분포를 고름.
    - 결정된 할 일 완료(11-21, 커밋 2): render.mjs 수리, 그래프 규칙 1~9 반영(`REVIEW-rules-2026-11-21-graph.md`), AUTO-LOOP 규칙 수정 절차, PROGRESS 갱신.
    - 규칙 수정 절차: 규칙 추가·수정은 웹 스레드 논의 → 웹 Claude 충돌 검토 → Ghootae 결정 → CLI는 결정 문안을 그대로 반영. CLI는 규칙 파일을 스스로 고치지 않는다.
-   - ④ 사회 A형 판정 끝(REPORT-cell4-social-A.md). ⑤ 끝(L3 통과, REPORT-cell5-generated-L3.md). 수리 방향 집계 끝(질문 ① 판정 불가 → 수리 단계 유지, REPORT-repair-direction-stage1·2). 다음 = 순서표 수정(PLAN-cell5 8절 추천 + 규칙 검토 자리 정하기) → 기출 오답 태깅(별도 세션 진행 중) 결과가 나오면 규칙 검토(PLAN-repair-direction 6.2 묶음 1~3). 인계: docs/handoffs/2026-11-22-repair-direction-done.md
+   - ④ 사회 A형 판정 끝(REPORT-cell4-social-A.md). ⑤ 끝(L3 통과, REPORT-cell5-generated-L3.md). 수리 방향 집계 끝(질문 ① 판정 불가 → 수리 단계 유지, REPORT-repair-direction-stage1·2). 기출 오답 태깅 끝(REPORT-bogi-distractor-tagging.md). 규칙 전략 = 기출을 넓게 다시 분석해 지금 규칙을 감사(2026-11-23 결정, rule-strategy-2026-11-22). 감사 동안 칸별 규칙 덧붙이기·칸 생성 멈춤. 다음 = 규칙 감사 계획(자료 목록 → 시범 6+6 → 본 감사 → 규칙 검토 → 시험 생성, 순서표 수정 포함). 인계: docs/handoffs/2026-11-23-rule-audit-direction.md
 
 ## 금지선
 
