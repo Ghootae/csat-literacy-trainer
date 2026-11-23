@@ -35,6 +35,7 @@ import { renderBoth, validateSpec } from './graph/render.mjs'; // KIND=graph (20
 import { checkStrategiesV6 } from './classify-v6.mjs';
 const V6 = process.env.RULES_V === '6'; // 기본값 5(v5 동작). 6이면 v6 규칙·지시문
 const DRY = process.env.DRY_RUN === '1';
+const stripOld = t => V6 ? t.replace(/\s*\(옛 [^()]*\)/g, '') : t; // v6 규칙 파일의 '(옛 …)' 대응 표시는 사람용이라 모델에게 보내는 문자열에서 지운다(파일은 그대로)
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(path.join(process.cwd(), 'package.json'));
@@ -65,7 +66,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const passage = fs.readFileSync(path.join(PDIR, 'passage.txt'), 'utf8');
 const map = fs.readFileSync(path.join(PDIR, 'map.json'), 'utf8');
-const rulesA = fs.readFileSync(path.join(DIR, `rules-${MODE}${V6 ? '-v6' : ''}.md`), 'utf8');
+const rulesA = stripOld(fs.readFileSync(path.join(DIR, `rules-${MODE}${V6 ? '-v6' : ''}.md`), 'utf8'));
 let avoidText = '';
 const ONLY = process.env.ONLY || '';
 if (ONLY && !['V1', 'V2'].includes(ONLY)) throw new Error('ONLY는 V1 또는 V2');
@@ -95,10 +96,10 @@ const guideText = fs.readFileSync(path.join(DIR, process.env.GUIDE || 'readabili
 const KIND_NAME = { case: '사례', table: '표·단계 목록', view: '외부 글·관점', graph: '그래프' };
 const KIND = { V1: process.env.KIND_V1, V2: process.env.KIND_V2 };
 for (const v of ['V1', 'V2']) if (!KIND_NAME[KIND[v]]) throw new Error(`KIND_${v}는 case | table | view | graph 중 하나`);
-const commonRules = fs.readFileSync(path.join(DIR, V6 ? 'rules-common-v6.md' : 'rules-common.md'), 'utf8')
+const commonRules = stripOld(fs.readFileSync(path.join(DIR, V6 ? 'rules-common-v6.md' : 'rules-common.md'), 'utf8'))
   + (!V6 && MODE === 'B' && process.env.V53_B !== '0' ? '\n\n' + fs.readFileSync(path.join(DIR, 'rules-common-v53-B.md'), 'utf8') : ''); // 2026-11-19: v5.3 규칙은 B형에만
-const kindRules = [...new Set([KIND.V1, KIND.V2])].map(k => `[갈래 규칙: ${KIND_NAME[k]} (${k})]\n` + fs.readFileSync(path.join(DIR, `kind-${k}${V6 ? '-v6' : ''}.md`), 'utf8')).join('\n\n');
-const strategies = V6 ? fs.readFileSync(path.join(DIR, 'strategies-v6.md'), 'utf8') : '';
+const kindRules = [...new Set([KIND.V1, KIND.V2])].map(k => `[갈래 규칙: ${KIND_NAME[k]} (${k})]\n` + stripOld(fs.readFileSync(path.join(DIR, `kind-${k}${V6 ? '-v6' : ''}.md`), 'utf8'))).join('\n\n');
+const strategies = V6 ? stripOld(fs.readFileSync(path.join(DIR, 'strategies-v6.md'), 'utf8')) : '';
 const POS_WEIGHT = [19, 29, 35, 38, 48]; // 기출 3점 169문항 정답 번호 분포
 function pickPos(seed) {
   let h = 2166136261;
@@ -258,7 +259,7 @@ try { for (const it of JSON.parse(lastJson(s3)[1]).items) if (it.graphSpec) grap
 for (const [v, g] of Object.entries(graphSpecs)) { const val = validateSpec(g); if (val.errs.length) console.warn(`[그래프 명세 오류] ${v}: ${val.errs.join(' / ')}`); }
 const graphNote = Object.keys(graphSpecs).length ? '\n\n[그래프 읽기 판(graphSpec에서 자동 생성, 〈보기〉로 취급 — graphSpec·bogi는 고치지 않는다)]\n' + Object.entries(graphSpecs).map(([v, g]) => `[${v}]\n${renderBoth(g).text}`).join('\n\n') : '';
 if (!lastJson(s3)) throw new Error('3단계 출력에서 JSON 블록을 찾지 못했습니다. out/3-assemble.md 확인');
-const checklist = fs.readFileSync(path.join(DIR, V6 ? 'polish-checklist-v6.md' : 'polish-checklist.md'), 'utf8');
+const checklist = stripOld(fs.readFileSync(path.join(DIR, V6 ? 'polish-checklist-v6.md' : 'polish-checklist.md'), 'utf8'));
 const s3b = await call('3b-polish', `너는 수능 국어 독서 문항의 문장을 다듬는 편집자다. ${COMMON}
 입력은 지문, 출제 규칙, 출제자가 만든 문항 두 개(해설·출제 기록 포함), 다듬기 점검표다.
 할 일: 점검표 항목을 문항의 〈보기〉와 선지 문장 하나하나에 적용해 표현만 고친다.

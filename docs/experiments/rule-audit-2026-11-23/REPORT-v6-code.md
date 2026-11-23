@@ -63,3 +63,10 @@
 ## 하지 않은 것
 - 실제 생성·검사 실행(4단계). R1~R3·S12 재표시. readability-guide, kind-graph graphSpec 처리.
 - 오답 카드 파일 4개, v5 규칙 파일은 건드리지 않았다.
+
+## 덧붙임: 코드 손질 2곳 (CLI-step3c-remark 2~4단계, 웹 결정 2026-11-24)
+- **2단계 "(옛 …)" 표시 제거:** `run.mjs`·`eval-repair.mjs`에 `stripOld`(정규식 `/\s*\(옛 [^()]*\)/g`, RULES_V=6일 때만)를 두고 v6 규칙 파일(rules-common-v6, strategies-v6, rules-A/B-v6, kind-*-v6, polish-checklist-v6)을 읽은 직후 적용한다. 파일은 그대로. 건조 실행(RULES_V=6 DRY_RUN=1, 지문 disclosure-insider, A·B, case·view)으로 만든 3단계 지시문의 남은 "(옛" 수: **A 0, B 0**.
+  - **새로 보인 것(후보):** "(옛 …)" 괄호는 없어졌지만 규칙 본문 안에 옛 번호가 남은 곳이 있다. `rules-common-v6.md`의 M6("A22·B25 … C8로 맞춘다(REVIEW 2절 충돌 1)"), M11("K-S5 … REVIEW 충돌 6"), 그리고 OP8의 "가장 긴 선지"(뜻은 맞는 말). 규칙 파일은 고치지 않는다는 지시라 그대로 두었다. 4단계 전에 고칠지는 웹이 정한다.
+- **3단계 e4 지시:** RULES_V=6에서 "오답 역할" 문장을 뺐고 "(v5.3) 거울 짝"을 "(M5) 거울 짝"으로 바꿨다. v5 경로 문자열은 그대로다.
+- **4단계 확인:** `node --check` 두 파일 통과. `classify-v6.test.mjs` 8/8 통과. v5 경로 바이트 비교: (a) run.mjs 2·3단계 지시문 — HEAD 사본 대 새 코드, disclosure-insider A·B 동일. (b) eval-repair.mjs e4 지시문 — HEAD 대 새 코드, 저장된 mrna-vaccine-lipid-nanoparticle-B V2(v5 판정 수리 대상)로 REPAIR=1 캐시 실행해 지시문을 덤프해 비교, 동일(API 호출 없음). (c) eval.json·eval-summary.txt는 이전 보고에서 세 곳 동일.
+- 후보 1(3b·3c가 strategies를 흘리면 채움)은 그대로 둔다.

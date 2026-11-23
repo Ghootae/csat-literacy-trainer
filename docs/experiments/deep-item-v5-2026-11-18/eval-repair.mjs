@@ -19,6 +19,7 @@ import { createRequire } from 'node:module';
 import { renderBoth, validateSpec } from './graph/render.mjs'; // 그래프 갈래(2026-11-21): 〈보기〉 = graphSpec에서 자동 생성한 읽기 판
 import { classifyV6 } from './classify-v6.mjs';
 const V6 = process.env.RULES_V === '6'; // 기본값 5(v5 동작). 6이면 v6 규칙·판정
+const stripOld = t => V6 ? t.replace(/\s*\(옛 [^()]*\)/g, '') : t; // v6 규칙 파일의 '(옛 …)' 대응 표시는 사람용이라 모델에게 보내는 문자열에서 지운다(파일은 그대로)
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(path.join(process.cwd(), 'package.json'));
@@ -42,7 +43,7 @@ const OUT = process.env.OUT_DIR; if (!OUT) throw new Error('OUT_DIR=<결과 폴�
 const REPAIR = process.env.REPAIR === '1';
 fs.mkdirSync(OUT, { recursive: true });
 const passage = fs.readFileSync(path.join(DIR, 'passages', PID, 'passage.txt'), 'utf8');
-const commonRules = fs.readFileSync(path.join(DIR, V6 ? 'rules-common-v6.md' : 'rules-common.md'), 'utf8');
+const commonRules = stripOld(fs.readFileSync(path.join(DIR, V6 ? 'rules-common-v6.md' : 'rules-common.md'), 'utf8'));
 const usagePath = path.join(OUT, 'usage.json');
 const usageLog = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : [];
 // gpt-6.2 계열은 긴 규칙을 top-level instructions 대신 developer 메시지로 보낸다(캐시용, 2026-11-20). 6.1 동작은 그대로.
@@ -155,9 +156,8 @@ if (REPAIR && Object.values(d0).some(x => x.repair)) {
 지킬 것:
 - 정답 번호, 발문(극성), 〈보기〉 갈래, 표의 행·열 구조는 그대로 둔다. 정답이 아닌 선지를 정답으로 바꾸지 않는다.
 ${V6 ? `- 사유로 적힌 방식 위반(M2 〈보기〉만으로 정오가 정해지는 선지, M3 참 선지가 지문 대조만으로 끝남, M4 〈보기〉 없이 지문 문장 확인만으로 정해지는 선지 둘 이상, M5 거울 짝)만 고친다. 고른 전략(strategies, strategyUse)은 그대로 옮기고 지킨다.` : `- 정답은 〈보기〉의 핵심 관찰을 해석해야 정해지게 한다. 지문 한 문장만으로 정답이 정해지면 〈보기〉의 값·관찰을 써야 판정되도록 정답이나 〈보기〉를 고친다.`}
-- (v5.3) 정답과 경쟁 선지가 같은 대상·같은 비교의 반대 결론(거울 짝)이면, 경쟁 선지가 같은 관찰로 다른 판정을 묻게 고친다. 기호는 대상·지점·시료에 붙이고 '~을 ㉠으로 기록했다'는 쓰지 않는다.
-- 오답 역할: 가장 강한 경쟁 선지 1개(핵심 관찰까지 맞게 읽은 학생도 지문의 관계 하나를 잘못 적용하면 고를 선지), 중간 2개(각각 〈보기〉의 값·대상·시점을 확인해야 판단), 쉬운 1개(짧은 개념 확인 가능). 다섯 선지 모두에 조건을 덧붙이지 않는다.
-- 매력적인 선지에는 '부분적으로 아는 학생이 믿을 이유'와 '끝내 배제할 지문 근거'가 모두 있어야 한다. 정답이 둘이 되면 안 된다.
+- (${V6 ? 'M5' : 'v5.3'}) 정답과 경쟁 선지가 같은 대상·같은 비교의 반대 결론(거울 짝)이면, 경쟁 선지가 같은 관찰로 다른 판정을 묻게 고친다. 기호는 대상·지점·시료에 붙이고 '~을 ㉠으로 기록했다'는 쓰지 않는다.
+${V6 ? '' : '- 오답 역할: 가장 강한 경쟁 선지 1개(핵심 관찰까지 맞게 읽은 학생도 지문의 관계 하나를 잘못 적용하면 고를 선지), 중간 2개(각각 〈보기〉의 값·대상·시점을 확인해야 판단), 쉬운 1개(짧은 개념 확인 가능). 다섯 선지 모두에 조건을 덧붙이지 않는다.\n'}- 매력적인 선지에는 '부분적으로 아는 학생이 믿을 이유'와 '끝내 배제할 지문 근거'가 모두 있어야 한다. 정답이 둘이 되면 안 된다.
 - 선지가 판정에 필요한 관찰을 스스로 공급해 〈보기〉를 대체하지 않는다. 답을 가르는 유일한 〈보기〉 관찰을 반대 가정으로 덮어쓰지 않는다.
 ${V6 ? '' : '- 정답 선지가 다섯 선지 중 가장 길지 않게 한다.\n'}- 고친 곳은 공통 원칙과 가독성을 지킨다. 사유와 무관한 곳은 고치지 않는다.
 출력: 문항마다 수정 표(위치, 원문, 수정문, 사유), 그리고 맨 끝에 JSON 블록 \`\`\`json {"items":[{"version":"V1","stem":"...","bogi":"...","choices":["①...","②...","③...","④...","⑤..."],"answer":3,"roles":["경쟁","중간","정답","쉬움","중간"],"repairNotes":"한 줄"}]} \`\`\``,
