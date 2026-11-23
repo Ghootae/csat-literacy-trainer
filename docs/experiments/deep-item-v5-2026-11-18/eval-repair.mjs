@@ -10,11 +10,15 @@
 // v5.2 보정 2차(2026-11-19): e3에 steps(추론 단계 수) 추가, 정답 steps≤1이면 수리. 정답 최장·후보 빈 경우는 경고로 내림(기출 12·19번 거짓 경보).
 // 실행(저장소 루트): PASSAGE=<id> IN=<items.json 경로> OUT_DIR=<결과 폴더> [REPAIR=1] node docs/experiments/deep-item-v5-2026-11-18/eval-repair.mjs
 //   IN 파일 형식: {"items":[{version, kind, stem, bogi, choices[5], answer, ...}]}
+// v6 (2026-11-24, rule-audit-2026-11-23/PROPOSAL-code-v6.md 4절): RULES_V=6이면 e3에 task·bogi_only 칸을 더하고, 판정을 classify-v6.mjs의 classifyV6로 한다
+//   (결함=다시 생성 / 방식 위반 M2~M5를 둘 이상 어기면 수리 / 나머지는 경고 / 고른 전략 못 지킴 경고). RULES_V가 없으면 v5 동작 그대로.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { renderBoth, validateSpec } from './graph/render.mjs'; // 그래프 갈래(2026-11-21): 〈보기〉 = graphSpec에서 자동 생성한 읽기 판
+import { classifyV6 } from './classify-v6.mjs';
+const V6 = process.env.RULES_V === '6'; // 기본값 5(v5 동작). 6이면 v6 규칙·판정
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(path.join(process.cwd(), 'package.json'));
@@ -38,7 +42,7 @@ const OUT = process.env.OUT_DIR; if (!OUT) throw new Error('OUT_DIR=<결과 폴�
 const REPAIR = process.env.REPAIR === '1';
 fs.mkdirSync(OUT, { recursive: true });
 const passage = fs.readFileSync(path.join(DIR, 'passages', PID, 'passage.txt'), 'utf8');
-const commonRules = fs.readFileSync(path.join(DIR, 'rules-common.md'), 'utf8');
+const commonRules = fs.readFileSync(path.join(DIR, V6 ? 'rules-common-v6.md' : 'rules-common.md'), 'utf8');
 const usagePath = path.join(OUT, 'usage.json');
 const usageLog = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : [];
 // gpt-6.2 계열은 긴 규칙을 top-level instructions 대신 developer 메시지로 보낸다(캐시용, 2026-11-20). 6.1 동작은 그대로.
@@ -89,19 +93,22 @@ async function evaluate(items, tag) {
 - minimum_evidence: 그 구절을 판정하는 데 꼭 필요한 지문 문장(요약)과 〈보기〉 근거(칸·값·관찰). 〈보기〉 근거가 필요 없으면 bogi를 빈 문자열로 둔다.
 - one_fact_shortcut: 지문의 한 사실과 선지 문장만으로(〈보기〉를 보지 않고) 이 선지의 정오를 실제로 판정해 보라. 판정되면 possible=true와 한 줄 증명, 안 되면 possible=false와 부족한 관찰.
 - bogi_sources: 이 선지의 정오를 확정하는 데 필요한 〈보기〉의 서로 다른 관찰 수(다른 열·다른 행·다른 문장은 따로 센다, 한 열 안의 값 여러 개는 1). 〈보기〉가 필요 없으면 0.
-- steps: 이 선지의 정오를 확정하는 데 필요한 추론 단계 수. 〈보기〉에서 한 번 읽은 값(같은 행을 대상만 바꿔 읽는 것 포함)에 지문 규칙 하나를 바로 적용하면 1. 두 관찰을 비교·연결하거나(예: 두 값의 차이, 변화의 방향), 지문 관계 둘을 이어야 하거나, 〈보기〉 표현을 지문 개념으로 바꿔 읽어야 하면 그 수만큼 더한다.
+- steps: 이 선지의 정오를 확정하는 데 필요한 추론 단계 수. 〈보기〉에서 한 번 읽은 값(같은 행을 대상만 바꿔 읽는 것 포함)에 지문 규칙 하나를 바로 적용하면 1. 두 관찰을 비교·연결하거나(예: 두 값의 차이, 변화의 방향), 지문 관계 둘을 이어야 하거나, 〈보기〉 표현을 지문 개념으로 바꿔 읽어야 하면 그 수만큼 더한다.${V6 ? `
+- task: 내용 확인 / 짝짓기 / 원리 적용 중 하나. 내용 확인 = 선지 진술이 지문(또는 〈보기〉)의 진술과 같은지 대조하면 끝. 짝짓기 = 〈보기〉의 대상·사례가 지문의 어느 개념·범주·관점에 해당하는지 정하면 끝. 원리 적용 = 지문의 원리·인과·규칙을 상황에 돌려 지문에 직접 적히지 않은 결과를 끌어내야 함. 셋이 섞이면 가장 뒤의 것(원리 적용 > 짝짓기 > 내용 확인)을 고른다.
+- bogi_only: 지문을 보지 않고 〈보기〉와 선지만으로 이 선지의 정오가 확정되는가 (true/false).` : ''}
 문항마다 추가로:
 - closest_rival: 부분적으로 이해한 학생이 마지막까지 고민할 선지 번호와, 정답과 그것을 가르는 관찰 하나.
 - mirror_pair: 같은 대상·같은 비교를 두고 결론만 반대인 두 선지(예: '같다'/'적다', '더 밝다'/'더 어둡다')가 있으면 {"exists":true,"choices":[a,b],"why":"..."}, 없으면 {"exists":false}.
 - valid_answers: 자료 전체로 다시 풀었을 때 발문을 충족하는 선지 번호 목록(정확히 하나여야 정상). 근거가 부족한 선지는 weak에 따로 적는다.
 - answer: 네가 고른 답.
-맨 끝에 JSON 블록: \`\`\`json {"items":[{"version":"V1","answer":3,"choices":[{"n":1,"decisive_clause":"...","minimum_evidence":{"passage":"...","bogi":""},"one_fact_shortcut":{"possible":true,"proof":"..."},"steps":2,"bogi_sources":2}],"closest_rival":{"n":2,"observation":"..."},"mirror_pair":{"exists":false},"valid_answers":[3],"weak":[]}]} \`\`\``,
+맨 끝에 JSON 블록: \`\`\`json {"items":[{"version":"V1","answer":3,"choices":[{"n":1,"decisive_clause":"...","minimum_evidence":{"passage":"...","bogi":""},"one_fact_shortcut":{"possible":true,"proof":"..."},"steps":2,"bogi_sources":2${V6 ? ',"task":"원리 적용","bogi_only":false' : ''}}],"closest_rival":{"n":2,"observation":"..."},"mirror_pair":{"exists":false},"valid_answers":[3],"weak":[]}]} \`\`\``,
     `[지문]\n${passage}\n\n[문항]\n${examText(items)}`));
   const r2 = Object.fromEntries(e2.items.map(x => [x.version, x]));
   const r3 = Object.fromEntries(e3.items.map(x => [x.version, x]));
   const diag = {};
   for (const it of items) {
     const m = mask[it.version] || {}, b = r2[it.version] || {}, c = r3[it.version] || {};
+    if (V6) { diag[it.version] = classifyV6(it, m, b, c); continue; }
     const reasons = [], warnings = [];
     const surv = (b.surviving || []).map(Number);
     const noKey = !m.keyEvidence || !m.keyEvidence.length;
@@ -142,20 +149,19 @@ const d0 = await evaluate(items, '');
 const report = { passage: PID, in: IN, before: d0 };
 if (REPAIR && Object.values(d0).some(x => x.repair)) {
   const target = items.filter(it => d0[it.version].repair);
-  const fixText = target.map(it => `[${it.version}] 정답 ${CIRC[it.answer - 1]} (${polarity(it)}), 갈래 ${it.kind}\n${it.stem}\n〈보기〉\n${it.bogi}\n${it.choices.join('\n')}${it.kind === 'graph' ? `\n(그래프 갈래) 〈보기〉는 아래 graphSpec에서 자동 생성한 읽기 판이다. 〈보기〉를 직접 쓰지 말고 graphSpec 전체를 고쳐 JSON의 "graphSpec"에 담는다. 계열 수·표시 기호(ⓐ 등)는 그대로 두고 점 위치·눈금·축 이름만 고친다(축 이름·범례에 판정어 금지).\ngraphSpec: ${JSON.stringify(it.graphSpec)}` : ''}\n수리 사유:\n- ${d0[it.version].reasons.join('\n- ')}\n참고: 핵심 관찰 ${JSON.stringify(d0[it.version].keyEvidence)}, 출제 쪽 경쟁 선지 ${d0[it.version].rival}, 풀이 쪽 경쟁 선지 ${JSON.stringify(d0[it.version].closestRival)}, 지문 한 사실로 지워지는 오답 ${JSON.stringify(d0[it.version].easyChoices)}`).join('\n\n');
+  const fixText = target.map(it => `[${it.version}] 정답 ${CIRC[it.answer - 1]} (${polarity(it)}), 갈래 ${it.kind}\n${it.stem}\n〈보기〉\n${it.bogi}\n${it.choices.join('\n')}${it.kind === 'graph' ? `\n(그래프 갈래) 〈보기〉는 아래 graphSpec에서 자동 생성한 읽기 판이다. 〈보기〉를 직접 쓰지 말고 graphSpec 전체를 고쳐 JSON의 "graphSpec"에 담는다. 계열 수·표시 기호(ⓐ 등)는 그대로 두고 점 위치·눈금·축 이름만 고친다(축 이름·범례에 판정어 금지).\ngraphSpec: ${JSON.stringify(it.graphSpec)}` : ''}\n수리 사유:\n- ${(V6 ? d0[it.version].methodViolations.map(k => d0[it.version].methodDetails[k]).map((t, i) => `[방식 위반 ${d0[it.version].methodViolations[i]}] ${t}`) : d0[it.version].reasons).join('\n- ')}\n참고: 핵심 관찰 ${JSON.stringify(d0[it.version].keyEvidence)}, 출제 쪽 경쟁 선지 ${d0[it.version].rival}, 풀이 쪽 경쟁 선지 ${JSON.stringify(d0[it.version].closestRival)}, 지문 한 사실로 지워지는 오답 ${JSON.stringify(d0[it.version].easyChoices)}`).join('\n\n');
   const e4 = lastJson(await call('e4-repair', `너는 수능 국어 독서 출제자다. ${COMMON}
 입력 문항에는 검사에서 나온 수리 사유가 붙어 있다. 사유만 고치는 최소 수정을 한다.
 지킬 것:
 - 정답 번호, 발문(극성), 〈보기〉 갈래, 표의 행·열 구조는 그대로 둔다. 정답이 아닌 선지를 정답으로 바꾸지 않는다.
-- 정답은 〈보기〉의 핵심 관찰을 해석해야 정해지게 한다. 지문 한 문장만으로 정답이 정해지면 〈보기〉의 값·관찰을 써야 판정되도록 정답이나 〈보기〉를 고친다.
+${V6 ? `- 사유로 적힌 방식 위반(M2 〈보기〉만으로 정오가 정해지는 선지, M3 참 선지가 지문 대조만으로 끝남, M4 〈보기〉 없이 지문 문장 확인만으로 정해지는 선지 둘 이상, M5 거울 짝)만 고친다. 고른 전략(strategies, strategyUse)은 그대로 옮기고 지킨다.` : `- 정답은 〈보기〉의 핵심 관찰을 해석해야 정해지게 한다. 지문 한 문장만으로 정답이 정해지면 〈보기〉의 값·관찰을 써야 판정되도록 정답이나 〈보기〉를 고친다.`}
 - (v5.3) 정답과 경쟁 선지가 같은 대상·같은 비교의 반대 결론(거울 짝)이면, 경쟁 선지가 같은 관찰로 다른 판정을 묻게 고친다. 기호는 대상·지점·시료에 붙이고 '~을 ㉠으로 기록했다'는 쓰지 않는다.
 - 오답 역할: 가장 강한 경쟁 선지 1개(핵심 관찰까지 맞게 읽은 학생도 지문의 관계 하나를 잘못 적용하면 고를 선지), 중간 2개(각각 〈보기〉의 값·대상·시점을 확인해야 판단), 쉬운 1개(짧은 개념 확인 가능). 다섯 선지 모두에 조건을 덧붙이지 않는다.
 - 매력적인 선지에는 '부분적으로 아는 학생이 믿을 이유'와 '끝내 배제할 지문 근거'가 모두 있어야 한다. 정답이 둘이 되면 안 된다.
 - 선지가 판정에 필요한 관찰을 스스로 공급해 〈보기〉를 대체하지 않는다. 답을 가르는 유일한 〈보기〉 관찰을 반대 가정으로 덮어쓰지 않는다.
-- 정답 선지가 다섯 선지 중 가장 길지 않게 한다.
-- 고친 곳은 공통 원칙과 가독성을 지킨다. 사유와 무관한 곳은 고치지 않는다.
+${V6 ? '' : '- 정답 선지가 다섯 선지 중 가장 길지 않게 한다.\n'}- 고친 곳은 공통 원칙과 가독성을 지킨다. 사유와 무관한 곳은 고치지 않는다.
 출력: 문항마다 수정 표(위치, 원문, 수정문, 사유), 그리고 맨 끝에 JSON 블록 \`\`\`json {"items":[{"version":"V1","stem":"...","bogi":"...","choices":["①...","②...","③...","④...","⑤..."],"answer":3,"roles":["경쟁","중간","정답","쉬움","중간"],"repairNotes":"한 줄"}]} \`\`\``,
-    `[지문]\n${passage}\n\n[공통 원칙]\n${commonRules}\n\n[수리할 문항]\n${fixText}`));
+    `[지문]\n${passage}\n\n[${V6 ? '공통 규칙 v6' : '공통 원칙'}]\n${commonRules}\n\n[수리할 문항]\n${fixText}`));
   const fixed = Object.fromEntries(e4.items.map(x => [x.version, x]));
   items = items.map(it => {
     const f = fixed[it.version]; if (!f) return it;
@@ -168,7 +174,7 @@ if (REPAIR && Object.values(d0).some(x => x.repair)) {
 }
 fs.writeFileSync(path.join(OUT, 'items-final.json'), JSON.stringify({ passage: PID, items }, null, 2));
 fs.writeFileSync(path.join(OUT, 'eval.json'), JSON.stringify(report, null, 2));
-const line = (v, d) => `${v}: ${d.repair ? '수리 필요' : '통과'}${d.reasons.length ? ' — ' + d.reasons.join(' / ') : ''}${d.warnings.length ? ' [경고: ' + d.warnings.join(' / ') + ']' : ''} (가린 판 남은 후보 ${JSON.stringify(d.surviving)}, 풀이 답 ${d.solverAnswer})`;
+const line = (v, d) => `${v}: ${d.defect ? '결함(다시 생성)' : d.repair ? '수리 필요' : '통과'}${d.reasons.length ? ' — ' + d.reasons.join(' / ') : ''}${d.warnings.length ? ' [경고: ' + d.warnings.join(' / ') + ']' : ''} (가린 판 남은 후보 ${JSON.stringify(d.surviving)}, 풀이 답 ${d.solverAnswer})`;
 let summary = '[검사]\n' + Object.entries(d0).map(([v, d]) => line(v, d)).join('\n');
 if (report.after) summary += '\n[수리 후]\n' + Object.entries(report.after).map(([v, d]) => line(v, d)).join('\n');
 fs.writeFileSync(path.join(OUT, 'eval-summary.txt'), summary + '\n');

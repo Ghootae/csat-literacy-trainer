@@ -22,6 +22,9 @@
 // v3 (2026-11-12): rules-A/B v3(사건 인과 연결, 지문 예시 옮기기 금지, 단정어 거짓 금지, V1·V2 정답 착각·짜임 차이,
 //   계산 양식 사례 건너뛰기 연결을 정답 자리에, 규칙 예시에서 기출 소재 제거), 선별 매력도 축, 3b 다듬기 단계(polish-checklist.md).
 // MODE=A: 개념 연결 양식(rules-A, 부정 발문). MODE=B: 계산 양식(rules-B, 긍정 발문, 식·변수·범위·절차 공격).
+// v6 (2026-11-24, rule-audit-2026-11-23/PROPOSAL-code-v6.md 2절): RULES_V=6이면 v6 규칙 파일(*-v6.md)과 선택 전략 목록(strategies-v6.md)을 읽고,
+//   3단계 지시에 '0. 전략 고르기'를 넣고 출력에 strategies·strategyUse를 받는다. 기계 점검에서 '정답이 가장 긴 선지'는 끄고 전략 점검을 더한다.
+//   RULES_V가 없으면 v5 동작 그대로. DRY_RUN=1이면 API를 부르지 않고 2·3단계 지시문을 OUT 폴더의 *.dry.txt로 쓴 뒤 멈춘다.
 // 필요: OPENAI_API_KEY (저장소 .env 또는 셸 환경), 저장소의 openai 패키지.
 // 모델: 기본 gpt-6.2-sol(2026-11-20 전환, 이전 gpt-6.1-sol). 사람 개입 없음: 2단계 선별도 모델이 한다.
 import fs from 'node:fs';
@@ -29,6 +32,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { renderBoth, validateSpec } from './graph/render.mjs'; // KIND=graph (2026-11-21): 명세 JSON → 읽기 판·SVG
+import { checkStrategiesV6 } from './classify-v6.mjs';
+const V6 = process.env.RULES_V === '6'; // 기본값 5(v5 동작). 6이면 v6 규칙·지시문
+const DRY = process.env.DRY_RUN === '1';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(path.join(process.cwd(), 'package.json'));
@@ -47,7 +53,7 @@ if (!process.env.OPENAI_API_KEY && fs.existsSync('.env')) {
 const MODEL = process.env.GEN_MODEL || 'gpt-6.2-sol'; // 기본 6.2-sol(2026-11-20, REPORT-cell-gen62.md). 6.1은 GEN_MODEL=gpt-6.1-sol
 const EFFORT = process.env.GEN_EFFORT || 'high';
 const POLISH_EFFORT = process.env.POLISH_EFFORT || EFFORT;
-const client = new OpenAI({ maxRetries: 0, timeout: 60 * 60 * 1000 }); // 재시도하면 중복 과금, 긴 추론은 스트리밍으로 받는다
+const client = new OpenAI({ ...(DRY && !process.env.OPENAI_API_KEY ? { apiKey: 'dry-run' } : {}), maxRetries: 0, timeout: 60 * 60 * 1000 }); // 재시도하면 중복 과금, 긴 추론은 스트리밍으로 받는다
 const PID = process.env.PASSAGE;
 if (!PID) throw new Error('PASSAGE=<id> 를 지정하세요');
 const PDIR = path.join(DIR, 'passages', PID);
@@ -59,7 +65,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const passage = fs.readFileSync(path.join(PDIR, 'passage.txt'), 'utf8');
 const map = fs.readFileSync(path.join(PDIR, 'map.json'), 'utf8');
-const rulesA = fs.readFileSync(path.join(DIR, `rules-${MODE}.md`), 'utf8');
+const rulesA = fs.readFileSync(path.join(DIR, `rules-${MODE}${V6 ? '-v6' : ''}.md`), 'utf8');
 let avoidText = '';
 const ONLY = process.env.ONLY || '';
 if (ONLY && !['V1', 'V2'].includes(ONLY)) throw new Error('ONLY는 V1 또는 V2');
@@ -89,9 +95,10 @@ const guideText = fs.readFileSync(path.join(DIR, process.env.GUIDE || 'readabili
 const KIND_NAME = { case: '사례', table: '표·단계 목록', view: '외부 글·관점', graph: '그래프' };
 const KIND = { V1: process.env.KIND_V1, V2: process.env.KIND_V2 };
 for (const v of ['V1', 'V2']) if (!KIND_NAME[KIND[v]]) throw new Error(`KIND_${v}는 case | table | view | graph 중 하나`);
-const commonRules = fs.readFileSync(path.join(DIR, 'rules-common.md'), 'utf8')
-  + (MODE === 'B' && process.env.V53_B !== '0' ? '\n\n' + fs.readFileSync(path.join(DIR, 'rules-common-v53-B.md'), 'utf8') : ''); // 2026-11-19: v5.3 규칙은 B형에만
-const kindRules = [...new Set([KIND.V1, KIND.V2])].map(k => `[갈래 규칙: ${KIND_NAME[k]} (${k})]\n` + fs.readFileSync(path.join(DIR, `kind-${k}.md`), 'utf8')).join('\n\n');
+const commonRules = fs.readFileSync(path.join(DIR, V6 ? 'rules-common-v6.md' : 'rules-common.md'), 'utf8')
+  + (!V6 && MODE === 'B' && process.env.V53_B !== '0' ? '\n\n' + fs.readFileSync(path.join(DIR, 'rules-common-v53-B.md'), 'utf8') : ''); // 2026-11-19: v5.3 규칙은 B형에만
+const kindRules = [...new Set([KIND.V1, KIND.V2])].map(k => `[갈래 규칙: ${KIND_NAME[k]} (${k})]\n` + fs.readFileSync(path.join(DIR, `kind-${k}${V6 ? '-v6' : ''}.md`), 'utf8')).join('\n\n');
+const strategies = V6 ? fs.readFileSync(path.join(DIR, 'strategies-v6.md'), 'utf8') : '';
 const POS_WEIGHT = [19, 29, 35, 38, 48]; // 기출 3점 169문항 정답 번호 분포
 function pickPos(seed) {
   let h = 2166136261;
@@ -105,7 +112,7 @@ for (const v of ['V1', 'V2']) TARGET[v] = Number(process.env[`ANSWER_${v}`]) || 
 if (TARGET.V1 === TARGET.V2 && !process.env.ANSWER_V2) TARGET.V2 = (TARGET.V1 % 5) + 1; // 두 버전이 같은 번호면 하나 옮김
 const TWISTS = ['뒤집기', '범위 넓히기', '조건 바꾸기', '원인 바꾸기', '대상 바꾸기', '단계 바꾸기', '귀속 바꾸기', '예외 만들기', '짝 바꾸기', '의미 비틀기'];
 const SPEC = (ONLY ? [ONLY] : ['V1', 'V2']).map(v => `- ${v}: 갈래 = ${KIND_NAME[KIND[v]]}(${KIND[v]}), 정답 번호 = ${TARGET[v]}번`).join('\n')
-  + `\n- 정답 비튼 방식 후보: ${TWISTS.join(', ')}. V1과 V2는 서로 다른 방식을 고른다(공통 C6).`
+  + `\n- 정답 비튼 방식 후보: ${TWISTS.join(', ')}. V1과 V2는 서로 다른 방식을 고른다(${V6 ? 'OP2' : '공통 C6'}).`
   + (ONLY ? `\n- 이번 실행은 ${ONLY} 한 버전만 만든다. 출력의 두 버전 관련 지시는 이 한 버전에만 적용하고, JSON items에는 ${ONLY} 하나만 넣는다. 다른 버전은 입력의 [확정된 다른 버전]이다.` : '');
 console.log('[v5 지정]\n' + SPEC);
 const usagePath = path.join(OUT, 'usage.json');
@@ -114,6 +121,7 @@ const usageLog = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath
 // gpt-6.2 계열은 긴 규칙을 top-level instructions 대신 developer 메시지로 보낸다(캐시용, 2026-11-20). 6.1 동작은 그대로.
 const reqBody = (instructions, input) => MODEL.startsWith('gpt-6.2') ? { input: [{ role: 'developer', content: instructions }, ...(Array.isArray(input) ? input : [{ role: 'user', content: input }])] } : { instructions, input };
 async function call(stage, instructions, input, effort = EFFORT) {
+  if (DRY) { fs.writeFileSync(path.join(OUT, `${stage}.dry.txt`), `[instructions]\n${instructions}\n\n[input]\n${typeof input === 'string' ? input : JSON.stringify(input)}\n`); console.log(`[${stage}] 건조 실행: 지시문만 저장`); return '(건조 실행: 이 단계는 부르지 않음)'; }
   const cached = path.join(OUT, `${stage}.md`);
   if (fs.existsSync(cached) && !process.env.FORCE) { console.log(`[${stage}] 이미 있음, 건너뜀`); return fs.readFileSync(cached, 'utf8'); }
   console.log(`[${stage}] 호출 중 (${MODEL}, ${effort})...`);
@@ -178,7 +186,7 @@ const s2 = await call('2-select', `너는 수능 국어 독서 문항 검토자�
 출력(마크다운):
 1. 후보별 표: 번호, 진술 요약, 깊이, 매력도, 등급, 한 줄 이유
 2. 선정 4개: 원문 진술 그대로, 깊이·매력도, 그리고 각각 "(어떤 착각인가. 실제: 지문상 사실)" 형식의 한 줄 설명. 4개는 서로 같은 포인트를 반복하지 않게 하되, 한 〈보기〉 문항으로 엮을 수 있도록 가까운 구역에서 고른다. 4개 중 최소 하나는 매력도 '상'이어야 한다. 4개는 서로 다른 착각이어야 하며(같은 오해를 표현만 바꾼 것은 하나로 본다), V1·V2가 정답 착각을 하나씩 나눠 갖고 나머지 함정도 두 버전에 겹치지 않게 배정할 수 있어야 한다. 입력에 '이미 쓴 함정'이 있으면 그 착각과 같은 후보는 고르지 않는다.${MODE === 'B' ? `
-   (계산 양식) 4개 중 최소 하나는 식·절차를 직접 공격하는 후보(여러 변수 상쇄, 여러 단계 거친 결과)로, 최소 하나는 지문의 한 사례·부분에서 가져온 변수 방향을 다른 식·단계에 넣어야 판단되는 후보(사례 건너뛰기)로 고른다. 이런 후보가 목록에 없으면 그 사실을 적는다.` : ''}
+${V6 ? '   (계산 양식) 식·절차를 직접 공격하는 후보(여러 변수 상쇄, 여러 단계 거친 결과)와 사례 건너뛰기 후보가 목록에 있으면 4개 안에 넣는다(선택 전략 S16·S1의 재료). 없으면 그 사실을 적는다.' : '   (계산 양식) 4개 중 최소 하나는 식·절차를 직접 공격하는 후보(여러 변수 상쇄, 여러 단계 거친 결과)로, 최소 하나는 지문의 한 사례·부분에서 가져온 변수 방향을 다른 식·단계에 넣어야 판단되는 후보(사례 건너뛰기)로 고른다. 이런 후보가 목록에 없으면 그 사실을 적는다.'}` : ''}
 3. 정답 후보 추천: 선정 4개 중 정답 자리에 가장 좋은 것과 그 이유(깊이와 매력도를 함께 보고).`,
   `[지문]\n${passage}\n\n[후보 목록]\n${s1}${AVOID}`);
 
@@ -207,14 +215,41 @@ const ASSEMBLE_B = `
 
 출력(마크다운): 버전마다 (1) 문항(발문, 〈보기〉, 선지 ①~⑤) — 정답 표시 없이 시험지 형태로, (2) 정답과 선지별 해설 표(정오, 근거 문장, 옮기기 단계, 난도), (3) 출제 기록(〈보기〉 문장별 노린 오해, 시도했다가 버린 선지와 이유).
 `;
-const s3 = await call('3-assemble', `너는 수능 국어 독서 출제자다. ${COMMON}
-${MODE === 'B' ? ASSEMBLE_B : ASSEMBLE_A}맨 끝에 아래 형식의 JSON 코드 블록을 하나 덧붙인다:
-\`\`\`json
-{"items":[{"version":"V1","kind":"table","stem":"...","bogi":"...","choices":["①...","②...","③...","④...","⑤..."],"answer":4,"answerTwist":"짝 바꾸기","twists":["참","뒤집기","참","짝 바꾸기","참"],"roles":["쉬움","경쟁","중간","정답","중간"],"rival":2}]}
-\`\`\`
-roles는 선지별 역할(공통 C11), rival은 가장 강한 경쟁 선지 번호다. kind는 갈래 영문 이름, answerTwist는 공통 C6의 방식 이름, twists는 선지별로 거짓이면 비튼 방식 이름, 참이면 "참"이다. 표 〈보기〉는 bogi 안에 안내 글과 마크다운 표를 줄바꿈으로 이어 넣는다. 갈래가 graph인 항목은 bogi를 빈 문자열로 두고 "graphSpec" 객체(갈래 규칙의 형식)를 항목에 넣는다. 시험지 형태 출력에서 〈보기〉 자리에는 graphSpec의 요약(축·곡선 모양·표시 기호)을 적는다.`,
-  `[지문]\n${passage}\n\n[버전별 지정]\n${SPEC}\n\n[공통 원칙 — 양식 규칙과 부딪치면 이것을 따른다]\n${commonRules}\n\n${kindRules}\n\n[${MODE}. 출제 규칙]\n${rulesA}\n\n[가독성 기준 — 〈보기〉와 선지 문장을 처음부터 이 기준에 맞게 쓴다]\n${guideText}\n\n[${MODE === 'B' ? 'S' : 'B'}. 선정된 거짓 진술]\n${s2}${AVOID}`);
+const ASSEMBLE_A_V6 = `
+할 일: "윗글을 바탕으로 〈보기〉를 이해한 내용으로 적절하지 않은 것은?" 형식의 5지선다 〈보기〉 문항을 두 버전(V1, V2) 만든다. 각 버전은 재료 B의 거짓 진술들이 다루는 구역을 중심에 두되, 〈보기〉의 구체 사례에 맞게 선지를 새로 쓴다. 두 버전은 〈보기〉 사례뿐 아니라 정답이 노리는 착각과 〈보기〉 짜임도 서로 달라야 한다(OP5).
 
+출제 과정(공통 규칙 v6·선택 전략·규칙 A를 따른다):
+0. 전략 고르기: 버전마다 [선택 전략 목록]에서 이 양식(A)과 이 버전의 갈래에 쓸 수 있는 전략을 1~3개 고르고, 고른 이유를 한 줄 적는다. 고르지 않은 전략은 지키지 않아도 된다.
+1. 〈보기〉 설계: 버전마다 입력의 [버전별 지정]에 적힌 갈래로 쓰고, 그 갈래 규칙의 형식·원칙을 따른다. 〈보기〉는 사실까지만 쓰고 목적·까닭을 쓰지 않으며(R1), 정답을 가르는 관계를 직접 말하지 않는다(M9). 선지가 판정하는 개념어는 비운다(R2). 지문 예시를 이름만 바꿔 옮기지 않는다(M8). 디테일(사실·값)은 고른 전략에 맞게 고른다.
+2. 선지 후보: 〈보기〉 문장마다 참 버전을 먼저 쓰고, 고른 전략과 P4(지문 문장으로 분명히 반박)를 통과하는 거짓 버전이 있는지 시도한다. 시도와 버린 이유를 짧게 기록한다.
+3. 〈보기〉 길이와 선지 길이를 갈래 규칙에 맞춘다.
+4. 최종 5선지: 거짓(=정답) 정확히 1개, 참 4개. 〈보기〉 관찰 문장은 결과까지 쓴다(R5). 〈보기〉만으로 정오가 드러나는 선지는 쓰지 않는다(M2). 참 선지도 지문 문장을 대조하기만 하면 끝나지 않게, 〈보기〉 표현을 지문 개념으로 옮기거나 지문 원리를 적용하게 쓴다(M3). 〈보기〉 없이 지문 문장을 확인하기만 하면 정해지는 선지는 많아야 1개다(M4). 결론만 반대인 거울 짝을 만들지 않는다(M5). V1과 V2는 선지 함정을 공유하지 않는다(OP6). 정답은 마지막에 깊이와 매력도를 함께 보고 가장 좋은 거짓 후보로 고른다(OP4). 거짓은 단정어가 아니라 개념을 잘못 이어서 생긴다(M7). 참 선지 중 일부는 B의 거짓 진술을 뒤집은 '참이지만 헷갈리는' 형태로 써도 좋다. 거짓은 한 지점만 한 방식으로 비틀고(M1), 정답의 비튼 방식은 V1·V2가 서로 다르다(OP2). 선지 하나의 근거는 지문 1~2문단이다(M10). 정답은 [버전별 지정]의 번호에 둔다(OP1). 0번에서 고른 전략은 실제로 쓰고, 어느 선지·문장에 썼는지 적는다.
+5. 자기 검산: 선지마다 정오와 지문 근거 문장(원문 그대로)을 적고, 〈보기〉의 어느 표현을 어느 지문 개념으로 옮겨야 하는지 적는다. 정답이 하나뿐인지, 지문 밖 지식이 필요 없는지, 해석에 따라 정오가 바뀌는 선지가 없는지 확인한다.
+
+출력(마크다운): 버전마다 (1) 문항(발문, 〈보기〉, 선지 ①~⑤) — 정답 표시 없이 시험지 형태로, (2) 정답과 선지별 해설 표(정오, 근거 문장, 옮기기 단계), (3) 출제 기록(〈보기〉 문장별 노린 오해, 시도했다가 버린 선지와 이유, 고른 전략과 쓴 자리).
+`;
+const ASSEMBLE_B_V6 = `
+할 일: "윗글을 바탕으로 〈보기〉를 이해한 내용으로 가장 적절한 것은?" 형식의 5지선다 〈보기〉 문항을 두 버전(V1, V2) 만든다. 지문의 식(변수 관계)·수치 범위·판단 절차를 중심에 두고, 재료 S의 거짓 진술들이 다루는 구역을 함정 선지에 활용하되 〈보기〉의 구체 사례에 맞게 새로 쓴다. 두 버전은 〈보기〉 장면뿐 아니라 정답이 공격하는 고리와 〈보기〉 짜임도 서로 달라야 한다(OP5).
+
+출제 과정(공통 규칙 v6·선택 전략·규칙 B를 따른다):
+0. 전략 고르기: 버전마다 [선택 전략 목록]에서 이 양식(B)과 이 버전의 갈래에 쓸 수 있는 전략을 1~3개 고르고, 고른 이유를 한 줄 적는다. 고르지 않은 전략은 지키지 않아도 된다.
+1. 〈보기〉 설계: 버전마다 입력의 [버전별 지정]에 적힌 갈래로 쓰고, 그 갈래 규칙의 형식·원칙을 따른다. 식·절차가 적용되는 새 대상의 값·상태를 주고(RB1), 변수는 값이나 관찰 특징으로 보여 준다. 〈보기〉는 사실까지만 쓰고 목적·까닭·조작 서사는 쓰지 않는다(R1, RB3). 정답을 가르는 관계를 직접 말하지 않는다(M9). 지문 예시를 이름만 바꿔 옮기지 않는다(M8). 규칙 문서의 예시 소재는 쓰지 않는다.
+2. 선지 후보: 고리마다 참·거짓 버전을 모두 써 본 뒤 더 어려운 쪽을 고른다(OP4). S16을 골랐으면 범위 → 한 변수 방향 → 여러 변수 상쇄 → 지문의 다른 문장 연결 순으로 고리를 고른다. 시도와 버린 이유를 짧게 기록한다.
+3. 〈보기〉 길이와 선지 길이를 갈래 규칙에 맞춘다.
+4. 최종 5선지: 참(=정답) 정확히 1개, 거짓 4개. 〈보기〉 관찰 문장은 결과까지 쓴다(R5). 〈보기〉만으로 정오가 드러나는 선지는 쓰지 않는다(M2). 정답(참)도 지문 문장을 대조하기만 하면 끝나지 않게 쓴다(M3). 〈보기〉 없이 지문 문장을 확인하기만 하면 정해지는 선지는 많아야 1개다(M4). 결론만 반대인 거울 짝을 만들지 않는다(M5). V1과 V2는 선지 함정을 공유하지 않는다(OP6). S1을 골랐으면 정답 자리에 근거 둘 이상을 잇는 고리(사례 건너뛰기 연결 포함)를 둔다. 단정어로 거짓을 만들지 않는다(M7). 거짓 선지는 한 지점만 한 방식으로 비튼다(M1). 정답(참)이 비켜 가는 함정의 방식을 answerTwist로 적되 V1·V2가 서로 다르게 한다(OP2). 선지 하나의 근거는 지문 1~2문단이다(M10). 정답은 [버전별 지정]의 번호에 둔다(OP1). 0번에서 고른 전략은 실제로 쓰고, 어느 선지·문장에 썼는지 적는다.
+5. 자기 검산: 선지마다 정오와 지문 근거 문장(원문 그대로), 〈보기〉의 어느 특징을 어느 변수로 옮겨야 하는지, 필요한 경우 배수 검산을 적는다. 참이 하나뿐인지, 지문 밖 지식이 필요 없는지, 해석에 따라 정오가 바뀌는 선지가 없는지 확인한다. 각 선지의 난도(쉬움/중간/어려움)도 적는다.
+
+출력(마크다운): 버전마다 (1) 문항(발문, 〈보기〉, 선지 ①~⑤) — 정답 표시 없이 시험지 형태로, (2) 정답과 선지별 해설 표(정오, 근거 문장, 옮기기 단계, 난도), (3) 출제 기록(〈보기〉 문장별 노린 오해, 시도했다가 버린 선지와 이유, 고른 전략과 쓴 자리).
+`;
+const s3 = await call('3-assemble', `너는 수능 국어 독서 출제자다. ${COMMON}
+${V6 ? (MODE === 'B' ? ASSEMBLE_B_V6 : ASSEMBLE_A_V6) : (MODE === 'B' ? ASSEMBLE_B : ASSEMBLE_A)}맨 끝에 아래 형식의 JSON 코드 블록을 하나 덧붙인다:
+\`\`\`json
+{"items":[{"version":"V1","kind":"table","stem":"...","bogi":"...","choices":["①...","②...","③...","④...","⑤..."],"answer":4,"answerTwist":"짝 바꾸기","twists":["참","뒤집기","참","짝 바꾸기","참"],"roles":["쉬움","경쟁","중간","정답","중간"],"rival":2${V6 ? ',"strategies":["S3","S12"],"strategyUse":{"S3":"정답 ④","S12":"〈보기〉 셋째 문장, 선지 ②"}' : ''}}]}
+\`\`\`
+roles는 선지별 역할(${V6 ? 'OP3' : '공통 C11'}), rival은 가장 강한 경쟁 선지 번호다. kind는 갈래 영문 이름, answerTwist는 ${V6 ? 'M1 표의 방식 이름(OP2)' : '공통 C6의 방식 이름'}, twists는 선지별로 거짓이면 비튼 방식 이름, 참이면 "참"이다. 표 〈보기〉는 bogi 안에 안내 글과 마크다운 표를 줄바꿈으로 이어 넣는다. 갈래가 graph인 항목은 bogi를 빈 문자열로 두고 "graphSpec" 객체(갈래 규칙의 형식)를 항목에 넣는다. 시험지 형태 출력에서 〈보기〉 자리에는 graphSpec의 요약(축·곡선 모양·표시 기호)을 적는다.${V6 ? ' strategies는 0번에서 고른 선택 전략 번호(1~3개), strategyUse는 전략마다 쓴 자리 한 줄이다.' : ''}`,
+  `[지문]\n${passage}\n\n[버전별 지정]\n${SPEC}\n\n[${V6 ? '공통 규칙 v6' : '공통 원칙'} — 양식 규칙과 부딪치면 이것을 따른다]\n${commonRules}${V6 ? `\n\n[선택 전략 목록]\n${strategies}` : ''}\n\n${kindRules}\n\n[${MODE}. 출제 규칙]\n${rulesA}\n\n[가독성 기준 — 〈보기〉와 선지 문장을 처음부터 이 기준에 맞게 쓴다]\n${guideText}\n\n[${MODE === 'B' ? 'S' : 'B'}. 선정된 거짓 진술]\n${s2}${AVOID}`);
+
+if (DRY) { console.log(`\n[건조 실행] 2·3단계 지시문을 ${OUT} 의 *.dry.txt 로 저장했다. API는 부르지 않았다.`); process.exit(0); }
 // 3b단계: 사후 수정(다듬기) — 표현만 고친다. 정오·정답·연결 고리는 그대로.
 const lastJson = t => [...t.matchAll(/```json\s*([\s\S]*?)```/g)].pop();
 // 그래프 갈래(2026-11-21): 3단계 JSON의 graphSpec이 기준이다. 〈보기〉 = 명세에서 자동 생성한 읽기 판. 3b·3c에는 읽기 판을 따로 붙이고, 이후 graphSpec·bogi는 3단계 것으로 덮어쓴다.
@@ -223,7 +258,7 @@ try { for (const it of JSON.parse(lastJson(s3)[1]).items) if (it.graphSpec) grap
 for (const [v, g] of Object.entries(graphSpecs)) { const val = validateSpec(g); if (val.errs.length) console.warn(`[그래프 명세 오류] ${v}: ${val.errs.join(' / ')}`); }
 const graphNote = Object.keys(graphSpecs).length ? '\n\n[그래프 읽기 판(graphSpec에서 자동 생성, 〈보기〉로 취급 — graphSpec·bogi는 고치지 않는다)]\n' + Object.entries(graphSpecs).map(([v, g]) => `[${v}]\n${renderBoth(g).text}`).join('\n\n') : '';
 if (!lastJson(s3)) throw new Error('3단계 출력에서 JSON 블록을 찾지 못했습니다. out/3-assemble.md 확인');
-const checklist = fs.readFileSync(path.join(DIR, 'polish-checklist.md'), 'utf8');
+const checklist = fs.readFileSync(path.join(DIR, V6 ? 'polish-checklist-v6.md' : 'polish-checklist.md'), 'utf8');
 const s3b = await call('3b-polish', `너는 수능 국어 독서 문항의 문장을 다듬는 편집자다. ${COMMON}
 입력은 지문, 출제 규칙, 출제자가 만든 문항 두 개(해설·출제 기록 포함), 다듬기 점검표다.
 할 일: 점검표 항목을 문항의 〈보기〉와 선지 문장 하나하나에 적용해 표현만 고친다.
@@ -231,13 +266,13 @@ const s3b = await call('3b-polish', `너는 수능 국어 독서 문항의 문�
 - 정오, 정답 번호, 선지가 노리는 연결 고리와 난도는 바꾸지 않는다. 문항을 버리거나 쉽게 만들지 않는다.
 - 고치면 정오가 흔들릴 것 같은 문제는 고치지 않고 '논리 메모'에 적는다.
 - 고칠 곳이 없으면 그대로 둔다. 고치기 위해 고치지 않는다.
-- (v5) 〈보기〉에 목적·까닭·판정 결론 문장("~하려고", "~위해", "~ 때문에", "~에 해당했다")이 있으면 사실만 남기고 지운다(공통 C1). 표 〈보기〉의 표 구조와 값은 바꾸지 않는다. (그래프 갈래) graphSpec과 bogi(읽기 판)는 고치지 않고 그대로 옮기며, 발문(stem)의 그래프 소개 문장과 선지만 다듬는다. kind, answerTwist, twists, roles, rival은 그대로 옮긴다.
+- (v5) 〈보기〉에 목적·까닭·판정 결론 문장("~하려고", "~위해", "~ 때문에", "~에 해당했다")이 있으면 사실만 남기고 지운다(${V6 ? 'R1·M9' : '공통 C1'}). 표 〈보기〉의 표 구조와 값은 바꾸지 않는다. (그래프 갈래) graphSpec과 bogi(읽기 판)는 고치지 않고 그대로 옮기며, 발문(stem)의 그래프 소개 문장과 선지만 다듬는다. ${V6 ? 'kind, answerTwist, twists, roles, rival, strategies, strategyUse는' : 'kind, answerTwist, twists, roles, rival은'} 그대로 옮긴다.
 출력(마크다운): 버전마다 (1) 수정 표: 위치(〈보기〉 n번째 문장 / 선지 번호), 원문, 수정문, 점검표 항목 번호, (2) 논리 메모(없으면 '없음'), (3) 다듬은 문항(시험지 형태).
 맨 끝에 아래 형식의 JSON 코드 블록을 하나 덧붙인다. truth는 선지별 정오(적절하면 "O", 적절하지 않으면 "X"), intent는 선지별 출제 의도 한 줄(〈보기〉의 어느 표현을 지문의 어느 개념으로 옮겨야 하는지, 거짓이면 어디가 어긋나는지), answerIntent는 정답이 노리는 착각 한 줄이다:
 \`\`\`json
 {"items":[{"version":"V1","kind":"table","stem":"...","bogi":"...","choices":["①...","②...","③...","④...","⑤..."],"answer":4,"answerTwist":"짝 바꾸기","twists":["참","뒤집기","참","짝 바꾸기","참"],"truth":["O","O","O","X","O"],"intent":["...","...","...","...","..."],"answerIntent":"...","edits":3}]}
 \`\`\``,
-  `[지문]\n${passage}\n\n[출제 규칙]\n${rulesA}\n\n[공통 원칙]\n${commonRules}\n\n[다듬기 점검표]\n${checklist}\n\n[출제자가 만든 문항]\n${s3}${graphNote}`, POLISH_EFFORT);
+  `[지문]\n${passage}\n\n[출제 규칙]\n${rulesA}\n\n[${V6 ? '공통 규칙 v6' : '공통 원칙'}]\n${commonRules}\n\n[다듬기 점검표]\n${checklist}\n\n[출제자가 만든 문항]\n${s3}${graphNote}`, POLISH_EFFORT);
 
 // 3c단계: 가독성·오류 최종 교정 (v3.1) — 처음 읽는 학생이 한 번에 뜻을 잡게. 정오·정답·숨긴 핵심 개념은 그대로.
 const j3b = lastJson(s3b);
@@ -251,7 +286,7 @@ const s3c = await call('3c-readability', `너는 수능 국어 독서 문항의 
 3. 정오와 정답 번호는 바꾸지 않는다. 고치면 정오가 흔들릴 것 같은 곳은 고치지 않고 메모로 남긴다.
 4. 조건을 더하거나 빼지 않는다. 표현만 바꾼다. 숨긴 라벨을 보여 주는 장면을 새로 만들지 않고, 장면을 고칠 때는 지문 정의와의 대응이 유지되는지 확인한다.
 출력(마크다운): 버전마다 (1) 숨긴 핵심 개념, (2) 수정 표: 위치, 원문, 수정문, 기준 번호, (3) 메모(없으면 '없음'), (4) 교정한 문항(시험지 형태).
-맨 끝에 입력 JSON과 같은 형식의 JSON 코드 블록을 하나 덧붙인다. 항목마다 "hidden"(숨긴 핵심 개념 배열)과 "readabilityEdits"(수정 수)를 더하고, intent도 고친 문장에 맞게 갱신한다. kind, answerTwist, twists, roles, rival은 그대로 둔다. 표 〈보기〉의 표 구조와 값은 바꾸지 않는다. (그래프 갈래) graphSpec과 bogi는 고치지 않고 그대로 옮긴다.`,
+맨 끝에 입력 JSON과 같은 형식의 JSON 코드 블록을 하나 덧붙인다. 항목마다 "hidden"(숨긴 핵심 개념 배열)과 "readabilityEdits"(수정 수)를 더하고, intent도 고친 문장에 맞게 갱신한다. ${V6 ? 'kind, answerTwist, twists, roles, rival, strategies, strategyUse는' : 'kind, answerTwist, twists, roles, rival은'} 그대로 둔다. 표 〈보기〉의 표 구조와 값은 바꾸지 않는다. (그래프 갈래) graphSpec과 bogi는 고치지 않고 그대로 옮긴다.`,
   `[지문]\n${passage}\n\n[교정 기준]\n${guide}\n\n[출제 기록]\n${s3}${graphNote}\n\n[다듬은 문항 JSON]\n${j3b[1]}`, POLISH_EFFORT);
 
 // 4단계: 독립 풀이 검증 (정답 모르는 상태로, 최종 교정한 문항을 푼다)
@@ -271,6 +306,7 @@ for (const it of items) {
   it.bogiChars = it.bogi.replace(/\s/g, '').length;
   const b0 = before[it.version];
   if (b0 && String(b0.answer) !== String(it.answer)) console.warn(`[경고] ${it.version}: 다듬기·교정에서 정답이 바뀜 ${b0.answer} → ${it.answer}`);
+  if (V6 && b0) { it.strategies ??= b0.strategies; it.strategyUse ??= b0.strategyUse; } // 다듬기·교정이 흘린 전략 칸은 3단계 것으로 채운다
   const p0 = polished[it.version];
   if (p0) { it.before = { bogi: p0.bogi, choices: p0.choices }; it.edits = p0.edits; }
 }
@@ -327,7 +363,7 @@ for (const it of items) {
   const ansLen = lens[it.answer - 1];
   const rank = 1 + lens.filter(l => l > ansLen).length;
   it.answerLenRank = rank;
-  if (rank === 1) c.push(`정답이 가장 긴 선지 (${ansLen}자, 다음 ${[...lens].sort((x, y) => y - x)[1]}자)`);
+  if (rank === 1 && !V6) c.push(`정답이 가장 긴 선지 (${ansLen}자, 다음 ${[...lens].sort((x, y) => y - x)[1]}자)`);
   const avg = Math.round(lens.reduce((x, y) => x + y, 0) / 5);
   it.choiceAvg = avg;
   const [clo, chi] = it.kind === 'graph' ? [35, 70] : it.kind === 'table' ? [35, 60] : it.kind === 'view' ? [70, 100] : [40, 85];
@@ -338,6 +374,7 @@ for (const it of items) {
     const many = Object.entries(cnt).filter(([, n]) => n > 2);
     if (many.length) c.push(`같은 비튼 방식 3개 이상: ${many.map(([k, n]) => `${k} ${n}`).join(', ')}`);
   }
+  if (V6) for (const w of checkStrategiesV6(it, MODE, it.kind)) c.push(`전략 점검: ${w}`);
   checks[it.version] = c;
 }
 const both = keptItem ? [...items, keptItem] : items;

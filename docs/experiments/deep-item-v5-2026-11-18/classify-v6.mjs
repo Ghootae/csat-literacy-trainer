@@ -1,0 +1,114 @@
+// v6 판정(순수 함수, API 호출 없음). RULES_V=6일 때 eval-repair.mjs가 쓴다. 근거: rule-audit-2026-11-23/PROPOSAL-code-v6.md 4절.
+//   classifyV6(item, mask, e2, e3): e1(mask)·e2·e3의 해당 버전 항목으로 결함·방식 위반·수리 대상·경고·전략 경고를 계산한다.
+//   checkStrategiesV6(item, mode, kind): 출력의 strategies·strategyUse 기계 점검(PROPOSAL-code-v6 2-6절).
+
+const NEG = /적절하지\s*않은/;
+const norm = s => String(s ?? '').replace(/\s/g, '');
+
+// strategies-v6.md 목록 표의 "쓸 수 있는 곳"을 코드로 옮긴 것. modes: 양식, kinds: 갈래(null이면 모두).
+export const STRATEGY_USE = {
+  S1: { modes: ['A', 'B'], kinds: null },
+  S2: { modes: ['B'], kinds: null },
+  S3: { modes: ['A', 'B'], kinds: null },
+  S4: { modes: ['A', 'B'], kinds: null },
+  S5: { modes: ['A', 'B'], kinds: ['case', 'view'] },
+  S6: { modes: ['A', 'B'], kinds: ['case', 'table'] },
+  S7: { modes: ['A', 'B'], kinds: null },
+  S8: { modes: ['A', 'B'], kinds: null },
+  S9: { modes: ['A', 'B'], kinds: null },
+  S10: { modes: ['A', 'B'], kinds: null },
+  S11: { modes: ['A', 'B'], kinds: ['table', 'graph'] },
+  S12: { modes: ['A', 'B'], kinds: ['case', 'table'] },
+  S13: { modes: ['A'], kinds: ['case'] },
+  S14: { modes: ['A', 'B'], kinds: ['view'] },
+  S15: { modes: ['A', 'B'], kinds: null },
+  S16: { modes: ['B'], kinds: null },
+  S17: { modes: ['B'], kinds: null },
+};
+
+export function checkStrategiesV6(item, mode, kind) {
+  const out = [];
+  const s = item.strategies;
+  if (!Array.isArray(s)) return ['strategies가 배열이 아님(없음)'];
+  if (s.length < 1 || s.length > 3) out.push(`strategies가 ${s.length}개(1~3개여야 함)`);
+  for (const id of s) {
+    const u = STRATEGY_USE[id];
+    if (!u) { out.push(`strategies에 목록에 없는 번호: ${id}`); continue; }
+    if (!u.modes.includes(mode)) out.push(`${id}는 ${mode} 양식에 쓸 수 없음`);
+    else if (u.kinds && !u.kinds.includes(kind)) out.push(`${id}는 ${kind} 갈래에 쓸 수 없음`);
+    const use = item.strategyUse?.[id];
+    if (typeof use !== 'string' || !use.trim()) out.push(`${id}의 strategyUse(쓴 자리 한 줄)가 없음`);
+  }
+  return out;
+}
+
+export function classifyV6(it, m = {}, b = {}, c = {}) {
+  const defectReasons = [], warnings = [], methodDetails = {};
+  const surv = (b.surviving || []).map(Number);
+  const ch = c.choices || [];
+  const get = n => ch.find(y => Number(y.n) === n);
+  const sc = n => { const x = get(n); return !!(x && x.one_fact_shortcut?.possible && !(x.minimum_evidence?.bogi || '').trim()); };
+  const isRecheck = n => sc(n) && norm(get(n)?.task) === '내용확인'; // 지문 되묻기: 지문 한 사실로 판정되고 〈보기〉 근거가 없고 task가 내용 확인
+  const ans = Number(it.answer);
+  const negative = NEG.test(it.stem || '');
+  const trueChoices = negative ? [1, 2, 3, 4, 5].filter(n => n !== ans) : [ans];
+
+  // ---- 결함: 정답 유일성 (v5 판정 그대로, '후보 비움 + 답 일치'는 경고)
+  const va = (c.valid_answers || []).map(Number);
+  if (va.length === 0 && Number(c.answer) === ans) warnings.push(`정답 유일성 경고: 검사 모델이 정답 후보를 비움(답은 ${c.answer}, 근거 약함 ${JSON.stringify(c.weak || [])})`);
+  else if (!(va.length === 1 && va[0] === ans)) defectReasons.push(`정답 유일성 문제: 검사 모델의 정답 후보 ${JSON.stringify(va)}, 출제 정답 ${ans}`);
+  const defect = defectReasons.length > 0;
+
+  // ---- 방식 위반 M2·M3·M4·M5
+  const bogiOnly = [1, 2, 3, 4, 5].filter(n => get(n)?.bogi_only === true);
+  if (bogiOnly.length) methodDetails.M2 = `〈보기〉만으로 정오가 정해지는 선지: ${bogiOnly.join(',')}`;
+  const trueRecheck = trueChoices.filter(n => norm(get(n)?.task) === '내용확인');
+  if (trueRecheck.length) methodDetails.M3 = `내용상 참인 선지 중 내용 확인인 것: ${trueRecheck.join(',')}`;
+  const recheck = [1, 2, 3, 4, 5].filter(isRecheck);
+  if (recheck.length >= 2) methodDetails.M4 = `〈보기〉 없이 지문 문장 확인만으로 정해지는 선지가 ${recheck.length}개: ${recheck.join(',')}`;
+  const mp = c.mirror_pair || {};
+  const mpc = (mp.choices || []).map(Number);
+  if (mp.exists) methodDetails.M5 = `거울 짝 선지(${mpc.join('·')}): ${mp.why || ''}`;
+  const methodViolations = Object.keys(methodDetails);
+  const repair = !defect && methodViolations.length >= 2;
+  if (!repair && methodViolations.length === 1) warnings.push(`방식 위반 ${methodViolations[0]}: ${methodDetails[methodViolations[0]]}`);
+
+  // ---- 경고로 내린 사유 (v5의 수리 사유였던 것)
+  const noKey = !m.keyEvidence || !m.keyEvidence.length;
+  const maskOnlyAnswer = !noKey && surv.length === 1 && surv[0] === ans;
+  if (noKey) warnings.push('정답과 경쟁 선지를 가르는 핵심 관찰이 〈보기〉에 없음(지문만으로 갈림)');
+  else if (maskOnlyAnswer) warnings.push(`핵심 관찰(${m.keyEvidence.join(' / ')})을 가려도 정답만 남음`);
+  const ansC = get(ans);
+  const ansSc = sc(ans);
+  if (ansSc) warnings.push('정답이 〈보기〉 없이 지문 한 사실로 판정됨');
+  const ansSteps = Number(ansC?.steps ?? NaN);
+  const oneStep = !ansSc && ansSteps <= 1;
+  if (oneStep) warnings.push('정답이 한 단계로 판정됨(〈보기〉 한 번 읽고 지문 규칙 하나 적용)');
+  const ansSrc = Number(ansC?.bogi_sources ?? NaN);
+  const oneObs = !ansSc && ansSrc <= 1;
+  if (oneObs) warnings.push('정답이 〈보기〉 관찰 하나(한 열·한 문장)로 정해짐');
+  const easy = [1, 2, 3, 4, 5].filter(n => n !== ans && sc(n));
+  if (easy.length === 4) warnings.push('오답 넷이 모두 〈보기〉 없이 지문 한 사실로 지워짐');
+  else if (easy.length === 3) warnings.push(`오답 셋이 지문 한 사실로 지워짐(${easy.join(',')})`);
+  if (c.closest_rival && m.rival && Number(c.closest_rival.n) !== Number(m.rival)) warnings.push(`경쟁 선지 판단이 다름(출제 쪽 ${m.rival}, 풀이 쪽 ${c.closest_rival.n})`);
+  // '정답이 가장 긴 선지' 경고는 v6에서 지움(OP8: 기록만).
+
+  // ---- 고른 전략 못 지킴
+  const strategyWarnings = [];
+  const picked = Array.isArray(it.strategies) ? it.strategies : [];
+  if (picked.includes('S3') && (noKey || maskOnlyAnswer || ansSc)) strategyWarnings.push('고른 전략 못 지킴: S3');
+  if (picked.includes('S1') && (oneStep || oneObs)) strategyWarnings.push('고른 전략 못 지킴: S1');
+  if (picked.includes('S4') && easy.length >= 3) strategyWarnings.push('고른 전략 못 지킴: S4');
+  warnings.push(...strategyWarnings);
+
+  const reasons = [...defectReasons.map(x => `[결함] ${x}`), ...methodViolations.map(k => `[방식 위반 ${k}] ${methodDetails[k]}`)];
+  return {
+    repair, defect, methodViolations, methodDetails, strategyWarnings, reasons, warnings,
+    rival: m.rival, keyEvidence: m.keyEvidence, surviving: surv, easyChoices: easy,
+    steps: [1, 2, 3, 4, 5].map(n => Number(get(n)?.steps ?? NaN)),
+    bogiSources: [1, 2, 3, 4, 5].map(n => Number(get(n)?.bogi_sources ?? NaN)),
+    tasks: [1, 2, 3, 4, 5].map(n => get(n)?.task ?? null),
+    bogiOnly: [1, 2, 3, 4, 5].map(n => get(n)?.bogi_only ?? null),
+    mirrorPair: mp, solverAnswer: c.answer, validAnswers: va, closestRival: c.closest_rival,
+  };
+}
