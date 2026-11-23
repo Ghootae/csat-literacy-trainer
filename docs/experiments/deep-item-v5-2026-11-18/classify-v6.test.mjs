@@ -60,6 +60,8 @@ t('(보충) 전략 점검: 개수·목록·양식/갈래·strategyUse', () => {
   assert.ok(checkStrategiesV6({ strategies: ['S99'], strategyUse: {} }, 'A', 'case').some(x => x.includes('목록에 없는')));
   assert.ok(checkStrategiesV6({ strategies: ['S16'], strategyUse: { S16: 'x' } }, 'A', 'case').some(x => x.includes('A 양식에 쓸 수 없음')));
   assert.ok(checkStrategiesV6({ strategies: ['S5'], strategyUse: { S5: 'x' } }, 'B', 'table').some(x => x.includes('table 갈래에 쓸 수 없음')));
+  assert.ok(checkStrategiesV6({ strategies: ['S18'], strategyUse: { S18: 'x' } }, 'A', 'view').some(x => x.includes('view 갈래에 쓸 수 없음')));
+  assert.deepEqual(checkStrategiesV6({ strategies: ['S18', 'S19'], strategyUse: { S18: 'x', S19: 'y' } }, 'B', 'table'), []);
   assert.ok(checkStrategiesV6({ strategies: ['S3'], strategyUse: {} }, 'A', 'case').some(x => x.includes('strategyUse')));
   assert.ok(checkStrategiesV6({ strategies: ['S1', 'S3', 'S4', 'S7'], strategyUse: { S1: 'a', S3: 'a', S4: 'a', S7: 'a' } }, 'A', 'case').some(x => x.includes('4개')));
 });

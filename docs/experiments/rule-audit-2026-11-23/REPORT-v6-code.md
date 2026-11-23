@@ -70,3 +70,12 @@
 - **3단계 e4 지시:** RULES_V=6에서 "오답 역할" 문장을 뺐고 "(v5.3) 거울 짝"을 "(M5) 거울 짝"으로 바꿨다. v5 경로 문자열은 그대로다.
 - **4단계 확인:** `node --check` 두 파일 통과. `classify-v6.test.mjs` 8/8 통과. v5 경로 바이트 비교: (a) run.mjs 2·3단계 지시문 — HEAD 사본 대 새 코드, disclosure-insider A·B 동일. (b) eval-repair.mjs e4 지시문 — HEAD 대 새 코드, 저장된 mrna-vaccine-lipid-nanoparticle-B V2(v5 판정 수리 대상)로 REPAIR=1 캐시 실행해 지시문을 덤프해 비교, 동일(API 호출 없음). (c) eval.json·eval-summary.txt는 이전 보고에서 세 곳 동일.
 - 후보 1(3b·3c가 strategies를 흘리면 채움)은 그대로 둔다.
+
+## 덧붙임: R2·R3 층 변경 반영 (CLI-step3d-r2r3, 결정 2026-11-24 00:44 Ghootae, REPORT-rule-compliance-r3.md 3절)
+- `rules-common-v6.md` R2(129~133행 근처): "〈보기〉의 지문 용어는 돌려 말하지 않는다"로 바꿈. 점검 질문은 (3)만, '주파수' 예·새 이름 예는 남김. (1)(2)·"반납 완료·면제" 예·"대개 1~2개"는 S18로. R3는 지우고 "R3 → 선택 전략 S19로 옮김(2026-11-24, 기출 11/26)" 한 줄. R3의 "같은 사안 밖에 덧붙인 사건" 문장은 S5("흐름 밖 사건을 덧붙이지 말고")에 이미 있음을 확인했다. V3 추가(V2 뒤, "(옛 C2 앞부분, 관점 6/6)").
+- `strategies-v6.md`: 목록 표에 S18(사례·표·그래프), S19(모두), 본문 S18·S19(끝). 출처 표시는 지시대로.
+- 참조 맞춤: `kind-view-v6.md` 14·15행(K-E8 → S19, V1·V2·V3, S18은 V3가 맡음), `kind-case-v6.md` 17행(K-S1 → R2·S18, K-S2 → S19), `rules-B-v6.md` RB2(R2 → S18). **`polish-checklist-v6.md` 4번의 "(R2)"는 지시대로 바꾸지 않았다**(숨긴 라벨이 아닌 용어를 되살린다는 뜻이라 R2의 새 뜻과 맞는다). `rules-A-v6.md`의 옛 번호 안내 줄은 R2·R3을 가리키지 않아 그대로.
+- `run.mjs` 224행(A 지시 1번): "선지가 판정하는 개념어는 비운다(R2)" → "〈보기〉의 지문 용어는 돌려 말하지 않는다(R2). 관점 갈래는 선지가 판정하는 개념어를 〈보기〉에 쓰지 않는다(V3)." **B 지시 1번에는 이 문장이 없어(원래 "변수는 값이나 관찰 특징으로 보여 준다") 바꿀 곳이 없었다.**
+- `classify-v6.mjs` STRATEGY_USE: S18(A·B, case·table·graph), S19(A·B, 모두). `classify-v6.test.mjs`: S18을 관점(view)에서 고르면 경고, S18·S19를 B·table에서 고르면 통과(보충 사례 안에 2줄).
+- `polish-checklist-v6.md`, readability-guide는 바꾸지 않았다.
+- **6단계 결과:** `node --check` 두 파일 통과, `classify-v6.test.mjs` 8/8 통과. v5 경로 바이트 비교: `run.mjs` 2·3단계 지시문(HEAD 대 새 코드, disclosure-insider A·B) 동일. `eval-repair.mjs`는 이번에 안 바뀜(diff 없음). RULES_V=6 건조 실행(disclosure-insider, A·B, case·view): "(옛" **0개**, "판정하는 개념어는 비운다" **0개**; S18·S19·V3가 지시문에 각 1번 들어감.

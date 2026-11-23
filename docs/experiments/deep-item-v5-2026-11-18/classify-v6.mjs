@@ -24,6 +24,8 @@ export const STRATEGY_USE = {
   S15: { modes: ['A', 'B'], kinds: null },
   S16: { modes: ['B'], kinds: null },
   S17: { modes: ['B'], kinds: null },
+  S18: { modes: ['A', 'B'], kinds: ['case', 'table', 'graph'] },
+  S19: { modes: ['A', 'B'], kinds: null },
 };
 
 export function checkStrategiesV6(item, mode, kind) {
