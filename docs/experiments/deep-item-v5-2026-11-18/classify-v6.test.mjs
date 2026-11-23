@@ -55,15 +55,34 @@ t('(보충) M3: 부정 발문에서 참 선지(정답 아닌 선지)가 내용 �
   assert.deepEqual(neg('원리 적용', '내용 확인').methodViolations, ['M3']);
 });
 t('(보충) 전략 점검: 개수·목록·양식/갈래·strategyUse', () => {
-  assert.deepEqual(checkStrategiesV6({ strategies: ['S3', 'S12'], strategyUse: { S3: '정답 ④', S12: '셋째 문장' } }, 'A', 'case'), []);
+  assert.deepEqual(checkStrategiesV6({ answer: 4, rival: 2, strategies: ['S3', 'S12'], strategyUse: { S3: '정답 ④', S12: '선지 ② 경계' } }, 'A', 'case'), []);
   assert.ok(checkStrategiesV6({ strategies: [] }, 'A', 'case').length);
   assert.ok(checkStrategiesV6({ strategies: ['S99'], strategyUse: {} }, 'A', 'case').some(x => x.includes('목록에 없는')));
   assert.ok(checkStrategiesV6({ strategies: ['S16'], strategyUse: { S16: 'x' } }, 'A', 'case').some(x => x.includes('A 양식에 쓸 수 없음')));
   assert.ok(checkStrategiesV6({ strategies: ['S5'], strategyUse: { S5: 'x' } }, 'B', 'table').some(x => x.includes('table 갈래에 쓸 수 없음')));
   assert.ok(checkStrategiesV6({ strategies: ['S18'], strategyUse: { S18: 'x' } }, 'A', 'view').some(x => x.includes('view 갈래에 쓸 수 없음')));
-  assert.deepEqual(checkStrategiesV6({ strategies: ['S18', 'S19'], strategyUse: { S18: 'x', S19: 'y' } }, 'B', 'table'), []);
+  assert.deepEqual(checkStrategiesV6({ answer: 3, rival: 2, strategies: ['S18', 'S19'], strategyUse: { S18: '정답 ③', S19: 'y' } }, 'B', 'table'), []);
   assert.ok(checkStrategiesV6({ strategies: ['S3'], strategyUse: {} }, 'A', 'case').some(x => x.includes('strategyUse')));
   assert.ok(checkStrategiesV6({ strategies: ['S1', 'S3', 'S4', 'S7'], strategyUse: { S1: 'a', S3: 'a', S4: 'a', S7: 'a' } }, 'A', 'case').some(x => x.includes('4개')));
+});
+t('(v6.1-1) 배치 전략만 고름 → "깊이 전략 없음" 경고', () => {
+  const w = checkStrategiesV6({ answer: 3, rival: 2, strategies: ['S5', 'S9'], strategyUse: { S5: '〈보기〉 한 사안', S9: '정답 ③' } }, 'A', 'case');
+  assert.deepEqual(w, ['깊이 전략 없음']);
+});
+t('(v6.1-2) 깊이 전략이 정답·rival 아닌 선지에만 쓰임 → 경고, 정답이나 rival이면 통과', () => {
+  const base = { answer: 3, rival: 2, strategies: ['S12'] };
+  assert.ok(checkStrategiesV6({ ...base, strategyUse: { S12: '〈보기〉 셋째 문장, 선지 ①' } }, 'A', 'case').some(x => x.includes('S12이 정답·rival에 안 쓰임')));
+  assert.deepEqual(checkStrategiesV6({ ...base, strategyUse: { S12: '〈보기〉 셋째 문장, 선지 ③' } }, 'A', 'case'), []);
+  assert.deepEqual(checkStrategiesV6({ ...base, strategyUse: { S12: '경쟁 ②' } }, 'A', 'case'), []);
+  assert.deepEqual(checkStrategiesV6({ ...base, strategyUse: { S12: '정답 ③' } }, 'A', 'case'), []);
+});
+t('(v6.1-3) 관점(view)에서 방식 위반 둘 → repair=false + 경고, 사례(case)는 repair=true', () => {
+  const choices = [1, 2, 3, 4, 5].map(n => ch(n, n === 1 ? { bogi_only: true } : {}));
+  const over = { e3: { choices, mirror_pair: { exists: true, choices: [1, 2], why: '같다/적다' } } };
+  const v = run(mk(3, { ...over, item: { kind: 'view' } }));
+  assert.deepEqual(v.methodViolations, ['M2', 'M5']); assert.equal(v.repair, false); assert.equal(v.defect, false);
+  assert.ok(v.warnings.some(w => w.startsWith('관점: 방식 위반 둘 이상 — 수리 안 함')));
+  assert.equal(run(mk(3, { ...over, item: { kind: 'case' } })).repair, true);
 });
 
 let fail = 0;

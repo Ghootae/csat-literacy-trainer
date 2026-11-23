@@ -5,27 +5,27 @@
 const NEG = /적절하지\s*않은/;
 const norm = s => String(s ?? '').replace(/\s/g, '');
 
-// strategies-v6.md 목록 표의 "쓸 수 있는 곳"을 코드로 옮긴 것. modes: 양식, kinds: 갈래(null이면 모두).
+// strategies-v6.md 목록 표의 "쓸 수 있는 곳"·"종류"를 코드로 옮긴 것. modes: 양식, kinds: 갈래(null이면 모두), type: depth(깊이)|layout(배치) (v6.1, PROPOSAL-v61.md 2-1).
 export const STRATEGY_USE = {
-  S1: { modes: ['A', 'B'], kinds: null },
-  S2: { modes: ['B'], kinds: null },
-  S3: { modes: ['A', 'B'], kinds: null },
-  S4: { modes: ['A', 'B'], kinds: null },
-  S5: { modes: ['A', 'B'], kinds: ['case', 'view'] },
-  S6: { modes: ['A', 'B'], kinds: ['case', 'table'] },
-  S7: { modes: ['A', 'B'], kinds: null },
-  S8: { modes: ['A', 'B'], kinds: null },
-  S9: { modes: ['A', 'B'], kinds: null },
-  S10: { modes: ['A', 'B'], kinds: null },
-  S11: { modes: ['A', 'B'], kinds: ['table', 'graph'] },
-  S12: { modes: ['A', 'B'], kinds: ['case', 'table'] },
-  S13: { modes: ['A'], kinds: ['case'] },
-  S14: { modes: ['A', 'B'], kinds: ['view'] },
-  S15: { modes: ['A', 'B'], kinds: null },
-  S16: { modes: ['B'], kinds: null },
-  S17: { modes: ['B'], kinds: null },
-  S18: { modes: ['A', 'B'], kinds: ['case', 'table', 'graph'] },
-  S19: { modes: ['A', 'B'], kinds: null },
+  S1: { modes: ['A', 'B'], kinds: null, type: 'depth' },
+  S2: { modes: ['B'], kinds: null, type: 'depth' },
+  S3: { modes: ['A', 'B'], kinds: null, type: 'depth' },
+  S4: { modes: ['A', 'B'], kinds: null, type: 'depth' },
+  S5: { modes: ['A', 'B'], kinds: ['case', 'view'], type: 'layout' },
+  S6: { modes: ['A', 'B'], kinds: ['case', 'table'], type: 'layout' },
+  S7: { modes: ['A', 'B'], kinds: null, type: 'layout' },
+  S8: { modes: ['A', 'B'], kinds: null, type: 'depth' },
+  S9: { modes: ['A', 'B'], kinds: null, type: 'layout' },
+  S10: { modes: ['A', 'B'], kinds: null, type: 'depth' },
+  S11: { modes: ['A', 'B'], kinds: ['table', 'graph'], type: 'depth' },
+  S12: { modes: ['A', 'B'], kinds: ['case', 'table'], type: 'depth' },
+  S13: { modes: ['A'], kinds: ['case'], type: 'depth' },
+  S14: { modes: ['A', 'B'], kinds: ['view'], type: 'depth' },
+  S15: { modes: ['A', 'B'], kinds: null, type: 'depth' },
+  S16: { modes: ['B'], kinds: null, type: 'depth' },
+  S17: { modes: ['B'], kinds: null, type: 'depth' },
+  S18: { modes: ['A', 'B'], kinds: ['case', 'table', 'graph'], type: 'depth' },
+  S19: { modes: ['A', 'B'], kinds: null, type: 'layout' },
 };
 
 export function checkStrategiesV6(item, mode, kind) {
@@ -40,6 +40,23 @@ export function checkStrategiesV6(item, mode, kind) {
     else if (u.kinds && !u.kinds.includes(kind)) out.push(`${id}는 ${kind} 갈래에 쓸 수 없음`);
     const use = item.strategyUse?.[id];
     if (typeof use !== 'string' || !use.trim()) out.push(`${id}의 strategyUse(쓴 자리 한 줄)가 없음`);
+  }
+  // v6.1 (PROPOSAL-v61.md 3절): 깊이 전략 점검. 경고일 뿐 수리·결함 아님. 목록 점검에 걸린 번호(없는 번호)는 깊이 판정에서 뺀다.
+  const depth = s.filter(id => STRATEGY_USE[id]?.type === 'depth');
+  if (s.length && depth.length === 0 && s.every(id => STRATEGY_USE[id])) out.push('깊이 전략 없음');
+  // 선지 번호 읽기: ①~⑤, "N번", "선지/정답/rival/경쟁 N"만 센다(다른 숫자는 세지 않음).
+  const nums = v => {
+    const t = String(v ?? '');
+    const r = [...t.matchAll(/[①-⑤]/g)].map(m => m[0].charCodeAt(0) - 0x2460 + 1);
+    for (const m of t.matchAll(/([1-5])\s*번/g)) r.push(Number(m[1]));
+    for (const m of t.matchAll(/(?:선지|정답|rival|경쟁)\s*([1-5])(?!\d)/g)) r.push(Number(m[1]));
+    return r;
+  };
+  const ans = Number(item.answer), rival = Number(item.rival);
+  for (const id of depth) {
+    const txt = String(item.strategyUse?.[id] ?? '');
+    const hit = new Set(nums(txt));
+    if (txt.trim() && !hit.has(ans) && !(rival >= 1 && hit.has(rival))) out.push(`깊이 전략 ${id}이 정답·rival에 안 쓰임`);
   }
   return out;
 }
@@ -72,8 +89,11 @@ export function classifyV6(it, m = {}, b = {}, c = {}) {
   const mpc = (mp.choices || []).map(Number);
   if (mp.exists) methodDetails.M5 = `거울 짝 선지(${mpc.join('·')}): ${mp.why || ''}`;
   const methodViolations = Object.keys(methodDetails);
-  const repair = !defect && methodViolations.length >= 2;
+  // v6.1 (PROPOSAL-v61.md 3절): 수리는 kind가 case·table·graph일 때만. view는 방식 위반이 둘 이상이어도 경고로만 남긴다.
+  const viewNoRepair = it.kind === 'view';
+  const repair = !defect && methodViolations.length >= 2 && !viewNoRepair;
   if (!repair && methodViolations.length === 1) warnings.push(`방식 위반 ${methodViolations[0]}: ${methodDetails[methodViolations[0]]}`);
+  if (!repair && viewNoRepair && !defect && methodViolations.length >= 2) warnings.push(`관점: 방식 위반 둘 이상 — 수리 안 함(검사기 참고): ${methodViolations.map(k => `${k} ${methodDetails[k]}`).join(' / ')}`);
 
   // ---- 경고로 내린 사유 (v5의 수리 사유였던 것)
   const noKey = !m.keyEvidence || !m.keyEvidence.length;
