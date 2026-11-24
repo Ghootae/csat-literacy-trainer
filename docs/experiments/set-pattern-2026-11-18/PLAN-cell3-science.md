@@ -1,6 +1,6 @@
 # 순서표 ③ 칸 계획: 과학 (웹, 2026-11-24 21시 KST)
 
-- 상태: **Ghootae 결정 전.** 판정 기준은 정해졌다(`PROPOSAL-cell-judging-criteria.md`, WORKING-RULES 4-2).
+- 상태: 3a 끝(후보 표 CANDIDATES-science.md). 과학 관점 기출 0 → 3b 안 = 사례 A형(고체 촉매 평가원) + 그래프(옥신), Ghootae 결정 대기. 판정 기준은 정해졌다(`PROPOSAL-cell-judging-criteria.md`, WORKING-RULES 4-2).
 - 근거: `2026-11-24-cell2-done.md` 4절, `REVIEW-step4-r3-web.md` 2절(순서표), `STRATEGY-hard-cells.md` 과학 절, `PROGRESS-hard.md`, `REPORT-cell-graph-r3.md`, `rule-audit-2026-11-23/INVENTORY.md`, `PLAN-cell2-economy-table-graph.md`(틀).
 - 경로: `V5` = `docs/experiments/deep-item-v5-2026-11-18`, `SP` = `docs/experiments/set-pattern-2026-11-18`.
 
