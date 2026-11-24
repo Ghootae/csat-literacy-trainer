@@ -1,20 +1,27 @@
 # 순서표 ② 칸 집계. 실행(저장소 루트): python3 docs/experiments/set-pattern-2026-11-18/cell2/aggregate.py
 # 측정값만 적는다. 판정 이름(통과/거의/미달)·결론·규칙 후보는 쓰지 않는다(웹이 한다).
-import json, re, collections
+import json, re, collections, sys
 C='docs/experiments/set-pattern-2026-11-18/cell2/'; B=C+'blind/'; V5='docs/experiments/deep-item-v5-2026-11-18/'
-KEY=json.load(open(B+'KEY-cell2.json')); SC={'수능 같음':2,'중':1,'수능 아님':0}
+SC={'수능 같음':2,'중':1,'수능 아님':0}
+R2=len(sys.argv)>1 and sys.argv[1]=='r2'   # 인자 r2: 2회차(blind-r2, 앵커 13번 더함). 인자 없으면 1회차 그대로.
 def blocks(t): return json.loads(re.findall(r'```json\s*(.*?)```',t,re.S)[-1])
-EV={i:{r['item']:r for r in blocks(open(B+f'REPORT-cell2-eval{i}.md',encoding='utf8').read())} for i in range(1,5)}
-assert all(len(EV[i])==5 for i in EV)
-OUT=[]; W=OUT.append
 def kind(k): return k['source'].split(' (')[0]
-ROW={}
-for k in KEY:
-    it=k['item']; gs=[EV[i][it]['grade'] for i in EV]; ans=[EV[i][it]['answer'] for i in EV]; df=collections.Counter(d for i in EV for d in (EV[i][it].get('defects') or []))
-    ROW[kind(k)]=dict(k=k,it=it,grades=gs,mean=sum(SC[g] for g in gs)/4,ok=sum(a==k['answer'] for a in ans),defects=df,ans=ans,
-        reasons=[EV[i][it]['reason'] for i in EV],gnotes=[EV[i][it].get('graphNote') or '' for i in EV],same=gs.count('수능 같음'),mid=gs.count('중'),no=gs.count('수능 아님'))
-ORD=['표 A-V1','표 B-V1','그래프 A-V2','그래프 B-V2','기출 12번']
-W('# 순서표 ② 경제 표·그래프 v6.2 칸 집계 (자동 생성, 측정만)\n')
+def load_rows(bdir, keyf, repf, n):
+    KEY=json.load(open(bdir+keyf)); EV={i:{r['item']:r for r in blocks(open(bdir+repf%i,encoding='utf8').read())} for i in range(1,5)}
+    assert all(len(EV[i])==n for i in EV)
+    ROW={}
+    for k in KEY:
+        it=k['item']; gs=[EV[i][it]['grade'] for i in EV]; ans=[EV[i][it]['answer'] for i in EV]; df=collections.Counter(d for i in EV for d in (EV[i][it].get('defects') or []))
+        ROW[kind(k)]=dict(k=k,it=it,grades=gs,mean=sum(SC[g] for g in gs)/4,ok=sum(a==k['answer'] for a in ans),defects=df,ans=ans,
+            reasons=[EV[i][it]['reason'] for i in EV],gnotes=[EV[i][it].get('graphNote') or '' for i in EV],same=gs.count('수능 같음'),mid=gs.count('중'),no=gs.count('수능 아님'))
+    return EV,ROW
+if R2:
+    B=C+'blind-r2/'; EV,ROW=load_rows(B,'KEY-cell2-r2.json','REPORT-cell2-r2-eval%d.md',6); _,ROW1=load_rows(C+'blind/','KEY-cell2.json','REPORT-cell2-eval%d.md',5)
+else:
+    EV,ROW=load_rows(B,'KEY-cell2.json','REPORT-cell2-eval%d.md',5)
+OUT=[]; W=OUT.append
+ORD=['표 A-V1','표 B-V1','그래프 A-V2','그래프 B-V2','기출 12번']+(['기출 13번'] if R2 else [])
+W('# 순서표 ② 경제 표·그래프 v6.2 칸 집계 (자동 생성, 측정만)'+(' — 2회차(앵커 13번 더함)' if R2 else '')+'\n')
 W('## a. 문항별 4회 등급·평균 (수능 같음 2, 중 1, 수능 아님 0)\n')
 W('| 문항 | 라벨 | 정답 | 평가자1~4 등급 | 평균 | 같음/중/아님 | 정답 일치 | 평가자 답 | 결함 표시 빈도 |'); W('|---|---|---|---|---|---|---|---|---|')
 for n in ORD:
@@ -74,6 +81,20 @@ for n,(m,v) in {'표 A-V1':('A','V1'),'그래프 A-V2':('A','V2'),'표 B-V1':('B
     W(f"  - design-check: {json.dumps(dc,ensure_ascii=False) if dc else '없음'}")
     W(f"  - 노출 수리(leakfix): {lf.get('status')}")
 W('\n## 형식 실패·정답 불일치\n')
-W(f"- 평가자 JSON 5문항 완결: {[len(EV[i]) for i in EV]}")
+W(f"- 평가자 JSON {len(ORD)}문항 완결: {[len(EV[i]) for i in EV]}")
 W(f"- 정답 불일치: { {n:(ROW[n]['ok'],ROW[n]['ans']) for n in ORD if ROW[n]['ok']<4} or '없음'}")
-open(C+'aggregate-out.md','w',encoding='utf8').write('\n'.join(OUT)+'\n'); print('\n'.join(OUT))
+if R2:
+    W('\n## 2회차 대 1회차 나란히 (값만)\n')
+    W('| 문항 | 1회차 등급(4명) | 1회차 평균 | 2회차 등급(4명) | 2회차 평균 | 정답 일치 1회차/2회차 |'); W('|---|---|---|---|---|---|')
+    for n in ORD:
+        r=ROW[n]; q=ROW1.get(n)
+        qg=' / '.join(q['grades']) if q else '(없음)'; qm=f"{q['mean']:.2f}" if q else '-'; qo=f"{q['ok']}/4" if q else '-'
+        W(f"| {n} | {qg} | {qm} | {' / '.join(r['grades'])} | {r['mean']:.2f} | {qo} / {r['ok']}/4 |")
+    W('\n## 앵커·기출 \'수능 같음\' 횟수 (2회차)\n')
+    W(f"- 기출 13번(앵커): {ROW['기출 13번']['same']}회 (등급 {ROW['기출 13번']['grades']}), 기출 12번: {ROW['기출 12번']['same']}회 (1회차 {ROW1['기출 12번']['same']}회)")
+    W('\n## 4-c 칸별 값 1회차·2회차 나란히 (표 칸 A-V1·B-V1, 그래프 칸 A-V2·B-V2)\n')
+    W('| 칸 | 회차 | A 아님 횟수 | B 아님 횟수 | 같음 3회 이상 문항 수 | A 같음 | B 같음 | 기출12 같음 |'); W('|---|---|---|---|---|---|---|---|')
+    for cell,(a,b) in {'표 칸':('표 A-V1','표 B-V1'),'그래프 칸':('그래프 A-V2','그래프 B-V2')}.items():
+        for lab,R in (('1회차',ROW1),('2회차',ROW)):
+            A=R[a]; Bq=R[b]; W(f"| {cell} | {lab} | {A['no']} | {Bq['no']} | {(A['same']>=3)+(Bq['same']>=3)} | {A['same']} | {Bq['same']} | {R['기출 12번']['same']} |")
+open(C+('aggregate-out-r2.md' if R2 else 'aggregate-out.md'),'w',encoding='utf8').write('\n'.join(OUT)+'\n'); print('\n'.join(OUT))
