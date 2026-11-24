@@ -295,3 +295,4 @@
 | [`D-0233`](./decisions/D-0233-passage-gen-pilot-round1-closed.md) | accepted | 지문 생성 파일럿 1차 종료: 인지 강화 지문 v4에서 다듬기 중단, 검토 반복은 정확도만 올림. 다음 검증은 문항 파이프라인(D-0231)으로 | 사용자 결정 |
 | [`D-0234`](./decisions/D-0234-restated-summary-corrections-card.md) | accepted | 오류가 남은 단계의 요약 카드는 "피드백을 반영한 정리"로 표시: 틀린 구절 취소선·교정 목록, 판정 지시문·모델 출력은 불변(Q-0050 방안 B) | 사용자 결정 |
 | [`D-0235`](./decisions/D-0235-deep-item-v52-baseline.md) | accepted | 깊은 〈보기〉 v5.3 블라인드 기준 미달로 비교 종료, 기준 v5.2 유지 | 사용자 사전 결정 |
+| [`D-0236`](./decisions/D-0236-rule-audit-conclusion-v62-adopted.md) | accepted | 규칙 감사 결론: 생성 규칙 v6.2 채택(다섯 층 + 생성 기준 GN1), 검사기 v6.1(관점 수리 끔), 칸 생성 재개 | 사용자 결정(사전 기준 충족) |

@@ -123,6 +123,8 @@ node $V5/run.mjs > $V5/out-cell5-disclosure-insider-B.log 2>&1
 
 ## 8. ⑤ 뒤에 정할 것: 11칸 × 추천 순서 대조 (웹 검토 2026-11-21 13:00, Ghootae 동의 13:11)
 
+> 2026-11-24: 이 표는 rule-audit-2026-11-23/step4/REVIEW-step4-r3-web.md 2절 순서표로 대신한다(v6.2 채택).
+
 세팅(2026-11-19): 과학 = 표·사례·실험·관점·그래프 / 인문 = 사례·관점 / 사회 = 사례·관점·표·그래프. STRATEGY 3절 ①~⑦과 PROGRESS-hard.md로 대조했다.
 
 | 칸 | 지금 | L2 (기출 지문) | L3 (생성 지문) |
