@@ -24,7 +24,7 @@ export const STRATEGY_USE = {
   S15: { modes: ['A', 'B'], kinds: null, type: 'depth' },
   S16: { modes: ['B'], kinds: null, type: 'depth' },
   S17: { modes: ['B'], kinds: null, type: 'depth' },
-  S18: { modes: ['A', 'B'], kinds: ['case', 'table', 'graph'], type: 'depth' },
+  S18: { modes: ['A', 'B'], kinds: ['case', 'table', 'graph', 'experiment'], type: 'depth' },
   S19: { modes: ['A', 'B'], kinds: null, type: 'layout' },
 };
 
@@ -89,9 +89,10 @@ export function classifyV6(it, m = {}, b = {}, c = {}) {
   const mpc = (mp.choices || []).map(Number);
   if (mp.exists) methodDetails.M5 = `거울 짝 선지(${mpc.join('·')}): ${mp.why || ''}`;
   const methodViolations = Object.keys(methodDetails);
-  // v6.1 (PROPOSAL-v61.md 3절): 수리는 kind가 case·table·graph일 때만. view는 방식 위반이 둘 이상이어도 경고로만 남긴다.
+  // v6.1 (PROPOSAL-v61.md 3절): 수리는 kind가 view가 아닐 때만. view는 방식 위반이 있어도 경고로만 남긴다.
+  // v6.3 (Ghootae 2026-11-25): 방식 위반 하나여도 수리(과학 사례 B형이 M2 경고만 받고 수리 없이 미달). view는 그대로 경고만.
   const viewNoRepair = it.kind === 'view';
-  const repair = !defect && methodViolations.length >= 2 && !viewNoRepair;
+  const repair = !defect && methodViolations.length >= 1 && !viewNoRepair;
   if (!repair && methodViolations.length === 1) warnings.push(`방식 위반 ${methodViolations[0]}: ${methodDetails[methodViolations[0]]}`);
   if (!repair && viewNoRepair && !defect && methodViolations.length >= 2) warnings.push(`관점: 방식 위반 둘 이상 — 수리 안 함(검사기 참고): ${methodViolations.map(k => `${k} ${methodDetails[k]}`).join(' / ')}`);
 

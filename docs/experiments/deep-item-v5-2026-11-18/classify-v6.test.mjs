@@ -23,11 +23,10 @@ t('(1) 정답 유일성 문제 → defect, 수리 아님', () => {
   assert.equal(d.defect, true); assert.equal(d.repair, false);
   assert.match(d.reasons.join(), /정답 유일성 문제/);
 });
-t('(2) M4만 어김 → 경고, 수리 아님', () => {
+t('(2) M4만 어김(case) → 수리 대상(v6.3: 하나여도 수리)', () => {
   const choices = [1, 2, 3, 4, 5].map(n => ch(n, n === 1 || n === 4 ? recheck : {}));
   const d = run(mk(3, { e3: { choices } }));
-  assert.deepEqual(d.methodViolations, ['M4']); assert.equal(d.defect, false); assert.equal(d.repair, false);
-  assert.ok(d.warnings.some(w => w.startsWith('방식 위반 M4')));
+  assert.deepEqual(d.methodViolations, ['M4']); assert.equal(d.defect, false); assert.equal(d.repair, true);
 });
 t('(3) M2 + M5 → 수리 대상', () => {
   const choices = [1, 2, 3, 4, 5].map(n => ch(n, n === 1 ? { bogi_only: true } : {}));
@@ -45,9 +44,9 @@ t('(5) 아무 문제 없음 → 통과', () => {
   const d = run(mk(3));
   assert.equal(d.repair, false); assert.equal(d.defect, false); assert.deepEqual(d.methodViolations, []); assert.deepEqual(d.warnings, []);
 });
-t('(6) 거울 짝이 오답끼리 → M5 위반(정답 포함 여부와 무관)', () => {
+t('(6) 거울 짝이 오답끼리 → M5 위반(정답 포함 여부와 무관), 수리 대상', () => {
   const d = run(mk(3, { e3: { mirror_pair: { exists: true, choices: [1, 2], why: '오답끼리' } } }));
-  assert.deepEqual(d.methodViolations, ['M5']); assert.equal(d.repair, false);
+  assert.deepEqual(d.methodViolations, ['M5']); assert.equal(d.repair, true);
 });
 t('(보충) M3: 부정 발문에서 참 선지(정답 아닌 선지)가 내용 확인이면 위반, 정답이 내용 확인이어도 위반 아님', () => {
   const neg = (task3, task1) => run(mk(3, { item: { stem: NEG }, e3: { choices: [1, 2, 3, 4, 5].map(n => ch(n, { task: n === 3 ? task3 : n === 1 ? task1 : '원리 적용' })) } }));
@@ -83,6 +82,18 @@ t('(v6.1-3) 관점(view)에서 방식 위반 둘 → repair=false + 경고, 사�
   assert.deepEqual(v.methodViolations, ['M2', 'M5']); assert.equal(v.repair, false); assert.equal(v.defect, false);
   assert.ok(v.warnings.some(w => w.startsWith('관점: 방식 위반 둘 이상 — 수리 안 함')));
   assert.equal(run(mk(3, { ...over, item: { kind: 'case' } })).repair, true);
+});
+
+t('(v6.3) 방식 위반 하나: case·experiment는 수리, view는 수리 안 하고 경고만', () => {
+  const choices = [1, 2, 3, 4, 5].map(n => ch(n, n === 1 ? { bogi_only: true } : {}));
+  const c1 = kind => run(mk(3, { e3: { choices }, item: { kind } }));
+  assert.deepEqual(c1('case').methodViolations, ['M2']); assert.equal(c1('case').repair, true);
+  assert.equal(c1('experiment').repair, true);
+  const v = c1('view'); assert.equal(v.repair, false); assert.ok(v.warnings.some(w => w.startsWith('방식 위반 M2')));
+});
+t('(v6.3) 전략: S18은 experiment 갈래에 쓸 수 있고 S5는 쓸 수 없음', () => {
+  assert.deepEqual(checkStrategiesV6({ answer: 3, rival: 2, strategies: ['S18'], strategyUse: { S18: '정답 ③' } }, 'B', 'experiment'), []);
+  assert.ok(checkStrategiesV6({ strategies: ['S5'], strategyUse: { S5: 'x' } }, 'B', 'experiment').some(x => x.includes('experiment 갈래에 쓸 수 없음')));
 });
 
 let fail = 0;

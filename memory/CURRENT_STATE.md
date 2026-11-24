@@ -92,7 +92,7 @@
 7. 단단한 〈보기〉 세트(`docs/experiments/set-pattern-2026-11-18/`, 작업 규칙 `docs/handoffs/WORKING-RULES.md`, 2026-11-21):
    - ③ 그래프 칸 **보류**(11-21 결정, 재시험은 ⑥ 경제 그래프 기출 지문으로). 원인·완료한 할 일: [체크포인트](./checkpoints/2026-11-24-current-state-trim.md).
    - 규칙 수정 절차: 규칙 추가·수정은 웹 스레드 논의 → 웹 Claude 충돌 검토 → Ghootae 결정 → CLI는 결정 문안을 그대로 반영. CLI는 규칙 파일을 스스로 고치지 않는다.
-   - ④·⑤·수리 방향·기출 오답 태깅·규칙 감사 0~4단계 끝(이력: [체크포인트](./checkpoints/2026-11-24-current-state-trim.md)). 지금 참: 생성 규칙 v6.2 채택(GN1 = 옛 C23), 검사기 v6.1(관점 수리 끔), 칸 생성 재개(RULES_V=6). 근거: docs/experiments/rule-audit-2026-11-23/step4/REVIEW-step4-r3-web.md, 인계 docs/handoffs/2026-11-24-rule-audit-step4-done.md. 순서표 ① 끝(사회 관점 L2 통과·인문 사례 거의 통과, v6.2). 순서표 ①·② 끝, ③-1 끝(과학 그래프 통과·과학 사례 B형 재생성 중). 칸 판정 기준 = 칸 평균 ≥1.5 통과, 블라인드마다 자격 기출(docs/handoffs/WORKING-RULES.md 4-3, 2026-11-25). 다음 할 일 = 과학 사례 재생성 결과 기록 → ③-2 실험(kind-experiment-v6 초안 결정).
+   - ④·⑤·수리 방향·기출 오답 태깅·규칙 감사 0~4단계 끝(이력: [체크포인트](./checkpoints/2026-11-24-current-state-trim.md)). 지금 참: 생성 규칙 v6.2 채택(GN1 = 옛 C23), 검사기 v6.1(관점 수리 끔), 칸 생성 재개(RULES_V=6). 근거: docs/experiments/rule-audit-2026-11-23/step4/REVIEW-step4-r3-web.md, 인계 docs/handoffs/2026-11-24-rule-audit-step4-done.md. 순서표 ① 끝(사회 관점 L2 통과·인문 사례 거의 통과, v6.2). 순서표 ①·② 끝, ③-1 끝(과학 그래프 통과, 과학 사례 미달 확정), ③-2 실험 칸 시험 중(kind-experiment-v6, 표면 장력 B형). 칸 판정 기준 = docs/handoffs/WORKING-RULES.md 4-3. 수리 기준 v6.3 = 방식 위반 하나여도 수리(view 제외).
 
 ## 금지선
 

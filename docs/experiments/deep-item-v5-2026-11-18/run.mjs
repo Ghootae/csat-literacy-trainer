@@ -93,9 +93,9 @@ const AVOID = (avoidText ? `\n\n[이미 쓴 함정 — 같은 지문의 A형 문
 const guideText = fs.readFileSync(path.join(DIR, process.env.GUIDE || 'readability-guide-v4.md'), 'utf8');
 
 // v5: 갈래·정답 번호·비튼 방식
-const KIND_NAME = { case: '사례', table: '표·단계 목록', view: '외부 글·관점', graph: '그래프' };
+const KIND_NAME = { case: '사례', table: '표·단계 목록', view: '외부 글·관점', graph: '그래프', experiment: '실험·관찰' };
 const KIND = { V1: process.env.KIND_V1, V2: process.env.KIND_V2 };
-for (const v of ['V1', 'V2']) if (!KIND_NAME[KIND[v]]) throw new Error(`KIND_${v}는 case | table | view | graph 중 하나`);
+for (const v of ['V1', 'V2']) if (!KIND_NAME[KIND[v]]) throw new Error(`KIND_${v}는 case | table | view | graph | experiment 중 하나`);
 const commonRules = stripOld(fs.readFileSync(path.join(DIR, V6 ? 'rules-common-v6.md' : 'rules-common.md'), 'utf8'))
   + (!V6 && MODE === 'B' && process.env.V53_B !== '0' ? '\n\n' + fs.readFileSync(path.join(DIR, 'rules-common-v53-B.md'), 'utf8') : ''); // 2026-11-19: v5.3 규칙은 B형에만
 const kindRules = [...new Set([KIND.V1, KIND.V2])].map(k => `[갈래 규칙: ${KIND_NAME[k]} (${k})]\n` + stripOld(fs.readFileSync(path.join(DIR, `kind-${k}${V6 ? '-v6' : ''}.md`), 'utf8'))).join('\n\n');
@@ -359,6 +359,7 @@ for (const it of items) {
     if (tableLines.length) c.push(`${KIND_NAME[it.kind]} 갈래인데 표가 들어 있음`);
     const [lo, hi] = it.kind === 'view' ? [200, 480] : [150, 310];
     if (tlen < lo || tlen > hi) c.push(`〈보기〉 ${tlen}자 (권장 ${lo}~${hi})`);
+    if (it.kind === 'experiment' && !/^\s*\(단,/.test(lines.filter(l => l.trim()).pop() || '')) c.push("실험 갈래인데 '(단, …)' 줄 없음");
   }
   const lens = it.choices.map(ch => strip(ch).length);
   const ansLen = lens[it.answer - 1];
