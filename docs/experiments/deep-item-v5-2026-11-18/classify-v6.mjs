@@ -1,3 +1,4 @@
+// v6.6 CASE_FLOW=lever (2026-11-26, case-check/PLAN-case-lever.md): checkLeversV6(item) — 사례 갈래 갈림 사실 표(leverTable)·선지별 choiceLevers를 〈보기〉와 서버가 대조(L1~L5).
 // v6.5(2026-11-25 22시대, case-check/REVIEW-case-fact-repair-web.md): M6는 e3가 아니라 별도 호출 e3f(gpt-6.1-sol, 질문 하나) 결과로 계산(classifyV6 5번째 인자). stemChanged·finalStatus는 수리 보완 두 개(발문 보존, 결함 내보내지 않기)의 순수 판정.
 // v6.4(2026-11-25): M6 원리 뒤집기(case-check/REVIEW-case-false-spot-web.md·REPORT-case-fact-check.md, 결정 카드 21:42 KST). v6 판정(순수 함수, API 호출 없음). RULES_V=6일 때 eval-repair.mjs가 쓴다. 근거: rule-audit-2026-11-23/PROPOSAL-code-v6.md 4절.
 //   classifyV6(item, mask, e2, e3): e1(mask)·e2·e3의 해당 버전 항목으로 결함·방식 위반·수리 대상·경고·전략 경고를 계산한다.
@@ -151,4 +152,40 @@ export function classifyV6(it, m = {}, b = {}, c = {}, f = null) {
     factWhy: [1, 2, 3, 4, 5].map(n => fch?.find(y => Number(y.n) === n)?.why ?? null),
     mirrorPair: mp, solverAnswer: c.answer, validAnswers: va, closestRival: c.closest_rival,
   };
+}
+
+// v6.6: 사례 갈림 사실 순서(CASE_FLOW=lever)의 서버 확인. item = {stem, bogi, answer, leverTable, choiceLevers, principleCards}. 반환 {errors, warnings}.
+const lvNorm = t => String(t ?? '').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim().replace(/^["'“”‘’「」『』]+|["'“”‘’「」『』]+$/g, '').trim();
+export function checkLeversV6(item) {
+  const errors = [], warnings = [];
+  const bogi = lvNorm(item.bogi);
+  const table = Array.isArray(item.leverTable) ? item.leverTable : [];
+  const facts = table.map(r => lvNorm(r?.fact)).filter(Boolean);
+  const inBogi = f => f && bogi.includes(f);
+  // L1(오류): leverTable 각 fact가 〈보기〉에 있다
+  if (!facts.length) errors.push('L1: leverTable이 비어 있음');
+  for (const f of facts) if (!inBogi(f)) errors.push(`L1: leverTable의 fact가 〈보기〉에 없음: "${f.slice(0, 40)}"`);
+  // L2(경고): 〈보기〉 문장(. ? ! 및 줄바꿈) 중 10자 이상인 것마다 그것을 포함하거나 그것에 포함되는 fact가 하나 이상
+  const sents = String(item.bogi ?? '').split(/\n+/).flatMap(l => l.split(/(?<=[.?!])\s+/)).map(lvNorm).filter(x => x.length >= 10);
+  for (const st of sents) if (!facts.some(f => f.includes(st) || st.includes(f))) warnings.push(`L2: 〈보기〉 문장이 leverTable 어디에도 안 쓰임: "${st.slice(0, 40)}"`);
+  // L3(오류): choiceLevers 5개, 선지마다 facts 1개 이상이고 모두 leverTable의 fact와 같다
+  const cl = Array.isArray(item.choiceLevers) ? item.choiceLevers : [];
+  if (cl.length !== 5) errors.push(`L3: choiceLevers가 ${cl.length}개(5개여야 함)`);
+  const factSet = new Set(facts);
+  for (const c of cl) {
+    const fs_ = Array.isArray(c?.facts) ? c.facts.map(lvNorm).filter(Boolean) : [];
+    if (!fs_.length) errors.push(`L3: 선지 ${c?.n}의 facts가 없음`);
+    for (const f of fs_) if (!factSet.has(f)) errors.push(`L3: 선지 ${c?.n}의 fact가 leverTable에 없음: "${f.slice(0, 40)}"`);
+  }
+  // L4(오류): 결정 선지마다 misread가 비어 있지 않다. 긍정 발문이면 오답 4개의 facts 합집합 3개 이상
+  const negative = NEG.test(item.stem || ''); const ans = Number(item.answer);
+  const decisive = negative ? [ans] : [1, 2, 3, 4, 5].filter(n => n !== ans);
+  for (const n of decisive) { const c = cl.find(x => Number(x?.n) === n); if (!c || !String(c.misread ?? '').trim() || c.misread === 'null') errors.push(`L4: 결정 선지 ${n}의 misread가 비어 있음`); }
+  if (!negative) {
+    const u = new Set(decisive.flatMap(n => (cl.find(x => Number(x?.n) === n)?.facts || []).map(lvNorm)).filter(Boolean));
+    if (u.size < 3) errors.push(`L4: 오답 4개의 facts 합집합이 ${u.size}개(3개 이상이어야 함)`);
+  }
+  // L5(경고): principleCards 2개 이상
+  if (!(Array.isArray(item.principleCards) && item.principleCards.length >= 2)) warnings.push('L5: principleCards가 2개 미만');
+  return { errors, warnings };
 }

@@ -11,6 +11,7 @@
 //   다른 버전 문항을 '확정된 다른 버전'으로 넘겨 함정·비튼 방식·지문 구역이 겹치지 않게 한다. 결과 items.json은 새 버전만,
 //   items-merged.json은 확정 버전 + 새 버전. B형의 A형 함정은 AVOID_OUT(기본 KEEP_OUT)에서 읽는다.
 // ---- 이전 v4 설명 ----
+// v6.6 CASE_FLOW=lever (2026-11-26, case-check/PLAN-case-lever.md): RULES_V=6일 때 3-assemble 지시 끝에 사례 갈림 사실 순서 블록을 붙이고(갈래가 case인 버전이 있을 때만), 서버가 leverTable·choiceLevers를 〈보기〉와 대조(classify-v6 checkLeversV6, 오류면 3-assemble-r로 1회 재호출).
 // 깊은 〈보기〉 문항 생성 v4 (2026-11-12): 생성 규칙 v4(지문 용어 그대로, 판정 라벨만 장면으로, 장면-정의 일치, 짧은 지칭)를 조립 단계부터 적용하고 가독성 기준을 조립에도 준다. 4-solve가 장면-정의 대응(sceneCheck)과 실제로 막히는 문장(hardSentences)을 따로 본다.
 // 실행: 저장소 루트에서  PASSAGE=plastic-polymerization MODE=A|B node docs/experiments/deep-item-v4-2026-11-12/run.mjs
 // v4.1 (2026-11-12): 결과 없는 〈보기〉 금지, 〈보기〉만으로 풀리는 선지 금지, 함정 중복 금지(V1·V2, 그리고 B 실행은 A 결과의 함정을 '이미 쓴 함정'으로 받음 → A 먼저, B 나중에 실행). 4-solve에 설계 검사(designCheck) 추가.
@@ -33,9 +34,11 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { renderBoth, validateSpec } from './graph/render.mjs'; // KIND=graph (2026-11-21): 명세 JSON → 읽기 판·SVG
 import { checkStrategiesV6 } from './classify-v6.mjs';
+import { checkLeversV6 } from './classify-v6.mjs'; // v6.6 CASE_FLOW=lever
 import { checkGraphPlan } from './graph/plan-check.mjs'; // RULES_V=6 + KIND=graph: graphPlan 서버 확인(2026-11-25)
 const V6 = process.env.RULES_V === '6'; // 기본값 5(v5 동작). 6이면 v6 규칙·지시문
 const DRY = process.env.DRY_RUN === '1';
+const LEVER = V6 && process.env.CASE_FLOW === 'lever'; // v6.6 (2026-11-26, case-check/PLAN-case-lever.md): 사례 갈래 갈림 사실 순서. 켜지 않으면 동작이 한 글자도 다르지 않다.
 const stripOld = t => V6 ? t.replace(/\s*\(옛 [^()]*\)/g, '') : t; // v6 규칙 파일의 '(옛 …)' 대응 표시는 사람용이라 모델에게 보내는 문자열에서 지운다(파일은 그대로)
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -243,18 +246,46 @@ const ASSEMBLE_B_V6 = `
 
 출력(마크다운): 버전마다 (1) 문항(발문, 〈보기〉, 선지 ①~⑤) — 정답 표시 없이 시험지 형태로, (2) 정답과 선지별 해설 표(정오, 근거 문장, 옮기기 단계, 난도), (3) 출제 기록(〈보기〉 문장별 노린 오해, 시도했다가 버린 선지와 이유, 고른 전략과 쓴 자리).
 `;
+const LEVER_BLOCK = `
+[사례 갈래 출제 순서 — 갈래가 사례(case)인 버전은 위 출제 과정 1·2단계 대신 아래 가~라를 따른다. 0·3·4·5단계와 출력 형식은 그대로다.]
+가. 원리 카드: 지문에서 판정 원리 2~4개를 고른다. 카드마다 원리(지문 문장 원문 인용), 판정자(누가 판정하는가), 갈림 변수(사례의 어떤 사실이 달라지면 판정이 바뀌는가)를 적는다. 갈림 변수가 없는 원리(개념 정의만 있는 것)는 고르지 않는다. 재료 B·S의 거짓 진술은 어느 구역에서 원리를 고를지 참고로만 쓰고, 선지로 옮기지 않는다.
+나. 〈보기〉와 갈림 사실 표: 〈보기〉를 먼저 쓴다. 원리 카드마다 그 갈림 변수의 값을 정하는 사실 문장을 〈보기〉에 넣는다. 표의 한 줄은 〈보기〉 문장 원문, 변수 값, 판정자별 판정이다. 〈보기〉의 모든 문장은 표의 어느 줄에 쓰인다. 같은 말이나 비슷한 사실인데 값이 다른 짝(대충 읽으면 섞이는 짝)을 하나 이상 둔다.
+다. 선지: 선지마다 표의 한 줄(또는 두 줄)을 쓴다. 원리 부분은 지문대로 맞게 쓴다. 거짓 선지는 그 줄의 사실 값을 잘못 읽은 결론으로 만들고, 잘못 읽는 쪽은 나.의 헷갈리는 짝에서 고른다. 엉뚱하게 틀리게 하지 않는다.
+라. 정답: 마지막에 고른다. 발문이 '적절하지 않은'이면, 헷갈리는 짝에서 나온 거짓이나 표의 두 줄을 함께 읽어야 하는 거짓을 먼저 정답으로 고른다. 발문이 '가장 적절한'이면, 거짓 4개가 서로 다른 줄을 잘못 읽게 한다.
+JSON의 사례 항목에 덧붙인다: "principleCards":[{"principle":"지문 원문","judge":"판정자","lever":"갈림 변수"}], "leverTable":[{"fact":"〈보기〉 문장 원문 그대로","value":"변수 값","verdicts":{"판정자":"판정"}}], "choiceLevers":[{"n":1,"facts":["leverTable의 fact 원문"],"misread":"거짓이면 잘못 읽은 값, 참이면 null","corrected":"거짓이면 사실을 바로 읽어 고친 선지, 참이면 null"}] (선지 5개 모두).
+`;
+const leverOn = LEVER && ['V1', 'V2'].some(v => (!ONLY || v === ONLY) && KIND[v] === 'case'); // 사례 버전이 있을 때만
 const GRAPH_PLAN_SENTENCE = V6 && (KIND.V1 === 'graph' || KIND.V2 === 'graph') ? 'graphSpec보다 먼저 같은 항목에 "graphPlan" 객체를 넣는다(형식은 갈래 규칙 "먼저 쓰는 것: graphPlan"). ' : ''; // RULES_V=6 + 그래프 갈래일 때만. v5 프롬프트는 그대로
-const s3 = await call('3-assemble', `너는 수능 국어 독서 출제자다. ${COMMON}
-${V6 ? (MODE === 'B' ? ASSEMBLE_B_V6 : ASSEMBLE_A_V6) : (MODE === 'B' ? ASSEMBLE_B : ASSEMBLE_A)}맨 끝에 아래 형식의 JSON 코드 블록을 하나 덧붙인다:
+const assemble = (stage, errNote = '') => call(stage, `너는 수능 국어 독서 출제자다. ${COMMON}
+${V6 ? (MODE === 'B' ? ASSEMBLE_B_V6 : ASSEMBLE_A_V6) : (MODE === 'B' ? ASSEMBLE_B : ASSEMBLE_A)}${leverOn ? LEVER_BLOCK : ''}맨 끝에 아래 형식의 JSON 코드 블록을 하나 덧붙인다:
 \`\`\`json
 {"items":[{"version":"V1","kind":"table","stem":"...","bogi":"...","choices":["①...","②...","③...","④...","⑤..."],"answer":4,"answerTwist":"짝 바꾸기","twists":["참","뒤집기","참","짝 바꾸기","참"],"roles":["쉬움","경쟁","중간","정답","중간"],"rival":2${V6 ? ',"strategies":["S3","S12"],"strategyUse":{"S3":"정답 ④","S12":"〈보기〉 셋째 문장, 선지 ②"}' : ''}}]}
 \`\`\`
-roles는 선지별 역할(${V6 ? 'OP3' : '공통 C11'}), rival은 가장 강한 경쟁 선지 번호다. kind는 갈래 영문 이름, answerTwist는 ${V6 ? 'M1 표의 방식 이름(OP2)' : '공통 C6의 방식 이름'}, twists는 선지별로 거짓이면 비튼 방식 이름, 참이면 "참"이다. 표 〈보기〉는 bogi 안에 안내 글과 마크다운 표를 줄바꿈으로 이어 넣는다. 갈래가 graph인 항목은 bogi를 빈 문자열로 두고 "graphSpec" 객체(갈래 규칙의 형식)를 항목에 넣는다. ${GRAPH_PLAN_SENTENCE}시험지 형태 출력에서 〈보기〉 자리에는 graphSpec의 요약(축·곡선 모양·표시 기호)을 적는다.${V6 ? ' strategies는 0번에서 고른 선택 전략 번호(1~3개), strategyUse는 전략마다 쓴 자리 한 줄이다.' : ''}`,
+roles는 선지별 역할(${V6 ? 'OP3' : '공통 C11'}), rival은 가장 강한 경쟁 선지 번호다. kind는 갈래 영문 이름, answerTwist는 ${V6 ? 'M1 표의 방식 이름(OP2)' : '공통 C6의 방식 이름'}, twists는 선지별로 거짓이면 비튼 방식 이름, 참이면 "참"이다. 표 〈보기〉는 bogi 안에 안내 글과 마크다운 표를 줄바꿈으로 이어 넣는다. 갈래가 graph인 항목은 bogi를 빈 문자열로 두고 "graphSpec" 객체(갈래 규칙의 형식)를 항목에 넣는다. ${GRAPH_PLAN_SENTENCE}시험지 형태 출력에서 〈보기〉 자리에는 graphSpec의 요약(축·곡선 모양·표시 기호)을 적는다.${V6 ? ' strategies는 0번에서 고른 선택 전략 번호(1~3개), strategyUse는 전략마다 쓴 자리 한 줄이다.' : ''}${errNote}`,
   `[지문]\n${passage}\n\n[버전별 지정]\n${SPEC}\n\n[${V6 ? '공통 규칙 v6' : '공통 원칙'} — 양식 규칙과 부딪치면 이것을 따른다]\n${commonRules}${V6 ? `\n\n[선택 전략 목록]\n${strategies}` : ''}\n\n${kindRules}\n\n[${MODE}. 출제 규칙]\n${rulesA}\n\n[가독성 기준 — 〈보기〉와 선지 문장을 처음부터 이 기준에 맞게 쓴다]\n${guideText}\n\n[${MODE === 'B' ? 'S' : 'B'}. 선정된 거짓 진술]\n${s2}${AVOID}`);
+let s3 = await assemble('3-assemble');
 
 if (DRY) { console.log(`\n[건조 실행] 2·3단계 지시문을 ${OUT} 의 *.dry.txt 로 저장했다. API는 부르지 않았다.`); process.exit(0); }
 // 3b단계: 사후 수정(다듬기) — 표현만 고친다. 정오·정답·연결 고리는 그대로.
 const lastJson = t => [...t.matchAll(/```json\s*([\s\S]*?)```/g)].pop();
+// v6.6 CASE_FLOW=lever: 사례 버전마다 서버 확인(L1~L5). 오류면 [서버 확인 오류]를 덧붙여 3-assemble-r로 한 번만 다시 부른다. 결과는 OUT/lever-check.json.
+const leverData = {}, leverCheck = {};
+const leverItems = s => { try { return JSON.parse(lastJson(s)[1]).items.filter(it => it.kind === 'case' && (!ONLY || it.version === ONLY)); } catch { return []; } };
+if (leverOn) {
+  const run1 = s => Object.fromEntries(leverItems(s).map(it => [it.version, checkLeversV6(it)]));
+  const first = run1(s3);
+  for (const [v, r] of Object.entries(first)) leverCheck[v] = { first: r };
+  const bad = Object.entries(first).filter(([, r]) => r.errors.length);
+  if (bad.length) {
+    const note = '\n\n[서버 확인 오류 — 아래를 고쳐 같은 형식으로 3단계 출력 전체(마크다운과 JSON)를 다시 낸다. leverTable의 fact는 〈보기〉 문장 원문 그대로, choiceLevers의 facts는 leverTable의 fact 원문 그대로 쓴다.]\n' + bad.map(([v, r]) => `${v}:\n- ` + r.errors.join('\n- ')).join('\n');
+    const s3r = await assemble('3-assemble-r', note);
+    const second = lastJson(s3r) ? run1(s3r) : null;
+    if (second) { s3 = s3r; for (const [v, r] of Object.entries(second)) (leverCheck[v] ||= {}).retry = r; }
+    else console.warn('[경고] 3-assemble-r에서 JSON을 못 읽어 처음 결과를 씀');
+  }
+  for (const it of leverItems(s3)) { leverData[it.version] = { principleCards: it.principleCards, leverTable: it.leverTable, choiceLevers: it.choiceLevers }; const r = checkLeversV6(it); (leverCheck[it.version] ||= {}).afterAssemble = r; if (r.errors.length) console.warn(`[경고] ${it.version}: 갈림 사실 확인 오류가 남음(기록하고 진행) ${r.errors.join(' / ')}`); }
+  fs.writeFileSync(path.join(OUT, 'lever-check.json'), JSON.stringify(leverCheck, null, 2));
+}
 // 그래프 갈래(2026-11-21): 3단계 JSON의 graphSpec이 기준이다. 〈보기〉 = 명세에서 자동 생성한 읽기 판. 3b·3c에는 읽기 판을 따로 붙이고, 이후 graphSpec·bogi는 3단계 것으로 덮어쓴다.
 const graphSpecs = {}, graphPlans = {}; // version → graphSpec / graphPlan(v6)
 try { for (const it of JSON.parse(lastJson(s3)[1]).items) if (it.graphSpec) { graphSpecs[it.version] = it.graphSpec; if (GRAPH_PLAN_SENTENCE && it.graphPlan) graphPlans[it.version] = it.graphPlan; } } catch {}
@@ -298,6 +329,7 @@ if (!json) throw new Error('3c단계 출력에서 JSON 블록을 찾지 못했�
 let items = JSON.parse(json[1]).items;
 if (ONLY) items = items.filter(x => x.version === ONLY);
 if (!items.length) throw new Error('3c 결과에 만들 버전이 없습니다');
+for (const it of items) if (leverData[it.version]) Object.assign(it, leverData[it.version]); // v6.6: 3b·3c가 흘린 갈림 사실 칸은 3단계 것으로 다시 붙인다
 for (const it of items) if (graphSpecs[it.version]) { // 그래프: 3단계 명세가 기준
   it.kind = 'graph'; it.graphSpec = graphSpecs[it.version]; it.bogi = renderBoth(it.graphSpec).text;
   if (graphPlans[it.version]) it.graphPlan = graphPlans[it.version]; // v6: 3단계 graphPlan이 기준(3b·3c가 건드려도 덮어쓴다)
@@ -410,6 +442,7 @@ const scene = solveJson.sceneCheck || {};
 const design = solveJson.designCheck || {};
 const kindChk = solveJson.kindCheck || {};
 const summary = items.map(it => `${it.version}: 출제 정답 ${it.answer} / 풀이 답 ${ans[it.version] ?? '?'} → ${String(it.answer) === String(ans[it.version]) ? '일치' : '불일치'} / 〈보기〉 ${it.bogiChars}자 / 설계 문제 ${(design[it.version] || []).length}곳 / 장면-정의 문제 ${(scene[it.version] || []).length}곳 / 막히는 문장 ${(hard[it.version] || []).length}곳 / 갈래 ${it.kind} 문제 ${(kindChk[it.version] || []).length}곳 / 정답 비튼 방식 ${it.answerTwist ?? '?'} / 정답 길이 순위 ${it.answerLenRank} / 선지 평균 ${it.choiceAvg}자${it.answerMoved ? ` / 번호 옮김 ${it.answerMoved}` : ''} / 기계 점검 ${(checks[it.version] || []).length}건`).join('\n');
+if (leverOn) { for (const it of items) if (leverData[it.version]) { const r = checkLeversV6(it); const l1 = r.errors.filter(e => e.startsWith('L1')); (leverCheck[it.version] ||= {}).final = { l1Errors: l1 }; if (l1.length) console.warn(`[경고] ${it.version}: 최종본에서 L1 오류 ${l1.join(' / ')}`); } fs.writeFileSync(path.join(OUT, 'lever-check.json'), JSON.stringify(leverCheck, null, 2)); }
 fs.writeFileSync(path.join(OUT, 'summary.txt'), summary + '\n');
 fs.writeFileSync(path.join(OUT, 'solve.json'), JSON.stringify(ans, null, 2));
 fs.writeFileSync(path.join(OUT, 'hard-sentences.json'), JSON.stringify(hard, null, 2));

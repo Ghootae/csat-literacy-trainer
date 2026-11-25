@@ -1,7 +1,7 @@
 // classifyV6 시험 사례 6개 + 전략 점검 (가짜 e1·e2·e3 출력, API 호출 없음). 실행: node docs/experiments/deep-item-v5-2026-11-18/classify-v6.test.mjs
 // 근거: rule-audit-2026-11-23/PROPOSAL-code-v6.md 4-4절
 import assert from 'node:assert/strict';
-import { classifyV6, checkStrategiesV6, stemChanged, finalStatus } from './classify-v6.mjs';
+import { classifyV6, checkStrategiesV6, stemChanged, finalStatus, checkLeversV6 } from './classify-v6.mjs';
 
 const POS = '윗글을 바탕으로 〈보기〉를 이해한 내용으로 가장 적절한 것은?';
 const NEG = '윗글을 바탕으로 〈보기〉를 이해한 내용으로 적절하지 않은 것은?';
@@ -134,6 +134,42 @@ t('(v6.5-7) 수리 뒤 결함이면 status=defect, 아니면 표시 없음', () 
   const bad = run(mk(3, { e3: { valid_answers: [2, 3], answer: 3 } }));
   assert.equal(finalStatus(bad), 'defect');
   assert.equal(finalStatus(run(mk(3))), undefined); assert.equal(finalStatus(undefined), undefined);
+});
+
+// v6.6 CASE_FLOW=lever: checkLeversV6 (L1~L5)
+const LB = '갑은 점검표를 읽었다. 을은 통로에 물을 흘렸고 곧 닦았다. 병은 다음 날 공방에 왔다.';
+const lvItem = (o = {}) => ({ stem: NEG, answer: 2, bogi: LB,
+  leverTable: [{ fact: '갑은 점검표를 읽었다.', value: 'a', verdicts: {} }, { fact: '을은 통로에 물을 흘렸고 곧 닦았다.', value: 'b', verdicts: {} }, { fact: '병은 다음 날 공방에 왔다.', value: 'c', verdicts: {} }],
+  choiceLevers: [1, 2, 3, 4, 5].map(n => ({ n, facts: ['을은 통로에 물을 흘렸고 곧 닦았다.'], misread: n === 2 ? '곧 닦음→안 닦음' : null, corrected: null })),
+  principleCards: [{ principle: 'p1' }, { principle: 'p2' }], ...o });
+t('(v6.6-1) L1 통과 / fact가 〈보기〉에 없으면 오류', () => {
+  assert.deepEqual(checkLeversV6(lvItem()).errors, []);
+  const r = checkLeversV6(lvItem({ leverTable: [{ fact: '〈보기〉에 없는 문장입니다 정말로', value: 'x' }] }));
+  assert.ok(r.errors.some(e => e.startsWith('L1')));
+  assert.deepEqual(checkLeversV6(lvItem({ bogi: '  **' + LB + '**  ' })).errors, []); // 정규화(마크다운·공백)
+});
+t('(v6.6-2) L3 facts 없음 → 오류', () => {
+  const cl = lvItem().choiceLevers.map(c => c.n === 4 ? { ...c, facts: [] } : c);
+  assert.ok(checkLeversV6(lvItem({ choiceLevers: cl })).errors.some(e => e.startsWith('L3') && e.includes('선지 4')));
+  assert.ok(checkLeversV6(lvItem({ choiceLevers: cl.slice(0, 4) })).errors.some(e => e.includes('4개')));
+});
+t('(v6.6-3) 부정 발문 정답 misread 없음 → 오류', () => {
+  const cl = lvItem().choiceLevers.map(c => c.n === 2 ? { ...c, misread: '' } : c);
+  assert.ok(checkLeversV6(lvItem({ choiceLevers: cl })).errors.some(e => e.startsWith('L4') && e.includes('선지 2')));
+});
+t('(v6.6-4) 긍정 발문 오답 facts 합집합 2개뿐 → 오류', () => {
+  const f1 = '갑은 점검표를 읽었다.', f2 = '을은 통로에 물을 흘렸고 곧 닦았다.';
+  const cl = [1, 2, 3, 4, 5].map(n => ({ n, facts: [n % 2 ? f1 : f2], misread: n === 2 ? null : 'm', corrected: null }));
+  const r = checkLeversV6(lvItem({ stem: POS, answer: 2, choiceLevers: cl }));
+  assert.ok(r.errors.some(e => e.startsWith('L4') && e.includes('합집합')));
+});
+t('(v6.6-5) L2 안 쓰인 〈보기〉 문장 → 경고만', () => {
+  const r = checkLeversV6(lvItem({ bogi: LB + ' 정은 그날 공방 문을 열어 두었다.' }));
+  assert.deepEqual(r.errors, []); assert.ok(r.warnings.some(w => w.startsWith('L2')));
+});
+t('(v6.6-6) L5 principleCards 1개 → 경고만', () => {
+  const r = checkLeversV6(lvItem({ principleCards: [{ principle: 'p1' }] }));
+  assert.deepEqual(r.errors, []); assert.ok(r.warnings.some(w => w.startsWith('L5')));
 });
 
 let fail = 0;
