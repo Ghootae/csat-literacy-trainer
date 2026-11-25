@@ -41,6 +41,13 @@ export function validateSpec(spec) {
       if (p.mark) { if (marks.has(p.mark)) errs.push(`표시 기호 ${p.mark} 중복`); marks.add(p.mark); }
     });
   }
+  { // 끝점 높이를 읽을 수 없는 계열(표시도, 세로축 값 눈금도, 기호 눈금도 없음): 경고만
+    const yv = new Set(spec.yAxis?.values || []), yt = new Set((spec.yAxis?.ticks || []).map(t => t.at));
+    for (const [i, s] of (spec.series || []).entries()) {
+      if (!Array.isArray(s.points) || s.points.length < 2) continue;
+      for (const p of [s.points[0], s.points[s.points.length - 1]]) if (typeof p.y === 'number' && !p.mark && !yv.has(p.y) && !yt.has(p.y)) warns.push(`끝점 높이를 읽을 수 없음: ${s.label || s.id || `곡선 ${i + 1}`} (${p.x}, ${p.y})`);
+    }
+  }
   for (const t of spec.xAxis?.ticks || []) if (typeof t.at !== 'number' || t.label === undefined || t.label === null || String(t.label).trim() === '') errs.push('xAxis.ticks 항목에 at(숫자)·label(표시 값) 필요');
   for (const t of spec.yAxis?.ticks || []) if (typeof t.at !== 'number' || t.label === undefined || t.label === null || String(t.label).trim() === '') errs.push('yAxis.ticks 항목에 at(숫자)·label(표시 기호) 필요');
   for (const sh of spec.shade || []) for (const k of ['from', 'to']) if (!marks.has(sh[k])) errs.push(`shade.${k} ${sh[k]}는 표시 기호가 아님`);
@@ -215,7 +222,12 @@ export function readingText(spec) {
   for (const [i, S] of A.series.entries()) {
     const nm = nameOf(S.s, i, n);
     L.push(`${nm}${S.s.style === 'dashed' ? '(점선)' : ''}:`);
-    const label = p => p.mark || A.marks.find(m => Math.abs(m.x - p.x) < 1e-6)?.name || (p === S.pts[0] ? '시작' : p === S.pts[S.pts.length - 1] ? '끝' : `x=${p.x}`);
+    const label = p => { // mark가 있으면 mark. 없으면 가로축 눈금 이름이나 시작·끝·x=. 같은 가로 위치에 다른 계열의 표시가 있으면 그 기호를 이름으로 쓰지 않고 "(ⓑ와 같은 가로 위치)"를 덧붙인다(where와 같은 방식).
+      if (p.mark) return p.mark;
+      const at = A.marks.filter(m => Math.abs(m.x - p.x) < 1e-6), tick = at.find(m => m.tick), other = at.find(m => !m.tick);
+      const base = tick ? tick.name : p === S.pts[0] ? '시작' : p === S.pts[S.pts.length - 1] ? '끝' : `x=${p.x}`;
+      return other ? `${base}(${other.name}와 같은 가로 위치)` : base;
+    };
     const valueAt = p => A.values.includes(p.y) ? `(${fmt(p.y)})` : '';
     for (const r of S.runs) {
       const shape = r.dir === 0 ? '일정' : dirWord(r.dir);

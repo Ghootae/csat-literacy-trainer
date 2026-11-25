@@ -149,6 +149,7 @@ t('(2-e) 단위 버그: 표시 점 이름·교차 위치에도 단위가 안 붙
 });
 
 // ---- 2-f ----
+const noEnd = ws => ws.filter(w => !w.startsWith('끝점 높이를 읽을 수 없음')); // 그래프 D에서 더한 경고는 따로 시험한다
 t('(2-f) validateSpec: 새 필드 오류 문구', () => {
   const e = g => validateSpec(base({ guides: [g] })).errs.join('|');
   assert.match(e({ dir: 'x', at: 3 }), /guides\[0\]\.dir x은 h 또는 v가 아님/);
@@ -165,10 +166,10 @@ t('(2-f) validateSpec: 새 label(눈금·기준선·교점)에도 판정어 경�
   assert.match(w(base({ yAxis: { label: '양', ticks: [{ at: 3, label: '큰 값' }] } })), /판정어 "큰"/);
   assert.match(w(base({ guides: [{ dir: 'h', at: 3, label: '증가 기준' }] })), /판정어 "증가"/);
   assert.match(w(cross2({ crossMarks: [{ a: 'u', b: 'w', label: '결과' }] })), /판정어 "결과"/);
-  assert.deepEqual(validateSpec(base({ guides: [{ dir: 'h', at: 3, label: 'P₁' }] })).warns, []);
+  assert.deepEqual(noEnd(validateSpec(base({ guides: [{ dir: 'h', at: 3, label: 'P₁' }] })).warns), []);
 });
 t('(2-f) validateSpec: 새 필드가 없는 명세는 지금처럼 통과', () => {
-  assert.deepEqual(validateSpec(base()), { errs: [], warns: [] });
+  const v = validateSpec(base()); assert.deepEqual(v.errs, []); assert.deepEqual(noEnd(v.warns), []);
 });
 
 // ---- 회귀 9개 ----
@@ -187,7 +188,13 @@ const golden = key => fs.readFileSync(path.join(SP, 'graph-census/regress-after'
 const unitless = (txt, spec) => (spec.xAxis.ticks || []).reduce((s, tk) => s.split(`${tk.label}${spec.xAxis.unit || ''}`).join(`${tk.label}`), txt);
 t('(회귀) 기준 파일 9개가 모두 있다', () => { assert.equal(REG.length, 9); for (const [k] of REG) assert.ok(fs.existsSync(path.join(SP, 'graph-census/regress-before', `${k}.svg`)), k); });
 for (const [key, spec, svgSame] of REG) {
-  t(`(회귀) ${key}: 읽기 판은 단위 줄만 다르다`, () => assert.equal(readingText(spec) + '\n', unitless(before(key, 'txt'), spec)));
+  t(`(회귀) ${key}: 읽기 판은 단위 줄과 '같은 가로 위치' 이름 줄만 다르다`, () => { // 그래프 D(2026-11-25): 다른 계열의 표시 기호를 끝점 이름으로 집어 오던 버그 수리
+    const a = unitless(before(key, 'txt'), spec).trim().split('\n'), b = readingText(spec).trim().split('\n'), sa = new Set(a);
+    assert.equal(a.length, b.length);
+    assert.ok(b.filter(l => !sa.has(l)).every(l => l.includes('와 같은 가로 위치')), `관계없는 줄이 바뀜: ${b.find(l => !sa.has(l) && !l.includes('와 같은 가로 위치'))}`);
+    const gp = path.join(SP, 'graph-census/regress-after', `${key}.txt`);
+    if (fs.existsSync(gp)) assert.equal(readingText(spec) + '\n', fs.readFileSync(gp, 'utf8')); // 그래프 D 새 기준
+  });
   t(`(회귀) ${key}: SVG ${svgSame ? '바이트 동일' : '곡선 이름·범례 줄만 다름'}`, () => {
     const now = renderSvg(spec), old = before(key, 'svg');
     if (svgSame) return assert.equal(now, old);
@@ -202,6 +209,29 @@ for (const [key, spec, svgSame] of REG) {
     assert.equal(now, golden(key)); // 새 기준(regress-after)과 바이트 동일
   });
 }
+
+// ---- 그래프 D: 읽기 판 끝점 이름 + 끝점 높이 경고 ----
+const GC = JSON.parse(fs.readFileSync(path.join(V5, 'out-graphC/gen32-o4-T5-1-B/leakfix/items-leakfix.json'), 'utf8')).items.find(i => i.version === 'V2').graphSpec;
+t('(D-1) 읽기 판: 표시 없는 끝점은 다른 계열의 기호를 이름으로 쓰지 않는다(graphC B)', () => {
+  const r = readingText(GC);
+  assert.ok(!/병[\s\S]*ⓔ\(100\) → ⓑ:/.test(r), r);
+  assert.match(r, /- ⓔ\(100\) → 가로축 1\(ⓑ·?ⓓ?와 같은 가로 위치\): 증가|- ⓔ\(100\) → 가로축 1\(ⓑ와 같은 가로 위치\): 증가/);
+});
+t('(D-1) 읽기 판: 자기 계열 mark와 눈금 없는 시작·끝 이름은 그대로', () => {
+  const s = base(); const r = readingText(s); assert.match(r, /시작|끝|ⓐ/);
+});
+t('(D-2) validateSpec: 끝점 높이를 읽을 수 없으면 경고만(graphC B의 병 끝점 120)', () => {
+  const v = validateSpec(GC); assert.deepEqual(v.errs, []);
+  assert.ok(v.warns.some(w => w === '끝점 높이를 읽을 수 없음: 병 (1, 120)'), v.warns.join('|'));
+  assert.ok(!v.warns.some(w => w.startsWith('끝점 높이를 읽을 수 없음: 갑') || w.startsWith('끝점 높이를 읽을 수 없음: 을')));
+});
+t('(D-2) validateSpec: 세로축 값·기호 눈금이 있거나 mark가 있으면 경고 없음', () => {
+  const sp = y => ({ xAxis: { label: 'x' }, yAxis: { label: 'y', values: [1, 2] }, series: [{ id: 's', label: 'S', points: [{ x: 0, y: 1 }, { x: 1, y: y }] }] });
+  assert.deepEqual(validateSpec(sp(2)).warns, []);
+  assert.equal(validateSpec(sp(3)).warns.length, 1);
+  const withTick = sp(3); withTick.yAxis.ticks = [{ at: 3, label: 'P₁' }]; assert.deepEqual(validateSpec(withTick).warns, []);
+  const withMark = sp(3); withMark.series[0].points[1].mark = 'ⓐ'; assert.deepEqual(validateSpec(withMark).warns, []);
+});
 
 let fail = 0;
 for (const [name, fn] of cases) {
