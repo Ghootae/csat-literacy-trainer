@@ -1,7 +1,7 @@
 import json,re,os,sys,statistics as st
-H=os.path.dirname(os.path.abspath(__file__)); hand=json.load(open(f'{H}/hand-codes.json'))
+H=os.path.dirname(os.path.abspath(__file__)); TAG=os.environ.get('TAG',''); hand=json.load(open(f'{H}/hand-codes.json'))
 def load(r,k):
-    p=f'{H}/out-{r}/{k}.md'
+    p=f'{H}/out{TAG}-{r}/{k}.md'
     if not os.path.exists(p): return None
     t=open(p,encoding='utf-8').read()
     ms=re.findall(r'```json\s*(\{.*?\})\s*```',t,re.S)
@@ -88,4 +88,4 @@ for k,n,h in dec:
 out.append('\n어긋남 많은 문항: '+', '.join(f'{k}({v})' for k,v in sorted(mis.items(),key=lambda a:-a[1])[:10]))
 miss=[(r,k) for r in res for k,v in res[r].items() if v is None]
 out.append(f'\n파싱 실패/누락: {miss or "없음"}')
-open(f'{H}/compare-output.md','w',encoding='utf-8').write('\n'.join(out)+'\n'); print('\n'.join(out[:40]))
+open(f'{H}/compare-output{TAG}.md','w',encoding='utf-8').write('\n'.join(out)+'\n'); print('\n'.join(out[:40]))

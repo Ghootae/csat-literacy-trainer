@@ -45,17 +45,19 @@ def build():
         hit=[x for x in its if x[0]==label]
         assert len(hit)==1,(key,f,label,[x[0] for x in its])
         lab,pname,txt=hit[0]
+        m=re.search(r'\(지문: ([^)]+)\)',txt[:80])
         if len(ps)==1: ptxt=ps[0][1]; pn=ps[0][0]
-        elif pname: ptxt=[p for p in ps if p[0]==pname][0][1]; pn=pname
-        else:
-            m=re.search(r'\(지문: ([^)]+)\)',txt); assert m,(key,'no passage')
+        elif m:  # v2: 문항에 (지문: …) 표시가 있으면 그것을 우선(v1은 마지막 지문을 붙이는 오류가 있었음: G15~G25)
             c=[p for p in ps if m.group(1) in p[0]]; assert len(c)==1,(key,m.group(1)); ptxt=c[0][1]; pn=c[0][0]
+        elif pname: ptxt=[p for p in ps if p[0]==pname][0][1]; pn=pname
+        else: raise AssertionError((key,'no passage'))
         txt=re.sub(r'^\*\*\[문항 [^\]]+\]\*\*\s*(\(지문: [^)]+\))?\s*','',txt)
         sheets[key]=f"{pn}\n\n## 지문\n{ptxt}\n\n## 문항\n{txt}\n"
     return order,sheets
 if __name__=='__main__':
     order,sheets=build()
-    for k,s in sheets.items(): open(f'sheets/{k}.md','w',encoding='utf-8').write(s)
+    OUTD=os.environ.get('SHEETS','sheets'); os.makedirs(OUTD,exist_ok=True)
+    for k,s in sheets.items(): open(f'{OUTD}/{k}.md','w',encoding='utf-8').write(s)
     json.dump(order,open('order.json','w'))
     print(order); 
     for k,s in sheets.items(): print(k,len(s),s.count('①'),s.count('⑤'))
