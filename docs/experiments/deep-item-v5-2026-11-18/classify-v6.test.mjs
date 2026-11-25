@@ -96,6 +96,33 @@ t('(v6.3) 전략: S18은 experiment 갈래에 쓸 수 있고 S5는 쓸 수 없�
   assert.ok(checkStrategiesV6({ strategies: ['S5'], strategyUse: { S5: 'x' } }, 'B', 'experiment').some(x => x.includes('experiment 갈래에 쓸 수 없음')));
 });
 
+// v6.4 M6 (2026-11-25): fact_sensitive 칸
+const fsChoices = (map) => [1, 2, 3, 4, 5].map(n => ch(n, n in map ? { fact_sensitive: map[n] } : {}));
+t('(v6.4-1) 부정 발문 정답 fact_sensitive=false → M6·수리', () => {
+  const d = run(mk(3, { item: { stem: NEG, kind: 'case' }, e3: { choices: fsChoices({ 3: false, 1: true }) } }));
+  assert.deepEqual(d.methodViolations, ['M6']); assert.equal(d.repair, true); assert.deepEqual(d.m6Choices, [3]);
+  assert.deepEqual(d.factSensitive, [true, null, false, null, null]);
+});
+t('(v6.4-2) 긍정 발문 오답 false 3개 → M6', () => {
+  const d = run(mk(3, { item: { kind: 'case' }, e3: { choices: fsChoices({ 1: false, 2: false, 4: false, 5: true, 3: false }) } }));
+  assert.deepEqual(d.methodViolations, ['M6']); assert.deepEqual(d.m6Choices, [1, 2, 4]); assert.match(d.methodDetails.M6, /1,2,4/);
+});
+t('(v6.4-3) 긍정 발문 오답 false 2개 → M6 없음', () => {
+  const d = run(mk(3, { item: { kind: 'case' }, e3: { choices: fsChoices({ 1: false, 2: false, 4: true, 5: true }) } }));
+  assert.deepEqual(d.methodViolations, []); assert.equal(d.repair, false);
+});
+t('(v6.4-4) fact_sensitive null·없음 3개 → M6 없음', () => {
+  const d = run(mk(3, { item: { kind: 'case' }, e3: { choices: fsChoices({ 1: null, 2: null, 4: null, 5: false }) } }));
+  assert.deepEqual(d.methodViolations, []);
+  const n = run(mk(3, { item: { stem: NEG, kind: 'case' }, e3: { choices: fsChoices({ 3: null }) } }));
+  assert.deepEqual(n.methodViolations, []);
+});
+t('(v6.4-5) kind view + M6 → 수리 없음·경고', () => {
+  const d = run(mk(3, { item: { stem: NEG, kind: 'view' }, e3: { choices: fsChoices({ 3: false }) } }));
+  assert.deepEqual(d.methodViolations, ['M6']); assert.equal(d.repair, false);
+  assert.ok(d.warnings.some(w => w.startsWith('방식 위반 M6')));
+});
+
 let fail = 0;
 for (const [name, fn] of cases) {
   try { fn(); console.log('통과  ' + name); } catch (e) { fail++; console.log('실패  ' + name + '\n      ' + e.message.split('\n')[0]); }

@@ -1,4 +1,4 @@
-// v6 판정(순수 함수, API 호출 없음). RULES_V=6일 때 eval-repair.mjs가 쓴다. 근거: rule-audit-2026-11-23/PROPOSAL-code-v6.md 4절.
+// v6.4(2026-11-25): M6 원리 뒤집기(case-check/REVIEW-case-false-spot-web.md·REPORT-case-fact-check.md, 결정 카드 21:42 KST). v6 판정(순수 함수, API 호출 없음). RULES_V=6일 때 eval-repair.mjs가 쓴다. 근거: rule-audit-2026-11-23/PROPOSAL-code-v6.md 4절.
 //   classifyV6(item, mask, e2, e3): e1(mask)·e2·e3의 해당 버전 항목으로 결함·방식 위반·수리 대상·경고·전략 경고를 계산한다.
 //   checkStrategiesV6(item, mode, kind): 출력의 strategies·strategyUse 기계 점검(PROPOSAL-code-v6 2-6절).
 
@@ -88,6 +88,14 @@ export function classifyV6(it, m = {}, b = {}, c = {}) {
   const mp = c.mirror_pair || {};
   const mpc = (mp.choices || []).map(Number);
   if (mp.exists) methodDetails.M5 = `거울 짝 선지(${mpc.join('·')}): ${mp.why || ''}`;
+  // v6.4 M6 (2026-11-25, case-check): 원리 뒤집기 선지. fact_sensitive가 null·없음이면 세지 않는다.
+  const fsOf = n => { const v = get(n)?.fact_sensitive; return v === true ? true : v === false ? false : null; };
+  const m6Choices = negative
+    ? (fsOf(ans) === false ? [ans] : [])
+    : [1, 2, 3, 4, 5].filter(n => n !== ans && fsOf(n) === false);
+  if (negative ? m6Choices.length === 1 : m6Choices.length >= 3) {
+    methodDetails.M6 = negative ? `정답이 지문 원리를 뒤집어 만든 선지: ${ans}` : `오답 중 지문 원리를 뒤집어 만든 선지: ${m6Choices.join(',')}`;
+  }
   const methodViolations = Object.keys(methodDetails);
   // v6.1 (PROPOSAL-v61.md 3절): 수리는 kind가 view가 아닐 때만. view는 방식 위반이 있어도 경고로만 남긴다.
   // v6.3 (Ghootae 2026-11-25): 방식 위반 하나여도 수리(과학 사례 B형이 M2 경고만 받고 수리 없이 미달). view는 그대로 경고만.
@@ -132,6 +140,7 @@ export function classifyV6(it, m = {}, b = {}, c = {}) {
     bogiSources: [1, 2, 3, 4, 5].map(n => Number(get(n)?.bogi_sources ?? NaN)),
     tasks: [1, 2, 3, 4, 5].map(n => get(n)?.task ?? null),
     bogiOnly: [1, 2, 3, 4, 5].map(n => get(n)?.bogi_only ?? null),
+    factSensitive: [1, 2, 3, 4, 5].map(fsOf), m6Choices: methodDetails.M6 ? m6Choices : [],
     mirrorPair: mp, solverAnswer: c.answer, validAnswers: va, closestRival: c.closest_rival,
   };
 }
