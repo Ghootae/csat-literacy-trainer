@@ -8,6 +8,11 @@
 //   "series": [{"id":"s1","label":"㉠"|null,"style":"solid|dashed","curve":"smooth|linear",
 //               "points":[{"x":0,"y":0},{"x":1,"y":-200,"mark":"ⓐ"}, ...]}],      // points는 x 오름차순. mark = 곡선 위에 찍을 표시 기호
 //   "shade": [{"series":"s1","from":"ⓑ","to":"ⓓ"}]                                // (선택) 곡선과 가로축 사이 빗금(넓이 읽기용)
+//   (2026-11-25, 그래프 1차: 아래는 모두 선택 필드. 없으면 출력이 이전과 같다)
+//   "yAxis.ticks": [{"at":16,"label":"P₂"}]                                        // 세로축 기호 눈금(xAxis.ticks와 같은 방식). 그림·읽기 판에는 label만
+//   "guides": [{"dir":"h|v","at":값 | {"series":"id","point":"표시 기호|peak|trough|start|end"},"label":"P₁"|null,"to":"axis"|"계열 id"|null}]
+//                                                                                  // 수평(h)·수직(v) 점선 기준선. at이 점 참조면 그 점의 좌표를 쓴다. to 없음=그림 끝까지, axis=축에서 그 점까지, 계열 id=축에서 그 계열과 만나는 곳까지
+//   "crossMarks": true | [{"a":"id","b":"id","label":"E"|null}]                    // 계열 사이 교점에 점(과 기호)을 자동으로 찍는다
 // }
 // 읽기 판은 그림에 보이는 것만 적는다(2026-11-21): 축 이름·단위, 눈금 값, 표시 점의 값(눈금에 있을 때)과 가로축 위·아래, 구간별 증가/감소/일정, 꼭짓점(최고·최저), 가로축(0) 통과와 부호, 계열 사이 교차. 기울기 크기 순위와 눈금 id는 적지 않는다.
 // 사용:  node graph/render.mjs <spec.json> <출력 폴더>        → <이름>.svg, <이름>.txt
@@ -37,17 +42,88 @@ export function validateSpec(spec) {
     });
   }
   for (const t of spec.xAxis?.ticks || []) if (typeof t.at !== 'number' || t.label === undefined || t.label === null || String(t.label).trim() === '') errs.push('xAxis.ticks 항목에 at(숫자)·label(표시 값) 필요');
+  for (const t of spec.yAxis?.ticks || []) if (typeof t.at !== 'number' || t.label === undefined || t.label === null || String(t.label).trim() === '') errs.push('yAxis.ticks 항목에 at(숫자)·label(표시 기호) 필요');
   for (const sh of spec.shade || []) for (const k of ['from', 'to']) if (!marks.has(sh[k])) errs.push(`shade.${k} ${sh[k]}는 표시 기호가 아님`);
-  const labelTexts = [spec.xAxis?.label, spec.xAxis?.unit, spec.yAxis?.label, spec.yAxis?.unit, ...(spec.series || []).map(s => s.label)].filter(Boolean);
+  const ids = new Set((spec.series || []).map(s => s.id));
+  (spec.guides || []).forEach((g, i) => {
+    const w = `guides[${i}]`;
+    if (!['h', 'v'].includes(g.dir)) { errs.push(`${w}.dir ${g.dir}은 h 또는 v가 아님`); return; }
+    if (typeof g.at === 'object' && g.at) {
+      if (!ids.has(g.at.series)) { errs.push(`${w}.at.series ${g.at.series}는 계열 id가 아님`); return; }
+      if (!resolvePoint(spec, g.at)) { errs.push(`${w}.at.point ${g.at.point}는 표시 기호도 peak·trough·start·end도 아님`); return; }
+    } else if (typeof g.at !== 'number') { errs.push(`${w}.at은 숫자 또는 {series, point}여야 함`); return; }
+    if (g.to !== undefined && g.to !== null && g.to !== 'axis' && !ids.has(g.to)) { errs.push(`${w}.to ${g.to}는 axis도 계열 id도 아님`); return; }
+    if (guideGeom(spec, g).end === undefined) errs.push(g.to === 'axis' ? `${w}.to가 axis이면 at은 점 참조여야 함` : `${w}.to ${g.to} 계열과 만나는 곳이 없음`);
+  });
+  if (spec.crossMarks !== undefined && spec.crossMarks !== true) {
+    if (!Array.isArray(spec.crossMarks)) errs.push('crossMarks는 true 또는 배열이어야 함');
+    else spec.crossMarks.forEach((m, i) => { for (const k of ['a', 'b']) if (!ids.has(m[k])) errs.push(`crossMarks[${i}].${k} ${m[k]}는 계열 id가 아님`); });
+  }
+  if (!errs.length && spec.crossMarks) {
+    const A = analyze(spec);
+    (spec.crossMarks === true ? [] : spec.crossMarks).forEach((m, i) => { if (!crossMarkList(spec, A).some(q => q.m === m)) errs.push(`crossMarks[${i}] ${m.a}·${m.b} 사이에 교점이 없음`); });
+  }
+  const labelTexts = [spec.xAxis?.label, spec.xAxis?.unit, spec.yAxis?.label, spec.yAxis?.unit, ...(spec.series || []).map(s => s.label),
+    ...(spec.yAxis?.ticks || []).map(t => t.label), ...(spec.guides || []).map(g => g.label), ...(Array.isArray(spec.crossMarks) ? spec.crossMarks.map(m => m.label) : [])].filter(Boolean);
   for (const t of labelTexts) for (const w of JUDGE_WORDS) if (String(t).includes(w)) warns.push(`축·범례 "${t}"에 판정어 "${w}"`);
   return { errs, warns };
+}
+
+// ---- 기준선·교점 도우미 ----
+function resolvePoint(spec, ref) { // {series, point} → 곡선 위 점. point = 표시 기호 | peak | trough | start | end
+  const s = (spec.series || []).find(q => q.id === ref?.series);
+  if (!s || !Array.isArray(s.points) || !s.points.length) return null;
+  const P = s.points;
+  if (ref.point === 'start') return P[0];
+  if (ref.point === 'end') return P[P.length - 1];
+  if (ref.point === 'peak') return P.reduce((m, p) => (p.y > m.y ? p : m));
+  if (ref.point === 'trough') return P.reduce((m, p) => (p.y < m.y ? p : m));
+  return P.find(p => p.mark === ref.point) || null;
+}
+function yAtX(s, x) {
+  const P = s.points;
+  if (x < P[0].x || x > P[P.length - 1].x) return null;
+  for (let i = 0; i < P.length - 1; i++) if (x >= P[i].x && x <= P[i + 1].x) return P[i].y + (P[i + 1].y - P[i].y) * (x - P[i].x) / (P[i + 1].x - P[i].x);
+  return null;
+}
+function xAtY(s, y) { // 곡선이 처음 그 높이에 닿는 가로 위치
+  const P = s.points;
+  for (let i = 0; i < P.length - 1; i++) {
+    const a = P[i], b = P[i + 1];
+    if (a.y === y) return a.x;
+    if ((a.y - y) * (b.y - y) < 0) return a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y);
+  }
+  return P[P.length - 1].y === y ? P[P.length - 1].x : null;
+}
+// 기준선의 좌표: val = 수평이면 y, 수직이면 x. end = 축에서 닿는 곳의 반대쪽 좌표(수평이면 x, 수직이면 y), null = 그림 끝까지, undefined = 정할 수 없음.
+function guideGeom(spec, g) {
+  const ref = g.at && typeof g.at === 'object' ? resolvePoint(spec, g.at) : null;
+  const val = ref ? (g.dir === 'h' ? ref.y : ref.x) : g.at;
+  let end = null;
+  if (g.to === 'axis') end = ref ? (g.dir === 'h' ? ref.x : ref.y) : undefined;
+  else if (g.to) {
+    const s = (spec.series || []).find(q => q.id === g.to);
+    end = s ? (g.dir === 'h' ? xAtY(s, val) : yAtX(s, val)) : undefined;
+    if (end === null) end = undefined;
+  }
+  return { val, end, ref };
+}
+function crossMarkList(spec, A) { // 찍을 교점: [{c: A.cross 항목, m: crossMarks 항목 또는 null, label}]
+  if (!spec.crossMarks) return [];
+  if (spec.crossMarks === true) return A.cross.map(c => ({ c, m: null, label: null }));
+  const r = [];
+  for (const m of spec.crossMarks) for (const c of A.cross) {
+    const ia = spec.series[c.a].id, ib = spec.series[c.b].id;
+    if ((m.a === ia && m.b === ib) || (m.a === ib && m.b === ia)) r.push({ c, m, label: m.label || null });
+  }
+  return r;
 }
 
 // ---- 분석 ----
 function analyze(spec) {
   const marks = []; // {name, x, y, series}
   for (const [si, s] of spec.series.entries()) for (const p of s.points) if (p.mark) marks.push({ name: p.mark, x: p.x, y: p.y, series: si });
-  for (const t of spec.xAxis.ticks || []) marks.push({ name: `가로축 ${t.label}${spec.xAxis.unit || ''}`, x: t.at, y: null, series: null, tick: true });
+  for (const t of spec.xAxis.ticks || []) marks.push({ name: `가로축 ${t.label}`, x: t.at, y: null, series: null, tick: true });
   marks.sort((a, b) => a.x - b.x);
   const xmin = Math.min(...spec.series.map(s => s.points[0].x));
   const where = (x, si = null) => { // si: 읽고 있는 계열 번호. 같은 가로 좌표에 다른 계열의 표시 기호가 있으면 그 계열 점으로 오해하지 않게 "같은 가로 위치"로 쓴다.
@@ -101,7 +177,7 @@ function analyze(spec) {
     const f = (s, x) => { const P = s.points; if (x < P[0].x || x > P[P.length - 1].x) return null; for (let i = 0; i < P.length - 1; i++) if (x >= P[i].x && x <= P[i + 1].x) return P[i].y + (P[i + 1].y - P[i].y) * (x - P[i].x) / (P[i + 1].x - P[i].x); return null; };
     const diff = x => { const u = f(spec.series[a], x), v = f(spec.series[b], x); return u === null || v === null ? null : u - v; };
     const seen = new Set();
-    const push = (x, touch) => { const k = x.toFixed(6); if (seen.has(k)) return; seen.add(k); out.cross.push({ a, b, x, touch }); };
+    const push = (x, touch) => { const k = x.toFixed(6); if (seen.has(k)) return; seen.add(k); out.cross.push({ a, b, x, touch, y: f(spec.series[a], x) }); };
     for (let i = 0; i < xs.length - 1; i++) {
       const d0 = diff(xs[i]), d1 = diff(xs[i + 1]);
       if (d0 === null || d1 === null) continue;
@@ -126,14 +202,16 @@ export function readingText(spec) {
   L.push('[그래프 읽기 판]');
   L.push(`가로축: ${ax.label}${ax.unit ? `(${ax.unit})` : ''}. 세로축: ${ay.label}${ay.unit ? `(${ay.unit})` : ''}.`);
   if (A.values.length) L.push(`세로축에 값이 적힌 눈금: ${A.values.map(fmt).join(', ')}.`);
+  if ((ay.ticks || []).length) L.push(`세로축에 기호가 적힌 눈금: ${ay.ticks.map(t => t.label).join(', ')}.`);
   const allY = [...spec.series.flatMap(S => S.points.map(p => p.y)), ...(A.values || [])];
   const zeroShown = Math.min(...allY) <= 0 && Math.max(...allY) >= 0; // 세로축 범위에 0이 있을 때만 '가로축 위·아래'를 적는다
   const mkInfo = [];
   for (const [si, S] of spec.series.entries()) for (const p of S.points) if (p.mark) mkInfo.push({ x: p.x, t: `${p.mark}${n > 1 || zeroShown ? `(${[n > 1 ? nameOf(S, si, n) : null, zeroShown ? `가로축 ${sgn(p.y) > 0 ? '위' : sgn(p.y) < 0 ? '아래' : '0, 가로축 위'}` : null].filter(Boolean).join(', ')})` : ''}` });
   mkInfo.sort((a, b) => a.x - b.x);
   if (mkInfo.length) L.push(`곡선 위 표시(가로축 왼쪽부터): ${mkInfo.map(m => m.t).join(', ')}.`);
-  const tk = (ax.ticks || []).map(t => `${t.label}${ax.unit || ''}`);
+  const tk = (ax.ticks || []).map(t => `${t.label}`);
   if (tk.length) L.push(`가로축에 값이 적힌 눈금: ${tk.join(', ')}.`);
+  for (const g of spec.guides || []) if (g.label) L.push(g.dir === 'h' ? `${g.label} 높이의 수평 기준선.` : `${g.label} 위치의 수직 기준선.`);
   for (const [i, S] of A.series.entries()) {
     const nm = nameOf(S.s, i, n);
     L.push(`${nm}${S.s.style === 'dashed' ? '(점선)' : ''}:`);
@@ -158,7 +236,8 @@ export function readingText(spec) {
       L.push(`- 가로축 기준 부호: ${sc.join(', ')}`);
     }
   }
-  for (const c of A.cross) L.push(`${nameOf(spec.series[c.a], c.a, n)}와 ${nameOf(spec.series[c.b], c.b, n)}는 ${A.where(c.x)}에서 만남${c.touch ? '(접함)' : '(교차)'}.`);
+  const crossLabel = new Map(crossMarkList(spec, A).filter(q => q.label).map(q => [q.c, q.label]));
+  for (const c of A.cross) L.push(`${nameOf(spec.series[c.a], c.a, n)}와 ${nameOf(spec.series[c.b], c.b, n)}는 ${A.where(c.x)}에서 만남${c.touch ? '(접함' : '(교차'}${crossLabel.has(c) ? `, 교점 기호 ${crossLabel.get(c)}` : ''}).`);
   for (const sh of spec.shade || []) L.push(`빗금: ${sh.from}~${sh.to} 구간에서 곡선과 가로축 사이.`);
   return L.join('\n');
 }
@@ -182,11 +261,11 @@ function monotonePath(P) { // P: [[x,y]] 화면 좌표, Fritsch–Carlson 단조
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
 export function renderSvg(spec) {
-  const shortOf = s => (s.label ? String(s.label).split(/\s+/)[0] : null);
   const legend = spec.series.filter(s => s.label && String(s.label).split(/\s+/).length > 1);
   const W = 560, ml = 64, mr = 36, mt = 28, legendH = legend.length ? 8 + legend.length * 18 : 0, mb = 56 + legendH, H = 360 + legendH;
   const all = spec.series.flatMap(s => s.points);
-  const xs = all.map(p => p.x), ys = [...all.map(p => p.y), ...(spec.yAxis.values || [])]; // 0을 강제로 넣지 않는다
+  const gH = (spec.guides || []).filter(g => g.dir === 'h' && typeof g.at === 'number').map(g => g.at), gV = (spec.guides || []).filter(g => g.dir === 'v' && typeof g.at === 'number').map(g => g.at);
+  const xs = [...all.map(p => p.x), ...gV], ys = [...all.map(p => p.y), ...(spec.yAxis.values || []), ...(spec.yAxis.ticks || []).map(t => t.at), ...gH]; // 0을 강제로 넣지 않는다
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   const padY = (y1 - y0) * 0.12 || 1, padX = (x1 - x0) * 0.06 || 1;
   const X = x => ml + (x - (x0 - 0)) / (x1 + padX - x0) * (W - ml - mr);
@@ -202,6 +281,10 @@ export function renderSvg(spec) {
     o.push(`<line x1="${ml - 4}" x2="${ml}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#000"/>`);
     o.push(`<text x="${ml - 8}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${fmt(v)}</text>`);
   }
+  for (const t of spec.yAxis.ticks || []) {
+    o.push(`<line x1="${ml - 4}" x2="${ml}" y1="${Y(t.at).toFixed(1)}" y2="${Y(t.at).toFixed(1)}" stroke="#000"/>`);
+    o.push(`<text x="${ml - 8}" y="${(Y(t.at) + 4).toFixed(1)}" text-anchor="end">${esc(t.label)}</text>`);
+  }
   // 축
   o.push(`<line x1="${ml}" y1="${H - mb + 8}" x2="${ml}" y2="${mt - 10}" stroke="#000" stroke-width="1.4" marker-end="url(#ah)"/>`);
   o.push(`<line x1="${ml - 6}" y1="${axisY.toFixed(1)}" x2="${W - mr + 14}" y2="${axisY.toFixed(1)}" stroke="#000" stroke-width="1.4" marker-end="url(#ah)"/>`);
@@ -212,7 +295,37 @@ export function renderSvg(spec) {
     o.push(`<line x1="${X(t.at).toFixed(1)}" x2="${X(t.at).toFixed(1)}" y1="${axisY - 4}" y2="${axisY + 4}" stroke="#000"/>`);
     o.push(`<text x="${X(t.at).toFixed(1)}" y="${(axisY + 18).toFixed(1)}" text-anchor="middle">${esc(t.label)}</text>`);
   }
-  legend.forEach((s, k) => o.push(`<text x="${ml}" y="${H - legendH + 22 + k * 18}" font-size="13">${esc(s.label)}</text>`));
+  legend.forEach((s, k) => {
+    const ly = H - legendH + 22 + k * 18;
+    o.push(`<line x1="${ml}" x2="${ml + 28}" y1="${ly - 4.5}" y2="${ly - 4.5}" stroke="#000" stroke-width="2" ${s.style === 'dashed' ? 'stroke-dasharray="7,5" ' : ''}data-role="legend-swatch"/>`);
+    o.push(`<text x="${ml + 34}" y="${ly}" font-size="13">${esc(s.label)}</text>`);
+  });
+  // 곡선 이름 자리: 끝점 옆(오른쪽 위)이 기본. 오른쪽 여백을 넘거나 다른 이름과 겹치면 다른 후보로 옮기고, 모두 안 되면 지시선을 단다.
+  const textW = (str, fs) => [...String(str)].reduce((w, ch) => w + (ch.codePointAt(0) > 0x2000 ? fs : fs * 0.58), 0);
+  const nameBoxes = [], namePos = new Map();
+  for (const s of spec.series) if (s.label) {
+    const e = [X(s.points[s.points.length - 1].x), Y(s.points[s.points.length - 1].y)], w = textW(s.label, 14);
+    const cands = [[e[0] + 6, e[1] - 6, 'start'], [e[0] + 6, e[1] + 14, 'start'], [e[0] - 4, e[1] - 10, 'end'], [e[0] - 4, e[1] + 16, 'end'], [e[0] - 4, e[1] - 28, 'end'], [e[0] - 4, e[1] + 34, 'end']];
+    const box = ([x, y, a]) => ({ l: a === 'end' ? x - w : x, r: a === 'end' ? x : x + w, t: y - 14, b: y + 3 });
+    const ok = b => b.l >= 2 && b.r <= W - 2 && b.t >= 2 && !nameBoxes.some(q => b.l < q.r + 2 && b.r > q.l - 2 && b.t < q.b + 2 && b.b > q.t - 2);
+    let k = cands.findIndex(c => ok(box(c))), leader = false;
+    if (k < 0) { k = cands.length - 1; leader = true; }
+    nameBoxes.push(box(cands[k]));
+    namePos.set(s, { x: cands[k][0], y: cands[k][1], a: cands[k][2], leader, e });
+  }
+  // 기준선(점 참조는 그 점의 좌표를 쓴다)
+  const drawn = new Set(), axisX = ml;
+  const addLine = (x1, y1, x2, y2, role) => { const l = `<line x1="${x1.toFixed(1)}" x2="${x2.toFixed(1)}" y1="${y1.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#000" stroke-width=".6" stroke-dasharray="2,3"${role ? ` data-role="${role}"` : ''}/>`; if (!drawn.has(l)) { drawn.add(l); o.push(l); } };
+  for (const g of spec.guides || []) {
+    const { val, end } = guideGeom(spec, g);
+    if (g.dir === 'h') {
+      addLine(axisX, Y(val), end === null ? W - mr : X(end), Y(val), 'guide');
+      if (g.label) { o.push(`<line x1="${ml - 4}" x2="${ml}" y1="${Y(val).toFixed(1)}" y2="${Y(val).toFixed(1)}" stroke="#000"/>`); o.push(`<text x="${ml - 8}" y="${(Y(val) + 4).toFixed(1)}" text-anchor="end">${esc(g.label)}</text>`); }
+    } else {
+      addLine(X(val), axisY, X(val), end === null ? mt : Y(end), 'guide');
+      if (g.label) { o.push(`<line x1="${X(val).toFixed(1)}" x2="${X(val).toFixed(1)}" y1="${axisY - 4}" y2="${axisY + 4}" stroke="#000"/>`); o.push(`<text x="${X(val).toFixed(1)}" y="${(axisY + 18).toFixed(1)}" text-anchor="middle">${esc(g.label)}</text>`); }
+    }
+  }
   // 빗금
   for (const sh of spec.shade || []) {
     const s = spec.series.find(q => q.id === sh.series) || spec.series[0];
@@ -227,13 +340,21 @@ export function renderSvg(spec) {
     const P = s.points.map(p => [X(p.x), Y(p.y)]);
     const d = s.curve === 'linear' ? `M${P.map(p => p.map(v => v.toFixed(1)).join(',')).join(' L')}` : monotonePath(P);
     o.push(`<path d="${d}" fill="none" stroke="#000" stroke-width="2" ${s.style === 'dashed' ? 'stroke-dasharray="7,5"' : ''}/>`);
-    if (s.label) { const e = P[P.length - 1]; o.push(`<text x="${(e[0] + 6).toFixed(1)}" y="${(e[1] - 6).toFixed(1)}" font-size="14">${esc(shortOf(s))}</text>`); }
+    if (s.label) {
+      const q = namePos.get(s);
+      if (q.leader) o.push(`<line x1="${q.e[0].toFixed(1)}" y1="${q.e[1].toFixed(1)}" x2="${q.x.toFixed(1)}" y2="${(q.y - 4).toFixed(1)}" stroke="#000" stroke-width=".6" data-role="name-leader"/>`);
+      o.push(`<text x="${q.x.toFixed(1)}" y="${q.y.toFixed(1)}"${q.a === 'end' ? ' text-anchor="end"' : ''} font-size="14">${esc(s.label)}</text>`);
+    }
     for (const p of s.points) if (p.mark) {
       const px = X(p.x), py = Y(p.y), up = p.y >= 0;
       o.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="3.4" fill="#000"/>`);
       o.push(`<line x1="${px.toFixed(1)}" x2="${px.toFixed(1)}" y1="${py.toFixed(1)}" y2="${axisY.toFixed(1)}" stroke="#000" stroke-width=".6" stroke-dasharray="2,3"/>`);
       o.push(`<text x="${px.toFixed(1)}" y="${(py + (up ? -9 : 17)).toFixed(1)}" text-anchor="middle" font-size="15">${esc(p.mark)}</text>`);
     }
+  }
+  for (const { c, label } of crossMarkList(spec, analyze(spec))) {
+    o.push(`<circle cx="${X(c.x).toFixed(1)}" cy="${Y(c.y).toFixed(1)}" r="3.4" fill="#000"/>`);
+    if (label) o.push(`<text x="${(X(c.x) + 7).toFixed(1)}" y="${(Y(c.y) - 7).toFixed(1)}" font-size="15">${esc(label)}</text>`);
   }
   o.push('</svg>');
   return o.join('\n');
