@@ -68,6 +68,10 @@ const results = [];
 const logLines = [`# leak-fix 로그: ${PID} (${new Date().toISOString().slice(0, 10)}, ${MODEL})`, ''];
 
 for (const it of targets) {
+  if (it.status === 'defect') { // v6.5 수리 보완 2: 결함(최종본 아님) 문항은 건너뛴다
+    results.push({ ...it, leakfix: { adopted: false, status: '건너뜀(결함: 최종본 아님)', leaks: [], changes: [] } });
+    logLines.push(`## ${it.version}`, '', '- 건너뜀: status=defect(결함: 최종본 아님)', ''); continue;
+  }
   const sents = splitSentences(it.bogi);
   const keyed = `[${it.version}] 정답 ${CIRC[it.answer - 1]} (${polarity(it)}), 갈래 ${it.kind}
 출제 의도(answerIntent): ${toStr(it.answerIntent ?? '')}

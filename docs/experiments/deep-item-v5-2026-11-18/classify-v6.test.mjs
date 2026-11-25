@@ -1,7 +1,7 @@
 // classifyV6 시험 사례 6개 + 전략 점검 (가짜 e1·e2·e3 출력, API 호출 없음). 실행: node docs/experiments/deep-item-v5-2026-11-18/classify-v6.test.mjs
 // 근거: rule-audit-2026-11-23/PROPOSAL-code-v6.md 4-4절
 import assert from 'node:assert/strict';
-import { classifyV6, checkStrategiesV6 } from './classify-v6.mjs';
+import { classifyV6, checkStrategiesV6, stemChanged, finalStatus } from './classify-v6.mjs';
 
 const POS = '윗글을 바탕으로 〈보기〉를 이해한 내용으로 가장 적절한 것은?';
 const NEG = '윗글을 바탕으로 〈보기〉를 이해한 내용으로 적절하지 않은 것은?';
@@ -96,31 +96,44 @@ t('(v6.3) 전략: S18은 experiment 갈래에 쓸 수 있고 S5는 쓸 수 없�
   assert.ok(checkStrategiesV6({ strategies: ['S5'], strategyUse: { S5: 'x' } }, 'B', 'experiment').some(x => x.includes('experiment 갈래에 쓸 수 없음')));
 });
 
-// v6.4 M6 (2026-11-25): fact_sensitive 칸
-const fsChoices = (map) => [1, 2, 3, 4, 5].map(n => ch(n, n in map ? { fact_sensitive: map[n] } : {}));
-t('(v6.4-1) 부정 발문 정답 fact_sensitive=false → M6·수리', () => {
-  const d = run(mk(3, { item: { stem: NEG, kind: 'case' }, e3: { choices: fsChoices({ 3: false, 1: true }) } }));
+// v6.5 M6 (2026-11-25): e3f(별도 호출) 결과를 classifyV6 5번째 인자로 받는다. (v6.4에서는 e3 choices 안에 있었음)
+const e3f = map => ({ answer: 3, choices: [1, 2, 3, 4, 5].map(n => ({ n, truth: '참', fact_sensitive: n in map ? map[n] : true, why: `w${n}` })) });
+const runF = (c, f) => classifyV6(c.item, c.mask, c.e2, c.e3, f);
+t('(v6.5-1) 부정 발문 정답 fact_sensitive=false → M6·수리', () => {
+  const d = runF(mk(3, { item: { stem: NEG, kind: 'case' } }), e3f({ 3: false }));
   assert.deepEqual(d.methodViolations, ['M6']); assert.equal(d.repair, true); assert.deepEqual(d.m6Choices, [3]);
-  assert.deepEqual(d.factSensitive, [true, null, false, null, null]);
+  assert.deepEqual(d.factSensitive, [true, true, false, true, true]); assert.equal(d.factWhy[2], 'w3');
 });
-t('(v6.4-2) 긍정 발문 오답 false 3개 → M6', () => {
-  const d = run(mk(3, { item: { kind: 'case' }, e3: { choices: fsChoices({ 1: false, 2: false, 4: false, 5: true, 3: false }) } }));
+t('(v6.5-2) 긍정 발문 오답 false 3개 → M6', () => {
+  const d = runF(mk(3, { item: { kind: 'case' } }), e3f({ 1: false, 2: false, 4: false, 3: false }));
   assert.deepEqual(d.methodViolations, ['M6']); assert.deepEqual(d.m6Choices, [1, 2, 4]); assert.match(d.methodDetails.M6, /1,2,4/);
 });
-t('(v6.4-3) 긍정 발문 오답 false 2개 → M6 없음', () => {
-  const d = run(mk(3, { item: { kind: 'case' }, e3: { choices: fsChoices({ 1: false, 2: false, 4: true, 5: true }) } }));
+t('(v6.5-3) 긍정 발문 오답 false 2개 → M6 없음', () => {
+  const d = runF(mk(3, { item: { kind: 'case' } }), e3f({ 1: false, 2: false }));
   assert.deepEqual(d.methodViolations, []); assert.equal(d.repair, false);
 });
-t('(v6.4-4) fact_sensitive null·없음 3개 → M6 없음', () => {
-  const d = run(mk(3, { item: { kind: 'case' }, e3: { choices: fsChoices({ 1: null, 2: null, 4: null, 5: false }) } }));
+t('(v6.5-4) fact_sensitive null 3개 / e3f 없음 → M6 없음', () => {
+  const d = runF(mk(3, { item: { kind: 'case' } }), e3f({ 1: null, 2: null, 4: null, 5: false }));
   assert.deepEqual(d.methodViolations, []);
-  const n = run(mk(3, { item: { stem: NEG, kind: 'case' }, e3: { choices: fsChoices({ 3: null }) } }));
-  assert.deepEqual(n.methodViolations, []);
+  assert.deepEqual(runF(mk(3, { item: { stem: NEG, kind: 'case' } }), e3f({ 3: null })).methodViolations, []);
+  const none = classifyV6(mk(3, { item: { stem: NEG, kind: 'case' } }).item, mk(3).mask, mk(3).e2, mk(3).e3); // 인자 없음
+  assert.deepEqual(none.methodViolations, []); assert.deepEqual(none.factSensitive, [null, null, null, null, null]);
 });
-t('(v6.4-5) kind view + M6 → 수리 없음·경고', () => {
-  const d = run(mk(3, { item: { stem: NEG, kind: 'view' }, e3: { choices: fsChoices({ 3: false }) } }));
+t('(v6.5-5) kind view + M6 → 수리 없음·경고', () => {
+  const d = runF(mk(3, { item: { stem: NEG, kind: 'view' } }), e3f({ 3: false }));
   assert.deepEqual(d.methodViolations, ['M6']); assert.equal(d.repair, false);
   assert.ok(d.warnings.some(w => w.startsWith('방식 위반 M6')));
+});
+t('(v6.5-6) 수리가 발문을 바꾸면(조건 문장 지워짐 포함) 되돌림 판정', () => {
+  assert.equal(stemChanged(NEG, NEG), false);
+  assert.equal(stemChanged(NEG, NEG + ' '), true);
+  assert.equal(stemChanged(POS, NEG), true);
+  assert.equal(stemChanged(POS, undefined), false); // 발문을 안 돌려준 것은 원본 유지로 처리(바뀌지 않음)
+});
+t('(v6.5-7) 수리 뒤 결함이면 status=defect, 아니면 표시 없음', () => {
+  const bad = run(mk(3, { e3: { valid_answers: [2, 3], answer: 3 } }));
+  assert.equal(finalStatus(bad), 'defect');
+  assert.equal(finalStatus(run(mk(3))), undefined); assert.equal(finalStatus(undefined), undefined);
 });
 
 let fail = 0;

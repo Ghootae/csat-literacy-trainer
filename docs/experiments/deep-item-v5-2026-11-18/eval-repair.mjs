@@ -12,13 +12,14 @@
 //   IN 파일 형식: {"items":[{version, kind, stem, bogi, choices[5], answer, ...}]}
 // v6 (2026-11-24, rule-audit-2026-11-23/PROPOSAL-code-v6.md 4절): RULES_V=6이면 e3에 task·bogi_only 칸을 더하고, 판정을 classify-v6.mjs의 classifyV6로 한다
 //   (결함=다시 생성 / 방식 위반 M2~M5를 둘 이상 어기면 수리 / 나머지는 경고 / 고른 전략 못 지킴 경고). RULES_V가 없으면 v5 동작 그대로.
+// v6.5 (2026-11-25 22시대, case-check/REVIEW-case-fact-repair-web.md): M6를 e3에서 떼어 별도 호출 e3f(FACT_MODEL 기본 gpt-6.1-sol, 정답 모름, 문항당 1회, CODEX-PROMPT.md 문구)로 판정 + 수리가 발문을 바꾸면 되돌림 + 수리 뒤 결함이면 status:"defect"(leak-fix는 건너뜀). e3f 문구 = v1(CODEX-PROMPT.md), v2·v3 질문은 재검증 미달로 안 씀(REPORT-case-fact-repair2.md).
 // v6.4 (2026-11-25, 결정 카드 21:42 KST "넣고 사례 두 칸 재시험"; 근거 set-pattern-2026-11-18/case-check/REVIEW-case-false-spot-web.md·REPORT-case-fact-check.md): RULES_V=6 e3에 fact_sensitive·fact_change 칸, classify-v6의 M6(원리 뒤집기 선지), e4에 M6 수리 한 줄.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { renderBoth, validateSpec } from './graph/render.mjs'; // 그래프 갈래(2026-11-21): 〈보기〉 = graphSpec에서 자동 생성한 읽기 판
-import { classifyV6 } from './classify-v6.mjs';
+import { classifyV6, stemChanged, finalStatus } from './classify-v6.mjs';
 const V6 = process.env.RULES_V === '6'; // 기본값 5(v5 동작). 6이면 v6 규칙·판정
 const stripOld = t => V6 ? t.replace(/\s*\(옛 [^()]*\)/g, '') : t; // v6 규칙 파일의 '(옛 …)' 대응 표시는 사람용이라 모델에게 보내는 문자열에서 지운다(파일은 그대로)
 
@@ -48,13 +49,13 @@ const commonRules = stripOld(fs.readFileSync(path.join(DIR, V6 ? 'rules-common-v
 const usagePath = path.join(OUT, 'usage.json');
 const usageLog = fs.existsSync(usagePath) ? JSON.parse(fs.readFileSync(usagePath, 'utf8')) : [];
 // gpt-6.2 계열은 긴 규칙을 top-level instructions 대신 developer 메시지로 보낸다(캐시용, 2026-11-20). 6.1 동작은 그대로.
-const reqBody = (instructions, input) => MODEL.startsWith('gpt-6.2') ? { input: [{ role: 'developer', content: instructions }, ...(Array.isArray(input) ? input : [{ role: 'user', content: input }])] } : { instructions, input };
-async function call(stage, instructions, input) {
+const reqBody = (instructions, input, model = MODEL) => model.startsWith('gpt-6.2') ? { input: [{ role: 'developer', content: instructions }, ...(Array.isArray(input) ? input : [{ role: 'user', content: input }])] } : { instructions, input };
+async function call(stage, instructions, input, model = MODEL) {
   const cached = path.join(OUT, `${stage}.md`);
   if (fs.existsSync(cached) && !process.env.FORCE) { console.log(`[${stage}] 이미 있음, 건너뜀`); return fs.readFileSync(cached, 'utf8'); }
-  console.log(`[${stage}] 호출 중 (${MODEL}, ${EFFORT})...`);
+  console.log(`[${stage}] 호출 중 (${model}, ${EFFORT})...`);
   const t0 = Date.now();
-  const res = await client.responses.stream({ model: MODEL, reasoning: { effort: EFFORT }, ...reqBody(instructions, input) }).finalResponse();
+  const res = await client.responses.stream({ model, reasoning: { effort: EFFORT }, ...reqBody(instructions, input, model) }).finalResponse();
   fs.writeFileSync(cached, res.output_text);
   usageLog.push({ stage, model: res.model, seconds: Math.round((Date.now() - t0) / 1000), usage: res.usage });
   fs.writeFileSync(usagePath, JSON.stringify(usageLog, null, 2));
@@ -67,6 +68,13 @@ const CIRC = ['①', '②', '③', '④', '⑤'];
 const strip = c => c.replace(/^\s*[①②③④⑤]\s*/, '');
 const polarity = it => /적절하지\s*않은/.test(it.stem) ? '부정 발문(적절하지 않은 것 = 내용상 거짓인 선지가 정답, 나머지 넷은 내용상 참)' : '긍정 발문(가장 적절한 것 = 내용상 참인 선지가 정답, 나머지 넷은 내용상 거짓)';
 const examText = (items, bogiKey = 'bogi') => items.map(it => `[${it.version}] (${polarity(it)})\n${it.stem}\n〈보기〉\n${it[bogiKey]}\n${it.choices.join('\n')}`).join('\n\n');
+
+const FACT_MODEL = process.env.FACT_MODEL || 'gpt-6.1-sol'; // v6.5: M6(사실 바꾸기 검사)는 별도 호출·6.1 모델·질문 하나(무료 검증과 같은 조건)
+const factPrompt = (() => { const t = fs.readFileSync(path.join(DIR, '..', 'set-pattern-2026-11-18', 'case-check', 'CODEX-PROMPT.md'), 'utf8'); return t.replace(/\n아래 문항 파일은 SHEET\.md다[^\n]*\n?/, '\n아래 지문과 문항을 읽고 위 지시대로 답하라.\n'); })();
+async function factCheck(it, tag) { // e3f: 정답을 모르는 상태로 문항 하나를 따로 묻는다
+  const input = `[지문]\n${passage}\n\n[문항]\n${it.stem}\n〈보기〉\n${it.bogi}\n${it.choices.join('\n')}`;
+  return lastJson(await call(`e3f-${it.version}${tag}`, factPrompt, input, FACT_MODEL));
+}
 
 async function evaluate(items, tag) {
   // e1: 핵심 관찰 가리기 (정답을 앎)
@@ -97,21 +105,22 @@ async function evaluate(items, tag) {
 - bogi_sources: 이 선지의 정오를 확정하는 데 필요한 〈보기〉의 서로 다른 관찰 수(다른 열·다른 행·다른 문장은 따로 센다, 한 열 안의 값 여러 개는 1). 〈보기〉가 필요 없으면 0.
 - steps: 이 선지의 정오를 확정하는 데 필요한 추론 단계 수. 〈보기〉에서 한 번 읽은 값(같은 행을 대상만 바꿔 읽는 것 포함)에 지문 규칙 하나를 바로 적용하면 1. 두 관찰을 비교·연결하거나(예: 두 값의 차이, 변화의 방향), 지문 관계 둘을 이어야 하거나, 〈보기〉 표현을 지문 개념으로 바꿔 읽어야 하면 그 수만큼 더한다.${V6 ? `
 - task: 내용 확인 / 짝짓기 / 원리 적용 중 하나. 내용 확인 = 선지 진술이 지문(또는 〈보기〉)의 진술과 같은지 대조하면 끝. 짝짓기 = 〈보기〉의 대상·사례가 지문의 어느 개념·범주·관점에 해당하는지 정하면 끝. 원리 적용 = 지문의 원리·인과·규칙을 상황에 돌려 지문에 직접 적히지 않은 결과를 끌어내야 함. 셋이 섞이면 가장 뒤의 것(원리 적용 > 짝짓기 > 내용 확인)을 고른다.
-- bogi_only: 지문을 보지 않고 〈보기〉와 선지만으로 이 선지의 정오가 확정되는가 (true/false).
-- fact_sensitive: 〈보기〉의 사실(값, 일어난 일, 일어난 순서, 누가 무엇을 알았거나 할 수 있었나) 가운데 하나를 그럴듯하게 바꾸었을 때 이 선지의 정오가 바뀌는가? 바뀌면 true와 fact_change("바꾼 사실 → 바뀐 결과" 한 줄). 〈보기〉에서 이름·정체(누가 누구인지, 무엇이 무엇인지)만 가져오고 어떤 사실을 바꿔도 정오가 그대로면 false와 fact_change에 정오를 정하는 지문 문장 한 줄. 선지가 〈보기〉 속 이름(갑, ㉮, A 등)을 쓴다는 것만으로 true로 하지 않는다. 선지 안에 '~라면'으로 붙은 조건은 선지의 일부로 본다(〈보기〉의 사실이 아님).` : ''}
+- bogi_only: 지문을 보지 않고 〈보기〉와 선지만으로 이 선지의 정오가 확정되는가 (true/false).` : ''}
 문항마다 추가로:
 - closest_rival: 부분적으로 이해한 학생이 마지막까지 고민할 선지 번호와, 정답과 그것을 가르는 관찰 하나.
 - mirror_pair: 같은 대상·같은 비교를 두고 결론만 반대인 두 선지(예: '같다'/'적다', '더 밝다'/'더 어둡다')가 있으면 {"exists":true,"choices":[a,b],"why":"..."}, 없으면 {"exists":false}.
 - valid_answers: 자료 전체로 다시 풀었을 때 발문을 충족하는 선지 번호 목록(정확히 하나여야 정상). 근거가 부족한 선지는 weak에 따로 적는다.
 - answer: 네가 고른 답.
-맨 끝에 JSON 블록: \`\`\`json {"items":[{"version":"V1","answer":3,"choices":[{"n":1,"decisive_clause":"...","minimum_evidence":{"passage":"...","bogi":""},"one_fact_shortcut":{"possible":true,"proof":"..."},"steps":2,"bogi_sources":2${V6 ? ',"task":"원리 적용","bogi_only":false,"fact_sensitive":true,"fact_change":"..."' : ''}}],"closest_rival":{"n":2,"observation":"..."},"mirror_pair":{"exists":false},"valid_answers":[3],"weak":[]}]} \`\`\``,
+맨 끝에 JSON 블록: \`\`\`json {"items":[{"version":"V1","answer":3,"choices":[{"n":1,"decisive_clause":"...","minimum_evidence":{"passage":"...","bogi":""},"one_fact_shortcut":{"possible":true,"proof":"..."},"steps":2,"bogi_sources":2${V6 ? ',"task":"원리 적용","bogi_only":false' : ''}}],"closest_rival":{"n":2,"observation":"..."},"mirror_pair":{"exists":false},"valid_answers":[3],"weak":[]}]} \`\`\``,
     `[지문]\n${passage}\n\n[문항]\n${examText(items)}`));
   const r2 = Object.fromEntries(e2.items.map(x => [x.version, x]));
   const r3 = Object.fromEntries(e3.items.map(x => [x.version, x]));
+  const f3 = {};
+  if (V6) for (const it of items) f3[it.version] = await factCheck(it, tag);
   const diag = {};
   for (const it of items) {
     const m = mask[it.version] || {}, b = r2[it.version] || {}, c = r3[it.version] || {};
-    if (V6) { diag[it.version] = classifyV6(it, m, b, c); continue; }
+    if (V6) { diag[it.version] = classifyV6(it, m, b, c, f3[it.version]); continue; }
     const reasons = [], warnings = [];
     const surv = (b.surviving || []).map(Number);
     const noKey = !m.keyEvidence || !m.keyEvidence.length;
@@ -166,19 +175,25 @@ ${V6 ? '' : '- 정답 선지가 다섯 선지 중 가장 길지 않게 한다.\n
 출력: 문항마다 수정 표(위치, 원문, 수정문, 사유), 그리고 맨 끝에 JSON 블록 \`\`\`json {"items":[{"version":"V1","stem":"...","bogi":"...","choices":["①...","②...","③...","④...","⑤..."],"answer":3,"roles":["경쟁","중간","정답","쉬움","중간"],"repairNotes":"한 줄"}]} \`\`\``,
     `[지문]\n${passage}\n\n[${V6 ? '공통 규칙 v6' : '공통 원칙'}]\n${commonRules}\n\n[수리할 문항]\n${fixText}`));
   const fixed = Object.fromEntries(e4.items.map(x => [x.version, x]));
+  const reverted = new Set();
   items = items.map(it => {
     const f = fixed[it.version]; if (!f) return it;
+    if (stemChanged(it.stem, f.stem)) { // v6.5 수리 보완 1: 발문을 바꾼 수리는 버리고 원본 유지
+      console.warn(`[경고] ${it.version}: 수리가 발문을 바꿔 되돌림`); (report.warnings ||= []).push(`${it.version}: 수리가 발문을 바꿔 되돌림`); reverted.add(it.version); return it;
+    }
     if (Number(f.answer) !== it.answer) console.warn(`[경고] ${it.version}: 수리에서 정답 번호가 바뀜 ${it.answer} → ${f.answer} (원래 번호 유지 안 됨)`);
     let gs = it.graphSpec, gbogi = f.bogi;
     if (it.kind === 'graph') { const v = f.graphSpec ? validateSpec(f.graphSpec) : { errs: ['graphSpec 없음'] }; if (v.errs.length) { console.warn(`[경고] ${it.version}: 그래프 수리 명세 오류(${v.errs.join('/')}) → 원본 명세 유지`); } else { gs = f.graphSpec; } gbogi = renderBoth(gs).text; }
     return { ...it, ...(it.kind === 'graph' ? { graphSpec: gs, beforeGraphSpec: it.graphSpec } : {}), stem: f.stem || it.stem, bogi: gbogi, choices: f.choices.map((c, i) => `${CIRC[i]} ${strip(c)}`), answer: Number(f.answer), roles: f.roles, repairNotes: f.repairNotes, beforeRepair: { bogi: it.bogi, choices: it.choices } };
   });
-  report.after = await evaluate(items.filter(it => fixed[it.version]), 'r');
+  report.after = await evaluate(items.filter(it => fixed[it.version] && !reverted.has(it.version)), 'r');
+  items = items.map(it => finalStatus(report.after[it.version]) ? { ...it, status: 'defect' } : it); // v6.5 수리 보완 2
 }
 fs.writeFileSync(path.join(OUT, 'items-final.json'), JSON.stringify({ passage: PID, items }, null, 2));
 fs.writeFileSync(path.join(OUT, 'eval.json'), JSON.stringify(report, null, 2));
-const line = (v, d) => `${v}: ${d.defect ? '결함(다시 생성)' : d.repair ? '수리 필요' : '통과'}${d.reasons.length ? ' — ' + d.reasons.join(' / ') : ''}${d.warnings.length ? ' [경고: ' + d.warnings.join(' / ') + ']' : ''} (가린 판 남은 후보 ${JSON.stringify(d.surviving)}, 풀이 답 ${d.solverAnswer})`;
+const line = (v, d, afterTag = false) => `${v}: ${d.defect ? '결함(다시 생성)' : d.repair ? '수리 필요' : '통과'}${d.reasons.length ? ' — ' + d.reasons.join(' / ') : ''}${d.warnings.length ? ' [경고: ' + d.warnings.join(' / ') + ']' : ''} (가린 판 남은 후보 ${JSON.stringify(d.surviving)}, 풀이 답 ${d.solverAnswer})${d.defect && afterTag ? ' 결함: 최종본 아님' : ''}${V6 && d.factSensitive ? ` [factSensitive ${JSON.stringify(d.factSensitive)}${d.m6Choices?.length ? ' M6 ' + d.m6Choices.join(',') : ''}]` : ''}`;
 let summary = '[검사]\n' + Object.entries(d0).map(([v, d]) => line(v, d)).join('\n');
-if (report.after) summary += '\n[수리 후]\n' + Object.entries(report.after).map(([v, d]) => line(v, d)).join('\n');
+if (report.warnings) summary += '\n[경고] ' + report.warnings.join(' / ');
+if (report.after) summary += '\n[수리 후]\n' + Object.entries(report.after).map(([v, d]) => line(v, d, true)).join('\n');
 fs.writeFileSync(path.join(OUT, 'eval-summary.txt'), summary + '\n');
 console.log('\n' + summary + '\n결과: ' + OUT);

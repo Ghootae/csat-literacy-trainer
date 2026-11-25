@@ -1,3 +1,4 @@
+// v6.5(2026-11-25 22시대, case-check/REVIEW-case-fact-repair-web.md): M6는 e3가 아니라 별도 호출 e3f(gpt-6.1-sol, 질문 하나) 결과로 계산(classifyV6 5번째 인자). stemChanged·finalStatus는 수리 보완 두 개(발문 보존, 결함 내보내지 않기)의 순수 판정.
 // v6.4(2026-11-25): M6 원리 뒤집기(case-check/REVIEW-case-false-spot-web.md·REPORT-case-fact-check.md, 결정 카드 21:42 KST). v6 판정(순수 함수, API 호출 없음). RULES_V=6일 때 eval-repair.mjs가 쓴다. 근거: rule-audit-2026-11-23/PROPOSAL-code-v6.md 4절.
 //   classifyV6(item, mask, e2, e3): e1(mask)·e2·e3의 해당 버전 항목으로 결함·방식 위반·수리 대상·경고·전략 경고를 계산한다.
 //   checkStrategiesV6(item, mode, kind): 출력의 strategies·strategyUse 기계 점검(PROPOSAL-code-v6 2-6절).
@@ -61,7 +62,12 @@ export function checkStrategiesV6(item, mode, kind) {
   return out;
 }
 
-export function classifyV6(it, m = {}, b = {}, c = {}) {
+// 수리 보완 1(v6.5): 수리가 발문을 한 글자라도 바꾸면 그 수리는 버린다.
+export const stemChanged = (origStem, fixedStem) => fixedStem != null && String(fixedStem) !== String(origStem);
+// 수리 보완 2(v6.5): 수리 뒤 재판정이 결함(정답 유일성 문제)이면 최종본 아님 표시.
+export const finalStatus = afterDiag => (afterDiag && afterDiag.defect ? 'defect' : undefined);
+
+export function classifyV6(it, m = {}, b = {}, c = {}, f = null) {
   const defectReasons = [], warnings = [], methodDetails = {};
   const surv = (b.surviving || []).map(Number);
   const ch = c.choices || [];
@@ -89,7 +95,8 @@ export function classifyV6(it, m = {}, b = {}, c = {}) {
   const mpc = (mp.choices || []).map(Number);
   if (mp.exists) methodDetails.M5 = `거울 짝 선지(${mpc.join('·')}): ${mp.why || ''}`;
   // v6.4 M6 (2026-11-25, case-check): 원리 뒤집기 선지. fact_sensitive가 null·없음이면 세지 않는다.
-  const fsOf = n => { const v = get(n)?.fact_sensitive; return v === true ? true : v === false ? false : null; };
+  const fch = (f && Array.isArray(f.choices)) ? f.choices : null; // e3f 결과(없으면 M6 계산 안 함)
+  const fsOf = n => { if (!fch) return null; const v = fch.find(y => Number(y.n) === n)?.fact_sensitive; return v === true ? true : v === false ? false : null; };
   const m6Choices = negative
     ? (fsOf(ans) === false ? [ans] : [])
     : [1, 2, 3, 4, 5].filter(n => n !== ans && fsOf(n) === false);
@@ -141,6 +148,7 @@ export function classifyV6(it, m = {}, b = {}, c = {}) {
     tasks: [1, 2, 3, 4, 5].map(n => get(n)?.task ?? null),
     bogiOnly: [1, 2, 3, 4, 5].map(n => get(n)?.bogi_only ?? null),
     factSensitive: [1, 2, 3, 4, 5].map(fsOf), m6Choices: methodDetails.M6 ? m6Choices : [],
+    factWhy: [1, 2, 3, 4, 5].map(n => fch?.find(y => Number(y.n) === n)?.why ?? null),
     mirrorPair: mp, solverAnswer: c.answer, validAnswers: va, closestRival: c.closest_rival,
   };
 }
