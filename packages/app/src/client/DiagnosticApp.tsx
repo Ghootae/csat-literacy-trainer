@@ -27,6 +27,7 @@ type Screen =
   | { name: 'answer'; passageId: string; data: QuestionsView }
   | { name: 'mid'; passageId: string }
   | { name: 'feedback'; passageId: string; questionId: string }
+  | { name: 'read'; questionId: string }
   | { name: 'result' } | { name: 'dev' };
 
 export function DiagnosticApp(): React.JSX.Element {
@@ -124,6 +125,12 @@ export function DiagnosticApp(): React.JSX.Element {
     return <FeedbackScreen key={questionId} load={() => getFeedback(participantId, questionId)} send={request => postFeedback(participantId, questionId, request)}
       nextLabel="지문 결과로 돌아가기" next={backToResult} back={backToResult} />;
   }
-  return <ResultContainer id={participantId} set={set} />;
+  if (screen.name === 'read') {
+    const { questionId } = screen;
+    const backToResult = () => setScreen({ name: 'result' });
+    return <FeedbackScreen key={questionId} readOnly load={() => getFeedback(participantId, questionId)} send={request => postFeedback(participantId, questionId, request)}
+      nextLabel="결과로 돌아가기" next={backToResult} backToResult={backToResult} />;
+  }
+  return <ResultContainer id={participantId} set={set} openAnswer={(_passageId, questionId) => setScreen({ name: 'read', questionId })} />;
 }
 

@@ -1,7 +1,7 @@
 /** 지문 끝 중간 화면·결과 화면의 불러오기 껍데기. 학생 화면(`DiagnosticApp`)과 개발자 이동 화면(`DevDiagnostic`)이 함께 쓴다. */
 import { useEffect, useState } from 'react';
 import { finishPassage, getResult, getSummaryCard, revealItem } from './api.js';
-import { hasPending } from './logic.js';
+import { hasPending, takeResultReturn } from './logic.js';
 import { MidPage } from './Pages.js';
 import { ResultView } from './ResultView.js';
 import type { ResultView as Result, SetInfo, SummaryCardView } from './types.js';
@@ -38,7 +38,10 @@ export function MidContainer({ id, passageId, title, number, total, last, dev, r
     review={review} finish={() => void guarded(async () => { await finishPassage(id, passageId); finished(); })} />;
 }
 
-export function ResultContainer({ id, set }: { id: string; set: SetInfo }) {
+export function ResultContainer({ id, set, openAnswer }: { id: string; set: SetInfo;
+  /** 있으면 오답 카드에서 그 문항의 정답 해설(읽기 전용 피드백 화면)으로 나간다. 돌아오면 보던 카드가 복원된다. */
+  openAnswer?: (passageId: string, questionId: string) => void }) {
+  const [initial] = useState(takeResultReturn);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -52,5 +55,5 @@ export function ResultContainer({ id, set }: { id: string; set: SetInfo }) {
     return () => { active = false; window.clearTimeout(timer); };
   }, [id]);
   if (!result) return <main className="diag-page"><div className="diag-wrap"><p className="diag-muted" role={error ? 'alert' : 'status'}>{error || '불러오는 중…'}</p></div></main>;
-  return <ResultView result={result} set={set} participantId={id} />;
+  return <ResultView result={result} set={set} participantId={id} initial={initial} {...(openAnswer ? { openAnswer } : {})} />;
 }

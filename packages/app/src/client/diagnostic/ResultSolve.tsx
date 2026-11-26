@@ -74,8 +74,11 @@ function SelfCheck({ selected, error, onSelect, choices = SELF_CHECK_CHOICES, pr
   </div>;
 }
 
-function Card({ item, titles, result, selfCheck, selfCheckError, onSelfCheck, onClose }: { item: ResultItem; titles: Record<string, string>; result: Result; selfCheck: string | null;
-  selfCheckError: boolean; onSelfCheck: (choice: string) => void; onClose: () => void }) {
+/** 3층 카드의 펼침 상태와 정답 해설 화면으로 나가는 동작(결과 화면이 들고 있다). */
+export interface CardNav { expanded: boolean; onExpandedChange: (expanded: boolean) => void; onOpenAnswer?: (item: ResultItem) => void }
+
+function Card({ item, titles, result, selfCheck, selfCheckError, onSelfCheck, onClose, nav }: { item: ResultItem; titles: Record<string, string>; result: Result; selfCheck: string | null;
+  selfCheckError: boolean; onSelfCheck: (choice: string) => void; onClose: () => void; nav?: CardNav | undefined }) {
   const title = `${titles[item.passageId] ?? ''} ${item.questionNumber}번`;
   const head = <div className="diag-item-head"><h3>{title} · {circledObject(item.chosenPosition)} 골랐어</h3>{!item.review && <span className={item.correct ? 'diag-right' : 'diag-wrong'}>{item.correct ? '정답' : '오답'}</span>}
     <button type="button" className="diag-close" onClick={onClose}>접기</button></div>;
@@ -86,6 +89,7 @@ function Card({ item, titles, result, selfCheck, selfCheckError, onSelfCheck, on
     <p>이 문항은 우리가 한 번 더 확인하고 있어.</p>{stats}<p className="diag-muted">{MEGASTUDY_NOTE}</p></article>;
   // 3층 카드는 생성·검사를 통과했을 때만. 아니면 아래 11/17 형식 카드가 대체 경로다.
   if (item.card.status === 'ready') return <LayeredCard item={item} card={item.card} passageTitle={titles[item.passageId] ?? ''} onClose={onClose}
+    expanded={nav?.expanded ?? false} onExpandedChange={nav?.onExpandedChange} onOpenAnswer={nav?.onOpenAnswer ? () => nav.onOpenAnswer!(item) : undefined}
     selfCheck={<SelfCheck selected={selfCheck} error={selfCheckError} onSelect={onSelfCheck} choices={item.card.selfCheckOptions ?? SELF_CHECK_CHOICES} prompt={false} />} />;
 
   // 기호 풀이는 한 카드 안에서 처음 나올 때만 붙는다. 화면에 나오는 순서대로 이어서 부른다.
@@ -129,8 +133,8 @@ function Card({ item, titles, result, selfCheck, selfCheckError, onSelfCheck, on
   </article>;
 }
 
-export function Solve({ result, set, participantId, open, onToggle, onClose }: { result: Result; set: SetInfo; participantId: string; open: string | null;
-  onToggle: (questionId: string) => void; onClose: () => void }) {
+export function Solve({ result, set, participantId, open, onToggle, onClose, nav }: { result: Result; set: SetInfo; participantId: string; open: string | null;
+  onToggle: (questionId: string) => void; onClose: () => void; nav?: CardNav }) {
   const titles = passageTitles(set);
   const total = set.passages.reduce((sum, p) => sum + p.questionIds.length, 0);
   const [chosen, setChosen] = useState<Record<string, string>>({});
@@ -149,6 +153,6 @@ export function Solve({ result, set, participantId, open, onToggle, onClose }: {
     <p className="diag-line" data-testid="solve-lead">처음 고른 답 기준 정답 {result.items.filter(item => item.correct).length} / {total}. 코칭 뒤 고쳐 고른 답은 점수에 넣지 않았어.</p>
     <Breakdown result={result} set={set} open={open} onToggle={onToggle} />
     {opened && <Card key={opened.questionId} item={opened} titles={titles} result={result} selfCheck={chosen[opened.questionId] ?? opened.selfCheck?.choice ?? null}
-      selfCheckError={failed === opened.questionId} onSelfCheck={choice => void select(opened.questionId, choice)} onClose={onClose} />}
+      selfCheckError={failed === opened.questionId} onSelfCheck={choice => void select(opened.questionId, choice)} onClose={onClose} nav={nav} />}
   </>;
 }

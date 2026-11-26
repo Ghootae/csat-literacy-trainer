@@ -6,8 +6,8 @@ import { Notice, Segs, glossOf, passageTitles } from './ResultShared.js';
 import { Reading } from './ResultReading.js';
 import { Solve } from './ResultSolve.js';
 import {
-  SERVICE_NOTE, POSITION_NOTE, accurateCorrect, annotateSegments, annotateSymbols, caseAnchor, caseHeading, circled, clip, excerptAround, gradeSentence, habitSourceName, hasPair, parseBold, pickFirstLook, twistsForPairs,
-  type FirstLook,
+  SERVICE_NOTE, POSITION_NOTE, accurateCorrect, annotateSegments, annotateSymbols, caseAnchor, caseHeading, circled, clip, excerptAround, gradeSentence, habitSourceName, hasPair, parseBold, pickFirstLook, restorableReturn, saveResultReturn, twistsForPairs,
+  type FirstLook, type ResultReturn,
 } from './logic.js';
 
 // ---------- 맨 위 요약 ----------
@@ -121,9 +121,16 @@ function Position({ result }: { result: Result }) {
   </>;
 }
 
-export function ResultView({ result, set, participantId }: { result: Result; set: SetInfo; participantId: string }): React.JSX.Element {
-  const [open, setOpen] = useState<string | null>(null);
-  const [scrollKey, setScrollKey] = useState(0);
+export function ResultView({ result, set, participantId, initial = null, openAnswer }: { result: Result; set: SetInfo; participantId: string;
+  /** 정답 해설 화면에서 돌아왔을 때 복원할 카드(보던 카드·열림·3층 펼침). */
+  initial?: ResultReturn | null;
+  /** 있으면 오답 카드에 "정답 해설 보기" 버튼이 생긴다. 나가기 전에 보던 상태를 저장한다. */
+  openAnswer?: (passageId: string, questionId: string) => void }): React.JSX.Element {
+  const restored = restorableReturn(initial, result.items);
+  const [open, setOpenState] = useState<string | null>(restored?.open ? restored.questionId : null);
+  const [expanded, setExpanded] = useState(restored?.expanded ?? false);
+  const [scrollKey, setScrollKey] = useState(restored?.open ? 1 : 0);
+  const setOpen = (next: string | null) => { setOpenState(next); setExpanded(false); };
   // 맨 위 요약의 링크: 카드를 연 채 그 카드로 스크롤한다.
   useEffect(() => { if (scrollKey > 0) document.getElementById('diag-item-card')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, [scrollKey]);
   return <main className="diag-page"><div className="diag-wrap">
@@ -131,7 +138,8 @@ export function ResultView({ result, set, participantId }: { result: Result; set
     <TopSummary result={result} set={set} onShowCard={questionId => { setOpen(questionId); setScrollKey(key => key + 1); }} />
     <section className="diag-card" aria-label="내 위치"><div className="diag-card-head"><span className="diag-label">① 내 위치</span><span className="diag-sub">수능 기준 환산 추정</span></div><Position result={result} /></section>
     <section className="diag-card" aria-label="문제 풀이 결과"><span className="diag-label">② 문제 풀이 결과</span>
-      <Solve result={result} set={set} participantId={participantId} open={open} onToggle={questionId => setOpen(open === questionId ? null : questionId)} onClose={() => setOpen(null)} /></section>
+      <Solve result={result} set={set} participantId={participantId} open={open} onToggle={questionId => setOpen(open === questionId ? null : questionId)} onClose={() => setOpen(null)}
+        nav={{ expanded, onExpandedChange: setExpanded, ...(openAnswer ? { onOpenAnswer: item => { saveResultReturn({ questionId: item.questionId, open: true, expanded }); openAnswer(item.passageId, item.questionId); } } : {}) }} /></section>
     <section className="diag-card" aria-label="독해 패턴"><span className="diag-label">③ 독해 패턴</span><Reading result={result} set={set} /></section>
     <section className="diag-card" aria-label="추천"><span className="diag-label">추천</span><p className="diag-line">{SERVICE_NOTE}</p></section>
   </div></main>;

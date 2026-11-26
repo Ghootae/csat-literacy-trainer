@@ -871,6 +871,15 @@ describe('결과 카드 자료와 자기 점검 (결과 화면 1단계)', () => 
     expect(wrongPick.answerText).not.toBeNull(); expect(wrongPick.chosenText).toContain(wrongPick.twist![0]!.choiceQuote);
   });
 
+  it('answerViewable: 피드백 세션이 COMPLETED인 문항만 true, 시작 전·미완료·정답 문항은 false', async () => {
+    const h = harness({ [Q13]: 'ERROR' });
+    await answerPassage(h, COG, mixed()); await settle(h.c);
+    const flags = () => Object.fromEntries(h.c.result(h.id).items.map(i => [i.questionId, i.answerViewable]));
+    expect(flags()[Q13]).toBe(false); expect(flags()[Q15]).toBe(false);
+    expect((await finishItem(h, Q13)).phase).toBe('COMPLETED');
+    expect(flags()[Q13]).toBe(true); expect(flags()[Q15]).toBe(false);
+  });
+
   it('근거를 생략한 오답은 피드백 대화에서 근거를 써도 결과 카드의 "내 근거"(evidence.student)가 null이다(첫 응답 원칙)', async () => {
     const h = harness({ [Q15]: 'ERROR' });
     await answerPassage(h, COG, { ...mixed(), [Q13]: provided(correctChoice(Q13)) }); await settle(h.c);

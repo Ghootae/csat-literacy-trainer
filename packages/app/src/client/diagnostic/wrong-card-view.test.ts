@@ -3,7 +3,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { Solve } from './ResultSolve.js';
-import { focusSegments, hasPending } from './logic.js';
+import { HeaderActions } from './FeedbackScreen.js';
+import { focusSegments, hasAnswerButton, hasPending, parseResultReturn, restorableReturn, saveResultReturn, serializeResultReturn, takeResultReturn } from './logic.js';
 import type { ResultItem, ResultView as Result, SetInfo, WrongCardView } from './types.js';
 
 const set: SetInfo = { passages: [{ passageId: 'plastic', title: '플라스틱의 중합 반응', questionIds: ['q9'] }] };
@@ -17,7 +18,7 @@ const wrong = (over: Partial<ResultItem> = {}): ResultItem => ({ questionId: 'q9
   judgment: { status: 'ready', contentAssessment: 'ERROR', boundary: 'NONE' }, thoughtDiagnosis: null, summaryLink: null,
   twist: [{ twistType: 'SCOPE', twistDetail: '범위', studentText: null, choiceQuote: '선지 구절', evidenceQuote: '원문 구절' }],
   evidence: { student: '학생이 쓴 근거', source: [] }, stem: '발문', chosenText: '선지 구절이 들어 있는 선지', answerText: '정답 선지 문장', stemPolarity: 'SELECT_CORRECT',
-  answerTwist: null, selfCheck: null, strategyAvailable: true, card: ready, ...over });
+  answerTwist: null, selfCheck: null, strategyAvailable: true, answerViewable: true, card: ready, ...over });
 const result = (item: ResultItem): Result => ({ qualityTiers: 3, position: { status: 'pending' }, items: [item], steps: { status: 'ready', counts: {}, denominator: 0 }, twists: { counts: {} },
   recommendation: null, reading: [], readingHabit: { status: 'none' }, symbolGloss: { plastic: { '㉮': '풀이 A', '㉯': '풀이 B' } } });
 const render = (item: ResultItem) => renderToStaticMarkup(createElement(Solve, { result: result(item), set, participantId: 'p', open: item.questionId, onToggle: () => {}, onClose: () => {} }));
@@ -123,5 +124,64 @@ describe('보조', () => {
     expect(hasPending({ ...base, items: [wrong({ card: { status: 'pending' } })] })).toBe(true);
     expect(hasPending({ ...base, items: [wrong({ card: { status: 'fallback' } })] })).toBe(false);
     expect(hasPending(base)).toBe(false);
+  });
+});
+
+describe('정답 해설 보기 버튼(결과 → 읽기 전용 피드백 화면)', () => {
+  const renderNav = (item: ResultItem, onOpenAnswer?: () => void) => renderToStaticMarkup(createElement(Solve, { result: result(item), set, participantId: 'p', open: item.questionId, onToggle: () => {}, onClose: () => {},
+    nav: { expanded: false, onExpandedChange: () => {}, ...(onOpenAnswer ? { onOpenAnswer } : {}) } }));
+  it('오답 카드의 정답 선지 칸 아래에 버튼이 있다', () => {
+    const html = renderNav(wrong(), () => {});
+    expect(html).toContain('data-testid="open-answer"'); expect(html).toContain('문항 화면에서 정답 해설 보기');
+    expect(html.indexOf('open-answer')).toBeGreaterThan(html.indexOf('card-answer'));
+  });
+  it('answerViewable이 false인 오답 카드엔 정답 해설 버튼이 없다', () => {
+    expect(renderNav(wrong({ answerViewable: false }), () => {})).not.toContain('문항 화면에서 정답 해설 보기');
+    expect(renderNav(wrong({ answerViewable: true }), () => {})).toContain('문항 화면에서 정답 해설 보기');
+  });
+  it('정답 카드(CORRECT_WEAK)엔 정답 해설 버튼이 없다', () => {
+    const html = renderNav(wrong({ correct: true, category: 'WEAK_CORRECT', answerPosition: null, answerText: null }), () => {});
+    expect(html).not.toContain('open-answer');
+  });
+  it('이동 동작이 없으면(nav 없음) 버튼도 없다', () => { expect(render(wrong())).not.toContain('open-answer'); expect(renderNav(wrong())).not.toContain('open-answer'); });
+  it('3층 펼침 상태는 expanded로 정해진다', () => {
+    const html = renderToStaticMarkup(createElement(Solve, { result: result(wrong()), set, participantId: 'p', open: 'q9', onToggle: () => {}, onClose: () => {}, nav: { expanded: true, onExpandedChange: () => {} } }));
+    expect(html).toMatch(/<details class="diag-l3"[^>]* open/u);
+  });
+  it('출제자 의도 새 버튼은 만들지 않는다(기존 링크만)', () => { expect(renderNav(wrong(), () => {})).not.toContain('출제자 의도 자세히 보기'); });
+});
+
+describe('결과 복귀 복원', () => {
+  it('parseResultReturn: 올바른 값은 읽고, 깨진 값·빈 questionId는 null', () => {
+    expect(parseResultReturn(serializeResultReturn({ questionId: 'q9', open: true, expanded: true }))).toEqual({ questionId: 'q9', open: true, expanded: true });
+    expect(parseResultReturn(null)).toBeNull(); expect(parseResultReturn('{')).toBeNull(); expect(parseResultReturn('{"questionId":""}')).toBeNull(); expect(parseResultReturn('3')).toBeNull();
+    expect(parseResultReturn('{"questionId":"q1","open":"yes"}')).toEqual({ questionId: 'q1', open: false, expanded: false });
+  });
+  it('restorableReturn: 이번 결과에 그 카드가 있을 때만 복원한다', () => {
+    const state = { questionId: 'q9', open: true, expanded: true };
+    expect(restorableReturn(state, [{ questionId: 'q9' }])).toEqual(state);
+    expect(restorableReturn(state, [{ questionId: 'q1' }])).toBeNull(); expect(restorableReturn(null, [{ questionId: 'q9' }])).toBeNull();
+  });
+  it('저장소가 막혀 있어도 깨지지 않는다(window 없음)', () => {
+    expect(() => saveResultReturn({ questionId: 'q9', open: true, expanded: false })).not.toThrow(); expect(takeResultReturn()).toBeNull();
+  });
+  it('hasAnswerButton: 오답이고 정답 선지가 있고 정답을 볼 수 있을 때만', () => {
+    const base = { correct: false, answerPosition: 3, answerText: 'x', answerViewable: true };
+    expect(hasAnswerButton(base)).toBe(true);
+    expect(hasAnswerButton({ ...base, correct: true })).toBe(false);
+    expect(hasAnswerButton({ ...base, answerPosition: null, answerText: null })).toBe(false);
+    expect(hasAnswerButton({ ...base, answerViewable: false })).toBe(false);
+  });
+});
+
+describe('읽기 전용 피드백 화면 머리', () => {
+  const html = (props: Parameters<typeof HeaderActions>[0]) => renderToStaticMarkup(createElement(HeaderActions, props));
+  it('backToResult가 있으면 "결과로 돌아가기"가 보이고, 없으면 안 보인다', () => {
+    expect(html({ finished: true, backToResult: () => {} })).toContain('data-testid="back-to-result-card"');
+    expect(html({ finished: false })).not.toContain('back-to-result-card');
+  });
+  it('기존 "← 결과 목록"은 그대로(검토 중 back이 있을 때만)', () => {
+    expect(html({ finished: false, back: () => {} })).toContain('data-testid="back-to-result"');
+    expect(html({ finished: true, back: () => {} })).not.toContain('data-testid="back-to-result"');
   });
 });

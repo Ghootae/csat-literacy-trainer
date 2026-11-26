@@ -2,14 +2,18 @@
 import type { ReactNode } from 'react';
 import type { ResultItem, WrongCardView } from './types.js';
 import { Segs } from './ResultShared.js';
-import { MEGASTUDY_NOTE, circled, circledObject, focusSegments, parseBold, percentPair, summaryLinkSentence } from './logic.js';
+import { MEGASTUDY_NOTE, circled, hasAnswerButton, circledObject, focusSegments, parseBold, percentPair, summaryLinkSentence } from './logic.js';
 
 type ReadyCard = Extract<WrongCardView, { status: 'ready' }>;
 
 function Arrow() { return <div className="diag-l2-arrow" aria-hidden="true">↓</div>; }
 
 /** `selfCheck`는 근거 없는 오답에서 자기 점검 버튼 자리에 끼우는 조각(버튼 동작은 ResultSolve가 맡는다). */
-export function LayeredCard({ item, card, passageTitle, selfCheck, onClose }: { item: ResultItem; card: ReadyCard; passageTitle: string; selfCheck: ReactNode; onClose: () => void }) {
+export function LayeredCard({ item, card, passageTitle, selfCheck, onClose, expanded = false, onExpandedChange, onOpenAnswer }: { item: ResultItem; card: ReadyCard; passageTitle: string; selfCheck: ReactNode; onClose: () => void;
+  /** 3층 펼침 상태(결과 화면이 들고 있어 정답 해설 화면에 다녀와도 유지된다). */
+  expanded?: boolean; onExpandedChange?: (expanded: boolean) => void;
+  /** 있으면 정답 선지 칸 아래에 "정답 해설 보기" 버튼을 둔다. */
+  onOpenAnswer?: () => void }) {
   const omitted = item.rationale === 'OMITTED';
   const missed = !item.correct && item.stemPolarity === 'SELECT_INCORRECT' && card.missedAnswer !== undefined;
   const title = `${passageTitle} ${item.questionNumber}번`;
@@ -35,13 +39,14 @@ export function LayeredCard({ item, card, passageTitle, selfCheck, onClose }: { 
       <Arrow />
       <div className="diag-l2-box" data-kind="so"><span className="diag-l2-label">그래서</span><p>{card.pair.conclusion}</p></div>
       {!item.correct && item.answerPosition !== null && item.answerText !== null
-        && <div className="diag-l2-answer" data-testid="card-answer"><span className="diag-l2-label">정답 선지</span><p>{circled(item.answerPosition)} {item.answerText}</p></div>}
+        && <div className="diag-l2-answer" data-testid="card-answer"><span className="diag-l2-label">정답 선지</span><p>{circled(item.answerPosition)} {item.answerText}</p>
+          {onOpenAnswer && hasAnswerButton(item) && <button type="button" className="diag-secondary" data-testid="open-answer" onClick={onOpenAnswer}>문항 화면에서 정답 해설 보기</button>}</div>}
       {missed && <div className="diag-missed" data-testid="missed-answer"><h4>네가 놓친 진짜 틀린 선지</h4><p>{card.missedAnswer!.text}</p>
         <div className="diag-l2-box" data-kind="source"><span className="diag-l2-label">원문</span><p>{card.missedAnswer!.source}</p></div></div>}
       {!item.correct && omitted && <><p className="diag-line">근거를 안 써서 어디서 헷갈렸는지는 몰라. 너는 어땠어?</p>{selfCheck}</>}
     </section>
 
-    <details className="diag-l3" data-testid="card-layer3">
+    <details className="diag-l3" data-testid="card-layer3" open={expanded} onToggle={e => onExpandedChange?.(e.currentTarget.open)}>
       <summary>자세히 보기</summary>
       <div className="diag-l3-body">
         <div><span className="diag-warn">다른 수험생은</span>

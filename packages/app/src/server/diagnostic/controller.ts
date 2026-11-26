@@ -1112,7 +1112,7 @@ export class DiagnosticController {
     const base = { questionId, passageId: passage.passageId, questionNumber: meta.questionNumber, chosenPosition: chosen.position,
       correct, rationale: first.rationale.mode, category: this.answerCategory(item), elimination: first.confidence === 'ELIMINATION', megastudy, afterFeedback,
       stem: content.stem, chosenText: textOf(chosen.choiceId), stemPolarity: stemPolarity(content.stem), selfCheck: item.selfCheck ?? null,
-      strategyAvailable: this.strategies.has(questionId) };
+      strategyAvailable: this.strategies.has(questionId), answerViewable: this.feedback.get(session.sessionId).phase === 'COMPLETED' };
     if (review) {
       return { ...base, review: true as const, answerPosition: null, answerText: null, answerTwist: null, judgment: { status: 'pending' as Box, contentAssessment: null, boundary: null },
         twist: null, thoughtDiagnosis: null, evidence: null, summaryLink: null, card: { status: 'none' } as WrongCardView };

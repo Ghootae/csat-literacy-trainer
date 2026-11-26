@@ -24,6 +24,7 @@ type View =
   | { name: 'answers'; passageId: string; data: DevAnswersView }
   | { name: 'mid'; passageId: string }
   | { name: 'feedback'; passageId: string; questionId: string; readOnly: boolean }
+  | { name: 'read'; questionId: string }
   | { name: 'result' };
 
 /** 낸 답을 선지 표시와 근거 글로 읽기 전용으로 보인다(문항 사이는 번호로 오간다). */
@@ -189,7 +190,13 @@ export function DevDiagnostic({ id, set }: { id: string; set: SetInfo }): React.
         return <FeedbackScreen key={`${questionId}:${readOnly}`} readOnly={readOnly} load={() => getFeedback(id, questionId)} send={request => postFeedback(id, questionId, request).then(next => { void afterChange(); return next; })}
           nextLabel="지문 결과로 돌아가기" next={backToResult} back={readOnly ? undefined : backToResult} />;
       }
-      default: return <ResultContainer id={id} set={set} />;
+      case 'read': {
+        const { questionId } = view;
+        const backToResult = () => setView({ name: 'result' });
+        return <FeedbackScreen key={`${questionId}:read`} readOnly load={() => getFeedback(id, questionId)} send={request => postFeedback(id, questionId, request)}
+          nextLabel="결과로 돌아가기" next={backToResult} backToResult={backToResult} />;
+      }
+      default: return <ResultContainer id={id} set={set} openAnswer={(_passageId, questionId) => setView({ name: 'read', questionId })} />;
     }
   }
   return <div className="diag-dev-shell">

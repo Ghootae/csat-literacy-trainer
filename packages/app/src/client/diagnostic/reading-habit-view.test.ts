@@ -12,7 +12,7 @@ const wrongItem = { questionId: 'q9', passageId: 'plastic', questionNumber: 9, c
   judgment: { status: 'ready', contentAssessment: 'ERROR', boundary: 'NONE' }, thoughtDiagnosis: null, summaryLink: null,
   twist: [{ twistType: 'SCOPE', twistDetail: '범위', studentText: null, choiceQuote: '선지 구절', evidenceQuote: '원문 구절' }],
   evidence: { student: '학생이 쓴 근거', source: [] }, stem: '발문', chosenText: '선지 구절이 들어 있는 선지', answerText: '정답', stemPolarity: 'SELECT_CORRECT',
-  answerTwist: null, selfCheck: null, strategyAvailable: false, card: { status: 'none' } } as ResultItem;
+  answerTwist: null, selfCheck: null, strategyAvailable: false, answerViewable: false, card: { status: 'none' } } as ResultItem;
 const habit: ReadingHabit = {
   headline: '종합적으로 보면, 너는 문장의 범위를 정하는 말을 빼고 읽는 경향이 있어.',
   featured: { questionId: 'q10', passageId: 'plastic', questionNumber: 10, sourceKind: 'CHOICE', choicePosition: 2, sentence: '㉮보다 ㉯로 이루어진 소재가 적합하겠군.',

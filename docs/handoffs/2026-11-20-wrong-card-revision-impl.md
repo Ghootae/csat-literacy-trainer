@@ -85,3 +85,25 @@
   - 선택지: (a) 문항 화면에 "열람 모드"를 추가한다(풀이 없이 정답 해설과 전략을 보여 주는 읽기 전용 상태. 새 서버 API 또는 `startFeedback` 확장 필요, 전략은 `strategyFor`의 COMPLETED 조건 완화 필요). (b) 진단 화면 안에서 쓰는 기존 `FeedbackScreen.tsx`(diagnostic) 쪽에 정답 해설·전략을 보이는 곳이 있는지 확인해 그쪽으로 진입점을 둔다(인계는 `/problem/lab`을 지정해 설계 확인 필요). (c) 버튼 두 개는 일단 기존 링크 동작(새 세션)으로 두고 `returnTo` 복귀·스크롤·펼침 복원만 먼저 구현한다. 어느 쪽인지 결정해 주면 이어서 구현한다.
   - `returnTo` 규칙: 지금 `resolveReturnTo`(`dev-part-nav-links.ts`)는 `/dialogue/...`만 허용하고 그 밖은 `/dialogue/lab`으로 바꾼다. `/diagnostic` 계열과 카드 `questionId`를 담으려면 이 정규식 확장이 필요하다(기존 동작 유지 가능). 화면 방식이 정해지면 함께 처리한다.
   - 캡처(`docs/handoffs/2026-11-20-wrong-card-revision-pc.png`)는 버튼이 없어 찍지 않았다. 저장 결과를 개발 서버에 주입하는 방법도 이번에는 확인하지 않았다.
+
+### 후속 지시 실행 결과 (2026-11-21)
+
+- 변경 파일(모델 호출 0, 외부 전송 없음, 커밋 안 함):
+  - `packages/app/src/client/diagnostic/ResultCard3.tsx`: 2층 "정답 선지" 칸 아래 "문항 화면에서 정답 해설 보기" 버튼(`onOpenAnswer`가 있고 `hasAnswerButton`일 때만, 정답 카드엔 없음). 3층 `<details>`를 `expanded`/`onExpandedChange`로 제어. 출제자 의도 새 버튼은 만들지 않았고 기존 "문항으로 돌아가 출제자 설명 보기 →"는 그대로.
+  - `ResultSolve.tsx`: `CardNav`(펼침 상태·`onOpenAnswer`)를 `Solve`→`Card`→`LayeredCard`로 전달(옵션 prop, 11/17 카드 경로는 그대로).
+  - `ResultView.tsx`: `initial`(복원 상태)·`openAnswer` prop. 복원 시 보던 카드를 열고 3층 펼침을 되살린 뒤 기존 `scrollKey`로 그 카드로 스크롤. 나가기 직전에 `{questionId, open, expanded}`를 저장.
+  - `Containers.tsx`: `ResultContainer`가 `openAnswer` prop을 받고, 마운트 때 저장 상태를 한 번 꺼내(`takeResultReturn`) `ResultView`에 넘김.
+  - `logic.ts`: `ResultReturn`, `parseResultReturn`, `serializeResultReturn`, `saveResultReturn`/`takeResultReturn`(`sessionStorage`, try/catch), `restorableReturn`(이번 결과에 그 카드가 있을 때만 복원), `hasAnswerButton`.
+  - `FeedbackScreen.tsx`: 새 prop `backToResult`와 머리 이동 버튼 `HeaderActions`(분리·export). 기존 "← 결과 목록"(`back`) 동작은 그대로. `data-testid="back-to-result-card"`.
+  - `DiagnosticApp.tsx`: 화면 `{name:'read', questionId}` 추가(`FeedbackScreen readOnly`, 돌아가기는 `result`로). `DevDiagnostic.tsx`: 같은 `read` view 추가(돌아가기는 `result`).
+  - `wrong-card-view.test.ts`: 정답 해설 버튼(오답 카드 있음·정답 카드 없음·nav 없으면 없음), 펼침 상태, 복원 함수(파싱·복원 가능 여부·저장소 없음), `HeaderActions`의 "결과로 돌아가기"/기존 버튼 표시 조건.
+- 테스트 결과: `npx vitest run packages/app/src/server/diagnostic packages/app/src/client/diagnostic` 13개 파일 253개 통과. `npm run typecheck` 통과. e2e 중 `diag-l3`·`card-layer3`·`back-to-result`를 쓰는 것은 없음(영향 없음).
+- 읽기 전용 화면에서 정답·해설이 보이는 조건(코드 확인: `FeedbackScreen.tsx`의 `lab-answer-reveal`, `pipeline/.../feedback.ts` `finish`):
+  - 정답 번호·문장 카드(`lab-answer-reveal`)는 그 문항의 피드백 결과 `answerRevealed === true`일 때만 보인다. 이는 `outcome === 'COACHING_TERMINATED'`(세 번 선택·교정 실패·설명 요청·건너뛰기로 끝난 경우)뿐이다. 학생이 스스로 고쳐 정답에 이른 문항(`VERIFIED_CORRECT` 등)은 이 카드가 없고 대화 기록의 설명만 남는다.
+  - 서버 `feedbackTarget(...,'read')`는 리뷰 대상(오답 또는 오류 정답이면서 `ITEM_REVIEW`가 아님)이 아니면 409를 준다. 결과 카드에 정답 선지 칸이 있는 오답은 대개 리뷰 대상이지만, 검토를 시작하지 않았거나 중간에 그만둔 문항(피드백 `phase`가 `COMPLETED`가 아님)은 읽기 전용 화면에 정답·해설이 없다(선택 단계 대화만 보임).
+  - `ResultItem`에는 "피드백이 끝났는지/정답이 공개됐는지"를 알려 주는 필드가 없어(`afterFeedback.corrected`·`skipped`만 있음) 클라이언트가 숨길 문항을 가려낼 수 없다. 그래서 버튼은 기존 "정답 선지" 칸이 있는 모든 오답 카드에 보인다(숨긴 문항 없음).
+- 캡처: 하지 않았다. 개발 서버가 떠 있지 않고, S-23 참가자 상태를 읽을 곳이나 저장된 v1.4 카드(`runs/v1.4/*.json`)를 결과 화면에 주입하는 방법(목 API·픽스처 하네스)이 이 저장소에 없다. 인계 규정대로 멈추고 보고한다.
+- 남은 문제(메인 세션 판단 필요):
+  - (a) 검토를 끝내지 않은 오답 카드의 버튼이 정답·해설 없는 화면으로 간다. 해결하려면 서버 `resultItem`에 `answerViewable`(피드백 `phase === 'COMPLETED'`) 같은 필드를 더하고 버튼을 그 값으로 거는 방법이 있다(서버 계약 변경이라 지시대로 하지 않았다).
+  - (b) 캡처에 쓸 주입 방법: 결과 응답을 가로채는 최소 하네스(예: 저장된 카드로 만든 `ResultView` 고정 렌더 페이지)를 만들지, S-23 참가자를 서버에 되살릴지 결정 필요.
+  - 복원 상태는 `sessionStorage` 한 번 쓰기로, `ResultContainer`가 마운트될 때 꺼내 지운다(새로고침 시 복원 안 됨, 의도됨).

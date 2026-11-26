@@ -77,6 +77,8 @@ export interface ResultItem {
   selfCheck: ResultSelfCheck | null;
   /** 이 문항의 출제자 전략 글이 있다. 있을 때만 "출제자 설명 보기" 버튼을 그린다. */
   strategyAvailable: boolean;
+  /** 그 문항의 피드백 세션이 끝났다(`COMPLETED`). 아니면 읽기 전용 화면에 정답·해설이 없어 "정답 해설 보기" 버튼을 숨긴다. */
+  answerViewable: boolean;
   card: WrongCardView;
 }
 export type BranchKey = '내용' | '논증' | '관점' | '흐름';

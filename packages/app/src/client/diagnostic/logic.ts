@@ -375,3 +375,35 @@ export function hasPending(result: ResultView): boolean {
 const SOURCE_LOCATION: Record<string, string> = { PASSAGE: '지문', SCENARIO: '보기', STEM: '발문', CHOICE: '선지' };
 /** 원문 인용의 위치 이름. 공식 해설 같은 학생에게 보이지 않을 자리는 null(인용을 내지 않는다). */
 export const sourceLocationName = (location: string): string | null => SOURCE_LOCATION[location] ?? null;
+
+// ---------- 결과 화면 ↔ 정답 해설(읽기 전용 피드백 화면) 오가기 ----------
+
+/** 결과 카드에서 정답 해설 화면으로 나갈 때 남기고, 돌아오면 복원하는 상태. */
+export interface ResultReturn { questionId: string; open: boolean; expanded: boolean }
+const RESULT_RETURN_KEY = 'csat-diagnostic-result-return';
+export const serializeResultReturn = (state: ResultReturn): string => JSON.stringify(state);
+/** 저장된 문자열을 읽는다. 모양이 맞지 않으면 null. */
+export function parseResultReturn(raw: string | null): ResultReturn | null {
+  if (raw === null) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<ResultReturn> | null;
+    if (value === null || typeof value !== 'object' || typeof value.questionId !== 'string' || value.questionId === '') return null;
+    return { questionId: value.questionId, open: value.open === true, expanded: value.expanded === true };
+  } catch { return null; }
+}
+export function saveResultReturn(state: ResultReturn): void {
+  try { window.sessionStorage.setItem(RESULT_RETURN_KEY, serializeResultReturn(state)); } catch { /* 저장하지 못하면 결과 화면이 처음 상태로 열린다. */ }
+}
+/** 저장된 상태를 한 번만 꺼낸다(읽은 뒤 지운다). */
+export function takeResultReturn(): ResultReturn | null {
+  try {
+    const raw = window.sessionStorage.getItem(RESULT_RETURN_KEY);
+    window.sessionStorage.removeItem(RESULT_RETURN_KEY);
+    return parseResultReturn(raw);
+  } catch { return null; }
+}
+/** 복원할 카드가 이번 결과에 있을 때만 쓴다(없으면 복원하지 않는다). */
+export const restorableReturn = (state: ResultReturn | null, items: readonly { questionId: string }[]): ResultReturn | null =>
+  state !== null && items.some(item => item.questionId === state.questionId) ? state : null;
+/** 정답 해설 버튼을 보일 카드: 틀린 문항의 "정답 선지" 칸이 있을 때(정답 카드엔 없다). */
+export const hasAnswerButton = (item: Pick<ResultItem, 'correct' | 'answerPosition' | 'answerText' | 'answerViewable'>): boolean => !item.correct && item.answerPosition !== null && item.answerText !== null && item.answerViewable;

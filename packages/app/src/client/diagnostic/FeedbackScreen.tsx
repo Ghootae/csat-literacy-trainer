@@ -12,7 +12,14 @@ const coachLabel = (entry: FeedbackMessage) => entry.kind === 'WAIT_DONE' ? '진
   : entry.sequence === 'GATE' ? '설명 시작' : entry.sequence === 'CONNECTOR' || entry.sequence === 'SECTION' ? '선지별 설명'
   : entry.sequence === 'QUESTION' ? '이해 확인' : entry.sequence === 'CLOSING' ? '마무리' : '판정 결과';
 
-export function FeedbackScreen({ load, send, nextLabel, next, back, readOnly = false }: {
+/** 머리의 이동 버튼: 검토 중 "← 결과 목록", 결과 카드에서 들어온 읽기 전용 화면의 "← 결과로 돌아가기". */
+export function HeaderActions({ back, finished, backToResult }: { back?: (() => void) | undefined; finished: boolean; backToResult?: (() => void) | undefined }): React.JSX.Element {
+  return <>
+    {back && !finished && <div className="workbench-actions"><button type="button" data-testid="back-to-result" onClick={back}>← 결과 목록</button></div>}
+    {backToResult && <div className="workbench-actions"><button type="button" data-testid="back-to-result-card" onClick={backToResult}>← 결과로 돌아가기</button></div>}</>;
+}
+
+export function FeedbackScreen({ load, send, nextLabel, next, back, readOnly = false, backToResult }: {
   load: () => Promise<DiagnosticFeedbackView>; send: (request: DiagnosticFeedbackRequest) => Promise<DiagnosticFeedbackView>;
   /** 이 문항의 검토가 끝난 뒤 보이는 버튼 이름과 동작(지문 결과 화면으로 돌아가기). */
   nextLabel: string; next: () => void;
@@ -20,6 +27,8 @@ export function FeedbackScreen({ load, send, nextLabel, next, back, readOnly = f
   back?: (() => void) | undefined;
   /** 개발자 이동으로 돌아온 화면(D-0217): 입력·명령을 막고 지나온 대화만 보인다. */
   readOnly?: boolean;
+  /** 결과 카드의 "정답 해설 보기"로 들어온 읽기 전용 화면에서 결과 화면으로 돌아간다. */
+  backToResult?: (() => void) | undefined;
 }): React.JSX.Element {
   const [view, setView] = useState<DiagnosticFeedbackView | null>(null);
   const [choice, setChoice] = useState<string | null>(null);
@@ -140,7 +149,7 @@ export function FeedbackScreen({ load, send, nextLabel, next, back, readOnly = f
   const question = paneFromFeedback(view);
   return <main className="reading-workbench problem-lab-workbench diag-workbench" data-pane={pane}>
     <header className="workbench-header"><div className="lab-strip-lead"><h1 className="diag-header-title">{view.title} {view.questionNumber}번</h1></div>
-      {back && !finished && <div className="workbench-actions"><button type="button" data-testid="back-to-result" onClick={back}>← 결과 목록</button></div>}</header>
+      <HeaderActions back={back} finished={finished} backToResult={backToResult} /></header>
     <nav className="workbench-tabs" aria-label="문제 화면 전환">{[['source', '지문'], ['problem', '문제'], ['chat', '대화']].map(([id, title]) =>
       <button key={id} aria-pressed={pane === id} onClick={() => setPane(id!)}>{title}</button>)}</nav>
     <div className="workbench-columns" ref={columns}>
