@@ -157,7 +157,7 @@ export function classifyV6(it, m = {}, b = {}, c = {}, f = null) {
 
 // v6.6: 사례 갈림 사실 순서(CASE_FLOW=lever)의 서버 확인. item = {stem, bogi, answer, leverTable, choiceLevers, principleCards}. 반환 {errors, warnings}.
 const lvNorm = t => String(t ?? '').replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim().replace(/^["'“”‘’「」『』]+|["'“”‘’「」『』]+$/g, '').trim();
-export function checkLeversV6(item) {
+export function checkLeversV6(item, opts = {}) {
   const errors = [], warnings = [];
   const bogi = lvNorm(item.bogi);
   const table = Array.isArray(item.leverTable) ? item.leverTable : [];
@@ -195,6 +195,19 @@ export function checkLeversV6(item) {
   const usesPair = n => (cl.find(x => Number(x?.n) === n)?.facts || []).some(f => pairFacts.has(lvNorm(f)));
   if (negative) { if (!usesPair(ans)) errors.push(`L7: 부정 발문 정답 선지 ${ans}가 헷갈리는 짝(pair) 줄을 쓰지 않음`); }
   else if (!decisive.some(usesPair)) warnings.push('L7: 오답 중 pair 줄을 쓰는 선지가 없음');
+  // L8 (v6.8 CASE_FLOW=premise, opts.premise): 전제형. a(오류) premise·verdict 모두 있음 / b(오류) premiseTrue=false가 정확히 하나이고 정답 / c(오류) 정답 선지에 가정 표현 없음 / d(경고) 선지 본문에 premise / e(경고) 이유 연결어 없는 선지 수
+  if (opts.premise) {
+    const choices = Array.isArray(item.choices) ? item.choices.map(lvNorm) : [];
+    const emp = cl.filter(c => !String(c?.premise ?? '').trim() || !String(c?.verdict ?? '').trim()).map(c => c?.n);
+    if (cl.length !== 5 || emp.length) errors.push(`L8a: premise·verdict가 빈 선지: ${emp.join(',') || '(choiceLevers 5개 아님)'}`);
+    const falses = cl.filter(c => c?.premiseTrue === false).map(c => Number(c.n));
+    if (falses.length !== 1 || falses[0] !== ans) errors.push(`L8b: premiseTrue=false가 ${falses.length}개(${falses.join(',')}), 정답 ${ans}만이어야 함`);
+    const at = choices[ans - 1] ?? '';
+    if (/(라면|다면|았더라면|었더라면)/.test(at)) errors.push(`L8c: 정답 선지 ${ans}에 가정 표현이 있음`);
+    for (const c of cl) { const p = lvNorm(c?.premise); const t = choices[Number(c?.n) - 1]; if (p && t && !t.includes(p) && diceBigram(p, t) < 0.6) warnings.push(`L8d: 선지 ${c.n} 본문에 premise가 없음`); }
+    const noLink = choices.filter(t => !/(므로|때문에|이니|이어서|이라서)/.test(t)).length;
+    if (noLink) warnings.push(`L8e: 이유 연결어가 없는 선지 ${noLink}개`);
+  }
   // L5(경고): principleCards 2개 이상
   if (!(Array.isArray(item.principleCards) && item.principleCards.length >= 2)) warnings.push('L5: principleCards가 2개 미만');
   return { errors, warnings };

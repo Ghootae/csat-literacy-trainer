@@ -200,6 +200,32 @@ t('(v6.6b-4) 유사도 0.6 경계: 0.6 → 유사, 0.4 → 없음, 글자 일치
   assert.equal(matchFactV6('갑은 점검표를 읽었다.', '전날 갑은 점검표를 읽었다. 을은 갔다.').status, '일치');
 });
 
+// v6.8 L8 (premise): 전제형
+const prem = (o = {}) => {
+  const base = lvItem({
+    choices: ['갑이 점검표를 읽었으므로 갑에게 주의 의무가 있겠군.', '을이 통로를 곧 닦지 않았으므로 갑은 비난받겠군.', '병이 다음 날 왔으므로 해명은 무관하겠군.', '을이 물을 흘렸으므로 책임이 있겠군.', '갑이 읽었으므로 알았겠군.'],
+    choiceLevers: [1, 2, 3, 4, 5].map(n => ({ n, facts: [n === 2 ? '을은 통로에 물을 흘렸고 곧 닦았다.' : '병은 다음 날 공방에 왔다.'], premise: ['갑이 점검표를 읽었으므로', '을이 통로를 곧 닦지 않았으므로', '병이 다음 날 왔으므로', '을이 물을 흘렸으므로', '갑이 읽었으므로'][n - 1], premiseTrue: n !== 2, verdict: 'v', misread: n === 2 ? '곧 닦음→안 닦음' : null, corrected: null })) });
+  return { ...base, ...o };
+};
+t('(v6.8-L8a) premise·verdict가 비면 오류, 채우면 통과', () => {
+  assert.deepEqual(checkLeversV6(prem(), { premise: true }).errors, []);
+  const cl = prem().choiceLevers.map(c => c.n === 3 ? { ...c, premise: '' } : c);
+  assert.ok(checkLeversV6(prem({ choiceLevers: cl }), { premise: true }).errors.some(e => e.startsWith('L8a')));
+  assert.deepEqual(checkLeversV6(prem({ choiceLevers: cl })).errors.filter(e => e.startsWith('L8')), []); // premise 옵션이 없으면 L8 안 돎
+});
+t('(v6.8-L8b) premiseTrue=false가 정답 하나뿐이어야 한다', () => {
+  const cl2 = prem().choiceLevers.map(c => c.n === 4 ? { ...c, premiseTrue: false } : c);
+  assert.ok(checkLeversV6(prem({ choiceLevers: cl2 }), { premise: true }).errors.some(e => e.startsWith('L8b')));
+  const cl3 = prem().choiceLevers.map(c => c.n === 2 ? { ...c, premiseTrue: true } : c);
+  assert.ok(checkLeversV6(prem({ choiceLevers: cl3 }), { premise: true }).errors.some(e => e.startsWith('L8b')));
+});
+t('(v6.8-L8c) 정답 선지에 가정 표현이 있으면 오류, 참 선지에는 허용', () => {
+  const ch = prem().choices.map((x, i) => i === 1 ? '을이 곧 닦았다면 갑은 비난받지 않겠군.' : x);
+  assert.ok(checkLeversV6(prem({ choices: ch }), { premise: true }).errors.some(e => e.startsWith('L8c')));
+  const ch2 = prem().choices.map((x, i) => i === 0 ? '갑이 읽었다면 주의 의무가 있겠군.' : x);
+  assert.ok(!checkLeversV6(prem({ choices: ch2 }), { premise: true }).errors.some(e => e.startsWith('L8c')));
+});
+
 let fail = 0;
 for (const [name, fn] of cases) {
   try { fn(); console.log('통과  ' + name); } catch (e) { fail++; console.log('실패  ' + name + '\n      ' + e.message.split('\n')[0]); }
