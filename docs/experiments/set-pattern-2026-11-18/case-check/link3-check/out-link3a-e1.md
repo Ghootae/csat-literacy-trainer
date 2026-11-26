@@ -1,0 +1,3 @@
+```json
+{"answer":3,"a":{"shortest":"갑이 찢은 덮개는 내용물을 확인하려고 연 배송 상자의 포장이므로, 포장만 훼손한 일을 일반 철회 제한 사유로 본 ③은 적절하지 않다.","rules":1,"ruleTexts":["물품의 내용을 확인하려고 포장만 훼손한 경우는 이 제한 사유에 해당하지 않는다."]},"b":{"rebuttal":"갑이 찢은 것은 배송 상자를 봉한 덮개이고, 조명의 빛을 조절한 것은 다른 덮개다.","needsPassage":false},"c":[{"n":1,"fixed":true,"alt":null},{"n":2,"fixed":true,"alt":null},{"n":4,"fixed":true,"alt":null},{"n":5,"fixed":true,"alt":null}]}
+```

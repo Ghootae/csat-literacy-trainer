@@ -1,3 +1,4 @@
+// v6.13 (2026-11-26) LINK_SEARCH=2 수리 가드(정답 선지 전제 보존). case-check/CLI-case-link2.md
 // v6.10 (2026-11-26) CASE_FLOW=premise 수리 가드(정답 가정형·정답 번호 변경 되돌림). case-check/CLI-case-pair2.md
 // v5.2 검사·수리 (2026-11-19): 코덱스 제안(blind/CODEX-DISCUSSION.md 답변)을 따른 문항 검사와 한 번의 수리.
 // 핵심 질문: "〈보기〉의 핵심 관찰을 가렸을 때, 정답과 가장 그럴듯한 다른 선지를 여전히 구별할 수 있는가?"
@@ -20,7 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { renderBoth, validateSpec } from './graph/render.mjs'; // 그래프 갈래(2026-11-21): 〈보기〉 = graphSpec에서 자동 생성한 읽기 판
-import { classifyV6, stemChanged, finalStatus, premiseGuardV6 } from './classify-v6.mjs';
+import { classifyV6, stemChanged, finalStatus, premiseGuardV6, premiseKeepGuardV6 } from './classify-v6.mjs';
 const V6 = process.env.RULES_V === '6'; // 기본값 5(v5 동작). 6이면 v6 규칙·판정
 const stripOld = t => V6 ? t.replace(/\s*\(옛 [^()]*\)/g, '') : t; // v6 규칙 파일의 '(옛 …)' 대응 표시는 사람용이라 모델에게 보내는 문자열에서 지운다(파일은 그대로)
 
@@ -185,6 +186,10 @@ ${V6 ? '' : '- 정답 선지가 다섯 선지 중 가장 길지 않게 한다.\n
     if (process.env.CASE_FLOW === 'premise') { // v6.10 수리 가드: 전제형 정답을 가정형으로 바꾸거나 정답 번호를 바꾼 수리는 버리고 원본 유지
       const why = premiseGuardV6(it, f);
       if (why) { console.warn(`[경고] ${it.version}: ${why}`); (report.warnings ||= []).push(`${it.version}: ${why}`); reverted.add(it.version); return it; }
+    }
+    if (process.env.LINK_SEARCH === '2') { // v6.13 수리 가드: 정답 선지의 전제를 지운 수리는 버리고 원본 유지(남은 M2는 결함 아님으로 기록)
+      const why2 = premiseKeepGuardV6(it, f);
+      if (why2) { console.warn(`[경고] ${it.version}: ${why2}`); (report.warnings ||= []).push(`${it.version}: ${why2}`); reverted.add(it.version); return it; }
     }
     if (Number(f.answer) !== it.answer) console.warn(`[경고] ${it.version}: 수리에서 정답 번호가 바뀜 ${it.answer} → ${f.answer} (원래 번호 유지 안 됨)`);
     let gs = it.graphSpec, gbogi = f.bogi;

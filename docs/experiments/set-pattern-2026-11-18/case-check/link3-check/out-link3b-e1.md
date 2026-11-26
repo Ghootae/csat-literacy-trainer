@@ -1,0 +1,3 @@
+```json
+{"answer":3,"a":{"shortest":"갑이 자른 끈은 당기면 등받이가 접히는 기능을 하는 의자의 일부이므로, 이를 자른 것은 ‘포장만 훼손한 경우’에 해당하지 않는다. 따라서 ③이 적절하지 않다.","rules":1,"ruleTexts":["물품의 내용을 확인하려고 포장만 훼손한 경우는 이 제한 사유에 해당하지 않는다."]},"b":{"rebuttal":"갑이 자른 끈은 당기면 등받이가 접히게 하는 의자의 기능 부품이므로 포장이 아니다.","needsPassage":false},"c":[{"n":1,"fixed":true,"alt":null},{"n":2,"fixed":true,"alt":null},{"n":4,"fixed":true,"alt":null},{"n":5,"fixed":true,"alt":null}]}
+```

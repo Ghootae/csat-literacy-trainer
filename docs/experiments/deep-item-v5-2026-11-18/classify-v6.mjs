@@ -232,7 +232,7 @@ export function checkLeversV6(item, opts = {}) {
     const pcs3 = Array.isArray(item.pairCards) ? item.pairCards : [];
     for (const p of pcs3) { const d = lvNorm(p?.decider); if (!d) errors.push(`L9h: 카드 "${p?.name}"의 decider가 비어 있음`); else if (!facts.some(f => f.includes(d) || d.includes(f) || diceBigram(d, f) >= 0.8)) errors.push(`L9h: 카드 "${p.name}"의 decider가 leverTable의 fact와 다름`); }
   }
-  if (opts.link === true) { // v6.12 L10 결합 선지 탐색
+  if (opts.link === true || opts.link === 2) { // v6.12 L10 결합 선지 탐색
     const lp = item.linkPlan && typeof item.linkPlan === 'object' ? item.linkPlan : null;
     const same = (x, f) => f.includes(x) || x.includes(f) || diceBigram(x, f) >= 0.8;
     const fa = lvNorm(lp?.factA), fb = lvNorm(lp?.factB);
@@ -248,6 +248,26 @@ export function checkLeversV6(item, opts = {}) {
     if (pcs4.length < 1 || pcs4.length > 2 || nAns !== 1 || nAns + nTrue !== pcs4.length) errors.push('L10d: pairCards는 1~2개이고 role이 answer 정확히 1개(2개이면 나머지는 true)여야 함');
     const bc = String(item.bogi ?? '').replace(/\s/g, '').length;
     if (bc > 450) warnings.push(`L10e: 〈보기〉 ${bc}자(450자 초과)`);
+  }
+  if (opts.link === 2) { // v6.13 L11 두 원리 결합·lure/fix·짝 양쪽 decider·labels
+    const lp = item.linkPlan && typeof item.linkPlan === 'object' ? item.linkPlan : null;
+    const same6 = (x, f) => f.includes(x) || x.includes(f) || diceBigram(x, f) >= 0.8;
+    const pcsK = (Array.isArray(item.principleCards) ? item.principleCards : []);
+    const cardIds = new Set(pcsK.map((p, i) => String(p?.id ?? p?.card ?? `C${i + 1}`)));
+    const cA = String(lp?.cardA ?? '').trim(), cB = String(lp?.cardB ?? '').trim();
+    if (!lp || lp.status !== 'ok' || !cA || !cB || cA === cB || !cardIds.has(cA) || !cardIds.has(cB)) errors.push('L11a: linkPlan.status가 ok가 아니거나 cardA·cardB가 같거나 principleCards에 없음');
+    const ps = lvNorm(opts.passage);
+    const inText = x => { const n = lvNorm(x); if (!n) return false; if (ps.includes(n) || lvNorm(item.bogi).includes(n)) return true; const sents = (String(opts.passage ?? '') + '\n' + String(item.bogi ?? '')).split(/\n+/).flatMap(l => l.split(/(?<=[.?!])\s+/)).map(lvNorm).filter(Boolean); return sents.some(z => diceBigram(n, z) >= 0.8); };
+    const need = ['lureA', 'fixA', 'lureB', 'fixB'];
+    if (!lp || need.some(k => !lvNorm(lp[k])) || !inText(lp.fixA) || !inText(lp.fixB)) errors.push('L11b: lureA·fixA·lureB·fixB가 비었거나 fix가 지문·〈보기〉에 없음');
+    const pcsD = Array.isArray(item.pairCards) ? item.pairCards : [];
+    const dOk = x => { const d = lvNorm(x); return d && facts.some(f => same6(d, f)); };
+    if (!pcsD.length || pcsD.some(p => !dOk(p?.deciderA) || !dOk(p?.deciderB))) errors.push('L11c: pairCards의 deciderA·deciderB가 비었거나 leverTable의 fact와 같지 않음');
+    const labs = (Array.isArray(item.labels) ? item.labels : []).map(l => String(l ?? '').replace(/\s/g, '')).filter(Boolean);
+    const bn = String(item.bogi ?? '').replace(/\s/g, '');
+    const inB = labs.filter(l => bn.includes(l));
+    if (!labs.length) errors.push('L11d: labels가 비어 있음');
+    else if (inB.length) errors.push(`L11d: labels의 말이 〈보기〉에 나옴: ${inB.join(', ')}`);
   }
   // L5(경고): principleCards 2개 이상
   if (!(Array.isArray(item.principleCards) && item.principleCards.length >= 2)) warnings.push('L5: principleCards가 2개 미만');
@@ -280,4 +300,16 @@ export function premiseGuardV6(orig, fixed) {
   if (HYP.test(f) && !HYP.test(o)) return '수리가 정답을 가정형으로 바꿔 되돌림';
   const MARK = /[◇◆○●△▲□■☆★]|표식|일련번호/; if (MARK.test(String(fixed.bogi ?? '')) && !MARK.test(String(orig.bogi ?? ''))) return '수리가 〈보기〉에 식별 기호·표식을 넣어 되돌림';
   return null;
+}
+
+// v6.13 수리 가드: LINK_SEARCH=2에서 수리 전 정답 선지에 그 선지 choiceLevers.premise가 있었는데 수리 뒤 없어지면 되돌린다. 반환: 사유 문자열 또는 null.
+export function premiseKeepGuardV6(orig, fixed) {
+  const ans = Number(orig?.answer);
+  const cl = (orig?.choiceLevers || []).find(x => Number(x?.n) === ans);
+  const prem = lvNorm(cl?.premise);
+  if (!prem) return null;
+  const has = txt => { const t = lvNorm(txt); if (!t) return false; if (t.includes(prem)) return true; if (diceBigram(prem, t) >= 0.6) return true; return t.split(/[,，、;]|(?<=므로)|(?<=이므로)/).map(lvNorm).filter(Boolean).some(z => diceBigram(prem, z) >= 0.6); };
+  const before = has(orig?.choices?.[ans - 1]);
+  if (!before) return null;
+  return has(fixed?.choices?.[ans - 1]) ? null : '수리가 정답 선지의 전제를 지워 되돌림';
 }

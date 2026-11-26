@@ -339,6 +339,41 @@ t('(v6.12-fixture) 17880bea 청약 pair3 항목(linkPlan 없음)은 L10a에 걸�
   assert.ok(checkLeversV6(it, { premise: true, pairCard: 3, link: true, passage: '' }).errors.some(e => e.startsWith('L10a')));
 });
 
+// v6.13 L11(link=2) + 수리 전제 보존 가드
+import { premiseKeepGuardV6 } from './classify-v6.mjs';
+const pcK = [{ principle: 'p1', judge: 'j', lever: 'l' }, { principle: 'p2', judge: 'j', lever: 'l' }];
+const lk2 = (o = {}) => lk({ principleCards: pcK, labels: ['방문판매', '포장'], pairCards: [{ name: 'P', quote: '포장은 물품을 담은 것이다.', sideA: '포장', sideB: '물품', card: 'C1', role: 'answer', deciderA: lt4[1].fact, deciderB: lt4[1].fact, decider: lt4[1].fact }], linkPlan: { ...lk().linkPlan, status: 'ok', cardA: 'C1', cardB: 'C2', form: '가', lureA: '처음엔 같은 거래로 읽는다', fixA: '포장은 물품을 담은 것이다.', lureB: '처음엔 확인이라 읽는다', fixB: lt4[1].fact }, ...o });
+const optK = { premise: true, link: 2, passage: PSG };
+t('(v6.13-L11) 통과하는 항목은 L10·L11 오류 없음', () => { assert.deepEqual(checkLeversV6(lk2(), optK).errors.filter(e => /^L1[01]/.test(e)), []); });
+t('(v6.13-L11a) status none/같은 카드/없는 카드', () => {
+  for (const lp of [{ status: 'none' }, { cardA: 'C1', cardB: 'C1' }, { cardB: 'C9' }]) assert.ok(checkLeversV6(lk2({ linkPlan: { ...lk2().linkPlan, ...lp } }), optK).errors.some(e => e.startsWith('L11a')));
+});
+t('(v6.13-L11b) lure 비어 있음/fix가 어디에도 없음', () => {
+  assert.ok(checkLeversV6(lk2({ linkPlan: { ...lk2().linkPlan, lureA: '' } }), optK).errors.some(e => e.startsWith('L11b')));
+  assert.ok(checkLeversV6(lk2({ linkPlan: { ...lk2().linkPlan, fixB: '어디에도 없는 아주 다른 문장이 여기에 있다' } }), optK).errors.some(e => e.startsWith('L11b')));
+});
+t('(v6.13-L11c) deciderA·B가 fact와 다르거나 비어 있음', () => {
+  const pc = lk2().pairCards[0];
+  assert.ok(checkLeversV6(lk2({ pairCards: [{ ...pc, deciderB: '' }] }), optK).errors.some(e => e.startsWith('L11c')));
+  assert.ok(checkLeversV6(lk2({ pairCards: [{ ...pc, deciderA: '전혀 다른 문장' }] }), optK).errors.some(e => e.startsWith('L11c')));
+});
+t('(v6.13-L11d) 〈보기〉에 labels 말이 든 가짜 항목', () => {
+  assert.ok(checkLeversV6(lk2({ bogi: lk2().bogi + ' 갑은 방문판매로 샀다.' }), optK).errors.some(e => e.startsWith('L11d')));
+  assert.ok(checkLeversV6(lk2({ labels: [] }), optK).errors.some(e => e.startsWith('L11d')));
+});
+t('(v6.13-fixture) d808e038 link1 항목(결합 카드 하나, status 없음)은 L11a에 걸린다', () => {
+  const txt = fs.readFileSync(new URL('out-case-link1/gen32-T3-2-A/3-assemble.md', import.meta.url), 'utf8');
+  const it = JSON.parse([...txt.matchAll(/```json\s*([\s\S]*?)```/g)].pop()[1]).items.find(x => x.version === 'V1');
+  assert.ok(checkLeversV6(it, { premise: true, pairCard: 3, link: 2, passage: '' }).errors.some(e => e.startsWith('L11a')));
+});
+t('(v6.13-guard) 수리가 정답 선지의 전제를 지우면 되돌림', () => {
+  const o = { answer: 2, choices: ['① a', '② 깨진 받침은 포장에 속하므로, 그 일은 제한 사유가 아니겠군.', '③ c', '④ d', '⑤ e'], choiceLevers: [{ n: 2, premise: '깨진 받침은 포장에 속하므로' }] };
+  assert.equal(premiseKeepGuardV6(o, { choices: ['① a', '② 갑이 받침을 깨뜨린 일은 제한 사유가 아니겠군.', '③ c', '④ d', '⑤ e'] }), '수리가 정답 선지의 전제를 지워 되돌림');
+  assert.equal(premiseKeepGuardV6(o, { choices: ['① a', '② 깨진 받침은 포장에 속하므로 그 일은 제한 사유가 아니겠군.', '③ c', '④ d', '⑤ e'] }), null);
+  assert.equal(premiseKeepGuardV6({ ...o, choiceLevers: [{ n: 2, premise: '' }] }, { choices: o.choices }), null);
+  assert.equal(premiseKeepGuardV6({ ...o, choices: ['① a', '② 전혀 다른 문장이다', '③ c', '④ d', '⑤ e'] }, { choices: ['① a', '② 또 다른 문장', '③ c', '④ d', '⑤ e'] }), null); // 원래도 전제가 없으면 건드리지 않음
+});
+
 let fail = 0;
 for (const [name, fn] of cases) {
   try { fn(); console.log('통과  ' + name); } catch (e) { fail++; console.log('실패  ' + name + '\n      ' + e.message.split('\n')[0]); }
