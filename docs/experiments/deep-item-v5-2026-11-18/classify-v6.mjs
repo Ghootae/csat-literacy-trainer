@@ -219,7 +219,7 @@ export function checkLeversV6(item, opts = {}) {
     for (const r of table) { const k = pairOf(r); if (k && !names.has(k)) errors.push(`L9c: leverTable의 pair "${k}"가 pairCards의 name이 아님`); }
     for (const r of table) if (pairOf(r) && /(북쪽|남쪽|동쪽|서쪽|왼쪽|오른쪽|위쪽|아래쪽|차례로|번째 칸)/.test(String(r.fact ?? ''))) errors.push(`L9d: pair 줄 fact에 방향·배치어: "${lvNorm(r.fact).slice(0, 30)}"`);
     for (const p of pcs) if (lvNorm(p?.sideA) && lvNorm(p?.sideA) === lvNorm(p?.sideB)) warnings.push(`L9e: 카드 "${p.name}"의 sideA와 sideB가 같은 말`);
-    if (opts.pairCard === 2) { // v6.10 PAIR_CARD=2: 같은 말(word)이 짝의 두 줄 이상에 나오고, 짝 줄에 식별 기호·표식이 없다
+    if (opts.pairCard >= 2) { // v6.10 PAIR_CARD=2: 같은 말(word)이 짝의 두 줄 이상에 나오고, 짝 줄에 식별 기호·표식이 없다
       for (const p of pcs) {
         const w = lvNorm(p?.word); const rows = table.filter(r => pairOf(r) === String(p?.name ?? '').trim());
         if (!w) errors.push(`L9f: 카드 "${p?.name}"의 word가 비어 있음`);
@@ -227,6 +227,10 @@ export function checkLeversV6(item, opts = {}) {
       }
       for (const r of table) if (pairOf(r) && /[◇◆○●△▲□■☆★]|표식|일련번호/.test(String(r.fact ?? ''))) errors.push(`L9g: pair 줄 fact에 식별 기호·표식: "${lvNorm(r.fact).slice(0, 30)}"`);
     }
+  }
+  if (opts.pairCard === 3) { // v6.11 L9h(오류): 카드마다 decider가 비어 있지 않고 leverTable의 fact 하나와 같다(글자 일치 또는 Dice ≥ 0.8)
+    const pcs3 = Array.isArray(item.pairCards) ? item.pairCards : [];
+    for (const p of pcs3) { const d = lvNorm(p?.decider); if (!d) errors.push(`L9h: 카드 "${p?.name}"의 decider가 비어 있음`); else if (!facts.some(f => f.includes(d) || d.includes(f) || diceBigram(d, f) >= 0.8)) errors.push(`L9h: 카드 "${p.name}"의 decider가 leverTable의 fact와 다름`); }
   }
   // L5(경고): principleCards 2개 이상
   if (!(Array.isArray(item.principleCards) && item.principleCards.length >= 2)) warnings.push('L5: principleCards가 2개 미만');
@@ -257,5 +261,6 @@ export function premiseGuardV6(orig, fixed) {
   if (Number(fixed.answer) !== Number(orig.answer)) return '수리가 정답 번호를 바꿔 되돌림';
   const o = String((orig.choices || [])[Number(orig.answer) - 1] ?? ''), f = String((fixed.choices || [])[Number(fixed.answer) - 1] ?? '');
   if (HYP.test(f) && !HYP.test(o)) return '수리가 정답을 가정형으로 바꿔 되돌림';
+  const MARK = /[◇◆○●△▲□■☆★]|표식|일련번호/; if (MARK.test(String(fixed.bogi ?? '')) && !MARK.test(String(orig.bogi ?? ''))) return '수리가 〈보기〉에 식별 기호·표식을 넣어 되돌림';
   return null;
 }

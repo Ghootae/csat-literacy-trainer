@@ -12,6 +12,7 @@
 //   items-merged.json은 확정 버전 + 새 버전. B형의 A형 함정은 AVOID_OUT(기본 KEEP_OUT)에서 읽는다.
 // ---- 이전 v4 설명 ----
 // v6.6b 사례 순서: 재료 끊기 + 헷갈리는 짝(L6·L7) (2026-11-26, case-check/CLI-case-lever2.md): 이번에 만드는 버전이 모두 사례이면 3-assemble 입력의 재료(2-select) 자리에 '[재료 없음]' 한 줄만 넣고, leverTable에 pair 칸, 최종 L1은 글자 일치·bigram 유사·없음으로 나눠 기록.
+// v6.11 (2026-11-26) PAIR_CARD=3: 짝 카드 decider(맥락 확정 사실)(시험용). case-check/CLI-case-pair3.md
 // v6.10 (2026-11-26) PAIR_CARD=2: 짝 = 같은 말이 맥락으로 다른 개념 쪽(시험용) + eval-repair 전제형 가드. case-check/CLI-case-pair2.md
 // v6.9 (2026-11-26) PAIR_CARD=1: 헷갈리는 짝을 지문 개념 구분에서 먼저 고름(시험용). case-check/CLI-case-pair.md
 // v6.8 (2026-11-26) CASE_FLOW=premise: A형 사례 전제형 순서(시험용, 기본값 아님). case-check/REVIEW-case-A-negative-web.md
@@ -43,7 +44,7 @@ import { checkGraphPlan } from './graph/plan-check.mjs'; // RULES_V=6 + KIND=gra
 const V6 = process.env.RULES_V === '6'; // 기본값 5(v5 동작). 6이면 v6 규칙·지시문
 const DRY = process.env.DRY_RUN === '1';
 // v6.7 (2026-11-26) 사례 순서 기본값: 인문·사회 B형 = lever, A형·과학 = 옛 순서. CASE_FLOW=lever|off로 덮어씀. handoffs/2026-11-26-case-check-done.md
-const PAIRCARD = V6 && ['1', '2'].includes(process.env.PAIR_CARD) && ['lever', 'premise'].includes(process.env.CASE_FLOW); // v6.9: CASE_FLOW=lever|premise와 함께 줄 때만
+const PAIRCARD = V6 && ['1', '2', '3'].includes(process.env.PAIR_CARD) && ['lever', 'premise'].includes(process.env.CASE_FLOW); // v6.9: CASE_FLOW=lever|premise와 함께 줄 때만
 const PREMISE = V6 && process.env.CASE_FLOW === 'premise'; // v6.8: A형 사례 전제형(시험용). lever 동작을 바탕으로 3단계 다·라와 JSON 안내만 바꾼다.
 let LEVER = V6 && (process.env.CASE_FLOW === 'lever' || process.env.CASE_FLOW === 'premise'); // v6.6 (2026-11-26, case-check/PLAN-case-lever.md): 사례 갈래 갈림 사실 순서. 켜지 않으면 동작이 한 글자도 다르지 않다.
 const stripOld = t => V6 ? t.replace(/\s*\(옛 [^()]*\)/g, '') : t; // v6 규칙 파일의 '(옛 …)' 대응 표시는 사람용이라 모델에게 보내는 문자열에서 지운다(파일은 그대로)
@@ -279,8 +280,9 @@ JSON의 사례 항목에 덧붙인다: principleCards·leverTable은 위와 같�
 `;
 const PAIR_PARAGRAPH = "짝 카드: 〈보기〉를 쓰기 전에 헷갈리는 짝을 먼저 정한다. 짝은 지문이 가르는 개념 구분(예: 포장과 물품, 일반 명과 속성이 붙은 명)에서 고른다. 두 사실은 겉으로 비슷하지만(같은 말, 같은 종류의 물건·행동) 지문 개념으로는 서로 다른 쪽에 놓인다. 위치·방향·배치 순서의 차이만으로 짝을 만들지 않는다. 카드마다 name(짝 이름), quote(그 구분을 세우는 지문 문장 원문), sideA·sideB(두 쪽의 개념 이름, 지문 용어), card(관련 원리 카드 번호)를 적는다. 나.의 pair에는 이 카드의 name만 쓴다.";
 const PAIR2_SENTENCE = " 짝의 두 사실에는 같은 말(word: 명, 용어, 물건 이름)이 함께 나온다. 그 말이 두 사실에서 지문 개념의 어느 쪽에 놓이는지는 〈보기〉가 표식·번호·기호·라벨로 알려 주지 않는다. 학생이 맥락(누가, 어디서, 무엇을 가리키며 그 말을 썼는가)으로 판단해야 한다.";
+const PAIR3_SENTENCE = " 짝의 같은 말이 어느 쪽인지는 〈보기〉의 사실 하나(decider)로 한 가지로만 정해져야 한다. decider를 빼고 읽으면 두 쪽 모두 가능하고, decider를 읽으면 한 쪽만 남는다. decider는 행동의 결과나 당사자의 말처럼 〈보기〉에 분명히 적힌 사실이고, 학생이 짐작해야 하는 의도가 아니다.";
 const PAIR_JSON = '\nJSON의 사례 항목에 "pairCards":[{"name":"짝 이름","quote":"지문 원문","sideA":"개념","sideB":"개념","card":"C1"}]도 덧붙인다.\n';
-const CASE_BLOCK = (() => { const b = PREMISE ? PREMISE_BLOCK : LEVER_BLOCK; if (!PAIRCARD) return b; const i = b.indexOf('\n나. 〈보기〉와 갈림 사실 표'); const two = process.env.PAIR_CARD === '2'; return b.slice(0, i) + '\n' + PAIR_PARAGRAPH + (two ? PAIR2_SENTENCE : '') + b.slice(i) + (two ? PAIR_JSON.replace('"name":"짝 이름",', '"name":"짝 이름","word":"짝 두 사실에 함께 나오는 같은 말",') : PAIR_JSON); })();
+const CASE_BLOCK = (() => { const b = PREMISE ? PREMISE_BLOCK : LEVER_BLOCK; if (!PAIRCARD) return b; const i = b.indexOf('\n나. 〈보기〉와 갈림 사실 표'); const pcv = process.env.PAIR_CARD; const two = pcv === '2' || pcv === '3'; const WJ = PAIR_JSON.replace('"name":"짝 이름",', '"name":"짝 이름","word":"짝 두 사실에 함께 나오는 같은 말",'); return b.slice(0, i) + '\n' + PAIR_PARAGRAPH + (two ? PAIR2_SENTENCE : '') + (pcv === '3' ? PAIR3_SENTENCE : '') + b.slice(i) + (pcv === '3' ? WJ.replace('"quote"', '"decider":"〈보기〉 문장 원문","quote"') : two ? WJ : PAIR_JSON); })();
 const allCaseNow = ['V1', 'V2'].filter(v => !ONLY || v === ONLY).every(v => KIND[v] === 'case');
 const noMaterial = LEVER && allCaseNow; // v6.6b: 이번에 만드는 버전이 모두 사례이면 재료(2단계 출력)를 주지 않는다
 const leverOn = LEVER && ['V1', 'V2'].some(v => (!ONLY || v === ONLY) && KIND[v] === 'case'); // 사례 버전이 있을 때만
@@ -301,7 +303,7 @@ const lastJson = t => [...t.matchAll(/```json\s*([\s\S]*?)```/g)].pop();
 const leverData = {}, leverCheck = {};
 const leverItems = s => { try { return JSON.parse(lastJson(s)[1]).items.filter(it => it.kind === 'case' && (!ONLY || it.version === ONLY)); } catch { return []; } };
 if (leverOn) {
-  const run1 = s => Object.fromEntries(leverItems(s).map(it => [it.version, checkLeversV6(it, { premise: PREMISE, pairCard: PAIRCARD && process.env.PAIR_CARD === '2' ? 2 : PAIRCARD, passage })]));
+  const run1 = s => Object.fromEntries(leverItems(s).map(it => [it.version, checkLeversV6(it, { premise: PREMISE, pairCard: PAIRCARD && ['2', '3'].includes(process.env.PAIR_CARD) ? Number(process.env.PAIR_CARD) : PAIRCARD, passage })]));
   const first = run1(s3);
   for (const [v, r] of Object.entries(first)) leverCheck[v] = { first: r };
   const bad = Object.entries(first).filter(([, r]) => r.errors.length);
@@ -312,7 +314,7 @@ if (leverOn) {
     if (second) { s3 = s3r; for (const [v, r] of Object.entries(second)) (leverCheck[v] ||= {}).retry = r; }
     else console.warn('[경고] 3-assemble-r에서 JSON을 못 읽어 처음 결과를 씀');
   }
-  for (const it of leverItems(s3)) { leverData[it.version] = { pairCards: it.pairCards, principleCards: it.principleCards, leverTable: it.leverTable, choiceLevers: it.choiceLevers }; const r = checkLeversV6(it, { premise: PREMISE, pairCard: PAIRCARD && process.env.PAIR_CARD === '2' ? 2 : PAIRCARD, passage }); (leverCheck[it.version] ||= {}).afterAssemble = r; if (r.errors.length) console.warn(`[경고] ${it.version}: 갈림 사실 확인 오류가 남음(기록하고 진행) ${r.errors.join(' / ')}`); }
+  for (const it of leverItems(s3)) { leverData[it.version] = { pairCards: it.pairCards, principleCards: it.principleCards, leverTable: it.leverTable, choiceLevers: it.choiceLevers }; const r = checkLeversV6(it, { premise: PREMISE, pairCard: PAIRCARD && ['2', '3'].includes(process.env.PAIR_CARD) ? Number(process.env.PAIR_CARD) : PAIRCARD, passage }); (leverCheck[it.version] ||= {}).afterAssemble = r; if (r.errors.length) console.warn(`[경고] ${it.version}: 갈림 사실 확인 오류가 남음(기록하고 진행) ${r.errors.join(' / ')}`); }
   fs.writeFileSync(path.join(OUT, 'lever-check.json'), JSON.stringify(leverCheck, null, 2));
 }
 // 그래프 갈래(2026-11-21): 3단계 JSON의 graphSpec이 기준이다. 〈보기〉 = 명세에서 자동 생성한 읽기 판. 3b·3c에는 읽기 판을 따로 붙이고, 이후 graphSpec·bogi는 3단계 것으로 덮어쓴다.
@@ -471,7 +473,7 @@ const scene = solveJson.sceneCheck || {};
 const design = solveJson.designCheck || {};
 const kindChk = solveJson.kindCheck || {};
 const summary = items.map(it => `${it.version}: 출제 정답 ${it.answer} / 풀이 답 ${ans[it.version] ?? '?'} → ${String(it.answer) === String(ans[it.version]) ? '일치' : '불일치'} / 〈보기〉 ${it.bogiChars}자 / 설계 문제 ${(design[it.version] || []).length}곳 / 장면-정의 문제 ${(scene[it.version] || []).length}곳 / 막히는 문장 ${(hard[it.version] || []).length}곳 / 갈래 ${it.kind} 문제 ${(kindChk[it.version] || []).length}곳 / 정답 비튼 방식 ${it.answerTwist ?? '?'} / 정답 길이 순위 ${it.answerLenRank} / 선지 평균 ${it.choiceAvg}자${it.answerMoved ? ` / 번호 옮김 ${it.answerMoved}` : ''} / 기계 점검 ${(checks[it.version] || []).length}건`).join('\n');
-if (leverOn) { for (const it of items) if (leverData[it.version]) { const r = checkLeversV6(it, { premise: PREMISE, pairCard: PAIRCARD && process.env.PAIR_CARD === '2' ? 2 : PAIRCARD, passage }); const l1 = r.errors.filter(e => e.startsWith('L1')); const facts = (it.leverTable || []).map(x => ({ fact: x.fact, ...matchFactV6(x.fact, it.bogi) })); (leverCheck[it.version] ||= {}).final = { l1Errors: l1, matches: facts, counts: { 일치: facts.filter(x => x.status === '일치').length, 유사: facts.filter(x => x.status === '유사').length, 없음: facts.filter(x => x.status === '없음').length } }; const lost = facts.filter(x => x.status === '없음'); if (lost.length) console.warn(`[경고] ${it.version}: 최종본에서 〈보기〉에 없는 fact ${lost.length}건(다듬기 유사 ${facts.filter(x => x.status === '유사').length}건 제외)`); } fs.writeFileSync(path.join(OUT, 'lever-check.json'), JSON.stringify(leverCheck, null, 2)); }
+if (leverOn) { for (const it of items) if (leverData[it.version]) { const r = checkLeversV6(it, { premise: PREMISE, pairCard: PAIRCARD && ['2', '3'].includes(process.env.PAIR_CARD) ? Number(process.env.PAIR_CARD) : PAIRCARD, passage }); const l1 = r.errors.filter(e => e.startsWith('L1')); const facts = (it.leverTable || []).map(x => ({ fact: x.fact, ...matchFactV6(x.fact, it.bogi) })); (leverCheck[it.version] ||= {}).final = { l1Errors: l1, matches: facts, counts: { 일치: facts.filter(x => x.status === '일치').length, 유사: facts.filter(x => x.status === '유사').length, 없음: facts.filter(x => x.status === '없음').length } }; const lost = facts.filter(x => x.status === '없음'); if (lost.length) console.warn(`[경고] ${it.version}: 최종본에서 〈보기〉에 없는 fact ${lost.length}건(다듬기 유사 ${facts.filter(x => x.status === '유사').length}건 제외)`); } fs.writeFileSync(path.join(OUT, 'lever-check.json'), JSON.stringify(leverCheck, null, 2)); }
 fs.writeFileSync(path.join(OUT, 'summary.txt'), summary + '\n');
 fs.writeFileSync(path.join(OUT, 'solve.json'), JSON.stringify(ans, null, 2));
 fs.writeFileSync(path.join(OUT, 'hard-sentences.json'), JSON.stringify(hard, null, 2));

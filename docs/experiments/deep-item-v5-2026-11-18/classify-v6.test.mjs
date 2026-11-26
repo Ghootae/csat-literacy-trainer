@@ -291,6 +291,28 @@ t('(v6.10-guard) 수리가 정답을 가정형으로/번호를 바꾸면 되돌�
   assert.equal(premiseGuardV6({ ...o, choices: ['① a', '② c라면 d겠군.', '③ e'] }, { ...o, choices: ['① a', '② c라면 d겠군.', '③ e'] }), null);
 });
 
+// v6.11 L9h(decider)와 수리 가드 확대
+const opt3 = { premise: true, pairCard: 3, passage: PSG };
+const pc3 = (o = {}) => pc2({ pairCards: [{ name: 'P', word: '등잔', decider: '안내 화면에서 등잔을 누르자 두 등잔이 떴다.', quote: '포장은 물품을 담은 것이다.', sideA: 'a', sideB: 'b' }], ...o });
+t('(v6.11-L9h) decider가 없거나 fact와 다르면 오류, 같으면 통과', () => {
+  assert.deepEqual(checkLeversV6(pc3(), opt3).errors.filter(e => /^L9[fgh]/.test(e)), []);
+  assert.ok(checkLeversV6(pc2(), opt3).errors.some(e => e.startsWith('L9h')));
+  assert.ok(checkLeversV6(pc3({ pairCards: [{ name: 'P', word: '등잔', decider: '전혀 다른 문장이 여기 있습니다', quote: '포장은 물품을 담은 것이다.', sideA: 'a', sideB: 'b' }] }), opt3).errors.some(e => e.startsWith('L9h')));
+  assert.deepEqual(checkLeversV6(pc3(), { ...opt3, pairCard: 2 }).errors.filter(e => e.startsWith('L9h')), []); // PAIR_CARD=2이면 L9h 안 돎
+});
+t('(v6.11-fixture) 7f1da2e8의 2판 항목(decider 없음)은 L9h에 걸린다', () => {
+  const it = JSON.parse(fs.readFileSync(new URL('out-case-pair2/gongsun-long-later-mohists-A/items.json', import.meta.url), 'utf8')).items[0];
+  const gp = fs.readFileSync(new URL('passages/gongsun-long-later-mohists/passage.txt', import.meta.url), 'utf8');
+  assert.ok(checkLeversV6(it, { premise: true, pairCard: 3, passage: gp }).errors.some(e => e.startsWith('L9h')));
+});
+t('(v6.11-guard) 수리가 〈보기〉에 식별 기호·표식을 새로 넣으면 되돌림, 원래 있으면 그대로', () => {
+  const o = { kind: 'case', stem: NEG, answer: 2, bogi: '접시를 닦았다.', choices: ['① a', '② c므로 d겠군.', '③ e'] };
+  assert.equal(premiseGuardV6(o, { ...o, bogi: '◇ 접시를 닦았다.' }), '수리가 〈보기〉에 식별 기호·표식을 넣어 되돌림');
+  assert.equal(premiseGuardV6(o, { ...o, bogi: '접시마다 표식을 새겼다.' }), '수리가 〈보기〉에 식별 기호·표식을 넣어 되돌림');
+  assert.equal(premiseGuardV6({ ...o, bogi: '◇ 접시' }, { ...o, bogi: '◇ 접시를 닦았다.' }), null);
+  assert.equal(premiseGuardV6(o, { ...o, bogi: '접시를 씻었다.' }), null);
+});
+
 let fail = 0;
 for (const [name, fn] of cases) {
   try { fn(); console.log('통과  ' + name); } catch (e) { fail++; console.log('실패  ' + name + '\n      ' + e.message.split('\n')[0]); }
