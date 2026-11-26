@@ -39,7 +39,8 @@ import { checkLeversV6, matchFactV6 } from './classify-v6.mjs'; // v6.6 CASE_FLO
 import { checkGraphPlan } from './graph/plan-check.mjs'; // RULES_V=6 + KIND=graph: graphPlan 서버 확인(2026-11-25)
 const V6 = process.env.RULES_V === '6'; // 기본값 5(v5 동작). 6이면 v6 규칙·지시문
 const DRY = process.env.DRY_RUN === '1';
-const LEVER = V6 && process.env.CASE_FLOW === 'lever'; // v6.6 (2026-11-26, case-check/PLAN-case-lever.md): 사례 갈래 갈림 사실 순서. 켜지 않으면 동작이 한 글자도 다르지 않다.
+// v6.7 (2026-11-26) 사례 순서 기본값: 인문·사회 B형 = lever, A형·과학 = 옛 순서. CASE_FLOW=lever|off로 덮어씀. handoffs/2026-11-26-case-check-done.md
+let LEVER = V6 && process.env.CASE_FLOW === 'lever'; // v6.6 (2026-11-26, case-check/PLAN-case-lever.md): 사례 갈래 갈림 사실 순서. 켜지 않으면 동작이 한 글자도 다르지 않다.
 const stripOld = t => V6 ? t.replace(/\s*\(옛 [^()]*\)/g, '') : t; // v6 규칙 파일의 '(옛 …)' 대응 표시는 사람용이라 모델에게 보내는 문자열에서 지운다(파일은 그대로)
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -100,6 +101,15 @@ const guideText = fs.readFileSync(path.join(DIR, process.env.GUIDE || 'readabili
 // v5: 갈래·정답 번호·비튼 방식
 const KIND_NAME = { case: '사례', table: '표·단계 목록', view: '외부 글·관점', graph: '그래프', experiment: '실험·관찰' };
 const KIND = { V1: process.env.KIND_V1, V2: process.env.KIND_V2 };
+// v6.7 기본값: CASE_FLOW가 비어 있고 RULES_V=6, MODE=B, 만드는 버전 중 case가 있으면 지문 분야로 정한다(과학 아님 → lever).
+if (V6 && !process.env.CASE_FLOW && MODE === 'B' && ['V1', 'V2'].some(v => (!ONLY || v === ONLY) && KIND[v] === 'case')) {
+  let field = '', fieldFile = '';
+  try { const meta = JSON.parse(fs.readFileSync(path.join(DIR, 'passages', PID, 'meta.json'), 'utf8')); for (const k of ['field', 'domain', 'subject']) if (meta[k]) { field = String(meta[k]); fieldFile = `passages/${PID}/meta.json(${k})`; break; } } catch {}
+  if (!field && process.env.PASSAGE_FIELD) { field = process.env.PASSAGE_FIELD; fieldFile = 'env PASSAGE_FIELD'; }
+  if (!field) throw new Error('분야를 모름: CASE_FLOW=lever 또는 off를 정하라 (passages/<id>/meta.json에 field가 없으면 PASSAGE_FIELD=science|humanities|social)');
+  LEVER = !/science|과학/i.test(field);
+  console.log(`[v6.7 사례 순서 기본값] 분야=${field} (${fieldFile}) → ${LEVER ? 'lever' : '옛 순서'}`);
+}
 for (const v of ['V1', 'V2']) if (!KIND_NAME[KIND[v]]) throw new Error(`KIND_${v}는 case | table | view | graph | experiment 중 하나`);
 const commonRules = stripOld(fs.readFileSync(path.join(DIR, V6 ? 'rules-common-v6.md' : 'rules-common.md'), 'utf8'))
   + (!V6 && MODE === 'B' && process.env.V53_B !== '0' ? '\n\n' + fs.readFileSync(path.join(DIR, 'rules-common-v53-B.md'), 'utf8') : ''); // 2026-11-19: v5.3 규칙은 B형에만
