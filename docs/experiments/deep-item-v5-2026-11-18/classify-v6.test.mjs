@@ -313,6 +313,32 @@ t('(v6.11-guard) 수리가 〈보기〉에 식별 기호·표식을 새로 넣�
   assert.equal(premiseGuardV6(o, { ...o, bogi: '접시를 씻었다.' }), null);
 });
 
+// v6.12 L10(link)
+const lt4 = [{ fact: '갑이 길에서 권유받아 매장에서 신청했다.', value: 'x', pair: 'P', verdicts: {} }, { fact: '을이 상자 덮개를 찢었다.', value: 'y', pair: 'P', verdicts: {} }, { fact: '신청 후 열흘째 철회를 통지했다.', value: 'z', pair: null, verdicts: {} }];
+const lk = (o = {}) => pcItem({ leverTable: lt4, bogi: '갑이 길에서 권유받아 매장에서 신청했다. 을이 상자 덮개를 찢었다. 신청 후 열흘째 철회를 통지했다.', pairCards: [{ name: 'P', quote: '포장은 물품을 담은 것이다.', sideA: '포장', sideB: '물품', card: 'C1', role: 'answer' }], choiceLevers: prem().choiceLevers.map((c, i) => i === 1 ? { ...c, facts: [lt4[0].fact, lt4[1].fact] } : c), linkPlan: { coreChoice: 2, factA: lt4[0].fact, factB: lt4[1].fact, verdictOriginal: '가능', changeA: '온라인 신청', verdictA: '불가능', changeB: '기능 부품', verdictB: '불가능' }, ...o });
+const optL = { premise: true, link: true };
+t('(v6.12-L10) 통과하는 항목은 L10 오류 없음', () => { assert.deepEqual(checkLeversV6(lk(), optL).errors.filter(e => e.startsWith('L10')), []); });
+t('(v6.12-L10a) linkPlan 없음 / factA=factB / fact 불일치', () => {
+  assert.ok(checkLeversV6(lk({ linkPlan: undefined }), optL).errors.some(e => e.startsWith('L10a')));
+  assert.ok(checkLeversV6(lk({ linkPlan: { ...lk().linkPlan, factB: lt4[0].fact } }), optL).errors.some(e => e.startsWith('L10a')));
+  assert.ok(checkLeversV6(lk({ linkPlan: { ...lk().linkPlan, factA: '전혀 다른 문장입니다 여기는' } }), optL).errors.some(e => e.startsWith('L10a')));
+});
+t('(v6.12-L10b) 한 사실만 바꿔도 판정이 같은 가짜 항목', () => {
+  assert.ok(checkLeversV6(lk({ linkPlan: { ...lk().linkPlan, verdictA: '가능' } }), optL).errors.some(e => e.startsWith('L10b')));
+  assert.ok(checkLeversV6(lk({ linkPlan: { ...lk().linkPlan, verdictB: '' } }), optL).errors.some(e => e.startsWith('L10b')));
+});
+t('(v6.12-L10c·d·e) coreChoice 선지 facts, role, 글자 수', () => {
+  assert.ok(checkLeversV6(lk({ linkPlan: { ...lk().linkPlan, coreChoice: 3 } }), optL).errors.some(e => e.startsWith('L10c')));
+  assert.ok(checkLeversV6(lk({ pairCards: [{ ...lk().pairCards[0], role: 'true' }] }), optL).errors.some(e => e.startsWith('L10d')));
+  assert.ok(checkLeversV6(lk({ pairCards: [{ ...lk().pairCards[0] }, { ...lk().pairCards[0], role: 'true' }, { ...lk().pairCards[0], role: 'true' }] }), optL).errors.some(e => e.startsWith('L10d')));
+  assert.ok(checkLeversV6(lk({ bogi: '가'.repeat(460) }), optL).warnings.some(e => e.startsWith('L10e')));
+  assert.ok(!checkLeversV6(lk({ bogi: '가'.repeat(460) }), optL).errors.some(e => e.startsWith('L10e')));
+});
+t('(v6.12-fixture) 17880bea 청약 pair3 항목(linkPlan 없음)은 L10a에 걸린다', () => {
+  const it = JSON.parse(fs.readFileSync(new URL('out-case-pair3/gen32-T3-2-A/items.json', import.meta.url), 'utf8')).items.find(x => x.version === 'V1');
+  assert.ok(checkLeversV6(it, { premise: true, pairCard: 3, link: true, passage: '' }).errors.some(e => e.startsWith('L10a')));
+});
+
 let fail = 0;
 for (const [name, fn] of cases) {
   try { fn(); console.log('통과  ' + name); } catch (e) { fail++; console.log('실패  ' + name + '\n      ' + e.message.split('\n')[0]); }

@@ -232,6 +232,23 @@ export function checkLeversV6(item, opts = {}) {
     const pcs3 = Array.isArray(item.pairCards) ? item.pairCards : [];
     for (const p of pcs3) { const d = lvNorm(p?.decider); if (!d) errors.push(`L9h: 카드 "${p?.name}"의 decider가 비어 있음`); else if (!facts.some(f => f.includes(d) || d.includes(f) || diceBigram(d, f) >= 0.8)) errors.push(`L9h: 카드 "${p.name}"의 decider가 leverTable의 fact와 다름`); }
   }
+  if (opts.link === true) { // v6.12 L10 결합 선지 탐색
+    const lp = item.linkPlan && typeof item.linkPlan === 'object' ? item.linkPlan : null;
+    const same = (x, f) => f.includes(x) || x.includes(f) || diceBigram(x, f) >= 0.8;
+    const fa = lvNorm(lp?.factA), fb = lvNorm(lp?.factB);
+    const ia = fa ? facts.findIndex(f => same(fa, f)) : -1, ib = fb ? facts.findIndex(f => same(fb, f)) : -1;
+    if (!lp || ia < 0 || ib < 0 || ia === ib) errors.push('L10a: linkPlan이 없거나 factA·factB가 leverTable의 서로 다른 fact 둘과 같지 않음');
+    const vo = lvNorm(lp?.verdictOriginal), va = lvNorm(lp?.verdictA), vb = lvNorm(lp?.verdictB);
+    if (!va || !vb || va === vo || vb === vo) errors.push('L10b: verdictA·verdictB가 비어 있거나 verdictOriginal과 같음(한 사실만 바꿔도 판정이 달라야 함)');
+    const cc = Number(lp?.coreChoice); const ccl = (item.choiceLevers || []).find(x => Number(x?.n) === cc);
+    const ccf = (ccl?.facts || []).map(lvNorm);
+    if (!(cc >= 1 && cc <= 5) || !fa || !fb || !ccf.some(f => same(fa, f)) || !ccf.some(f => same(fb, f))) errors.push('L10c: coreChoice가 1~5가 아니거나 그 선지의 choiceLevers.facts에 factA·factB가 모두 있지 않음');
+    const pcs4 = Array.isArray(item.pairCards) ? item.pairCards : [];
+    const nAns = pcs4.filter(p => p?.role === 'answer').length, nTrue = pcs4.filter(p => p?.role === 'true').length;
+    if (pcs4.length < 1 || pcs4.length > 2 || nAns !== 1 || nAns + nTrue !== pcs4.length) errors.push('L10d: pairCards는 1~2개이고 role이 answer 정확히 1개(2개이면 나머지는 true)여야 함');
+    const bc = String(item.bogi ?? '').replace(/\s/g, '').length;
+    if (bc > 450) warnings.push(`L10e: 〈보기〉 ${bc}자(450자 초과)`);
+  }
   // L5(경고): principleCards 2개 이상
   if (!(Array.isArray(item.principleCards) && item.principleCards.length >= 2)) warnings.push('L5: principleCards가 2개 미만');
   return { errors, warnings };
