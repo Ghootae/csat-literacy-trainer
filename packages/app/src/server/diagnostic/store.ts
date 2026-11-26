@@ -50,7 +50,7 @@ export interface DiagnosticParticipant {
   /** paragraphId 단위. judgments는 단위(노드·관계) id별 결과 */
   analysis: Record<string, { status: JobStatus; judgments: Record<string, unknown> }>;
   /** 결과 화면 맨 위 요약(문장 읽기 습관). 입력 해시가 같으면 저장본을 쓴다. 옛 파일에는 없다(없으면 NONE). */
-  readingHabit?: { status: JobStatus; inputHash: string | null; generation: unknown | null; review: unknown | null; shown: ShownHabit | null; hiddenReason: string | null };
+  readingHabit?: { status: JobStatus; inputHash: string | null; promptVersion?: string; generation: unknown | null; review: unknown | null; shown: ShownHabit | null; hiddenReason: string | null };
 }
 
 export interface DiagnosticEvent { type: string; participantId: string; at?: string; [key: string]: unknown }

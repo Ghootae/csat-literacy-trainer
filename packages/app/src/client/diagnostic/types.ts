@@ -93,6 +93,7 @@ export interface ReadingCounts {
 }
 export interface ReadingHabit {
   headline: string;
+  othersLead: string | null;
   featured: { questionId: string; passageId: string; questionNumber: number; sourceKind: 'CHOICE' | 'PASSAGE' | 'SCENARIO'; choicePosition: number | null;
     sentence: string; studentQuote: string; sourceForm: string; studentForm: string; changed: string; explanation: string };
   otherCases: { questionId: string; passageId: string; questionNumber: number; sentence: string; studentQuote: string; changed: string }[];

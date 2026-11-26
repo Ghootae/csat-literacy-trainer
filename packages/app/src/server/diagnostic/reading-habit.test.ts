@@ -18,9 +18,9 @@ const readJson = (path: string): any => JSON.parse(readFileSync(resolve(EXPERIME
 // ---------- 지시문 ----------
 
 describe('지시문', () => {
-  it('PROMPT-v2.4.1.md를 생성·검토로 나눈다', () => {
+  it('PROMPT-v2.5.md를 생성·검토로 나눈다', () => {
     const { generation, review } = loadReadingHabitPrompts();
-    expect(READING_HABIT_PROMPT_VERSION).toBe('v2.4.1');
+    expect(READING_HABIT_PROMPT_VERSION).toBe('v2.5');
     expect(generation).toContain('(생성)'); expect(review).toContain('(검토)');
     expect(generation).not.toContain('(검토)');
   });
@@ -42,13 +42,14 @@ const replay = (student: string, run: number, mutate?: (generation: any) => void
 };
 
 describe('보여 주기 전 코드 검사: 저장된 실험 출력 재생(인계 4절)', () => {
-  it.each([['S-58', 1], ['S-58', 3], ['S-66', 1], ['S-66', 2], ['S-66', 3], ['S-23', 1], ['S-23', 3]] as const)('%s r%i → 보임', (student, run) => {
-    const { shown, hiddenReason } = replay(student, run);
+  it.each([['S-58', 1], ['S-66', 1], ['S-23', 1]] as const)('%s r%i → 보임(v2.5 출력)', (student, run) => {
+    const { shown, hiddenReason } = replay(student, run, undefined, 'v2.5');
     expect(hiddenReason).toBeNull(); expect(shown).not.toBeNull();
     // 응답에 내부용 값이 없다
-    expect(Object.keys(shown!)).toEqual(['headline', 'featured', 'otherCases', 'secondary', 'nextTime']);
+    expect(Object.keys(shown!)).toEqual(['headline', 'othersLead', 'featured', 'otherCases', 'secondary', 'nextTime']);
     // featured.changed가 화면 응답까지 그대로 넘어간다
-    expect(shown!.featured.changed).toBe(readJson(`runs/${student}-v2.4-r${run}.gen.json`).output.featured.changed);
+    expect(shown!.featured.changed).toBe(readJson(`runs/${student}-v2.5-r${run}.gen.json`).output.featured.changed);
+    expect(shown!.othersLead).toBe(readJson(`runs/${student}-v2.5-r${run}.gen.json`).output.othersLead);
   });
   it.each([['S-23', 2], ['S-58', 2]] as const)('%s r%i → 숨김(REVIEW_FAIL)', (student, run) => {
     expect(replay(student, run)).toEqual({ shown: null, hiddenReason: 'REVIEW_FAIL' });
@@ -176,12 +177,22 @@ describe('입력 만들기와 호출(가짜 transport)', () => {
     expect(w.store.count('READING_HABIT_DONE')).toBe(1);
   });
 
+  it('저장된 결과의 지시문 버전이 현재와 다르면 같은 입력이어도 다시 분석한다', async () => {
+    const w = await world(tags, {});
+    w.c.result(w.id); await settle(w.c);
+    expect(w.habit.requests).toHaveLength(2);
+    (w.c as any).participants.get(w.id).readingHabit.promptVersion = 'v2.4.1';   // 옛 지시문으로 저장된 결과
+    w.c.result(w.id); await settle(w.c);
+    expect(w.habit.requests).toHaveLength(4);
+    expect((w.c as any).participants.get(w.id).readingHabit.promptVersion).toBe('v2.5');
+  });
+
   it('숨긴 경우도 원출력을 사건에 남기고, 응답은 none이다', async () => {
     const w = await world(tags, {});
     w.c.result(w.id); await settle(w.c);
     expect(w.c.result(w.id).readingHabit).toEqual({ status: 'none' });
     const done = w.store.events.find(e => e.type === 'READING_HABIT_DONE') as any;
-    expect(done).toMatchObject({ promptVersion: 'v2.4.1', hiddenReason: 'NONE', shown: null, generation: { result: 'NONE' }, review: { verdict: 'PASS' }, inputHash: expect.any(String) });
+    expect(done).toMatchObject({ promptVersion: 'v2.5', hiddenReason: 'NONE', shown: null, generation: { result: 'NONE' }, review: { verdict: 'PASS' }, inputHash: expect.any(String) });
     expect(done.metadata).toMatchObject({ generation: { model: 'gpt-6.1-sol' }, review: { model: 'gpt-6.1-sol' } });
     expect(w.store.load(w.id)!.readingHabit).toMatchObject({ status: 'READY', hiddenReason: 'NONE', shown: null });
   });
@@ -194,7 +205,7 @@ describe('입력 만들기와 호출(가짜 transport)', () => {
     const generation = { perEntry: [], result: 'PATTERN', kind: 'CONDITION', strength: 'TWO', headline: '이번 진단에서 조건을 빼고 읽은 곳이 두 번 있었어.',
       featured: { item: a!.item, sentence: a!.chosen.text.slice(0, 8), studentQuote: a!.studentRationale, sourceForm: 'A는 C일 때 B', studentForm: 'A는 B', changed: 'C일 때', explanation: '설명이야.' },
       otherCases: [{ item: b!.item, sentence: `**${b!.chosen.text.slice(0, 6)}**`, studentQuote: b!.studentRationale, changed: '조건을 버림' }],
-      secondary: null, nextTime: '다음에 밑줄을 그어.', counterCheck: '', rejected: [] };
+      othersLead: '비슷하게 조건을 버린 또 다른 사례야.', secondary: null, nextTime: '다음에 밑줄을 그어.', counterCheck: '', rejected: [] };
     const w = await world(tags, {}, { generation });
     expect(w.c.result(w.id).readingHabit).toEqual({ status: 'pending' });
     await settle(w.c);

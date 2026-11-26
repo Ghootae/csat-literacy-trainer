@@ -63,6 +63,7 @@ function HabitBox({ habit, result, titles, onShowCard }: { habit: ReadingHabit; 
     onClick={event => { event.preventDefault(); onShowCard(questionId); }}>{label}</a>;
   return <div className="diag-look diag-habit" data-testid="reading-habit">
     <p className="diag-habit-headline" data-testid="habit-headline">{habit.headline}</p>
+    <p className="diag-look-text diag-habit-lead" data-testid="habit-example-lead">대표적인 예시를 들어 볼게.</p>
     <p className="diag-look-source">{titles[featured.passageId] ?? ''} {featured.questionNumber}번 · {habitSourceName(featured.sourceKind, featured.choicePosition)}</p>
     <p className="diag-look-text diag-habit-sentence">&ldquo;<Segs segments={sentenceSegments} />&rdquo;</p>
     <p className="diag-look-mine">네 근거 &nbsp;&ldquo;{quote}&rdquo;</p>
@@ -72,7 +73,7 @@ function HabitBox({ habit, result, titles, onShowCard }: { habit: ReadingHabit; 
     </dl>
     <p className="diag-look-text diag-habit-changed" data-testid="habit-changed">{featured.changed.includes('→') ? '네가 바꿔 읽은 말' : '네가 뺀 말'}: {changed}</p>
     <p className="diag-look-text">{explanation}</p>
-    {others.length > 0 && <div className="diag-habit-others"><p className="diag-label2">같은 방식으로 읽은 곳</p>
+    {others.length > 0 && <div className="diag-habit-others"><p className="diag-label2" data-testid="habit-others-lead">{habit.othersLead ? `${habit.othersLead} ` : ''}카드를 누르면 자세히 볼 수 있어.</p>
       <ul>{others.map(c => <li key={c.questionId}>
         <span>{titles[c.passageId] ?? ''} {c.questionNumber}번 &mdash; <Segs segments={c.segments} /> &middot; {note(c.passageId, c.changed)}</span>
         {link(c.questionId, '카드 보기 →')}</li>)}</ul></div>}

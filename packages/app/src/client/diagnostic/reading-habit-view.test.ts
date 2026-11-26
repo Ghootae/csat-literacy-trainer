@@ -15,6 +15,7 @@ const wrongItem = { questionId: 'q9', passageId: 'plastic', questionNumber: 9, c
   answerTwist: null, selfCheck: null, strategyAvailable: false, answerViewable: false, card: { status: 'none' } } as ResultItem;
 const habit: ReadingHabit = {
   headline: '종합적으로 보면, 너는 문장의 범위를 정하는 말을 빼고 읽는 경향이 있어.',
+  othersLead: '비슷하게 사슬의 위치를 바꿔 읽은 또 다른 사례야.',
   featured: { questionId: 'q10', passageId: 'plastic', questionNumber: 10, sourceKind: 'CHOICE', choicePosition: 2, sentence: '㉮보다 ㉯로 이루어진 소재가 적합하겠군.',
     studentQuote: '㉯가 조밀하니까 투명할 것 같음', sourceForm: 'A보다 B가 적합하다', studentForm: 'B가 투명하다', changed: '보다 → 가', explanation: '비교하는 말이 빠지면 뜻이 달라져.' },
   otherCases: [{ questionId: 'q9', passageId: 'plastic', questionNumber: 9, sentence: '사슬 **끝에** 있다', studentQuote: '양쪽 끝이라고 함', changed: "'끝에'를 '양쪽 끝'으로 바꿈" }],
@@ -34,7 +35,7 @@ describe('맨 위 요약의 읽기 습관 상자', () => {
     expect(html).not.toContain('data-testid="first-look"'); expect(html).not.toContain('가장 먼저 볼 것');
     expect(html).toContain(habit.headline);
     expect(html).toContain('플라스틱의 중합 반응 10번 · 선지 ②');
-    expect(html).toContain('원래 문장'); expect(html).toContain('네가 읽은 것'); expect(html).toContain('같은 방식으로 읽은 곳'); expect(html).toContain('다음에:');
+    expect(html).toContain('원래 문장'); expect(html).toContain('네가 읽은 것'); expect(html).toContain('대표적인 예시를 들어 볼게.'); expect(html).toContain('비슷하게 사슬의 위치를 바꿔 읽은 또 다른 사례야. 카드를 누르면 자세히 볼 수 있어.'); expect(html).toContain('다음에:');
     // 기호 풀이는 처음 나올 때만 붙는다. 바뀐 말은 굵게.
     expect(html).toContain('㉮(가지를 친 구조의 사슬들)보다 ㉯(직선형 구조의 사슬들)로'); expect(html).toContain('<strong>끝에</strong>');
     expect(html).toContain('그 밖에: 그리고 순서를 거꾸로 읽은 곳도 두 번 있었어.'); expect(html).toContain('9번');

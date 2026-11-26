@@ -964,13 +964,13 @@ export class DiagnosticController {
     if (input.evidenceEntries.length < 2) return { status: 'none' };
     const inputHash = jsonHash(input);
     const saved = p.readingHabit;
-    if (saved?.inputHash === inputHash) {
+    if (saved?.inputHash === inputHash && saved.promptVersion === READING_HABIT_PROMPT_VERSION) {
       if (saved.status === 'PENDING') return { status: 'pending' };
       if (saved.status === 'FAILED') return { status: 'failed' };
       if (saved.status === 'READY') return saved.shown === null ? { status: 'none' } : { status: 'ready', habit: saved.shown };
     }
     this.habitPrompts ??= loadReadingHabitPrompts();
-    const slot = { status: 'PENDING' as const, inputHash, generation: null, review: null, shown: null, hiddenReason: null };
+    const slot = { status: 'PENDING' as const, inputHash, promptVersion: READING_HABIT_PROMPT_VERSION, generation: null, review: null, shown: null, hiddenReason: null };
     p.readingHabit = slot;
     this.requestSave(p);
     this.track(this.runReadingHabit(p, slot, input, refs));

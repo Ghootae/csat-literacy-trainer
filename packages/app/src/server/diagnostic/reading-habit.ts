@@ -20,7 +20,7 @@ export const READING_HABIT_TAGS: ReadonlySet<string> = new Set(['CONDITION', 'SC
 const Featured = z.object({ item: z.string(), sentence: z.string(), studentQuote: z.string(), sourceForm: z.string(), studentForm: z.string(), changed: z.string(), explanation: z.string() });
 const OtherCase = z.object({ item: z.string(), sentence: z.string(), studentQuote: z.string(), changed: z.string() });
 export const HabitGenerationSchema = z.discriminatedUnion('result', [
-  z.object({ result: z.literal('PATTERN'), strength: z.enum(['TWO', 'THREE_PLUS']), headline: z.string(), featured: Featured, otherCases: z.array(OtherCase),
+  z.object({ result: z.literal('PATTERN'), strength: z.enum(['TWO', 'THREE_PLUS']), headline: z.string(), featured: Featured, othersLead: z.string().nullable().default(null), otherCases: z.array(OtherCase),
     secondary: z.object({ line: z.string(), items: z.array(z.string()) }).nullable(), nextTime: z.string() }),
   z.object({ result: z.literal('NONE') }),
 ]);
@@ -139,6 +139,8 @@ export function buildHabitInput(p: DiagnosticParticipant, ctx: HabitContext): { 
 export type HabitSourceKind = 'CHOICE' | 'PASSAGE' | 'SCENARIO';
 export interface ShownHabit {
   headline: string;
+  /** 다른 사례 목록 앞 한 문장. 비어 있으면 null(화면은 고정 문구만 쓴다). */
+  othersLead: string | null;
   featured: { questionId: string; passageId: string; questionNumber: number; sourceKind: HabitSourceKind; choicePosition: number | null;
     sentence: string; studentQuote: string; sourceForm: string; studentForm: string; changed: string; explanation: string };
   otherCases: { questionId: string; passageId: string; questionNumber: number; sentence: string; studentQuote: string; changed: string }[];
@@ -185,6 +187,7 @@ export function checkHabit(input: HabitInput, refs: ReadonlyMap<string, HabitRef
   const featured = generation.featured; const featuredRef = refs.get(featured.item)!; const featuredAt = located[0]!;
   return { hiddenReason: null, shown: {
     headline: generation.headline,
+    othersLead: generation.othersLead !== null && generation.othersLead.trim() !== '' && generation.othersLead.trim().toUpperCase() !== 'NONE' ? generation.othersLead.trim() : null,
     featured: { ...featuredRef, sourceKind: featuredAt.kind, choicePosition: featuredAt.choicePosition, sentence: featured.sentence.trim(), studentQuote: featured.studentQuote.trim(),
       sourceForm: featured.sourceForm, studentForm: featured.studentForm, changed: featured.changed, explanation: featured.explanation },
     otherCases: generation.otherCases.map(c => ({ ...refs.get(c.item)!, sentence: c.sentence.trim(), studentQuote: c.studentQuote.trim(), changed: c.changed })),
