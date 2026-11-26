@@ -226,6 +226,42 @@ t('(v6.8-L8c) 정답 선지에 가정 표현이 있으면 오류, 참 선지에�
   assert.ok(!checkLeversV6(prem({ choices: ch2 }), { premise: true }).errors.some(e => e.startsWith('L8c')));
 });
 
+// v6.9 L9 (pairCard)
+import fs from 'node:fs';
+const PSG = '포장은 물품을 담은 것이다. 손잡이는 물품의 구성이다.';
+const pcItem = (o = {}) => ({ ...prem(), pairCards: [{ name: 'P', quote: '포장은 물품을 담은 것이다.', sideA: '포장', sideB: '물품', card: 'C1' }], ...o });
+const opt = { premise: true, pairCard: true, passage: PSG };
+t('(v6.9-L9a) pairCards 없거나 빈 필드면 오류, 채우면 통과', () => {
+  assert.deepEqual(checkLeversV6(pcItem(), opt).errors.filter(e => e.startsWith('L9')), []);
+  assert.ok(checkLeversV6(pcItem({ pairCards: [] }), opt).errors.some(e => e.startsWith('L9a')));
+  assert.ok(checkLeversV6(pcItem({ pairCards: [{ name: 'P', quote: '', sideA: 'a', sideB: 'b' }] }), opt).errors.some(e => e.startsWith('L9a')));
+});
+t('(v6.9-L9b) quote가 지문에 없으면 오류, 지문 한 문장과 Dice≥0.8이면 통과', () => {
+  assert.ok(checkLeversV6(pcItem({ pairCards: [{ name: 'P', quote: '지문에 전혀 없는 문장입니다 정말로', sideA: 'a', sideB: 'b' }] }), opt).errors.some(e => e.startsWith('L9b')));
+  assert.ok(!checkLeversV6(pcItem({ pairCards: [{ name: 'P', quote: '포장은 물품을 담은 것이다', sideA: 'a', sideB: 'b' }] }), opt).errors.some(e => e.startsWith('L9b')));
+});
+t('(v6.9-L9c) pair 값이 카드 name이 아니면 오류', () => {
+  assert.ok(checkLeversV6(pcItem({ pairCards: [{ name: 'Q', quote: '포장은 물품을 담은 것이다.', sideA: 'a', sideB: 'b' }] }), opt).errors.some(e => e.startsWith('L9c')));
+});
+t('(v6.9-L9d) pair 줄 fact에 방향·배치어가 있으면 오류, pair 없는 줄은 무관', () => {
+  const lt = prem().leverTable.map((r, i) => i === 0 ? { ...r, fact: '갑은 북쪽 섬에 사진을 넣었다.' } : r);
+  assert.ok(checkLeversV6(pcItem({ leverTable: lt }), opt).errors.some(e => e.startsWith('L9d')));
+  const lt2 = prem().leverTable.map(r => r.pair ? r : { ...r, fact: r.fact + ' 북쪽' });
+  assert.ok(!checkLeversV6(pcItem({ leverTable: lt2 }), opt).errors.some(e => e.startsWith('L9d')));
+});
+t('(v6.9-fixture) 242c021f 공손룡 항목은 L9에서 걸리고 청약 항목은 L9b~d를 통과', () => {
+  const rd = p => JSON.parse(fs.readFileSync(new URL(p, import.meta.url), 'utf8')).items[0];
+  const g = rd('out-case-premise/gongsun-long-later-mohists-A/items.json'); const cy = rd('out-case-premise/gen32-T3-2-A/items.json');
+  const gp = fs.readFileSync(new URL('passages/gongsun-long-later-mohists/passage.txt', import.meta.url), 'utf8');
+  const cp = fs.readFileSync(new URL('passages/gen32-T3-2/passage.txt', import.meta.url), 'utf8');
+  const gq = gp.split(/\n+/).flatMap(l => l.split(/(?<=[.?!])\s+/)).find(x => x.length > 20);
+  const gr = checkLeversV6({ ...g, pairCards: [{ name: g.leverTable.find(r => r.pair).pair, quote: gq, sideA: '가', sideB: '나' }] }, { premise: true, pairCard: true, passage: gp });
+  assert.ok(gr.errors.some(e => e.startsWith('L9d')), '공손룡 사진 배치 짝이 L9d에 걸려야 함');
+  const cname = cy.leverTable.find(r => r.pair).pair; const cq = cp.split(/\n+/).flatMap(l => l.split(/(?<=[.?!])\s+/)).find(x => x.includes('포장'));
+  const cr = checkLeversV6({ ...cy, pairCards: [{ name: cname, quote: cq, sideA: '포장', sideB: '물품' }] }, { premise: true, pairCard: true, passage: cp });
+  assert.deepEqual(cr.errors.filter(e => /^L9[bcd]/.test(e)), []);
+});
+
 let fail = 0;
 for (const [name, fn] of cases) {
   try { fn(); console.log('통과  ' + name); } catch (e) { fail++; console.log('실패  ' + name + '\n      ' + e.message.split('\n')[0]); }

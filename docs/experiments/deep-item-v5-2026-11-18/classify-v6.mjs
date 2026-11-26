@@ -208,6 +208,18 @@ export function checkLeversV6(item, opts = {}) {
     const noLink = choices.filter(t => !/(므로|때문에|이니|이어서|이라서)/.test(t)).length;
     if (noLink) warnings.push(`L8e: 이유 연결어가 없는 선지 ${noLink}개`);
   }
+  // L9 (v6.9 PAIR_CARD, opts.pairCard): 짝 카드. a(오류) pairCards 1개 이상·필드 채움 / b(오류) quote가 지문 문장에 있음(글자 일치 또는 Dice ≥0.8) / c(오류) pair 값은 모두 카드 name / d(오류) pair 줄 fact에 방향·배치어 / e(경고) sideA=sideB
+  if (opts.pairCard) {
+    const pcs = Array.isArray(item.pairCards) ? item.pairCards : [];
+    const bad = pcs.filter(p => !['name', 'quote', 'sideA', 'sideB'].every(k => String(p?.[k] ?? '').trim()));
+    if (!pcs.length || bad.length) errors.push(`L9a: pairCards가 없거나 name·quote·sideA·sideB가 빈 카드가 있음(${pcs.length}개 중 ${bad.length}개)`);
+    const ptxt = lvNorm(opts.passage ?? ''); const psents = String(opts.passage ?? '').split(/\n+/).flatMap(l => l.split(/(?<=[.?!])\s+/)).map(lvNorm).filter(Boolean);
+    for (const p of pcs) { const q = lvNorm(p?.quote); if (q && !(ptxt.includes(q) || psents.some(x => diceBigram(q, x) >= 0.8))) errors.push(`L9b: 카드 "${p.name}"의 quote가 지문에 없음`); }
+    const names = new Set(pcs.map(p => String(p?.name ?? '').trim()).filter(Boolean));
+    for (const r of table) { const k = pairOf(r); if (k && !names.has(k)) errors.push(`L9c: leverTable의 pair "${k}"가 pairCards의 name이 아님`); }
+    for (const r of table) if (pairOf(r) && /(북쪽|남쪽|동쪽|서쪽|왼쪽|오른쪽|위쪽|아래쪽|차례로|번째 칸)/.test(String(r.fact ?? ''))) errors.push(`L9d: pair 줄 fact에 방향·배치어: "${lvNorm(r.fact).slice(0, 30)}"`);
+    for (const p of pcs) if (lvNorm(p?.sideA) && lvNorm(p?.sideA) === lvNorm(p?.sideB)) warnings.push(`L9e: 카드 "${p.name}"의 sideA와 sideB가 같은 말`);
+  }
   // L5(경고): principleCards 2개 이상
   if (!(Array.isArray(item.principleCards) && item.principleCards.length >= 2)) warnings.push('L5: principleCards가 2개 미만');
   return { errors, warnings };
