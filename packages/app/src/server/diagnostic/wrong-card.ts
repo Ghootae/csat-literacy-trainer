@@ -63,6 +63,7 @@ export interface WrongCardSource {
   megastudy: { subjects: readonly string[]; choicePercents: readonly [readonly number[], readonly number[]]; correctRate: readonly [number, number] };
 }
 
+const circled = (position: number) => '①②③④⑤'[position - 1] ?? String(position);
 const SYMBOL = /[㉠-㉿ⓐ-ⓩ]|\([가-힣]\)/gu;
 const toTwist = (t: { twistDetail: string; choiceQuote: string; evidenceQuote: string }): WrongCardTwist => ({ twistDetail: t.twistDetail, choiceQuote: t.choiceQuote, evidenceQuote: t.evidenceQuote === '' ? null : t.evidenceQuote });
 
@@ -94,7 +95,7 @@ export function buildWrongCardInput(s: WrongCardSource): WrongCardInput {
   };
 }
 
-// ---------- 코드 검사(PROMPT-v1.3 "코드 검사") ----------
+// ---------- 코드 검사(PROMPT-v1.4 "코드 검사") ----------
 
 const FORBIDDEN = ['뒤집기', '비틂', '함정 유형', '조건 축소', '범위', '방향', '긍정·부정', '인과 왜곡', '상식 개입'];
 const LAYER_SYMBOL_PAREN = /[㉠-㉿ⓐ-ⓩ]\s*\(|\([가-힣]\)\s*\(/u;
@@ -125,9 +126,16 @@ export function codeChecks(out: WrongCardOutput, input: WrongCardInput): WrongCa
   const hits = forbiddenHits(bodies, input);
   add('금지어(규칙 4)가 없다', hits.length === 0, hits.join(', '));
   add('근거 없는 오답이면 selfCheckOptions가 정확히 3개다', !(input.case !== 'CORRECT_WEAK' && input.studentRationale === undefined) || out.selfCheckOptions?.length === 3, `${out.selfCheckOptions?.length ?? 0}개`);
-  add('1층이 130자 이내다', out.layer1.length <= 130, `${out.layer1.length}자`);
-  const missing = out.symbolGlosses.filter(g => !out.layer1.includes(g.symbol)).map(g => g.symbol);
-  add('symbolGlosses의 기호가 모두 1층에 나온다', missing.length === 0, missing.join(', '));
+  add('1층이 140자 이내다', out.layer1.length <= 140, `${out.layer1.length}자`);
+  const sentences = (out.layer1.match(/[^.?!]*[^.?!\s][^.?!]*[.?!]*/gu) ?? []).length;
+  add('1층이 3문장 이내다', sentences <= 3, `${sentences}문장`);
+  if (input.case !== 'CORRECT_WEAK') add('1층에 정답 번호(원문자)가 없다', !out.layer1.includes(circled(input.answer.position)), circled(input.answer.position));
+  // 발문·고른 선지·1층에 나온 기호 집합과 symbolGlosses의 기호 집합이 같아야 한다.
+  const symbolsOf = (text: string) => new Set(text.match(SYMBOL) ?? []);
+  const wanted = new Set([input.stem, input.chosen.text, out.layer1].flatMap(t => [...symbolsOf(t)]));
+  const glossed = new Set(out.symbolGlosses.map(g => g.symbol));
+  const notGlossed = [...wanted].filter(x => !glossed.has(x)); const extra = [...glossed].filter(x => !wanted.has(x));
+  add('symbolGlosses의 기호 집합이 발문·고른 선지·1층에 나온 기호 집합과 같다', notGlossed.length === 0 && extra.length === 0, `빠짐 ${notGlossed.join('') || '-'} / 초과 ${extra.join('') || '-'}`);
   const layer23 = [out.pair.top, out.pair.source, out.pair.conclusion, out.missedAnswer?.text, out.missedAnswer?.source, out.examinerIntent].map(s => s ?? '');
   add('2·3층에 "기호(" 형태가 없다', !layer23.some(b => LAYER_SYMBOL_PAREN.test(b)), layer23.filter(b => LAYER_SYMBOL_PAREN.test(b)).join(' | '));
   return checks;

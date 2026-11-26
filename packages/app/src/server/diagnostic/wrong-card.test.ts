@@ -14,19 +14,27 @@ const EXPERIMENT = resolve(process.cwd(), 'docs/experiments/wrong-card-layer1-20
 const readJson = (path: string): any => JSON.parse(readFileSync(resolve(EXPERIMENT, path), 'utf8'));
 
 describe('지시문', () => {
-  it('PROMPT-v1.3.md 전문을 그대로 읽고 버전 상수는 v1.3이다', () => {
-    expect(WRONG_CARD_PROMPT_VERSION).toBe('v1.3');
-    expect(loadWrongCardPrompt()).toBe(readFileSync(resolve(EXPERIMENT, 'PROMPT-v1.3.md'), 'utf8'));
+  it('PROMPT-v1.4.md 전문을 그대로 읽고 버전 상수는 v1.4다', () => {
+    expect(WRONG_CARD_PROMPT_VERSION).toBe('v1.4');
+    expect(loadWrongCardPrompt()).toBe(readFileSync(resolve(EXPERIMENT, 'PROMPT-v1.4.md'), 'utf8'));
   });
 });
 
 // ---------- 코드 검사 ----------
 
-/** card3(WRONG_PROVIDED)의 저장된 v1.2 출력은 검사를 모두 통과한다. */
+/** 저장된 v1.2 출력을 v1.4 규칙(기호 집합 = 발문·고른 선지·1층 기호, 1층에 정답 번호 없음)에 맞게 손본 통과 사례. 나머지 필드는 저장본 그대로다. */
 const input3 = readJson('inputs/card3.json') as WrongCardInput;
-const output3 = (): WrongCardOutput => structuredClone(readJson('runs/v1.2/card3.json').attempts.at(-1).output);
+const output3 = (): WrongCardOutput => {
+  const out: WrongCardOutput = structuredClone(readJson('runs/v1.2/card3.json').attempts.at(-1).output);
+  out.symbolGlosses = ['㉡', 'ⓐ', 'ⓑ'].map(symbol => ({ symbol, gloss: '풀이' }));   // 발문의 ㉡·ⓐ·ⓑ, 1층의 ⓑ
+  return out;
+};
 const input4 = readJson('inputs/card4.json') as WrongCardInput;
-const output4 = (): WrongCardOutput => structuredClone(readJson('runs/v1.2/card4.json').attempts.at(-1).output);
+const output4 = (): WrongCardOutput => {
+  const out: WrongCardOutput = structuredClone(readJson('runs/v1.2/card4.json').attempts.at(-1).output);
+  out.layer1 = '⑤는 두 결합 중 하나가 더 쉽게 끊어지므로 맞는 말이야. 너는 이중 결합의 두 결합은 세기가 같다고 판단했어.';   // 저장본은 정답 번호(④)를 말했다
+  return out;
+};
 const failed = (out: WrongCardOutput, input: WrongCardInput) => codeChecks(out, input).filter(c => !c.ok).map(c => c.name);
 
 describe('코드 검사(run.mjs codeChecks 이식)', () => {
@@ -84,14 +92,35 @@ describe('코드 검사(run.mjs codeChecks 이식)', () => {
     expect(failed(output3(), input3)).not.toContain(checkName);   // 근거 쓴 오답은 selfCheckOptions가 없어도 된다
     expect(failed(output4(), input4)).not.toContain(checkName);
   });
-  it('1층이 131자면 실패, 130자는 통과', () => {
+  it('1층이 141자면 실패, 140자는 통과', () => {
     const out = output3(); out.symbolGlosses = [];
-    out.layer1 = 'ㄱ'.repeat(131); expect(failed(out, input3)).toContain('1층이 130자 이내다');
-    out.layer1 = 'ㄱ'.repeat(130); expect(failed(out, input3)).not.toContain('1층이 130자 이내다');
+    out.layer1 = 'ㄱ'.repeat(141); expect(failed(out, input3)).toContain('1층이 140자 이내다');
+    out.layer1 = 'ㄱ'.repeat(140); expect(failed(out, input3)).not.toContain('1층이 140자 이내다');
   });
-  it('1층에 없는 기호 풀이가 있으면 실패', () => {
-    const out = output3(); out.symbolGlosses = [{ symbol: '㉣', gloss: '없는 기호' }];
-    expect(failed(out, input3)).toContain('symbolGlosses의 기호가 모두 1층에 나온다');
+  it('1층이 4문장이면 실패, 140자 이내 3문장은 통과', () => {
+    const out = output3(); out.symbolGlosses = [];
+    out.layer1 = '가. 나. 다. 라.'; expect(failed(out, input3)).toContain('1층이 3문장 이내다');
+    out.layer1 = '가. 나? 다!'; expect(failed(out, input3)).not.toContain('1층이 3문장 이내다');
+  });
+  const SYMBOLS_CHECK = 'symbolGlosses의 기호 집합이 발문·고른 선지·1층에 나온 기호 집합과 같다';
+  it('기호 집합: 발문·고른 선지·1층 기호와 같으면 통과, 발문·선지 기호가 풀이에서 빠지면 실패, 그 밖 기호가 있으면 실패', () => {
+    const stemInput = { ...input3, stem: `${input3.stem} ㉣`, chosen: { ...input3.chosen, text: `${input3.chosen.text} ⓩ` } } as WrongCardInput;
+    const out = output3(); out.layer1 = '가. 나. 다㉧.';
+    const base = ['㉡', 'ⓐ', 'ⓑ'];   // input3 발문의 기호
+    out.symbolGlosses = [...base, '㉣', 'ⓩ', '㉧'].map(symbol => ({ symbol, gloss: '풀이' }));
+    expect(failed(out, stemInput)).not.toContain(SYMBOLS_CHECK);
+    out.symbolGlosses = [...base, '㉧'].map(symbol => ({ symbol, gloss: '풀이' }));            // 발문(㉣)·고른 선지(ⓩ) 기호가 빠짐
+    expect(failed(out, stemInput)).toContain(SYMBOLS_CHECK);
+    out.symbolGlosses = [...base, '㉣', 'ⓩ', '㉧', '㉤'].map(symbol => ({ symbol, gloss: '풀이' }));   // 어디에도 없는 기호
+    expect(failed(out, stemInput)).toContain(SYMBOLS_CHECK);
+  });
+  it('1층에 정답 번호(원문자)가 있으면 실패, 고른 선지 번호만이면 통과, CORRECT_WEAK는 건너뜀', () => {
+    const NAME = '1층에 정답 번호(원문자)가 없다';
+    const answer = '①②③④⑤'[input3.answer.position - 1]!; const chosen = '①②③④⑤'[input3.chosen.position - 1]!;
+    const out = output3(); out.symbolGlosses = [];
+    out.layer1 = `${chosen}는 틀려. 정답은 ${answer}야.`; expect(failed(out, input3)).toContain(NAME);
+    out.layer1 = `그래서 ${chosen}는 적절하지 않아.`; expect(failed(out, input3)).not.toContain(NAME);
+    out.layer1 = `${answer}`; expect(failed(out, { ...input3, case: 'CORRECT_WEAK' } as WrongCardInput)).not.toContain(NAME);
   });
   it('2·3층에 "기호(" 형태가 있으면 실패', () => {
     const out = output3(); out.examinerIntent = `${out.examinerIntent} ⓑ(소수 의견)`;
@@ -175,7 +204,9 @@ const inputOf = (request: any): WrongCardInput => JSON.parse(String(request.inpu
 /** 입력에 맞는 유효한 카드 출력(검사를 통과한다). conclusion은 "그래서"로 시작한다. */
 const validOutput = (input: WrongCardInput): any => {
   const source = input.passage.slice(0, 40);
-  return { layer1: '1층 문장이야.', symbolGlosses: [], matchesTrap: true,
+  // v1.4: symbolGlosses의 기호 집합 = 발문·고른 선지·1층에 나온 기호 집합.
+  const symbols = [...new Set(`${input.stem}\n${input.chosen.text}`.match(/[㉠-㉿ⓐ-ⓩ]|\([가-힣]\)/gu) ?? [])];
+  return { layer1: '1층 문장이야.', symbolGlosses: symbols.map(symbol => ({ symbol, gloss: '풀이야' })), matchesTrap: true,
     pair: { top: input.studentRationale ?? input.chosen.text.slice(0, 10), source, sourceFocus: source.slice(0, 5), conclusion: '그래서 결론이야.' },
     ...(input.case === 'WRONG_TRUE_CHOSEN' ? { missedAnswer: { text: '놓친 선지', source } } : {}), examinerIntent: '출제자 의도야.',
     ...(input.case !== 'CORRECT_WEAK' && input.studentRationale === undefined ? { selfCheckOptions: ['하나', '둘', '셋'] } : {}) };
@@ -221,20 +252,20 @@ describe('컨트롤러 흐름: 결과의 items[].card', () => {
     expect(view).toMatchObject({ status: 'ready', layer1: '1층 문장이야.', pair: { conclusion: '결론이야.' }, examinerIntent: '출제자 의도야.' });
     expect(JSON.stringify(w.c.result(w.id))).not.toContain('matchesTrap');
     const stored = w.store.load(w.id)!.items[H6]!.wrongCard!;
-    expect(stored).toMatchObject({ status: 'ready', attempts: 1, promptVersion: 'v1.3', output: { matchesTrap: true } });
+    expect(stored).toMatchObject({ status: 'ready', attempts: 1, promptVersion: 'v1.4', output: { matchesTrap: true } });
     const done = w.store.events.find(e => e.type === 'WRONG_CARD_DONE') as any;
-    expect(done).toMatchObject({ questionId: H6, case: 'WRONG_PROVIDED', status: 'ready', promptVersion: 'v1.3', attempts: [{ attempt: 1, passed: true, failedChecks: [], conclusionStrippedLeadingSo: '그래서 결론이야.', metadata: { model: 'gpt-6.1-sol' } }] });
+    expect(done).toMatchObject({ questionId: H6, case: 'WRONG_PROVIDED', status: 'ready', promptVersion: 'v1.4', attempts: [{ attempt: 1, passed: true, failedChecks: [], conclusionStrippedLeadingSo: '그래서 결론이야.', metadata: { model: 'gpt-6.1-sol' } }] });
   });
 
   it('1회 검사 실패 후 재생성 성공 → ready, 호출 2회(실패 항목이 사건에 남는다)', async () => {
-    const card = cardFake((input, index) => index === 0 ? { ...validOutput(input), layer1: 'ㄱ'.repeat(131) } : validOutput(input));
+    const card = cardFake((input, index) => index === 0 ? { ...validOutput(input), layer1: 'ㄱ'.repeat(141) } : validOutput(input));
     const w = await world([{ question: H6, answer: provided(wrongChoice(H6)) }], card);
     w.c.result(w.id); await settle(w.c);
     expect(card.requests).toHaveLength(2);
     expect(cardOf(w.c, w.id, H6).status).toBe('ready');
     const done = w.store.events.find(e => e.type === 'WRONG_CARD_DONE') as any;
     expect(done.attempts.map((a: any) => a.passed)).toEqual([false, true]);
-    expect(done.attempts[0].failedChecks).toEqual([{ name: '1층이 130자 이내다', ok: false, detail: '131자' }]);
+    expect(done.attempts[0].failedChecks).toEqual([{ name: '1층이 140자 이내다', ok: false, detail: '141자' }]);
   });
 
   it('JSON이 아닌 응답도 1회 다시 생성한다', async () => {
