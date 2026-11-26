@@ -1,7 +1,7 @@
 // classifyV6 시험 사례 6개 + 전략 점검 (가짜 e1·e2·e3 출력, API 호출 없음). 실행: node docs/experiments/deep-item-v5-2026-11-18/classify-v6.test.mjs
 // 근거: rule-audit-2026-11-23/PROPOSAL-code-v6.md 4-4절
 import assert from 'node:assert/strict';
-import { classifyV6, checkStrategiesV6, stemChanged, finalStatus, checkLeversV6 } from './classify-v6.mjs';
+import { classifyV6, checkStrategiesV6, stemChanged, finalStatus, checkLeversV6, diceBigram, matchFactV6 } from './classify-v6.mjs';
 
 const POS = '윗글을 바탕으로 〈보기〉를 이해한 내용으로 가장 적절한 것은?';
 const NEG = '윗글을 바탕으로 〈보기〉를 이해한 내용으로 적절하지 않은 것은?';
@@ -139,8 +139,8 @@ t('(v6.5-7) 수리 뒤 결함이면 status=defect, 아니면 표시 없음', () 
 // v6.6 CASE_FLOW=lever: checkLeversV6 (L1~L5)
 const LB = '갑은 점검표를 읽었다. 을은 통로에 물을 흘렸고 곧 닦았다. 병은 다음 날 공방에 왔다.';
 const lvItem = (o = {}) => ({ stem: NEG, answer: 2, bogi: LB,
-  leverTable: [{ fact: '갑은 점검표를 읽었다.', value: 'a', verdicts: {} }, { fact: '을은 통로에 물을 흘렸고 곧 닦았다.', value: 'b', verdicts: {} }, { fact: '병은 다음 날 공방에 왔다.', value: 'c', verdicts: {} }],
-  choiceLevers: [1, 2, 3, 4, 5].map(n => ({ n, facts: ['을은 통로에 물을 흘렸고 곧 닦았다.'], misread: n === 2 ? '곧 닦음→안 닦음' : null, corrected: null })),
+  leverTable: [{ fact: '갑은 점검표를 읽었다.', value: 'a', pair: 'P', verdicts: {} }, { fact: '을은 통로에 물을 흘렸고 곧 닦았다.', value: 'b', pair: 'P', verdicts: {} }, { fact: '병은 다음 날 공방에 왔다.', value: 'c', pair: null, verdicts: {} }],
+  choiceLevers: [1, 2, 3, 4, 5].map(n => ({ n, facts: ['을은 통로에 물을 흘렸고 곧 닦았다.'], misread: n === 2 ? '곧 닦음→안 닦음' : null, corrected: null })), // v6.6b: 기본 lvItem은 pair 짝(갑·을 줄)을 갖는다
   principleCards: [{ principle: 'p1' }, { principle: 'p2' }], ...o });
 t('(v6.6-1) L1 통과 / fact가 〈보기〉에 없으면 오류', () => {
   assert.deepEqual(checkLeversV6(lvItem()).errors, []);
@@ -170,6 +170,34 @@ t('(v6.6-5) L2 안 쓰인 〈보기〉 문장 → 경고만', () => {
 t('(v6.6-6) L5 principleCards 1개 → 경고만', () => {
   const r = checkLeversV6(lvItem({ principleCards: [{ principle: 'p1' }] }));
   assert.deepEqual(r.errors, []); assert.ok(r.warnings.some(w => w.startsWith('L5')));
+});
+
+// v6.6b: L6·L7·유사도. (v6.6-1~6의 lvItem은 pair가 없으므로 L6 오류가 늘 있다 → 아래 시험은 pair를 넣은 변형 사용)
+const pairRows = [{ fact: '갑은 점검표를 읽었다.', pair: 'P' }, { fact: '을은 통로에 물을 흘렸고 곧 닦았다.', pair: 'P' }, { fact: '병은 다음 날 공방에 왔다.', pair: null }].map(r => ({ ...r, value: 'v', verdicts: {} }));
+const pItem = (o = {}) => lvItem({ leverTable: pairRows, choiceLevers: [1, 2, 3, 4, 5].map(n => ({ n, facts: [n === 2 ? '갑은 점검표를 읽었다.' : '병은 다음 날 공방에 왔다.'], misread: n === 2 ? 'x' : null, corrected: null })), ...o });
+t('(v6.6b-1) L6 pair가 없거나 한 줄뿐이면 오류, 두 줄이면 통과', () => {
+  assert.ok(checkLeversV6(lvItem({ leverTable: pairRows.map(r => ({ ...r, pair: null })) })).errors.some(e => e.startsWith('L6')));
+  assert.ok(checkLeversV6(pItem({ leverTable: pairRows.map((r, i) => i === 1 ? { ...r, pair: null } : r) })).errors.some(e => e.startsWith('L6')));
+  assert.deepEqual(checkLeversV6(pItem()).errors, []);
+});
+t('(v6.6b-2) L7 부정 발문 정답이 pair 줄을 안 쓰면 오류', () => {
+  const cl = pItem().choiceLevers.map(c => c.n === 2 ? { ...c, facts: ['병은 다음 날 공방에 왔다.'] } : c);
+  assert.ok(checkLeversV6(pItem({ choiceLevers: cl })).errors.some(e => e.startsWith('L7')));
+  assert.deepEqual(checkLeversV6(pItem()).errors.filter(e => e.startsWith('L7')), []);
+});
+t('(v6.6b-3) L7 긍정 발문에서 오답이 pair 줄을 안 쓰면 경고만', () => {
+  const cl = [1, 2, 3, 4, 5].map(n => ({ n, facts: ['병은 다음 날 공방에 왔다.', '을은 통로에 물을 흘렸고 곧 닦았다.', '갑은 점검표를 읽었다.'].slice(n === 1 ? 0 : 0, 3), misread: n === 2 ? null : 'm', corrected: null }));
+  // 오답(1,3,4,5)이 모두 pair 줄을 쓰므로 경고 없음, 오답이 pair 줄을 하나도 안 쓰면 경고
+  const none = [1, 2, 3, 4, 5].map(n => ({ n, facts: ['병은 다음 날 공방에 왔다.'], misread: n === 2 ? null : 'm', corrected: null }));
+  const r = checkLeversV6(pItem({ stem: POS, answer: 2, choiceLevers: none }));
+  assert.ok(r.warnings.some(w => w.startsWith('L7')) && !r.errors.some(e => e.startsWith('L7')));
+});
+t('(v6.6b-4) 유사도 0.6 경계: 0.6 → 유사, 0.4 → 없음, 글자 일치 → 일치', () => {
+  assert.equal(diceBigram('abcdef', 'abcdxy'), 0.6);
+  assert.equal(matchFactV6('abcdef', 'abcdxy').status, '유사');
+  assert.equal(diceBigram('abcdef', 'abxyzw') < 0.6, true);
+  assert.equal(matchFactV6('abcdef', 'abxyzw').status, '없음');
+  assert.equal(matchFactV6('갑은 점검표를 읽었다.', '전날 갑은 점검표를 읽었다. 을은 갔다.').status, '일치');
 });
 
 let fail = 0;

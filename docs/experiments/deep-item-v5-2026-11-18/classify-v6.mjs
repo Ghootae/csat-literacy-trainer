@@ -1,3 +1,4 @@
+// v6.6b 사례 순서: 재료 끊기 + 헷갈리는 짝(L6·L7) (2026-11-26, case-check/CLI-case-lever2.md)
 // v6.6 CASE_FLOW=lever (2026-11-26, case-check/PLAN-case-lever.md): checkLeversV6(item) — 사례 갈래 갈림 사실 표(leverTable)·선지별 choiceLevers를 〈보기〉와 서버가 대조(L1~L5).
 // v6.5(2026-11-25 22시대, case-check/REVIEW-case-fact-repair-web.md): M6는 e3가 아니라 별도 호출 e3f(gpt-6.1-sol, 질문 하나) 결과로 계산(classifyV6 5번째 인자). stemChanged·finalStatus는 수리 보완 두 개(발문 보존, 결함 내보내지 않기)의 순수 판정.
 // v6.4(2026-11-25): M6 원리 뒤집기(case-check/REVIEW-case-false-spot-web.md·REPORT-case-fact-check.md, 결정 카드 21:42 KST). v6 판정(순수 함수, API 호출 없음). RULES_V=6일 때 eval-repair.mjs가 쓴다. 근거: rule-audit-2026-11-23/PROPOSAL-code-v6.md 4절.
@@ -185,7 +186,33 @@ export function checkLeversV6(item) {
     const u = new Set(decisive.flatMap(n => (cl.find(x => Number(x?.n) === n)?.facts || []).map(lvNorm)).filter(Boolean));
     if (u.size < 3) errors.push(`L4: 오답 4개의 facts 합집합이 ${u.size}개(3개 이상이어야 함)`);
   }
+  // L6(오류): pair 이름 하나 이상이 두 줄 이상에 쓰였다 (v6.6b)
+  const pairOf = r => { const v = String(r?.pair ?? '').trim(); return v && v !== 'null' ? v : null; };
+  const pairCount = {}; for (const r of table) { const k = pairOf(r); if (k) pairCount[k] = (pairCount[k] || 0) + 1; }
+  if (!Object.values(pairCount).some(n => n >= 2)) errors.push('L6: pair 이름이 두 줄 이상에 쓰인 헷갈리는 짝이 없음');
+  // L7: 부정 발문이면 정답 선지의 facts에 pair 줄이 하나 이상(없으면 오류). 긍정 발문이면 오답 중 하나 이상이 pair 줄을 쓴다(없으면 경고).
+  const pairFacts = new Set(table.filter(r => pairOf(r)).map(r => lvNorm(r.fact)));
+  const usesPair = n => (cl.find(x => Number(x?.n) === n)?.facts || []).some(f => pairFacts.has(lvNorm(f)));
+  if (negative) { if (!usesPair(ans)) errors.push(`L7: 부정 발문 정답 선지 ${ans}가 헷갈리는 짝(pair) 줄을 쓰지 않음`); }
+  else if (!decisive.some(usesPair)) warnings.push('L7: 오답 중 pair 줄을 쓰는 선지가 없음');
   // L5(경고): principleCards 2개 이상
   if (!(Array.isArray(item.principleCards) && item.principleCards.length >= 2)) warnings.push('L5: principleCards가 2개 미만');
   return { errors, warnings };
+}
+
+// v6.6b: 글자 두 개씩 묶음(bigram) Dice 유사도. 최종 L1에서 글자 일치가 깨졌을 때 다듬기로 바뀐 것인지 가른다.
+const bigrams = t => { const x = lvNorm(t).replace(/\s/g, ''); const m = new Map(); for (let i = 0; i < x.length - 1; i++) { const g = x.slice(i, i + 2); m.set(g, (m.get(g) || 0) + 1); } return m; };
+export function diceBigram(a, b) {
+  const A = bigrams(a), B = bigrams(b); let common = 0, na = 0, nb = 0;
+  for (const v of A.values()) na += v; for (const v of B.values()) nb += v;
+  for (const [g, v] of A) common += Math.min(v, B.get(g) || 0);
+  return na + nb ? (2 * common) / (na + nb) : 0;
+}
+// fact 하나를 〈보기〉와 대조: '일치'(부분 문자열) / '유사'(문장 중 Dice 최고 ≥ 0.6, 다듬기로 바뀜) / '없음'.
+export function matchFactV6(fact, bogi, threshold = 0.6) {
+  const f = lvNorm(fact), b = lvNorm(bogi);
+  if (f && b.includes(f)) return { status: '일치', score: 1 };
+  const sents = String(bogi ?? '').split(/\n+/).flatMap(l => l.split(/(?<=[.?!])\s+/)).map(lvNorm).filter(Boolean);
+  let best = 0; for (const st of sents) best = Math.max(best, diceBigram(f, st));
+  return { status: best >= threshold ? '유사' : '없음', score: Math.round(best * 1000) / 1000 };
 }
