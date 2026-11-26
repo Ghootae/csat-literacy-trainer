@@ -1,7 +1,7 @@
 // classifyV6 시험 사례 6개 + 전략 점검 (가짜 e1·e2·e3 출력, API 호출 없음). 실행: node docs/experiments/deep-item-v5-2026-11-18/classify-v6.test.mjs
 // 근거: rule-audit-2026-11-23/PROPOSAL-code-v6.md 4-4절
 import assert from 'node:assert/strict';
-import { classifyV6, checkStrategiesV6, stemChanged, finalStatus, checkLeversV6, diceBigram, matchFactV6 } from './classify-v6.mjs';
+import { classifyV6, checkStrategiesV6, stemChanged, finalStatus, checkLeversV6, diceBigram, matchFactV6, premiseGuardV6 } from './classify-v6.mjs';
 
 const POS = '윗글을 바탕으로 〈보기〉를 이해한 내용으로 가장 적절한 것은?';
 const NEG = '윗글을 바탕으로 〈보기〉를 이해한 내용으로 적절하지 않은 것은?';
@@ -260,6 +260,35 @@ t('(v6.9-fixture) 242c021f 공손룡 항목은 L9에서 걸리고 청약 항목�
   const cname = cy.leverTable.find(r => r.pair).pair; const cq = cp.split(/\n+/).flatMap(l => l.split(/(?<=[.?!])\s+/)).find(x => x.includes('포장'));
   const cr = checkLeversV6({ ...cy, pairCards: [{ name: cname, quote: cq, sideA: '포장', sideB: '물품' }] }, { premise: true, pairCard: true, passage: cp });
   assert.deepEqual(cr.errors.filter(e => /^L9[bcd]/.test(e)), []);
+});
+
+// v6.10 L9f·L9g(PAIR_CARD=2)와 수리 가드
+const opt2 = { premise: true, pairCard: 2, passage: PSG };
+const lt2 = [{ fact: '갑은 푸른 등잔에 새벽이라 불렀다.', pair: 'P', value: 'a', verdicts: {} }, { fact: '안내 화면에서 등잔을 누르자 두 등잔이 떴다.', pair: 'P', value: 'b', verdicts: {} }, { fact: '병은 다음 날 공방에 왔다.', pair: null, value: 'c', verdicts: {} }];
+const pc2 = (o = {}) => pcItem({ leverTable: lt2, pairCards: [{ name: 'P', word: '등잔', quote: '포장은 물품을 담은 것이다.', sideA: '두 개체', sideB: '한 개체' }], ...o });
+t('(v6.10-L9f) word가 비었거나 짝 두 줄에 안 나오면 오류, 두 줄에 나오면 통과', () => {
+  assert.deepEqual(checkLeversV6(pc2(), opt2).errors.filter(e => /^L9[fg]/.test(e)), []);
+  assert.ok(checkLeversV6(pc2({ pairCards: [{ name: 'P', quote: '포장은 물품을 담은 것이다.', sideA: 'a', sideB: 'b' }] }), opt2).errors.some(e => e.startsWith('L9f')));
+  assert.ok(checkLeversV6(pc2({ pairCards: [{ name: 'P', word: '새벽', quote: '포장은 물품을 담은 것이다.', sideA: 'a', sideB: 'b' }] }), opt2).errors.some(e => e.startsWith('L9f')));
+  assert.deepEqual(checkLeversV6(pc2({ leverTable: lt2 }), { ...opt2, pairCard: true }).errors.filter(e => e.startsWith('L9f')), []); // PAIR_CARD=1이면 L9f 안 돎
+});
+t('(v6.10-L9g) pair 줄 fact에 식별 기호·표식이 있으면 오류', () => {
+  const lt = lt2.map((r, i) => i === 1 ? { ...r, fact: '◇ 접시에서 등잔을 닦았다.' } : r);
+  assert.ok(checkLeversV6(pc2({ leverTable: lt }), opt2).errors.some(e => e.startsWith('L9g')));
+});
+t('(v6.10-fixture) 594213c9 짝 카드 1판 항목은 L9f·L9g에 걸린다', () => {
+  const it = JSON.parse(fs.readFileSync(new URL('out-case-pair/gongsun-long-later-mohists-A/items.json', import.meta.url), 'utf8')).items[0];
+  const gp = fs.readFileSync(new URL('passages/gongsun-long-later-mohists/passage.txt', import.meta.url), 'utf8');
+  const r = checkLeversV6(it, { premise: true, pairCard: 2, passage: gp });
+  assert.ok(r.errors.some(e => e.startsWith('L9f')) && r.errors.some(e => e.startsWith('L9g')), r.errors.join(' | '));
+});
+t('(v6.10-guard) 수리가 정답을 가정형으로/번호를 바꾸면 되돌림, 긍정 발문·원래 가정형은 그대로', () => {
+  const o = { kind: 'case', stem: NEG, answer: 2, choices: ['① a므로 b겠군.', '② c므로 d겠군.', '③ e'] };
+  assert.equal(premiseGuardV6(o, { ...o, choices: ['① a', '② c였다면 d겠군.', '③ e'] }), '수리가 정답을 가정형으로 바꿔 되돌림');
+  assert.equal(premiseGuardV6(o, { ...o, answer: 3 }), '수리가 정답 번호를 바꿔 되돌림');
+  assert.equal(premiseGuardV6(o, { ...o, choices: ['① a', '② c므로 d겠군.', '③ e라면 f'] }), null);
+  assert.equal(premiseGuardV6({ ...o, stem: POS }, { ...o, stem: POS, choices: ['① a', '② c라면 d', '③ e'] }), null);
+  assert.equal(premiseGuardV6({ ...o, choices: ['① a', '② c라면 d겠군.', '③ e'] }, { ...o, choices: ['① a', '② c라면 d겠군.', '③ e'] }), null);
 });
 
 let fail = 0;

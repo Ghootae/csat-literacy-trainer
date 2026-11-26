@@ -219,6 +219,14 @@ export function checkLeversV6(item, opts = {}) {
     for (const r of table) { const k = pairOf(r); if (k && !names.has(k)) errors.push(`L9c: leverTable의 pair "${k}"가 pairCards의 name이 아님`); }
     for (const r of table) if (pairOf(r) && /(북쪽|남쪽|동쪽|서쪽|왼쪽|오른쪽|위쪽|아래쪽|차례로|번째 칸)/.test(String(r.fact ?? ''))) errors.push(`L9d: pair 줄 fact에 방향·배치어: "${lvNorm(r.fact).slice(0, 30)}"`);
     for (const p of pcs) if (lvNorm(p?.sideA) && lvNorm(p?.sideA) === lvNorm(p?.sideB)) warnings.push(`L9e: 카드 "${p.name}"의 sideA와 sideB가 같은 말`);
+    if (opts.pairCard === 2) { // v6.10 PAIR_CARD=2: 같은 말(word)이 짝의 두 줄 이상에 나오고, 짝 줄에 식별 기호·표식이 없다
+      for (const p of pcs) {
+        const w = lvNorm(p?.word); const rows = table.filter(r => pairOf(r) === String(p?.name ?? '').trim());
+        if (!w) errors.push(`L9f: 카드 "${p?.name}"의 word가 비어 있음`);
+        else if (rows.filter(r => lvNorm(r.fact).includes(w)).length < 2) errors.push(`L9f: 카드 "${p.name}"의 word "${w}"가 짝 줄 두 개 이상의 fact에 들어 있지 않음`);
+      }
+      for (const r of table) if (pairOf(r) && /[◇◆○●△▲□■☆★]|표식|일련번호/.test(String(r.fact ?? ''))) errors.push(`L9g: pair 줄 fact에 식별 기호·표식: "${lvNorm(r.fact).slice(0, 30)}"`);
+    }
   }
   // L5(경고): principleCards 2개 이상
   if (!(Array.isArray(item.principleCards) && item.principleCards.length >= 2)) warnings.push('L5: principleCards가 2개 미만');
@@ -240,4 +248,14 @@ export function matchFactV6(fact, bogi, threshold = 0.6) {
   const sents = String(bogi ?? '').split(/\n+/).flatMap(l => l.split(/(?<=[.?!])\s+/)).map(lvNorm).filter(Boolean);
   let best = 0; for (const st of sents) best = Math.max(best, diceBigram(f, st));
   return { status: best >= threshold ? '유사' : '없음', score: Math.round(best * 1000) / 1000 };
+}
+
+// v6.10 수리 가드: CASE_FLOW=premise 부정 발문 사례 문항에서 수리가 정답 선지를 가정형으로 바꾸거나 정답 번호를 바꾸면 되돌린다. 반환: 되돌릴 사유 문자열 또는 null.
+const HYP = /(라면|다면|았더라면|었더라면)/;
+export function premiseGuardV6(orig, fixed) {
+  if (!orig || !fixed || orig.kind !== 'case' || !NEG.test(orig.stem || '')) return null;
+  if (Number(fixed.answer) !== Number(orig.answer)) return '수리가 정답 번호를 바꿔 되돌림';
+  const o = String((orig.choices || [])[Number(orig.answer) - 1] ?? ''), f = String((fixed.choices || [])[Number(fixed.answer) - 1] ?? '');
+  if (HYP.test(f) && !HYP.test(o)) return '수리가 정답을 가정형으로 바꿔 되돌림';
+  return null;
 }
