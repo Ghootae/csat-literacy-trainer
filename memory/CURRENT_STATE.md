@@ -93,7 +93,7 @@
    - ③ 그래프 **끝**(11-25): 사회 그래프 L3 통과(참고 칸 1.81, 규칙 칸 0.81 무효), 2차 안 함. 과제: 수리 e4 조건 문장 삭제 방지, 재판정 결함 문항 내보내지 않기. [인계](../docs/handoffs/2026-11-25-graph-done.md)
    - 규칙 수정 절차: 규칙 추가·수정은 웹 스레드 논의 → 웹 Claude 충돌 검토 → Ghootae 결정 → CLI는 결정 문안을 그대로 반영. CLI는 규칙 파일을 스스로 고치지 않는다.
    - 칸별 진행·판정은 [PROGRESS-hard](../docs/experiments/set-pattern-2026-11-18/PROGRESS-hard.md), 전체 진행은 `docs/handoffs/ROADMAP-generation.md`. 지금 참: 생성 규칙 v6.2(D-0236), 다섯 칸 L4 확정(D-0237). 이력: [체크포인트](./checkpoints/2026-11-24-current-state-trim.md).
-8. 어려운 문제 다섯 칸 L4 확정(D-0237), 내용 일치 문항 규칙 v3 확정(D-0238). 다음 = 밑줄 대상 이해 문항. 진행 상황은 `docs/handoffs/ROADMAP-generation.md`.
+8. 어려운 문제 다섯 칸 L4 확정(D-0237), 내용 일치 문항 규칙 v3 확정(D-0238), 밑줄 대상 이해 문항 규칙 v3 확정(D-0239). 다음 = 어휘 문항. 진행 상황은 `docs/handoffs/ROADMAP-generation.md`.
 
 ## 금지선
 
