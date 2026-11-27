@@ -296,3 +296,5 @@
 | [`D-0234`](./decisions/D-0234-restated-summary-corrections-card.md) | accepted | 오류가 남은 단계의 요약 카드는 "피드백을 반영한 정리"로 표시: 틀린 구절 취소선·교정 목록, 판정 지시문·모델 출력은 불변(Q-0050 방안 B) | 사용자 결정 |
 | [`D-0235`](./decisions/D-0235-deep-item-v52-baseline.md) | accepted | 깊은 〈보기〉 v5.3 블라인드 기준 미달로 비교 종료, 기준 v5.2 유지 | 사용자 사전 결정 |
 | [`D-0236`](./decisions/D-0236-rule-audit-conclusion-v62-adopted.md) | accepted | 규칙 감사 결론: 생성 규칙 v6.2 채택(다섯 층 + 생성 기준 GN1), 검사기 v6.1(관점 수리 끔), 칸 생성 재개 | 사용자 결정(사전 기준 충족) |
+| [`D-0237`](./decisions/D-0237-hard-cells-l4-five.md) | accepted | 어려운 문제 다섯 칸(인문 사례·관점, 사회 사례·표·그래프) L4 확정: v6.2·검사기 v6.1·수리 v6.3, 사례 B형 lever 자동 기본값, A형 옛 순서. 세트 조립기는 이 설정을 부른다 | 사용자 결정 |
+| [`D-0238`](./decisions/D-0238-match-items-rules-v3.md) | accepted | 내용 일치 문항 생성 규칙 v3 확정: gpt-6.2-sol + rules-match-v3(맞는 선지 다시 말하기, 오답 한 곳 비틀기, '적절한 것' 오답 관계 비틀기 ≥2). 우리 지문 1.97 vs 기출 1.80. 세트 조립기는 이 설정을 부른다 | 사용자 결정 |

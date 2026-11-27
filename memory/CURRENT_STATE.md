@@ -85,14 +85,15 @@
    - v5.10 통과([보고](../docs/reports/REPORT-v59-v510-run-human.md)), 후보는 하나([D-0216](./decisions/D-0216-v510-single-candidate-diagnostic-first-lab-held.md)): 질문 블라인드 4/5, **진단 기본값 v5.10**(11-10, [기록](./checkpoints/2026-11-10-question-rules-blind-result.md)). lab은 v5.8 보류. Q-0045.
    - [전 구간 가상 검토](../docs/experiments/diagnostic-full-simulation-2026-11-13/REPORT-full-simulation-human.md): 완주. D-0234 구현(화면 확인 대기). 라벨 문구 대기: `docs/handoffs/2026-11-16-diagnostic-result-labels.md`.
    - 진단 화면: 답은 입력창 안 버튼으로 확정([D-0226](./decisions/D-0226-diagnostic-answer-submit-buttons-conclusion.md)), 소거법은 [소거법] 버튼(D-0228).
-5. 문항 생성: E1 종료·E2 보류(D-0210), P1 중단(D-0230). 깊은 〈보기〉 API 확정(D-0231), 계산 양식 후보, 플라스틱 v4.1 판단 대기(Q-0049). v5.3 비교 종료, 기준 A형 v5.2·B형 v5.2+v5.3(D-0235). 다음: ③ 쉬운 유형 생성기. 정리 문장 압력 설계 미결.
+5. 문항 생성: E1 종료·E2 보류(D-0210), P1 중단(D-0230). 깊은 〈보기〉 API 확정(D-0231), 계산 양식 후보, 플라스틱 v4.1 판단 대기(Q-0049). v5.3 비교 종료, 기준 A형 v5.2·B형 v5.2+v5.3(D-0235). 다음: 8번 참고. 정리 문장 압력 설계 미결.
 
 6. 지문 생성(구조 목록 → 생성기 v2 → 충실도 검사기): 검사기 보정 통과(r3a 따름·r3b 절반, 사람 판단과 일치, [체크포인트](./checkpoints/2026-11-16-fidelity-checker-calibration.md)). 다음: 구조 지정 생성(3~4구조×2회), 인계 `docs/handoffs/2026-11-15-catalog-generator-v2-and-goals.md` 3.2절.
 
 7. 단단한 〈보기〉 세트(`docs/experiments/set-pattern-2026-11-18/`, 작업 규칙 `docs/handoffs/WORKING-RULES.md`, 2026-11-21):
    - ③ 그래프 **끝**(11-25): 사회 그래프 L3 통과(참고 칸 1.81, 규칙 칸 0.81 무효), 2차 안 함. 과제: 수리 e4 조건 문장 삭제 방지, 재판정 결함 문항 내보내지 않기. [인계](../docs/handoffs/2026-11-25-graph-done.md)
    - 규칙 수정 절차: 규칙 추가·수정은 웹 스레드 논의 → 웹 Claude 충돌 검토 → Ghootae 결정 → CLI는 결정 문안을 그대로 반영. CLI는 규칙 파일을 스스로 고치지 않는다.
-   - ④·⑤·수리 방향·기출 오답 태깅·규칙 감사 0~4단계 끝(이력: [체크포인트](./checkpoints/2026-11-24-current-state-trim.md)). 지금 참: 생성 규칙 v6.2 채택(GN1 = 옛 C23), 검사기 v6.1(관점 수리 끔), 칸 생성 재개(RULES_V=6). 근거: docs/experiments/rule-audit-2026-11-23/step4/REVIEW-step4-r3-web.md, 인계 docs/handoffs/2026-11-24-rule-audit-step4-done.md. 순서표 ① 끝(사회 관점 L2 통과·인문 사례 거의 통과, v6.2). 순서표 ①·②·③ 끝(③: 과학 그래프·실험 통과, 과학 사례 미달, 과학 관점 기출 없어 뺌; 인계 docs/handoffs/2026-11-25-cell3-done.md). 칸 판정 기준 = docs/handoffs/WORKING-RULES.md 4-3. 수리 기준 v6.3 = 방식 위반 하나여도 수리(view 제외). 다음 할 일 = 순서표 ④.
+   - 칸별 진행·판정은 [PROGRESS-hard](../docs/experiments/set-pattern-2026-11-18/PROGRESS-hard.md), 전체 진행은 `docs/handoffs/ROADMAP-generation.md`. 지금 참: 생성 규칙 v6.2(D-0236), 다섯 칸 L4 확정(D-0237). 이력: [체크포인트](./checkpoints/2026-11-24-current-state-trim.md).
+8. 어려운 문제 다섯 칸 L4 확정(D-0237), 내용 일치 문항 규칙 v3 확정(D-0238). 다음 = 밑줄 대상 이해 문항. 진행 상황은 `docs/handoffs/ROADMAP-generation.md`.
 
 ## 금지선
 
