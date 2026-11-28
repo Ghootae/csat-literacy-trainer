@@ -299,3 +299,4 @@
 | [`D-0237`](./decisions/D-0237-hard-cells-l4-five.md) | accepted | 어려운 문제 다섯 칸(인문 사례·관점, 사회 사례·표·그래프) L4 확정: v6.2·검사기 v6.1·수리 v6.3, 사례 B형 lever 자동 기본값, A형 옛 순서. 세트 조립기는 이 설정을 부른다 | 사용자 결정 |
 | [`D-0238`](./decisions/D-0238-match-items-rules-v3.md) | accepted | 내용 일치 문항 생성 규칙 v3 확정: gpt-6.2-sol + rules-match-v3(맞는 선지 다시 말하기, 오답 한 곳 비틀기, '적절한 것' 오답 관계 비틀기 ≥2). 우리 지문 1.97 vs 기출 1.80. 세트 조립기는 이 설정을 부른다 | 사용자 결정 |
 | [`D-0239`](./decisions/D-0239-underline-items-rules-v3.md) | accepted | 밑줄 대상 이해 문항 생성 규칙 v3 확정: gpt-6.2-sol + rules-underline-v3(밑줄은 한 번 나오는 정의·설명 구절, 정답은 원리 한 번 적용, '적절한 것' 오답은 문장 끝 반전 ≤1). 우리 지문 2.00 vs 기출 1.84. 세트 조립기는 이 설정을 부른다 | 사용자 결정 |
+| [`D-0240`](./decisions/D-0240-vocab-items-rules-v3.md) | accepted | 어휘 문항 생성 규칙 v3 확정: gpt-6.2-sol + rules-vocab-v3(꼴 A 문맥적 의미: 같은 말 묶음 금지 / 꼴 B 바꿔 쓰기: 안 맞는 낱말은 다른 뜻 짝). 꼴 A 우리 지문 1.94, 꼴 B 0.88~1.00(기출 1.84) → 꼴 B는 세트 시험 때 사람 확인 | 사용자 결정 |
