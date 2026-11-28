@@ -144,7 +144,7 @@ function analyze(spec) {
     if (before && after) return `${before.name}와 ${after.name} 사이`;
     if (after) return `${after.name} 이전`;
     if (before) return `${before.name} 이후`;
-    return `x=${x}`;
+    return '이름 없는 지점';
   };
   const values = spec.yAxis.values || [];
   const out = { marks, where, series: [] };
@@ -203,6 +203,59 @@ function analyze(spec) {
 const dirWord = d => d > 0 ? '증가' : d < 0 ? '감소' : '일정';
 const nameOf = (s, i, n) => s.label || (n > 1 ? `곡선 ${i + 1}` : '곡선');
 
+// 2026-11-28 o5b: 읽기 판에 눈금별 높이·기준선 교차·표시점 가로 위치를 더한다(그림은 그대로). 값은 graphSpec 원래 숫자로 비교한다(픽셀 반올림 없음).
+// 그림에 보이는 것만 적는다: 세로 눈금 값이나 이름 붙은 기준선과의 위·아래·같음, 계열 사이 높낮이 순서. 계산한 숫자 자체는 적지 않는다.
+function readingExtra(spec, A, n) {
+  const L = [], ticks = [...(spec.xAxis.ticks || [])].sort((a, b) => a.at - b.at);
+  const vals = [...(A.values || [])].sort((a, b) => a - b);
+  const gl = (spec.guides || []).filter(g => g.dir === 'h' && g.label).map(g => ({ label: g.label, val: guideGeom(spec, g).val })).filter(g => typeof g.val === 'number');
+  const posT = (x, si) => { // 이름 있는 가로 눈금 기준 위치. 눈금이 없으면 표시·눈금 기준(where)
+    if (!ticks.length) return A.where(x, si).replace(/가로축 /g, '');
+    const eq = ticks.find(t => Math.abs(t.at - x) < 1e-6); if (eq) return `${eq.label} 위치`;
+    const bef = [...ticks].reverse().find(t => t.at < x), aft = ticks.find(t => t.at > x);
+    return bef && aft ? `${bef.label}~${aft.label} 사이` : aft ? `${aft.label} 이전` : `${bef.label} 이후`;
+  };
+  const yv = (s, x) => yAtX(s, x);
+  const nm = (i) => nameOf(spec.series[i], i, n);
+  // a. 이름 있는 가로 눈금마다 각 계열의 높이
+  for (const t of ticks) {
+    const parts = [], hs = [];
+    spec.series.forEach((s, i) => {
+      const y = yv(s, t.at); if (y === null) return;
+      hs.push({ i, y });
+      const d = [];
+      if (vals.length) {
+        const eq = vals.find(v => Math.abs(v - y) < EPS), lo = [...vals].reverse().find(v => v < y - EPS), hi = vals.find(v => v > y + EPS);
+        d.push(eq !== undefined ? `눈금 ${fmt(eq)} 높이` : lo !== undefined && hi !== undefined ? `눈금 ${fmt(lo)}~${fmt(hi)} 사이` : lo !== undefined ? `눈금 ${fmt(lo)}보다 위` : `눈금 ${fmt(hi)}보다 아래`);
+      }
+      for (const g of gl) d.push(Math.abs(y - g.val) < EPS ? `${g.label} 높이` : `${g.label}보다 ${y > g.val ? '위' : '아래'}`);
+      if (d.length) parts.push(`${nm(i)}: ${d.join(', ')}`);
+    });
+    let ord = '';
+    if (hs.length > 1) {
+      hs.sort((a, b) => b.y - a.y);
+      ord = '높은 쪽부터 ' + hs.map((h, k) => (k ? (Math.abs(h.y - hs[k - 1].y) < EPS ? ' = ' : ' > ') : '') + nm(h.i)).join('');
+    }
+    if (parts.length || ord) L.push(`가로축 ${t.label}에서: ${[...parts, ord].filter(Boolean).join('; ')}.`);
+  }
+  // b. 계열이 이름 붙은 수평 기준선과 만나는 곳
+  for (const g of gl) for (const [i, s] of spec.series.entries()) {
+    const P = s.points, sg = P.map(p => sgn(p.y - g.val)), hits = [];
+    for (let k = 0; k < P.length - 1; k++) {
+      if (sg[k] * sg[k + 1] < 0) hits.push({ x: P[k].x + (P[k + 1].x - P[k].x) * (g.val - P[k].y) / (P[k + 1].y - P[k].y), up: sg[k + 1] > 0 });
+      else if (sg[k + 1] === 0 && sg[k] !== 0 && k + 2 < P.length && sg[k + 2] !== 0 && sg[k + 2] !== sg[k]) hits.push({ x: P[k + 1].x, up: sg[k + 2] > 0 });
+    }
+    if (hits.length) for (const h of hits) L.push(`${nm(i)}: ${posT(h.x, i)}에서 ${g.label} ${h.up ? '위로 올라간다' : '아래로 내려간다'}.`);
+    else if (sg.every(v => v > 0) || sg.every(v => v < 0)) L.push(`${nm(i)}: ${posT(P[0].x, i).replace(/ 위치$/, '')}~${posT(P[P.length - 1].x, i).replace(/ 위치$/, '')} 내내 ${g.label} ${sg[0] > 0 ? '위' : '아래'}.`);
+  }
+  // c. 곡선 위 표시점의 가로 위치(이름 있는 눈금 기준)와 높이가 같은 표시점
+  const mk = []; spec.series.forEach((s, i) => s.points.forEach(p => { if (p.mark) mk.push({ m: p.mark, x: p.x, y: p.y }); }));
+  if (ticks.length && mk.length) L.push(`표시점의 가로 위치: ${[...mk].sort((a, b) => a.x - b.x).map(m => `${m.m}: ${posT(m.x, null)}`).join(', ')}.`);
+  const seen = new Set();
+  for (const a of mk) { if (seen.has(a.m)) continue; const grp = mk.filter(b => Math.abs(b.y - a.y) < EPS); grp.forEach(b => seen.add(b.m)); if (grp.length > 1) L.push(`표시점 ${grp.map(b => b.m).join(', ')}의 높이가 같다.`); }
+  return L;
+}
+
 export function readingText(spec) {
   const A = analyze(spec), n = spec.series.length, L = [];
   const ax = spec.xAxis, ay = spec.yAxis;
@@ -225,7 +278,11 @@ export function readingText(spec) {
     const label = p => { // mark가 있으면 mark. 없으면 가로축 눈금 이름이나 시작·끝·x=. 같은 가로 위치에 다른 계열의 표시가 있으면 그 기호를 이름으로 쓰지 않고 "(ⓑ와 같은 가로 위치)"를 덧붙인다(where와 같은 방식).
       if (p.mark) return p.mark;
       const at = A.marks.filter(m => Math.abs(m.x - p.x) < 1e-6), tick = at.find(m => m.tick), other = at.find(m => !m.tick);
-      const base = tick ? tick.name : p === S.pts[0] ? '시작' : p === S.pts[S.pts.length - 1] ? '끝' : `x=${p.x}`;
+      let base = tick ? tick.name : p === S.pts[0] ? '시작' : p === S.pts[S.pts.length - 1] ? '끝' : null;
+      if (base === null) { // 이름 없는 꺾임점·최고점(2026-11-28 o5b): 내부 좌표 대신 이름 있는 표시·눈금 사이로 쓴다
+        const bef = [...A.marks].reverse().find(m => m.x < p.x - 1e-6), aft = A.marks.find(m => m.x > p.x + 1e-6);
+        base = bef && aft ? `${bef.name}와 ${aft.name} 사이 지점` : aft ? `${aft.name} 이전 지점` : bef ? `${bef.name} 이후 지점` : '이름 없는 지점';
+      }
       return other ? `${base}(${other.name}와 같은 가로 위치)` : base;
     };
     const valueAt = p => A.values.includes(p.y) ? `(${fmt(p.y)})` : '';
@@ -248,6 +305,7 @@ export function readingText(spec) {
       L.push(`- 가로축 기준 부호: ${sc.join(', ')}`);
     }
   }
+  readingExtra(spec, A, n).forEach(l => L.push(l));
   const crossLabel = new Map(crossMarkList(spec, A).filter(q => q.label).map(q => [q.c, q.label]));
   for (const c of A.cross) L.push(`${nameOf(spec.series[c.a], c.a, n)}와 ${nameOf(spec.series[c.b], c.b, n)}는 ${A.where(c.x)}에서 만남${c.touch ? '(접함' : '(교차'}${crossLabel.has(c) ? `, 교점 기호 ${crossLabel.get(c)}` : ''}).`);
   for (const sh of spec.shade || []) L.push(`빗금: ${sh.from}~${sh.to} 구간에서 곡선과 가로축 사이.`);

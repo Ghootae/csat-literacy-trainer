@@ -185,15 +185,17 @@ const REG = [
 ];
 const before = (key, ext) => fs.readFileSync(path.join(SP, 'graph-census/regress-before', `${key}.${ext}`), 'utf8');
 const golden = key => fs.readFileSync(path.join(SP, 'graph-census/regress-after', `${key}.svg`), 'utf8'); // 2026-11-25 방안 A: 이름·범례가 바뀐 5개의 새 기준
+const O5B_ADDED = /^(가로축 .+에서: |표시점의 가로 위치: |표시점 .+의 높이가 같다\.$|.+: .+(위로 올라간다|아래로 내려간다)\.$|.+: .+ 내내 .+ (위|아래)\.$)/; // o5b 추가 줄 모양(a·b·c)
 const unitless = (txt, spec) => (spec.xAxis.ticks || []).reduce((s, tk) => s.split(`${tk.label}${spec.xAxis.unit || ''}`).join(`${tk.label}`), txt);
 t('(회귀) 기준 파일 9개가 모두 있다', () => { assert.equal(REG.length, 9); for (const [k] of REG) assert.ok(fs.existsSync(path.join(SP, 'graph-census/regress-before', `${k}.svg`)), k); });
 for (const [key, spec, svgSame] of REG) {
-  t(`(회귀) ${key}: 읽기 판은 단위 줄과 '같은 가로 위치' 이름 줄만 다르다`, () => { // 그래프 D(2026-11-25): 다른 계열의 표시 기호를 끝점 이름으로 집어 오던 버그 수리
-    const a = unitless(before(key, 'txt'), spec).trim().split('\n'), b = readingText(spec).trim().split('\n'), sa = new Set(a);
-    assert.equal(a.length, b.length);
-    assert.ok(b.filter(l => !sa.has(l)).every(l => l.includes('와 같은 가로 위치')), `관계없는 줄이 바뀜: ${b.find(l => !sa.has(l) && !l.includes('와 같은 가로 위치'))}`);
+  t(`(회귀) ${key}: 읽기 판은 단위 줄·'같은 가로 위치' 이름 줄·o5b 추가 줄(a~d)만 다르다`, () => { // 그래프 D(2026-11-25) + o5b(2026-11-28): 눈금별 높이·기준선 교차·표시점 위치 줄이 더해지고, 내부 좌표 x=N 이름이 이름 있는 지점으로 바뀐다
     const gp = path.join(SP, 'graph-census/regress-after', `${key}.txt`);
-    if (fs.existsSync(gp)) assert.equal(readingText(spec) + '\n', fs.readFileSync(gp, 'utf8')); // 그래프 D 새 기준
+    const a = (fs.existsSync(gp) ? fs.readFileSync(gp, 'utf8') : unitless(before(key, 'txt'), spec)).trim().split('\n'), b = readingText(spec).trim().split('\n'), sa = new Set(a), sb = new Set(b);
+    const added = b.filter(l => !sa.has(l)), removed = a.filter(l => !sb.has(l));
+    assert.ok(added.every(l => O5B_ADDED.test(l) || /지점|이후|이전|와 같은 가로 위치/.test(l)), `관계없는 줄이 생김: ${added.find(l => !(O5B_ADDED.test(l) || /지점|이후|이전|와 같은 가로 위치/.test(l)))}`);
+    assert.ok(removed.every(l => /x=\d/.test(l) || l.includes('와 같은 가로 위치')), `사라진 줄이 x= 이름이 아님: ${removed.find(l => !/x=\d/.test(l) && !l.includes('와 같은 가로 위치'))}`);
+    assert.ok(!b.some(l => /x=\d/.test(l)), '읽기 판에 내부 좌표 x=가 남음');
   });
   t(`(회귀) ${key}: SVG ${svgSame ? '바이트 동일' : '곡선 이름·범례 줄만 다름'}`, () => {
     const now = renderSvg(spec), old = before(key, 'svg');
@@ -231,6 +233,53 @@ t('(D-2) validateSpec: 세로축 값·기호 눈금이 있거나 mark가 있으�
   assert.equal(validateSpec(sp(3)).warns.length, 1);
   const withTick = sp(3); withTick.yAxis.ticks = [{ at: 3, label: 'P₁' }]; assert.deepEqual(validateSpec(withTick).warns, []);
   const withMark = sp(3); withMark.series[0].points[1].mark = 'ⓐ'; assert.deepEqual(validateSpec(withMark).warns, []);
+});
+
+// ---- o5b: 읽기 판 눈금별 높이·기준선 교차·표시점 위치 ----
+const OB = () => ({
+  xAxis: { label: '시간', unit: null, ticks: [{ at: 0, label: 't₀' }, { at: 1, label: 't₁' }, { at: 2, label: 't₂' }] }, yAxis: { label: '농도', unit: null, values: [0] },
+  series: [
+    { id: 's1', label: '㉠', style: 'solid', curve: 'linear', points: [{ x: 0, y: 8 }, { x: 1, y: 3 }, { x: 2, y: 0.5 }] },
+    { id: 's2', label: '㉡', style: 'dashed', curve: 'linear', points: [{ x: 0, y: 8 }, { x: 1, y: 6 }, { x: 2, y: 4 }] },
+  ], guides: [{ dir: 'h', at: 5, label: 'P' }],
+});
+t('(o5b-a) 눈금마다 계열의 기준선 위·아래와 어느 계열이 높은지', () => {
+  const r = readingText(OB());
+  assert.match(r, /^가로축 t₀에서: ㉠: 눈금 0보다 위, P보다 위; ㉡: 눈금 0보다 위, P보다 위; 높은 쪽부터 ㉠ = ㉡\.$/m);
+  assert.match(r, /^가로축 t₁에서: ㉠: .*P보다 아래; ㉡: .*P보다 위; 높은 쪽부터 ㉡ > ㉠\.$/m);
+  assert.match(r, /^가로축 t₂에서: ㉠: .*P보다 아래; ㉡: .*P보다 아래; 높은 쪽부터 ㉡ > ㉠\.$/m);
+});
+t('(o5b-a) 세로 눈금 값이 있으면 그 값, 사이면 a~b 사이', () => {
+  const s = OB(); s.yAxis.values = [0, 4, 10]; s.guides = [];
+  const r = readingText(s);
+  assert.match(r, /가로축 t₁에서: ㉠: 눈금 0~4 사이; ㉡: 눈금 4~10 사이/);
+  assert.match(r, /가로축 t₂에서: ㉠: 눈금 0~4 사이; ㉡: 눈금 4 높이/);
+});
+t('(o5b-b) 기준선과 만나는 곳, 만나지 않으면 내내 위·아래', () => {
+  const r = readingText(OB());
+  assert.match(r, /^㉠: t₀~t₁ 사이에서 P 아래로 내려간다\.$/m);
+  assert.match(r, /^㉡: t₁~t₂ 사이에서 P 아래로 내려간다\.$/m);
+  const s = OB(); s.guides[0].at = 2; const r2 = readingText(s);
+  assert.match(r2, /^㉠: t₁~t₂ 사이에서 P 아래로 내려간다\.$/m);
+  assert.match(r2, /^㉡: t₀~t₂ 내내 P 위\.$/m);
+});
+t('(o5b-c) 표시점의 가로 위치와 높이가 같은 표시점', () => {
+  const s = OB(); s.series[0].points[0].mark = 'ⓐ'; s.series[0].points[1].mark = 'ⓑ'; s.series[1].points[0].mark = 'ⓒ'; s.series[1].points[2].mark = 'ⓓ'; s.xAxis.ticks = [{ at: 0, label: 't₀' }, { at: 1.5, label: 't₁' }];
+  const r = readingText(s);
+  assert.match(r, /^표시점의 가로 위치: ⓐ: t₀ 위치, ⓒ: t₀ 위치, ⓑ: t₀~t₁ 사이, ⓓ: t₁ 이후\.$/m);
+  assert.match(r, /^표시점 ⓐ, ⓒ의 높이가 같다\.$/m);
+});
+t('(o5b-d) 읽기 판에 내부 좌표 x=N을 쓰지 않는다(이름 없는 꺾임점)', () => {
+  const s = { xAxis: { label: '시간', unit: null, ticks: [{ at: 1, label: 't₁' }, { at: 4, label: 't₂' }] }, yAxis: { label: '농도', unit: null, values: [0, 2] },
+    series: [{ id: 's1', label: null, style: 'solid', curve: 'linear', points: [{ x: 0, y: 0, mark: 'ⓐ' }, { x: 2, y: 2, mark: 'ⓑ' }, { x: 3, y: 4 }, { x: 4, y: 3.5 }, { x: 7, y: 1, mark: 'ⓔ' }] }] };
+  const r = readingText(s);
+  assert.doesNotMatch(r, /x=\d/);
+  assert.match(r, /ⓑ\(2\) → ⓑ와 가로축 t₂ 사이 지점: 증가/);
+});
+t('(o5b-e) 높이 비교는 명세 원래 값으로(픽셀 반올림으로 같음이 틀리지 않는다)', () => {
+  const s = OB(); s.series[0].points[1].y = 6.0000004; s.guides = [{ dir: 'h', at: 6.0000004, label: 'P' }]; const r = readingText(s);
+  assert.match(r, /가로축 t₁에서: ㉠: .*P 높이/);
+  const s2 = OB(); s2.series[0].points[1].y = 6.4; s2.series[1].points[1].y = 6.5; assert.match(readingText(s2), /가로축 t₁에서: .*높은 쪽부터 ㉡ > ㉠/);
 });
 
 let fail = 0;
